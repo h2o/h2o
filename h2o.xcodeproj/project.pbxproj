@@ -751,6 +751,9 @@
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
+		08F7EE8A298F8B6800730154 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = test.pl; sourceTree = "<group>"; };
+		08F7EE8B298F8CA700730154 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08F7EE8C298F8CA700730154 /* 40http3-io-batch10.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-io-batch10.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1206,7 +1209,6 @@
 		E9708B1B1E49A3480029E0A5 /* handy.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = handy.h; sourceTree = "<group>"; };
 		E9757708221BB78C00D1EF74 /* http3_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_internal.h; sourceTree = "<group>"; };
 		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
-		E98041C22230C45E008B9745 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E98042152238D35B008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E980423822463044008B9745 /* defaults.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.h; sourceTree = "<group>"; };
 		E980423922463044008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
@@ -1506,6 +1508,14 @@
 				08790DDE1D8015A400A04BC1 /* sds.h */,
 			);
 			path = hiredis;
+			sourceTree = "<group>";
+		};
+		08F7EE89298F8B4C00730154 /* 40http3 */ = {
+			isa = PBXGroup;
+			children = (
+				08F7EE8A298F8B6800730154 /* test.pl */,
+			);
+			path = 40http3;
 			sourceTree = "<group>";
 		};
 		100A550D1C2BB12A00C4E3E0 /* mruby */ = {
@@ -2225,12 +2235,14 @@
 				E9414F9724ED1D7500273C59 /* 40http2-h2spec-client.t */,
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
-				E98041C22230C45E008B9745 /* 40http3.t */,
 				086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */,
+				08F7EE89298F8B4C00730154 /* 40http3 */,
+				08F7EE8B298F8CA700730154 /* 40http3.t */,
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
+				08F7EE8C298F8CA700730154 /* 40http3-io-batch10.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
