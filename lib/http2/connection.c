@@ -455,7 +455,11 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (!write_is_in_flight(conn) && !h2o_timer_is_linked(&conn->_write.timeout_entry))
+
+    /* The reason for consulting `h2o_socket_is_writing` (in addition to `write_is_in_flight`) is that we might be waiting for the
+     * amount of unsent data in the TCP send buffer to become small enough, rather than writing eagerly. In such case,
+     * `h2o_socket_notify_write` has been called and `h2o_socket_is_writing` returns true. */
+    if (!write_is_in_flight(conn) && !h2o_socket_is_writing(conn->sock) && !h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
 }
 
