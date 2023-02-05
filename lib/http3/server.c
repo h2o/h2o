@@ -196,10 +196,21 @@ struct st_h2o_http3_server_stream_t {
         uint64_t bytes_left_in_data_frame;
     } recvbuf;
     struct {
-        H2O_VECTOR(struct st_h2o_http3_server_sendvec_t) vecs, vecs_to_pull;
+        H2O_VECTOR(struct st_h2o_http3_server_sendvec_t) vecs;
         size_t off_within_first_vec;
         size_t min_index_to_retain;
-        uint64_t final_size, final_body_size;
+        /**
+         * number of bytes being submitted to sendbuf at the stream level
+         */
+        uint64_t final_size;
+        /**
+         * number of bytes being submitted to sendbuf as flattened, at stream level
+         */
+        uint64_t final_flattened_size;
+        /**
+         * number of HTTP body bytes being submitted
+         */
+        uint64_t final_body_size;
         h2o_sendvec_puller_t puller;
     } sendbuf;
     enum h2o_http3_server_stream_state state;
@@ -257,6 +268,17 @@ static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream,
 static const h2o_sendvec_callbacks_t recycled_vec_callbacks = {h2o_sendvec_read_raw, NULL},
                                      freed_vec_callbacks = {&h2o_sendvec_read_raw, NULL},
                                      immutable_vec_callbacks = {h2o_sendvec_read_raw, NULL};
+
+static int puller_is_empty(struct st_h2o_http3_server_stream_t *stream)
+{
+    return stream->sendbuf.puller.vecs.size == 0;
+}
+
+static int is_blocked_by_puller(struct st_h2o_http3_server_stream_t *stream)
+{
+    return stream->sendbuf.puller.on_async_read_complete != NULL &&
+        stream->quic->sendstate.pending.ranges[0].start >= stream->sendbuf.final_flattened_size;
+}
 
 static void dispose_sendvec(struct st_h2o_http3_server_sendvec_t *vec)
 {
@@ -352,9 +374,11 @@ static void req_scheduler_conn_blocked(struct st_h2o_http3_req_scheduler_t *sche
 static void req_scheduler_unblock_conn_blocked(struct st_h2o_http3_req_scheduler_t *sched, h2o_http3_req_scheduler_compare_cb comp)
 {
     while (!h2o_linklist_is_empty(&sched->conn_blocked)) {
-        struct st_h2o_http3_req_scheduler_node_t *node =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_req_scheduler_node_t, link, sched->conn_blocked.next);
-        req_scheduler_activate(sched, node, comp);
+        struct st_h2o_http3_server_stream_t *stream =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, sched->conn_blocked.next);
+        req_scheduler_activate(sched, &stream->scheduler, comp);
+        if (is_blocked_by_puller(stream))
+            req_scheduler_deactivate(sched, &stream->scheduler);
     }
 }
 
@@ -769,11 +793,6 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
         h2o_conn_set_state(&conn->super, H2O_CONN_STATE_IDLE);
 }
 
-static int puller_is_running(struct st_h2o_http3_server_stream_t *stream)
-{
-    return stream->sendbuf.puller.vecs.size != 0;
-}
-
 /**
  * Converts vectors owned by the generator to ones owned by the HTTP/3 implementation, as the former becomes inaccessible once we
  * call `do_proceed`.
@@ -805,46 +824,54 @@ static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
     }
 }
 
-static void on_send_shift(quicly_stream_t *qs, size_t delta)
+static void on_send_shift(quicly_stream_t *qs, size_t bytes_shifted)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
-    size_t i;
+    size_t vecs_shifted;
 
     assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
-    assert(delta != 0);
+    assert(bytes_shifted != 0);
     assert(stream->sendbuf.vecs.size != 0);
 
     size_t bytes_avail_in_first_vec = stream->sendbuf.vecs.entries[0].vec.len - stream->sendbuf.off_within_first_vec;
-    if (delta < bytes_avail_in_first_vec) {
-        stream->sendbuf.off_within_first_vec += delta;
+    if (bytes_shifted < bytes_avail_in_first_vec) {
+        stream->sendbuf.off_within_first_vec += bytes_shifted;
         return;
     }
-    delta -= bytes_avail_in_first_vec;
+    bytes_shifted -= bytes_avail_in_first_vec;
     stream->sendbuf.off_within_first_vec = 0;
     dispose_sendvec(&stream->sendbuf.vecs.entries[0]);
 
-    for (i = 1; delta != 0; ++i) {
-        assert(i < stream->sendbuf.vecs.size);
-        if (delta < stream->sendbuf.vecs.entries[i].vec.len) {
-            stream->sendbuf.off_within_first_vec = delta;
+    for (vecs_shifted = 1; bytes_shifted != 0; ++vecs_shifted) {
+        assert(vecs_shifted < stream->sendbuf.vecs.size);
+        assert(stream->sendbuf.vecs.entries[vecs_shifted].vec.raw != NULL);
+        if (bytes_shifted < stream->sendbuf.vecs.entries[vecs_shifted].vec.len) {
+            stream->sendbuf.off_within_first_vec = bytes_shifted;
             break;
         }
-        delta -= stream->sendbuf.vecs.entries[i].vec.len;
-        dispose_sendvec(&stream->sendbuf.vecs.entries[i]);
+        bytes_shifted -= stream->sendbuf.vecs.entries[vecs_shifted].vec.len;
+        dispose_sendvec(&stream->sendbuf.vecs.entries[vecs_shifted]);
     }
-    memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + i,
-            (stream->sendbuf.vecs.size - i) * sizeof(stream->sendbuf.vecs.entries[0]));
-    stream->sendbuf.vecs.size -= i;
-    if (stream->sendbuf.min_index_to_retain <= i) {
+    memmove(stream->sendbuf.vecs.entries, stream->sendbuf.vecs.entries + vecs_shifted,
+            (stream->sendbuf.vecs.size - vecs_shifted) * sizeof(stream->sendbuf.vecs.entries[0]));
+    stream->sendbuf.vecs.size -= vecs_shifted;
+    if (stream->sendbuf.min_index_to_retain <= vecs_shifted) {
         stream->sendbuf.min_index_to_retain = 0;
     } else {
-        stream->sendbuf.min_index_to_retain -= i;
+        stream->sendbuf.min_index_to_retain -= vecs_shifted;
+    }
+
+    for (size_t i = 0; i < stream->sendbuf.puller.vecs.size; ++i) {
+        char ***pulldst = &stream->sendbuf.puller.vecs.entries[i].dst;
+        struct st_h2o_http3_server_sendvec_t *pullvec =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_sendvec_t, vec.raw, *pulldst);
+        pullvec -= vecs_shifted;
+        *pulldst = &pullvec->vec.raw;
     }
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested ||
-                   puller_is_running(stream));
+            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
         } else {
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
@@ -877,6 +904,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     *wrote_all = 0;
     do {
         struct st_h2o_http3_server_sendvec_t *this_vec = stream->sendbuf.vecs.entries + vec_index;
+        assert(this_vec->vec.raw != NULL);
         size_t sz = this_vec->vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
@@ -894,6 +922,9 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
             if (vec_index == stream->sendbuf.vecs.size) {
                 *wrote_all = 1;
                 break;
+            } else if (stream->sendbuf.vecs.entries[vec_index].vec.raw == NULL) {
+                /* bail out if the next vector is still in the process of being read asynchronously */
+                break;
             }
         }
     } while (dst != dst_end);
@@ -901,7 +932,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
     *len = dst - (uint8_t *)_dst;
 
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
-    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all && stream->sendbuf.vecs_to_pull.size == 0 &&
+    if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
         quicly_sendstate_is_open(&stream->quic->sendstate) && !stream->proceed_requested) {
         retain_sendvecs(stream);
         stream->proceed_requested = 1;
@@ -1394,6 +1425,7 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
     vec->vec = (h2o_sendvec_t){&immutable_vec_callbacks, frame.len, {frame.base}};
     vec->entity_offset = UINT64_MAX;
     stream->sendbuf.final_size += frame.len;
+    stream->sendbuf.final_flattened_size = stream->sendbuf.final_size;
 }
 
 static void flatten_data_frame_header(struct st_h2o_http3_server_stream_t *stream, struct st_h2o_http3_server_sendvec_t *dst,
@@ -1462,8 +1494,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, _ostr);
 
     assert(&stream->req == _req);
-    assert(stream->sendbuf.vecs_to_pull.size == 0);
-    assert(!puller_is_running(stream));
+    assert(stream->sendbuf.final_size == stream->sendbuf.final_flattened_size);
+    assert(puller_is_empty(stream));
 
     stream->proceed_requested = 0;
 
@@ -1491,24 +1523,28 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     if (bufcnt != 0) {
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         struct st_h2o_http3_server_sendvec_t *data_frame_header_vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
-        size_t bufindex = 0, prev_body_size = stream->sendbuf.final_body_size;
-        int found_pull = 0;
+        size_t prev_body_size = stream->sendbuf.final_body_size, non_flattened_size = 0;
         /* copy vectors; pull vectors and one that follow are copied to `vecs_pre_flatten` */
-        for (; bufindex < bufcnt; ++bufindex) {
-            if (!found_pull && bufs[bufindex].callbacks->read_ != h2o_sendvec_read_raw) {
-                found_pull = 1;
-                h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs_to_pull, bufcnt - bufindex);
+        for (size_t bufindex = 0; bufindex < bufcnt; ++bufindex) {
+            if (bufs[bufindex].len == 0)
+                continue;
+            struct st_h2o_http3_server_sendvec_t *dst = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
+            if (bufs[bufindex].callbacks->read_ != h2o_sendvec_read_raw) {
+                h2o_sendvec_init_raw(&dst->vec, NULL, bufs[bufindex].len);
+                h2o_sendvec_puller_add(&stream->sendbuf.puller, &bufs[bufindex], bufs[bufindex].len, &dst->vec.raw, 0);
+            } else {
+                dst->vec = bufs[bufindex];
             }
-            struct st_h2o_http3_server_sendvec_t *dst =
-                found_pull ? stream->sendbuf.vecs_to_pull.entries + stream->sendbuf.vecs_to_pull.size++
-                           : stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
-            *dst = (struct st_h2o_http3_server_sendvec_t){.vec = bufs[bufindex], .entity_offset = stream->sendbuf.final_body_size};
+            dst->entity_offset = stream->sendbuf.final_body_size;
             stream->sendbuf.final_body_size += bufs[bufindex].len;
+            if (!puller_is_empty(stream))
+                non_flattened_size += bufs[bufindex].len;
         }
         /* build DATA frame header, adjust final size */
         size_t body_bytes_added = stream->sendbuf.final_body_size - prev_body_size;
         flatten_data_frame_header(stream, data_frame_header_vec, body_bytes_added);
         stream->sendbuf.final_size += data_frame_header_vec->vec.len + body_bytes_added;
+        stream->sendbuf.final_flattened_size = stream->sendbuf.final_size - non_flattened_size;
     }
 
     switch (send_state) {
@@ -1687,29 +1723,17 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
 static int pull_sendvecs_on_complete(struct st_h2o_http3_server_stream_t *stream)
 {
     if (stream->sendbuf.puller.failed) {
+        h2o_sendvec_puller_dispose(&stream->sendbuf.puller);
         shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
         return 0;
     }
 
-    /* enough space would have been allocated in `do_send` */
-    assert(stream->sendbuf.vecs.size + stream->sendbuf.vecs_to_pull.size <= stream->sendbuf.vecs.capacity);
-
-    /* move vectors to `sendbuf.vec`, stealing ownership of buffers from puller */
-    size_t puller_index = 0;
-    for (size_t i = 0; i < stream->sendbuf.vecs_to_pull.size; ++i) {
-        struct st_h2o_http3_server_sendvec_t *dst = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
-        *dst = stream->sendbuf.vecs_to_pull.entries[i];
-        if (dst->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-            dst->vec.callbacks = &recycled_vec_callbacks;
-            dst->vec.raw = stream->sendbuf.puller.vecs.entries[puller_index].buf;
-            stream->sendbuf.puller.vecs.entries[puller_index].buf = NULL;
-            ++puller_index;
-        }
-    }
-    assert(puller_index == stream->sendbuf.puller.vecs.size);
-
+    /* dispose puller after stealing ownership of buffers */
+    for (size_t i = 0; i < stream->sendbuf.puller.vecs.size; ++i)
+        stream->sendbuf.puller.vecs.entries[i].buf = NULL;
     h2o_sendvec_puller_dispose(&stream->sendbuf.puller);
-    stream->sendbuf.vecs_to_pull.size = 0;
+
+    stream->sendbuf.final_flattened_size = stream->sendbuf.final_size;
 
     return 1;
 }
@@ -1723,29 +1747,6 @@ static void pull_sendvecs_on_async_complete(h2o_sendvec_puller_t *_puller)
         quicly_stream_sync_sendbuf(stream->quic, 1);
         h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
     }
-}
-
-static int pull_sendvecs(struct st_h2o_http3_server_stream_t *stream)
-{
-    assert(stream->sendbuf.vecs_to_pull.size != 0 &&
-           stream->sendbuf.vecs_to_pull.entries[0].vec.callbacks->read_ != h2o_sendvec_read_raw);
-    assert(!puller_is_running(stream));
-
-    for (size_t i = 0; i < stream->sendbuf.vecs_to_pull.size; ++i) {
-        struct st_h2o_http3_server_sendvec_t *src = &stream->sendbuf.vecs_to_pull.entries[i];
-        if (src->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-            static __thread char *dummy_dst;
-            h2o_sendvec_puller_add(&stream->sendbuf.puller, &src->vec, src->vec.len, &dummy_dst, 0);
-            assert(stream->sendbuf.puller.vecs.entries[stream->sendbuf.puller.vecs.size - 1].buf == NULL);
-        }
-    }
-
-    h2o_sendvec_puller_read(&stream->sendbuf.puller);
-    if (h2o_sendvec_puller_read_is_complete(&stream->sendbuf.puller))
-        return pull_sendvecs_on_complete(stream);
-
-    stream->sendbuf.puller.on_async_read_complete = pull_sendvecs_on_async_complete;
-    return 0;
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
@@ -1806,15 +1807,25 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
-            /* 2. Load the content. While it might be better to delay the load to exactly when a QUIC STREAM frame conveying those
-             *    bytes are being built, it is impossible to postpone the emission of a STREAM frame within the `on_send_emit`
-             *    callback. Therefore the compromise is to load the contents of a stream the moment we observe that the stream is
-             *    actively sent.
-             *    The stream is deactivated unless the content is successfully and synchronously read. Upon error, resets are sent
-             *    outside the scheduler. Upon async read, the stream will be reactivated when the read completes. */
-            if (stream->sendbuf.vecs_to_pull.size != 0 && !puller_is_running(stream) && !pull_sendvecs(stream)) {
-                req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
-                continue;
+            /* 2. pull any content (if not yet been pulled), as this is an active stream */
+            if (!puller_is_empty(stream)) {
+                if (stream->sendbuf.puller.on_async_read_complete == NULL) {
+                    h2o_sendvec_puller_read(&stream->sendbuf.puller);
+                    if (h2o_sendvec_puller_read_is_complete(&stream->sendbuf.puller)) {
+                        if (!pull_sendvecs_on_complete(stream)) {
+                            /* pull failure -> stream is reset without sending any bytes */
+                            req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                            continue;
+                        }
+                    } else {
+                        stream->sendbuf.puller.on_async_read_complete = pull_sendvecs_on_async_complete;
+                    }
+                }
+                /* deactivate this stream if no bytes can be sent at this moment (due to them in the process of being pulled) */
+                if (stream->quic->sendstate.pending.ranges[0].start >= stream->sendbuf.final_flattened_size) {
+                    req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                    continue;
+                }
             }
             /* 3. send */
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
@@ -1889,6 +1900,8 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
         struct st_h2o_http3_server_stream_t *stream = qs->data;
         if (stream->proceed_while_sending)
             return 0;
+        if (new_state == ACTIVATE && is_blocked_by_puller(stream))
+            new_state = DEACTIVATE;
         switch (new_state) {
         case DEACTIVATE:
             req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
