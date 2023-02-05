@@ -455,9 +455,8 @@ static void stream_send_error(h2o_http2_conn_t *conn, uint32_t stream_id, int er
 static void request_gathered_write(h2o_http2_conn_t *conn)
 {
     assert(conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING);
-    if (!write_is_in_flight(conn) && !h2o_socket_is_writing(conn->sock) && !h2o_timer_is_linked(&conn->_write.timeout_entry)) {
+    if (!write_is_in_flight(conn) && !h2o_timer_is_linked(&conn->_write.timeout_entry))
         h2o_timer_link(conn->super.ctx->loop, 0, &conn->_write.timeout_entry);
-    }
 }
 
 static int update_stream_output_window(h2o_http2_stream_t *stream, ssize_t delta)
