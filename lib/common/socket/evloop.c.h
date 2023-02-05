@@ -87,7 +87,7 @@ struct st_h2o_evloop_read_file_t {
     h2o_timer_t delayed;
 };
 
-size_t h2o_evloop_io_uring_batch_size;
+size_t h2o_evloop_io_uring_batch_size = 1;
 
 #endif
 
