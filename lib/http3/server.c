@@ -1701,23 +1701,20 @@ static void pull_sendvecs_on_complete(h2o_sendvec_puller_t *_puller)
     struct st_h2o_http3_server_stream_t *stream =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, pullbuf.puller, _puller);
 
+    if (stream->pullbuf.puller.failed)
+        return shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
+
     /* rewrite pull vectors for which we have pulled as flattened, stealing buffers from the puller */
-    if (!stream->pullbuf.puller.failed) {
-        size_t puller_index = 0;
-        for (size_t i = 0; i < stream->pullbuf.vecs.size; ++i) {
-            h2o_sendvec_t *vec = &stream->pullbuf.vecs.entries[i];
-            if (vec->callbacks->read_ != h2o_sendvec_read_raw) {
-                void **puller_buf = &stream->pullbuf.puller.vecs.entries[puller_index++].buf;
-                h2o_sendvec_init_raw(vec, *puller_buf, vec->len);
-                *puller_buf = NULL;
-            }
+    size_t puller_index = 0;
+    for (size_t i = 0; i < stream->pullbuf.vecs.size; ++i) {
+        h2o_sendvec_t *vec = &stream->pullbuf.vecs.entries[i];
+        if (vec->callbacks->read_ != h2o_sendvec_read_raw) {
+            void **puller_buf = &stream->pullbuf.puller.vecs.entries[puller_index++].buf;
+            h2o_sendvec_init_raw(vec, *puller_buf, vec->len);
+            *puller_buf = NULL;
         }
-        h2o_sendvec_puller_dispose(&stream->pullbuf.puller);
-    } else {
-        h2o_sendvec_puller_dispose(&stream->pullbuf.puller);
-        stream->pullbuf.vecs.size = 0;
-        stream->pullbuf.send_state = H2O_SEND_STATE_ERROR;
     }
+    h2o_sendvec_puller_dispose(&stream->pullbuf.puller);
 
     size_t numvecs = stream->pullbuf.vecs.size;
     stream->pullbuf.vecs.size = 0;
