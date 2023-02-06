@@ -1442,10 +1442,9 @@ static h2o_iovec_t finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_
     }
 }
 
-static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream, int sync_sendbuf)
+static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)
 {
-    if (sync_sendbuf)
-        quicly_stream_sync_sendbuf(stream->quic, 1);
+    quicly_stream_sync_sendbuf(stream->quic, 1);
     if (!stream->proceed_while_sending)
         h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
@@ -1455,7 +1454,7 @@ static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream, int sy
  * in `stream->pullbuf`. They will be pulled in `on_send_emit` and be supplied to this function again as flat vectors.
  */
 static void do_send_core(struct st_h2o_http3_server_stream_t *stream, h2o_sendvec_t *bufs, size_t bufcnt,
-                         h2o_send_state_t send_state, int sync_sendbuf)
+                         h2o_send_state_t send_state)
 {
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
     struct st_h2o_http3_server_sendvec_t *data_frame_header_vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
@@ -1490,7 +1489,6 @@ static void do_send_core(struct st_h2o_http3_server_stream_t *stream, h2o_sendve
         stream->sendbuf.final_body_size += bytes_added;
         flatten_data_frame_header(stream, data_frame_header_vec, bytes_added);
         stream->sendbuf.final_size += data_frame_header_vec->vec.len + bytes_added;
-        sync_sendbuf = 1;
     } else {
         --stream->sendbuf.vecs.size;
     }
@@ -1502,17 +1500,15 @@ static void do_send_core(struct st_h2o_http3_server_stream_t *stream, h2o_sendve
     case H2O_SEND_STATE_ERROR:
         /* TODO consider how to forward error, pending resolution of https://github.com/quicwg/base-drafts/issues/3300 */
         shutdown_by_generator(stream);
-        sync_sendbuf = 1;
         break;
     }
 
-    finalize_do_send(stream, sync_sendbuf);
+    finalize_do_send(stream);
 }
 
 static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, _ostr);
-    int sync_sendbuf = 0;
 
     assert(&stream->req == _req);
     assert(stream->pullbuf.vecs.size == 0);
@@ -1525,7 +1521,6 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         write_response(stream, finalize_do_send_setup_udp_tunnel(stream));
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
-        sync_sendbuf = 1;
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
         assert(quicly_sendstate_is_open(&stream->quic->sendstate));
@@ -1540,7 +1535,7 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         break;
     }
 
-    do_send_core(stream, bufs, bufcnt, send_state, sync_sendbuf);
+    do_send_core(stream, bufs, bufcnt, send_state);
 }
 
 static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
@@ -1550,7 +1545,7 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
 
     write_response(stream, h2o_iovec_init(NULL, 0));
 
-    finalize_do_send(stream, 1);
+    finalize_do_send(stream);
 }
 
 static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)
@@ -1726,7 +1721,7 @@ static void pull_sendvecs_on_complete(h2o_sendvec_puller_t *_puller)
 
     size_t numvecs = stream->pullbuf.vecs.size;
     stream->pullbuf.vecs.size = 0;
-    do_send_core(stream, stream->pullbuf.vecs.entries, numvecs, stream->pullbuf.send_state, 0);
+    do_send_core(stream, stream->pullbuf.vecs.entries, numvecs, stream->pullbuf.send_state);
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
