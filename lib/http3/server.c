@@ -1696,13 +1696,12 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
     return 0;
 }
 
-static void pull_sendvecs_on_complete(h2o_sendvec_puller_t *_puller)
+static int pull_sendvecs_on_complete(struct st_h2o_http3_server_stream_t *stream)
 {
-    struct st_h2o_http3_server_stream_t *stream =
-        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, pullbuf.puller, _puller);
-
-    if (stream->pullbuf.puller.failed)
-        return shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
+    if (stream->pullbuf.puller.failed) {
+        shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0);
+        return 0;
+    }
 
     /* rewrite pull vectors for which we have pulled as flattened, stealing buffers from the puller */
     size_t puller_index = 0;
@@ -1719,6 +1718,17 @@ static void pull_sendvecs_on_complete(h2o_sendvec_puller_t *_puller)
     size_t numvecs = stream->pullbuf.vecs.size;
     stream->pullbuf.vecs.size = 0;
     do_send_core(stream, stream->pullbuf.vecs.entries, numvecs, stream->pullbuf.send_state);
+
+    return 1;
+}
+
+static void pull_sendvecs_on_async_complete(h2o_sendvec_puller_t *_puller)
+{
+    struct st_h2o_http3_server_stream_t *stream =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, pullbuf.puller, _puller);
+
+    if (!pull_sendvecs_on_complete(stream))
+        h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
 }
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
@@ -1798,9 +1808,12 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 if (stream->pullbuf.vecs.size != 0 && stream->pullbuf.puller.on_async_read_complete == NULL) {
                     h2o_sendvec_puller_read(&stream->pullbuf.puller);
                     if (h2o_sendvec_puller_read_is_complete(&stream->pullbuf.puller)) {
-                        pull_sendvecs_on_complete(&stream->pullbuf.puller);
+                        if (!pull_sendvecs_on_complete(stream)) {
+                            req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                            continue;
+                        }
                     } else {
-                        stream->pullbuf.puller.on_async_read_complete = pull_sendvecs_on_complete;
+                        stream->pullbuf.puller.on_async_read_complete = pull_sendvecs_on_async_complete;
                     }
                 }
                 /* When `do_send` receives zero bytes of flattened vectors, it schedules the stream for emission and
