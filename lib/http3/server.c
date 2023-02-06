@@ -789,7 +789,8 @@ static void retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
             /* allocate memory either from ssl buffer allocator or malloc; latter is used when the chunk is too large */
             void *newbuf;
             const h2o_sendvec_callbacks_t *callbacks;
-            if (newlen <= h2o_socket_ssl_buffer_allocator.conf->memsize) {
+            if (h2o_socket_ssl_buffer_allocator.conf->memsize / 2 <= newlen &&
+                newlen <= h2o_socket_ssl_buffer_allocator.conf->memsize) {
                 newbuf = h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator);
                 callbacks = &recycled_vec_callbacks;
             } else {
