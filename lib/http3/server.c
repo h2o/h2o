@@ -1785,6 +1785,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             }
             /* 2. make sure to pull any content (if not yet been pulled) before `on_send_emit` called from `quicly_send_stream`
              *    sets `*wrote_all` to true */
+            assert(stream->quic->sendstate.pending.num_ranges != 0 && "why scheduled? cannot call quicly_send_stream");
             if (quicly_sendstate_is_open(&stream->quic->sendstate) &&
                 stream->quic->sendstate.size_inflight + max_udp_payload_size >= stream->sendbuf.final_size) {
                 /* if there are nothing to be pulled and if we have not called `h2o_proceed_response`, call it now, after retaining
@@ -1804,6 +1805,15 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                     } else {
                         stream->pullbuf.puller.on_async_read_complete = pull_sendvecs_on_complete;
                     }
+                }
+                /* When `do_send` receives zero bytes of flattened vectors, it schedules the stream for emission and
+                 * `h2o_proceed_response` or `h2o_sendvec_puller_read` right above gets called depending on if pull vectors were
+                 * supplied. Either function might not complete synchronously, in which case the stream might get left open without
+                 * any pending to be sent. */
+                if (quicly_sendstate_is_open(&stream->quic->sendstate) &&
+                    stream->quic->sendstate.pending.ranges[0].start >= stream->sendbuf.final_size) {
+                    req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                    continue;
                 }
             }
             { /* 3. send */
