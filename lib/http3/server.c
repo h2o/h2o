@@ -1732,6 +1732,7 @@ static void pull_sendvecs_on_complete(h2o_sendvec_puller_t *_puller)
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
+    size_t max_udp_payload_size = conn->h3.super.ctx->quic->transport_params.max_udp_payload_size;
     int ret = 0;
 
     while (quicly_can_send_data(conn->h3.super.quic, s)) {
@@ -1787,9 +1788,10 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 req_scheduler_conn_blocked(&conn->scheduler.reqs, &stream->scheduler);
                 continue;
             }
-            /* 2. pull any content (if not yet been pulled), if we have sent all (or almost all) of the bytes available */
+            /* 2. make sure to pull any content (if not yet been pulled) before `on_send_emit` called from `quicly_send_stream`
+             *    sets `*wrote_all` to true */
             if (quicly_sendstate_is_open(&stream->quic->sendstate) &&
-                stream->quic->sendstate.size_inflight + 2000 >= stream->sendbuf.final_size) {
+                stream->quic->sendstate.size_inflight + max_udp_payload_size >= stream->sendbuf.final_size) {
                 /* if there are nothing to be pulled and if we have not called `h2o_proceed_response`, call it now, after retaining
                  * copies of sendvecs that are owned by the generator */
                 if (stream->pullbuf.vecs.size == 0 && !stream->proceed_requested) {
