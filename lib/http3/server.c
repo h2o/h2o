@@ -1820,7 +1820,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
                 if (stream->quic->sendstate.size_inflight > prev_size_inflight)
                     stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
             }
-            /* 5. prepare for next */
+            /* 4. prepare for next */
             if (quicly_stream_can_send(stream->quic, 1)) {
                 if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(stream->quic, 0)) {
                     /* capped by connection-level flow control, move the stream to conn-blocked */
