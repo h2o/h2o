@@ -1783,7 +1783,7 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
             /* 2. make sure to pull any content (if not yet been pulled) before `on_send_emit` called from `quicly_send_stream`
              *    sets `*wrote_all` to true */
             assert(stream->quic->sendstate.pending.num_ranges != 0 && "why scheduled? cannot call quicly_send_stream");
-            if (quicly_sendstate_is_open(&stream->quic->sendstate) &&
+            if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && quicly_sendstate_is_open(&stream->quic->sendstate) &&
                 stream->quic->sendstate.size_inflight + max_udp_payload_size >= stream->sendbuf.final_size) {
                 /* if there are nothing to be pulled and if we have not called `h2o_proceed_response`, call it now, after retaining
                  * copies of sendvecs that are owned by the generator */
