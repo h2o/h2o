@@ -738,6 +738,9 @@
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
 		08A835E42996351100D872CE /* build.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = build.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.make; };
+		08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu1604; sourceTree = "<group>"; };
+		08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2004; sourceTree = "<group>"; };
+		08A835E729964B5C00D872CE /* Dockerfile.ubuntu2204 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2204; sourceTree = "<group>"; };
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1096,9 +1099,7 @@
 		E904233524AB2C9C0072C5B7 /* pyproject.toml */ = {isa = PBXFileReference; lastKnownFileType = text; path = pyproject.toml; sourceTree = "<group>"; };
 		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		E908A2AD2320AE4C0039BCEE /* Dockerfile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile; sourceTree = "<group>"; };
 		E908A2AE2320AE4C0039BCEE /* check.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = check.mk; sourceTree = "<group>"; };
-		E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = Dockerfile.ubuntu1904; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90A95F41E30797D00483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
 		E90BB43924F369E4006507EA /* server.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = server.c; sourceTree = "<group>"; };
@@ -2610,8 +2611,9 @@
 			children = (
 				08A835E42996351100D872CE /* build.mk */,
 				E908A2AE2320AE4C0039BCEE /* check.mk */,
-				E908A2AD2320AE4C0039BCEE /* Dockerfile */,
-				E908A2AF2320AE4D0039BCEE /* Dockerfile.ubuntu1904 */,
+				08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */,
+				08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */,
+				08A835E729964B5C00D872CE /* Dockerfile.ubuntu2204 */,
 			);
 			path = "docker-ci";
 			sourceTree = "<group>";
