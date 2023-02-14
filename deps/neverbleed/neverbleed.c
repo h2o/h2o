@@ -544,7 +544,6 @@ static size_t daemon_set_pkey(EVP_PKEY *pkey)
     return index;
 }
 
-
 static int priv_encdec_proxy(const char *cmd, int flen, const unsigned char *from, unsigned char *_to, RSA *rsa, int padding)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
@@ -603,6 +602,8 @@ static int priv_encdec_stub(const char *name,
 
     return 0;
 }
+
+#if !defined(OPENSSL_IS_BORINGSSL)
 
 static int priv_enc_proxy(int flen, const unsigned char *from, unsigned char *to, RSA *rsa, int padding)
 {
@@ -681,6 +682,8 @@ static int sign_stub(neverbleed_iobuf_t *buf)
     return 0;
 }
 
+#endif
+
 static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebuf, const char *nbuf)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
@@ -706,7 +709,9 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
         abort();
     }
     RSA_set0_key(rsa, n, e, NULL);
+#if !defined(OPENSSL_IS_BORINGSSL)
     RSA_set_flags(rsa, RSA_FLAG_EXT_PKEY);
+#endif
 
     pkey = EVP_PKEY_new();
     EVP_PKEY_set1_RSA(pkey, rsa);
@@ -807,12 +812,12 @@ static int ecdsa_sign_proxy(int type, const unsigned char *m, int m_len, unsigne
     return (int)ret;
 }
 
-static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve_name, const char *ec_pubkeybuf)
+static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve_name, const void *pubkey, size_t pubkey_len)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     EC_KEY *ec_key;
     EC_GROUP *ec_group;
-    BIGNUM *ec_pubkeybn = NULL;
+    BN_CTX *bn_ctx = BN_CTX_new();
     EC_POINT *ec_pubkey;
     EVP_PKEY *pkey;
 
@@ -834,23 +839,19 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
 
     EC_KEY_set_group(ec_key, ec_group);
 
-    if (BN_hex2bn(&ec_pubkeybn, ec_pubkeybuf) == 0) {
-        fprintf(stderr, "failed to parse ECDSA ephemeral public key:%s\n", ec_pubkeybuf);
-        abort();
-    }
-
-    if ((ec_pubkey = EC_POINT_bn2point(ec_group, ec_pubkeybn, NULL, NULL)) == NULL) {
+    ec_pubkey = EC_POINT_new(ec_group);
+    assert(ec_pubkey != NULL);
+    if (!EC_POINT_oct2point(ec_group, ec_pubkey, pubkey, pubkey_len, bn_ctx)) {
         fprintf(stderr, "failed to get ECDSA ephemeral public key from BIGNUM\n");
         abort();
     }
-
     EC_KEY_set_public_key(ec_key, ec_pubkey);
 
     pkey = EVP_PKEY_new();
     EVP_PKEY_set1_EC_KEY(pkey, ec_key);
 
     EC_POINT_free(ec_pubkey);
-    BN_free(ec_pubkeybn);
+    BN_CTX_free(bn_ctx);
     EC_GROUP_free(ec_group);
     EC_KEY_free(ec_key);
 
@@ -1040,14 +1041,14 @@ int neverbleed_load_private_key_file(neverbleed_t *nb, SSL_CTX *ctx, const char 
     }
 #ifdef NEVERBLEED_ECDSA
     case NEVERBLEED_TYPE_ECDSA: {
-        char *ec_pubkeystr;
-        size_t curve_name;
+        size_t curve_name, pubkey_len;
+        void *pubkey_bytes;
 
-        if (iobuf_shift_num(&buf, &curve_name) != 0 || (ec_pubkeystr = iobuf_shift_str(&buf)) == NULL) {
+        if (iobuf_shift_num(&buf, &curve_name) != 0 || (pubkey_bytes = iobuf_shift_bytes(&buf, &pubkey_len)) == NULL) {
             errno = 0;
             dief("failed to parse response");
         }
-        pkey = ecdsa_create_pkey(nb, index, (int)curve_name, ec_pubkeystr);
+        pkey = ecdsa_create_pkey(nb, index, (int)curve_name, pubkey_bytes, pubkey_len);
         break;
     }
 #endif
@@ -1087,8 +1088,9 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
     EVP_PKEY *pkey = NULL;
 #ifdef NEVERBLEED_ECDSA
     const EC_GROUP *ec_group;
-    BIGNUM *ec_pubkeybn = NULL;
-    char *ec_pubkeystr = NULL;
+    void *ec_pubkeybytes = NULL;
+    size_t ec_pubkeylen;
+    BN_CTX *bn_ctx = NULL;
 #endif
 
     if ((fn = iobuf_shift_str(buf)) == NULL) {
@@ -1126,13 +1128,11 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
         type = NEVERBLEED_TYPE_ECDSA;
         ec_group = EC_KEY_get0_group(ec_key);
         ec_pubkey = EC_KEY_get0_public_key(ec_key);
-        ec_pubkeybn = BN_new();
-        if (!EC_POINT_point2bn(ec_group, ec_pubkey, POINT_CONVERSION_COMPRESSED, ec_pubkeybn, NULL)) {
-            type = NEVERBLEED_TYPE_ERROR;
-            snprintf(errbuf, sizeof(errbuf), "failed to convert ECDSA public key to BIGNUM");
-            goto Respond;
-        }
-        ec_pubkeystr = BN_bn2hex(ec_pubkeybn);
+        ec_pubkeylen = EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, bn_ctx);
+        if (!(ec_pubkeylen > 0 && (ec_pubkeybytes = malloc(ec_pubkeylen)) != NULL &&
+              EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, ec_pubkeybytes, ec_pubkeylen, bn_ctx) ==
+                  ec_pubkeylen))
+            dief("failed to serialize EC public key");
         break;
 #else
         snprintf(errbuf, sizeof(errbuf), "ECDSA support requires OpenSSL >= 1.1.0 or LibreSSL >= 2.9.1");
@@ -1159,7 +1159,7 @@ Respond:
 #ifdef NEVERBLEED_ECDSA
     case NEVERBLEED_TYPE_ECDSA:
         iobuf_push_num(buf, EC_GROUP_get_curve_name(ec_group));
-        iobuf_push_str(buf, ec_pubkeystr);
+        iobuf_push_bytes(buf, ec_pubkeybytes, ec_pubkeylen);
         break;
 #endif
     default:
@@ -1174,10 +1174,10 @@ Respond:
     if (nstr != NULL)
         OPENSSL_free(nstr);
 #ifdef NEVERBLEED_ECDSA
-    if (ec_pubkeystr != NULL)
-        OPENSSL_free(ec_pubkeystr);
-    if (ec_pubkeybn != NULL)
-        BN_free(ec_pubkeybn);
+    if (ec_pubkeybytes != NULL)
+        OPENSSL_free(ec_pubkeybytes);
+    if (bn_ctx != NULL)
+        BN_CTX_free(bn_ctx);
 #endif
     if (fp != NULL)
         fclose(fp);
@@ -1444,6 +1444,7 @@ static void *daemon_conn_thread(void *_sock_fd)
             warnf("failed to parse request");
             break;
         }
+#if !defined(OPENSSL_IS_BORINGSSL)
         if (strcmp(cmd, "priv_enc") == 0) {
             if (priv_enc_stub(&buf) != 0)
                 break;
@@ -1458,7 +1459,9 @@ static void *daemon_conn_thread(void *_sock_fd)
             if (ecdsa_sign_stub(&buf) != 0)
                 break;
 #endif
-        } else if (strcmp(cmd, "digestsign") == 0) {
+        } else
+#endif
+            if (strcmp(cmd, "digestsign") == 0) {
             if (digestsign_stub(&buf) != 0)
                 break;
         } else if (strcmp(cmd, "load_key") == 0) {
@@ -1590,40 +1593,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 {
     int pipe_fds[2] = {-1, -1}, listen_fd = -1;
     char *tempdir = NULL;
-    const RSA_METHOD *rsa_default_method;
-    RSA_METHOD *rsa_method;
-#ifdef NEVERBLEED_ECDSA
-    const EC_KEY_METHOD *ecdsa_default_method;
-    EC_KEY_METHOD *ecdsa_method;
-#endif
-
-#ifdef NEVERBLEED_OPAQUE_RSA_METHOD
-    rsa_default_method = RSA_PKCS1_OpenSSL();
-    rsa_method = RSA_meth_dup(rsa_default_method);
-
-    RSA_meth_set1_name(rsa_method, "privsep RSA method");
-    RSA_meth_set_priv_enc(rsa_method, priv_enc_proxy);
-    RSA_meth_set_priv_dec(rsa_method, priv_dec_proxy);
-    RSA_meth_set_sign(rsa_method, sign_proxy);
-    RSA_meth_set_finish(rsa_method, priv_rsa_finish);
-#else
-    rsa_default_method = RSA_PKCS1_SSLeay();
-    rsa_method = &static_rsa_method;
-
-    rsa_method->rsa_pub_enc = rsa_default_method->rsa_pub_enc;
-    rsa_method->rsa_pub_dec = rsa_default_method->rsa_pub_dec;
-    rsa_method->rsa_verify = rsa_default_method->rsa_verify;
-    rsa_method->bn_mod_exp = rsa_default_method->bn_mod_exp;
-#endif
-
-#ifdef NEVERBLEED_ECDSA
-    ecdsa_default_method = EC_KEY_get_default_method();
-    ecdsa_method = EC_KEY_METHOD_new(ecdsa_default_method);
-
-    /* it seems sign_sig and sign_setup is not used in TLS ECDSA. */
-    EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
-    EC_KEY_METHOD_set_init(ecdsa_method, NULL, priv_ecdsa_finish, NULL, NULL, NULL, NULL);
-#endif
 
     /* setup the daemon */
     if (pipe(pipe_fds) != 0) {
@@ -1687,17 +1656,57 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
     close(pipe_fds[0]);
     pipe_fds[0] = -1;
 
-    /* setup engine */
-    if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
-        !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, rsa_method)
+#if defined(OPENSSL_IS_BORINGSSL)
+    nb->engine = NULL;
+#else
+    { /* setup engine */
+        const RSA_METHOD *rsa_default_method;
+        RSA_METHOD *rsa_method;
 #ifdef NEVERBLEED_ECDSA
-        || !ENGINE_set_EC(nb->engine, ecdsa_method)
+        const EC_KEY_METHOD *ecdsa_default_method;
+        EC_KEY_METHOD *ecdsa_method;
 #endif
-            ) {
-        snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
-        goto Fail;
+
+#ifdef NEVERBLEED_OPAQUE_RSA_METHOD
+        rsa_default_method = RSA_PKCS1_OpenSSL();
+        rsa_method = RSA_meth_dup(rsa_default_method);
+
+        RSA_meth_set1_name(rsa_method, "privsep RSA method");
+        RSA_meth_set_priv_enc(rsa_method, priv_enc_proxy);
+        RSA_meth_set_priv_dec(rsa_method, priv_dec_proxy);
+        RSA_meth_set_sign(rsa_method, sign_proxy);
+        RSA_meth_set_finish(rsa_method, priv_rsa_finish);
+#else
+        rsa_default_method = RSA_PKCS1_SSLeay();
+        rsa_method = &static_rsa_method;
+
+        rsa_method->rsa_pub_enc = rsa_default_method->rsa_pub_enc;
+        rsa_method->rsa_pub_dec = rsa_default_method->rsa_pub_dec;
+        rsa_method->rsa_verify = rsa_default_method->rsa_verify;
+        rsa_method->bn_mod_exp = rsa_default_method->bn_mod_exp;
+#endif
+
+#ifdef NEVERBLEED_ECDSA
+        ecdsa_default_method = EC_KEY_get_default_method();
+        ecdsa_method = EC_KEY_METHOD_new(ecdsa_default_method);
+
+        /* it seems sign_sig and sign_setup is not used in TLS ECDSA. */
+        EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
+        EC_KEY_METHOD_set_init(ecdsa_method, NULL, priv_ecdsa_finish, NULL, NULL, NULL, NULL);
+#endif
+
+        if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
+            !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, rsa_method)
+#ifdef NEVERBLEED_ECDSA
+            || !ENGINE_set_EC(nb->engine, ecdsa_method)
+#endif
+        ) {
+            snprintf(errbuf, NEVERBLEED_ERRBUF_SIZE, "failed to initialize the OpenSSL engine");
+            goto Fail;
+        }
+        ENGINE_add(nb->engine);
     }
-    ENGINE_add(nb->engine);
+#endif
 
     /* setup thread key */
     pthread_key_create(&nb->thread_key, dispose_thread_data);
