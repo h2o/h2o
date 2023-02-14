@@ -85,7 +85,7 @@ extern "C" {
 #define PTLS_AESCCM_INTEGRITY_LIMIT 0xB504F3                   /* 2^23.5 */
 
 #define PTLS_CHACHA20_KEY_SIZE 32
-#define PTLS_CHACHA20_IV_SIZE 16
+#define PTLS_CHACHA20_IV_SIZE 16 /* contrary to RFC 7539, follow OpenSSL way of using first 32 bits as ctr and latter 96 as IV */
 #define PTLS_CHACHA20POLY1305_IV_SIZE 12
 #define PTLS_CHACHA20POLY1305_TAG_SIZE 16
 #define PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT UINT64_MAX       /* at least 2^64 */
@@ -398,7 +398,8 @@ typedef struct st_ptls_aead_context_t {
     const struct st_ptls_aead_algorithm_t *algo;
     /* field above this line must not be altered by the crypto binding */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
-    void (*do_xor_iv)(struct st_ptls_aead_context_t *ctx, const void *bytes, size_t len);
+    void (*do_get_iv)(struct st_ptls_aead_context_t *ctx, void *iv);
+    void (*do_set_iv)(struct st_ptls_aead_context_t *ctx, const void *iv);
     void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
     size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
     size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
@@ -607,6 +608,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
      */
     ptls_iovec_t raw_message;
     /**
+     * points to the cipher-suites section of the raw_message (see above)
+     */
+    ptls_iovec_t cipher_suites;
+    /**
      *
      */
     struct {
@@ -621,10 +626,6 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         const uint16_t *list;
         size_t count;
     } certificate_compression_algorithms;
-    struct {
-        const uint16_t *list;
-        size_t count;
-    } cipher_suites;
     struct {
         const uint8_t *list;
         size_t count;
@@ -1609,7 +1610,9 @@ void ptls_aead_free(ptls_aead_context_t *ctx);
  * Permutes the static IV by applying given bytes using bit-wise XOR. This API can be used for supplying nonces longer than 64-
  * bits.
  */
-static void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len);
+void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len);
+static void ptls_aead_get_iv(ptls_aead_context_t *ctx, void *iv);
+static void ptls_aead_set_iv(ptls_aead_context_t *ctx, const void *iv);
 /**
  * Encrypts one AEAD block, given input and output vectors.
  */
@@ -1817,9 +1820,14 @@ inline void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const 
     ctx->do_transform(ctx, output, input, len);
 }
 
-inline void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len)
+inline void ptls_aead_get_iv(ptls_aead_context_t *ctx, void *iv)
 {
-    ctx->do_xor_iv(ctx, bytes, len);
+    ctx->do_get_iv(ctx, iv);
+}
+
+inline void ptls_aead_set_iv(ptls_aead_context_t *ctx, const void *iv)
+{
+    ctx->do_set_iv(ctx, iv);
 }
 
 inline size_t ptls_aead_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,

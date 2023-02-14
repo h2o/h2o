@@ -328,7 +328,6 @@ struct st_ptls_client_hello_psk_t {
 };
 
 #define MAX_UNKNOWN_EXTENSIONS 16
-#define MAX_CLIENT_CIPHERS 32
 #define MAX_CERTIFICATE_TYPES 8
 
 struct st_ptls_client_hello_t {
@@ -353,10 +352,6 @@ struct st_ptls_client_hello_t {
         uint16_t list[16];
         size_t count;
     } cert_compression_algos;
-    struct {
-        uint16_t list[MAX_CLIENT_CIPHERS];
-        size_t count;
-    } client_ciphers;
     struct {
         ptls_iovec_t all;
         ptls_iovec_t tbs;
@@ -1634,6 +1629,9 @@ static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_
 
     ctx->epoch = epoch;
 
+    log_secret(tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
+               ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
+
     /* special path for applications having their own record layer */
     if (tls->ctx->update_traffic_key != NULL) {
         if (skip_notify)
@@ -1648,8 +1646,6 @@ static int setup_traffic_protection(ptls_t *tls, int is_enc, const char *secret_
         return PTLS_ERROR_NO_MEMORY; /* TODO obtain error from ptls_aead_new */
     ctx->seq = 0;
 
-    log_secret(tls, log_labels[ptls_is_server(tls) == is_enc][epoch],
-               ptls_iovec_init(ctx->secret, tls->key_schedule->hashes[0].algo->digest_size));
     PTLS_DEBUGF("[%s] %02x%02x,%02x%02x\n", log_labels[ptls_is_server(tls)][epoch], (unsigned)ctx->secret[0],
                 (unsigned)ctx->secret[1], (unsigned)ctx->aead->static_iv[0], (unsigned)ctx->aead->static_iv[1]);
 
@@ -3545,18 +3541,12 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
 
     /* decode and select from ciphersuites */
     ptls_decode_open_block(src, end, 2, {
+        if ((end - src) % 2 != 0) {
+            ret = PTLS_ALERT_DECODE_ERROR;
+            goto Exit;
+        }
         ch->cipher_suites = ptls_iovec_init(src, end - src);
-        uint16_t *id = ch->client_ciphers.list;
-        do {
-            if ((ret = ptls_decode16(id, &src, end)) != 0)
-                goto Exit;
-            id++;
-            ch->client_ciphers.count++;
-            if (id >= ch->client_ciphers.list + MAX_CLIENT_CIPHERS) {
-                src = end;
-                break;
-            }
-        } while (src != end);
+        src = end;
     });
 
     /* decode legacy_compression_methods */
@@ -3917,10 +3907,10 @@ Exit:
 
 /* Wrapper function for invoking the on_client_hello callback, taking an exhaustive list of parameters as arguments. The intention
  * is to not miss setting them as we add new parameters to the struct. */
-static inline int call_on_client_hello_cb(ptls_t *tls, ptls_iovec_t server_name, ptls_iovec_t raw_message, ptls_iovec_t *alpns,
-                                          size_t num_alpns, const uint16_t *sig_algos, size_t num_sig_algos,
-                                          const uint16_t *cert_comp_algos, size_t num_cert_comp_algos,
-                                          const uint16_t *cipher_suites, size_t num_cipher_suites, const uint8_t *server_cert_types,
+static inline int call_on_client_hello_cb(ptls_t *tls, ptls_iovec_t server_name, ptls_iovec_t raw_message,
+                                          ptls_iovec_t cipher_suites, ptls_iovec_t *alpns, size_t num_alpns,
+                                          const uint16_t *sig_algos, size_t num_sig_algos, const uint16_t *cert_comp_algos,
+                                          size_t num_cert_comp_algos, const uint8_t *server_cert_types,
                                           size_t num_server_cert_types, int incompatible_version)
 {
     if (tls->ctx->on_client_hello == NULL)
@@ -3928,10 +3918,10 @@ static inline int call_on_client_hello_cb(ptls_t *tls, ptls_iovec_t server_name,
 
     ptls_on_client_hello_parameters_t params = {server_name,
                                                 raw_message,
+                                                cipher_suites,
                                                 {alpns, num_alpns},
                                                 {sig_algos, num_sig_algos},
                                                 {cert_comp_algos, num_cert_comp_algos},
-                                                {cipher_suites, num_cipher_suites},
                                                 {server_cert_types, num_server_cert_types},
                                                 incompatible_version};
     return tls->ctx->on_client_hello->cb(tls->ctx->on_client_hello, tls, &params);
@@ -3955,8 +3945,8 @@ static int check_client_hello_constraints(ptls_context_t *ctx, struct st_ptls_cl
         /* fail with PROTOCOL_VERSION alert, after providing the applications the raw CH and SNI to help them fallback */
         if (!is_second_flight) {
             int ret;
-            if ((ret = call_on_client_hello_cb(tls_cbarg, ch->server_name, raw_message, ch->alpn.list, ch->alpn.count, NULL, 0,
-                                               NULL, 0, NULL, 0, NULL, 0, 1)) != 0)
+            if ((ret = call_on_client_hello_cb(tls_cbarg, ch->server_name, raw_message, ch->cipher_suites, ch->alpn.list,
+                                               ch->alpn.count, NULL, 0, NULL, 0, NULL, 0, 1)) != 0)
                 return ret;
         }
         return PTLS_ALERT_PROTOCOL_VERSION;
@@ -4325,9 +4315,9 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         ptls_iovec_t server_name = {NULL};
         if (ch->server_name.base != NULL)
             server_name = ch->server_name;
-        if ((ret = call_on_client_hello_cb(tls, server_name, message, ch->alpn.list, ch->alpn.count, ch->signature_algorithms.list,
-                                           ch->signature_algorithms.count, ch->cert_compression_algos.list,
-                                           ch->cert_compression_algos.count, ch->client_ciphers.list, ch->client_ciphers.count,
+        if ((ret = call_on_client_hello_cb(tls, server_name, message, ch->cipher_suites, ch->alpn.list, ch->alpn.count,
+                                           ch->signature_algorithms.list, ch->signature_algorithms.count,
+                                           ch->cert_compression_algos.list, ch->cert_compression_algos.count,
                                            ch->server_certificate_types.list, ch->server_certificate_types.count, 0)) != 0)
             goto Exit;
         if (!certificate_type_exists(ch->server_certificate_types.list, ch->server_certificate_types.count,
@@ -6214,6 +6204,17 @@ void ptls_aead_free(ptls_aead_context_t *ctx)
     free(ctx);
 }
 
+void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *_bytes, size_t len)
+{
+    const uint8_t *bytes = _bytes;
+    uint8_t iv[PTLS_MAX_IV_SIZE];
+
+    ptls_aead_get_iv(ctx, iv);
+    for (size_t i = 0; i < len; ++i)
+        iv[i] ^= bytes[i];
+    ptls_aead_set_iv(ctx, iv);
+}
+
 void ptls_aead__build_iv(ptls_aead_algorithm_t *algo, uint8_t *iv, const uint8_t *static_iv, uint64_t seq)
 {
     size_t iv_size = algo->iv_size, i;
@@ -6432,12 +6433,13 @@ static char *byte_to_hex(char *dst, uint8_t v)
 
 char *ptls_hexdump(char *dst, const void *_src, size_t len)
 {
+    char *buf = dst;
     const uint8_t *src = _src;
 
     for (size_t i = 0; i != len; ++i)
         dst = byte_to_hex(dst, src[i]);
     *dst = '\0';
-    return dst;
+    return buf;
 }
 
 char *ptls_jsonescape(char *buf, const char *unsafe_str, size_t len)
@@ -6504,7 +6506,9 @@ int ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
     if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
         return 0;
 
-    buf->off = (uint8_t *)ptls_hexdump((char *)(buf->base + buf->off), s, l) - buf->base;
+    ptls_hexdump((char *)(buf->base + buf->off), s, l);
+    buf->off += l * 2;
+
     return 1;
 }
 

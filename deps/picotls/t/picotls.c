@@ -210,6 +210,53 @@ static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
     ptls_aead_free(c);
 }
 
+static void test_ciphersuite_stream(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
+{
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567",
+               *text[] = {
+                   "CHAPTER I.\n",
+                   "Down the Rabbit-Hole\n",
+                   "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once "
+                   "or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, "
+                   "“and what is the use of a book,” thought Alice “without pictures or conversations?”\n",
+                   "So she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and "
+                   "stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the "
+                   "daisies, when suddenly a White Rabbit with pink eyes ran close by her.\n",
+                   NULL,
+               };
+    ptls_aead_context_t *c;
+    char enc[1024], dec[1024];
+    size_t enclen, declen;
+
+    /* encrypt */
+    c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
+    assert(c != NULL);
+    ptls_aead_encrypt_init(c, 0, NULL, 0);
+    enclen = 0;
+    for (size_t i = 0; text[i] != NULL; ++i)
+        enclen += ptls_aead_encrypt_update(c, enc + enclen, text[i], strlen(text[i]));
+    enclen += ptls_aead_encrypt_final(c, enc + enclen);
+    ptls_aead_free(c);
+
+    /* decrypt */
+    c = ptls_aead_new(cs2->aead, cs2->hash, 0, traffic_secret, NULL);
+    declen = ptls_aead_decrypt(c, dec, enc, enclen, 0, NULL, 0);
+    ok(declen != SIZE_MAX);
+    ok(declen == enclen - cs1->aead->tag_size);
+    ptls_aead_free(c);
+
+    /* check text */
+    for (size_t i = 0, decoff = 0;; ++i) {
+        if (text[i] == NULL) {
+            ok(decoff == declen);
+            break;
+        }
+        ok(decoff + strlen(text[i]) <= declen);
+        ok(memcmp(dec + decoff, text[i], strlen(text[i])) == 0);
+        decoff += strlen(text[i]);
+    }
+}
+
 static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
 {
     const char *traffic_secret = "012345678901234567890123456789012345678901234567", *src = "hello world", *aad = "my true aad";
@@ -372,6 +419,7 @@ static void test_aes128gcm(void)
                         *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256);
 
     test_ciphersuite(cs, cs_peer);
+    test_ciphersuite_stream(cs, cs_peer);
     test_aad_ciphersuite(cs, cs_peer);
     test_aad96_ciphersuite(cs, cs_peer);
 }
@@ -383,6 +431,7 @@ static void test_aes256gcm(void)
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
         test_aad96_ciphersuite(cs, cs_peer);
     }
@@ -395,6 +444,7 @@ static void test_chacha20poly1305(void)
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
         test_aad96_ciphersuite(cs, cs_peer);
     }
