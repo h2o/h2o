@@ -41,6 +41,7 @@ INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
 INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
+INCLUDE(deps/picotls/cmake/boringssl-adjust.cmake)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
@@ -68,6 +69,7 @@ IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR D
     ENDIF ()
 ENDIF ()
 FIND_PACKAGE(OpenSSL REQUIRED)
+BORINGSSL_ADJUST()
 FIND_PACKAGE(ZLIB REQUIRED)
 
 CHECK_C_SOURCE_COMPILES("
