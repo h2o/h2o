@@ -1303,6 +1303,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     identity->ptls.ctx = &pctx->ctx;
 
+    X509_free(cert);
+
     return NULL;
 }
 
