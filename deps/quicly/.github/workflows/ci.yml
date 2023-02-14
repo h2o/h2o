@@ -17,6 +17,10 @@ jobs:
         include:
           - name: default
             command: make -f misc/docker-ci.mk
+          - name: openssl-3.0
+            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204
+          - name: boringssl
+            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204 CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl'
           - name: asan
             command: make -f misc/docker-ci.mk CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0'
 
