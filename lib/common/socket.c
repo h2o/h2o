@@ -1403,9 +1403,18 @@ const char *h2o_socket_get_error_string(int errnum, const char *default_err)
     }
 }
 
-static void create_ossl(h2o_socket_t *sock)
+static void create_ossl(h2o_socket_t *sock, int is_server)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+#ifdef OPENSSL_IS_BORINGSSL
+    if (is_server) {
+        SSL_set_accept_state(sock->ssl->ossl);
+    } else {
+        SSL_set_connect_state(sock->ssl->ossl);
+    }
+#else
+    assert(SSL_is_server(sock->ssl->ossl) == !!is_server);
+#endif
     /* set app data to be used in h2o_socket_ssl_new_session_cb */
     SSL_set_app_data(sock->ssl->ossl, sock);
     setup_bio(sock);
@@ -1838,7 +1847,7 @@ Redo:
                    "async operation should start only after resumption state is obtained and OpenSSL decides not to resume");
 #endif
             SSL_free(sock->ssl->ossl);
-            create_ossl(sock);
+            create_ossl(sock, 1);
             if (has_pending_ssl_bytes(sock->ssl))
                 dispose_ssl_output_buffer(sock->ssl);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
@@ -1949,7 +1958,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
         /* the client cannot use tls1.3, fallback to openssl */
         ptls_free(ptls);
-        create_ossl(sock);
+        create_ossl(sock, 1);
         proceed_handshake_openssl(sock);
     } else {
         /* picotls is responsible for handling the handshake */
@@ -1998,7 +2007,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     } else if (sock->ssl->ossl != NULL) {
         proceed_handshake_openssl(sock);
     } else if (h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx) == NULL) {
-        create_ossl(sock);
+        create_ossl(sock, 1);
         proceed_handshake_openssl(sock);
     } else {
         proceed_handshake_undetermined(sock);
@@ -2034,7 +2043,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
-        create_ossl(sock);
+        create_ossl(sock, 0);
         if (alpn_protos.base != NULL)
             SSL_set_alpn_protos(sock->ssl->ossl, (const unsigned char *)alpn_protos.base, (unsigned)alpn_protos.len);
         h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(sock->ssl->ssl_ctx);
