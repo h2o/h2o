@@ -1460,12 +1460,12 @@ static void *daemon_conn_thread(void *_sock_fd)
             if (ecdsa_sign_stub(&buf) != 0)
                 break;
 #endif
-        } else if (strcmp(cmd, "digestsign") == 0) {
-            if (digestsign_stub(&buf) != 0)
-                break;
         } else
 #endif
-        if (strcmp(cmd, "load_key") == 0) {
+        if (strcmp(cmd, "digestsign") == 0) {
+            if (digestsign_stub(&buf) != 0)
+                break;
+        } else if (strcmp(cmd, "load_key") == 0) {
             if (load_key_stub(&buf) != 0)
                 break;
         } else if (strcmp(cmd, "del_pkey") == 0) {
