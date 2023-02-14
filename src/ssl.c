@@ -504,7 +504,7 @@ static int serialize_ticket_entry(char *buf, size_t bufsz, struct st_session_tic
                     "  key: %s\n"
                     "  not_before: %" PRIu64 "\n"
                     "  not_after: %" PRIu64 "\n",
-                    name_buf, OBJ_nid2sn(EVP_CIPHER_type(ticket->cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac)), key_buf,
+                    name_buf, OBJ_nid2sn(EVP_CIPHER_nid(ticket->cipher)), OBJ_nid2sn(EVP_MD_type(ticket->hmac)), key_buf,
                     ticket->not_before, ticket->not_after);
 }
 
