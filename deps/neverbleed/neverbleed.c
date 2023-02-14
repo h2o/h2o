@@ -1657,7 +1657,9 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
     close(pipe_fds[0]);
     pipe_fds[0] = -1;
 
-#if !defined(OPENSSL_IS_BORINGSSL)
+#if defined(OPENSSL_IS_BORINGSSL)
+    nb->engine = NULL;
+#else
     { /* setup engine */
         const RSA_METHOD *rsa_default_method;
         RSA_METHOD *rsa_method;
