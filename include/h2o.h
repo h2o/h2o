@@ -945,6 +945,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     union {
         struct {
+            h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
