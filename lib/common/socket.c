@@ -1755,6 +1755,11 @@ static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_w
         assert(numfds == 1);
         SSL_get_all_async_fds(sock->ssl->ossl, &async_fd, &numfds);
         h2o_socket_start_async_handshake(h2o_socket_get_loop(sock), async_fd, sock, on_async_proceed_handshake);
+#elif defined(OPENSSL_IS_BORINGSSL)
+        ptls_async_job_t *job = SSL_get_ex_data(sock->ssl->ossl, h2o_socket_boringssl_get_async_object_index());
+        assert(job != NULL);
+        assert(job->set_completion_callback != NULL);
+        job->set_completion_callback(job, on_async_job_complete, sock);
 #else
         h2o_fatal("how can OpenSSL ask async when the async API is unavailable");
 #endif
@@ -1867,12 +1872,16 @@ Redo:
 
     /* handshake failed either in strict mTLS mode or others */
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
+        int is_async = 0;
 #if H2O_CAN_OSSL_ASYNC
-        if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
+        is_async = SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC;
+#elif defined(OPENSSL_IS_BORINGSSL)
+        is_async = SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_PRIVATE_KEY_OPERATION;
+#endif
+        if (is_async) {
             do_proceed_handshake_async(sock, NULL);
             return;
         }
-#endif
 
         /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
          * shutdown_ssl. */
@@ -2768,6 +2777,23 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
 {
     return flags;
+}
+
+#endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+int h2o_socket_boringssl_get_async_object_index(void)
+{
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_get_ex_new_index(0, 0, NULL, NULL, NULL); });
+    return index;
+}
+
+int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl)
+{
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+    return SSL_is_server(ssl) && sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_REQUEST_SENT;
 }
 
 #endif

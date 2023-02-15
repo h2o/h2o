@@ -662,6 +662,25 @@ static void async_nb_digestsign_handle_response(struct async_nb_transaction_t *t
     ctx->on_complete.func(ctx->on_complete.data);
 }
 
+static struct async_nb_digestsign_ctx_t *async_nb_start_digestsign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme,
+                                                                   ptls_iovec_t input)
+{
+    struct async_nb_digestsign_ctx_t *async_ctx = h2o_mem_alloc(sizeof(*async_ctx));
+    *async_ctx =
+        (struct async_nb_digestsign_ctx_t){.super = {.destroy_ = async_nb_digestsign_ctx_free,
+                                                     .set_completion_callback = async_nb_digestsign_ctx_set_completion_callback},
+                                           .transaction = {.on_read_complete = async_nb_digestsign_handle_response},
+                                           .scheme = scheme};
+    neverbleed_start_digestsign(&async_ctx->buf, key, scheme->scheme_md(), input.base, input.len);
+    async_ctx->transaction.buf = &async_ctx->buf;
+
+    /* submit */
+    async_nb_push(&async_nb.write_queue, &async_ctx->transaction);
+    async_nb_submit_write_pending();
+
+    return async_ctx;
+}
+
 static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
                                ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
@@ -700,20 +719,8 @@ static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls
     if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
         return PTLS_ALERT_HANDSHAKE_FAILURE;
 
-    /* build async context, generate request */
-    struct async_nb_digestsign_ctx_t *async_ctx = h2o_mem_alloc(sizeof(*async_ctx));
-    *async_ctx =
-        (struct async_nb_digestsign_ctx_t){.super = {.destroy_ = async_nb_digestsign_ctx_free,
-                                                     .set_completion_callback = async_nb_digestsign_ctx_set_completion_callback},
-                                           .transaction = {.on_read_complete = async_nb_digestsign_handle_response},
-                                           .scheme = scheme};
-    neverbleed_start_digestsign(&async_ctx->buf, self->key, scheme->scheme_md(), input.base, input.len);
-    async_ctx->transaction.buf = &async_ctx->buf;
-    *async = &async_ctx->super;
-
-    /* submit */
-    async_nb_push(&async_nb.write_queue, &async_ctx->transaction);
-    async_nb_submit_write_pending();
+    /* submit async request */
+    *async = &async_nb_start_digestsign(self->key, scheme, input)->super;
 
     return PTLS_ERROR_ASYNC_OPERATION;
 }
@@ -738,6 +745,62 @@ static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
 }
 
 static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+enum ssl_private_key_result_t boringssl_async_sign(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out,
+                                                   uint16_t signature_algorithm, const uint8_t *in, size_t len)
+{
+    if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
+        return ssl_private_key_failure;
+
+    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    const ptls_openssl_signature_scheme_t *scheme;
+
+    if ((scheme = ptls_openssl_lookup_signature_schemes(key)) == NULL)
+        h2o_fatal("unsupported private key type %d", EVP_PKEY_id(key));
+    for (; scheme->scheme_id != UINT16_MAX; ++scheme)
+        if (scheme->scheme_id == signature_algorithm)
+            goto FoundScheme;
+    h2o_fatal("specified scheme %" PRIu16 " is not supported", signature_algorithm);
+
+FoundScheme:
+    /* request signature generation */
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(),
+                    async_nb_start_digestsign(key, scheme, ptls_iovec_init(in, len)));
+    return ssl_private_key_retry;
+}
+
+enum ssl_private_key_result_t boringssl_async_decrypt(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, const uint8_t *in,
+                                                      size_t len)
+{
+    h2o_fatal("unimplemented");
+}
+
+enum ssl_private_key_result_t boringssl_async_complete(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out)
+{
+    struct async_nb_digestsign_ctx_t *async_ctx = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_object_index());
+    void *digest;
+    size_t digestlen;
+
+    assert(async_ctx != NULL);
+
+    neverbleed_finish_digestsign(&async_ctx->buf, &digest, &digestlen);
+    async_nb_digestsign_ctx_free(&async_ctx->super);
+    async_ctx = NULL;
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), NULL);
+
+    assert(digestlen <= max_out);
+    memcpy(out, digest, digestlen);
+    *out_len = digestlen;
+
+    ptls_clear_memory(digest, digestlen);
+    free(digest);
+
+    return ssl_private_key_success;
+}
+
+#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -1940,6 +2003,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
+#elif defined(OPENSSL_IS_BORINGSSL)
+        if (use_neverbleed) {
+            static const SSL_PRIVATE_KEY_METHOD meth = {
+                .sign = boringssl_async_sign, .decrypt = boringssl_async_decrypt, .complete = boringssl_async_complete};
+            SSL_CTX_set_private_key_method(identity->ossl, &meth);
+        }
 #endif
 
         SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);

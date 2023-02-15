@@ -554,6 +554,11 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
+#ifdef OPENSSL_IS_BORINGSSL
+int h2o_socket_boringssl_get_async_object_index(void);
+int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
+#endif
+
 /* inline defs */
 
 inline int h2o_socket_is_writing(h2o_socket_t *sock)
