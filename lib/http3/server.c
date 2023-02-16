@@ -544,6 +544,15 @@ static quicly_tracer_t *get_tracer(h2o_conn_t *_conn)
     return quicly_get_tracer(conn->h3.super.quic);
 }
 
+static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof("u=" H2O_UINT8_LONGEST_STR ",i=?1"));
+    int len =
+        sprintf(buf, "u=%" PRIu8 "%s", stream->scheduler.priority.urgency, stream->scheduler.priority.incremental ? ",i=?1" : "");
+    return h2o_iovec_init(buf, len);
+}
+
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -1933,6 +1942,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .num_reqs_inflight = num_reqs_inflight,
         .get_tracer = get_tracer,
         .log_ = {{
+            .extensible_priorities = log_extensible_priorities,
             .transport =
                 {
                     .cc_name = log_cc_name,
