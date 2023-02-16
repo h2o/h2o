@@ -34,11 +34,11 @@ EOT
     my $write_file = sub {
         # use write-then-rename pattern; otherwise the behavior would become identical to shrinking an existing file that is covered
         # in t/50file-shrink.t
-        open my $fh, ">", "index.txt.tmp"
-            or die "failed to open index.txt.tmp:$!";
+        open my $fh, ">", "$tempdir/.tmpfile"
+            or die "failed to open $tempdir/.tmpfile:$!";
         print $fh shift;
         close $fh;
-        rename "index.txt.tmp", "$tempdir/$fn"
+        rename "$tempdir/.tmpfile", "$tempdir/$fn"
             or die "rename failed:$!";
     };
     run_with_curl($server, sub {
