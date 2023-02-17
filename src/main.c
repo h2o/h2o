@@ -619,13 +619,13 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf)
     async_nb_run_sync(buf, neverbleed_transaction_read);
 }
 
-struct async_nb_digestsign_t {
+struct async_nb_picotls_context_t {
     ptls_sign_certificate_t super;
     EVP_PKEY *key;
     const ptls_openssl_signature_scheme_t *schemes;
 };
 
-struct async_nb_digestsign_ctx_t {
+struct async_nb_job_t {
     ptls_async_job_t super;
     struct async_nb_transaction_t transaction;
     struct {
@@ -638,9 +638,9 @@ struct async_nb_digestsign_ctx_t {
     neverbleed_iobuf_t buf;
 };
 
-static void async_nb_digestsign_ctx_free(ptls_async_job_t *job)
+static void async_nb_job_free(ptls_async_job_t *job)
 {
-    struct async_nb_digestsign_ctx_t *ctx = (struct async_nb_digestsign_ctx_t *)job;
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
 
     assert(!h2o_linklist_is_linked(&ctx->transaction.link));
 
@@ -648,65 +648,64 @@ static void async_nb_digestsign_ctx_free(ptls_async_job_t *job)
     free(ctx);
 }
 
-static void async_nb_digestsign_ctx_set_completion_callback(ptls_async_job_t *job, void (*cb)(void *), void *cbdata)
+static void async_nb_job_set_completion_callback(ptls_async_job_t *job, void (*cb)(void *), void *cbdata)
 {
-    struct async_nb_digestsign_ctx_t *ctx = (struct async_nb_digestsign_ctx_t *)job;
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
 
     ctx->on_complete.func = cb;
     ctx->on_complete.data = cbdata;
 }
 
-static void async_nb_digestsign_handle_response(struct async_nb_transaction_t *transaction)
+static void async_nb_job_handle_response(struct async_nb_transaction_t *transaction)
 {
-    struct async_nb_digestsign_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct async_nb_digestsign_ctx_t, transaction, transaction);
+    struct async_nb_job_t *ctx = H2O_STRUCT_FROM_MEMBER(struct async_nb_job_t, transaction, transaction);
 
     assert(ctx->on_complete.func != NULL);
     ctx->on_complete.func(ctx->on_complete.data);
 }
 
 /*
- * Instantiates an async_nb_digestsign_ctx_t. The caller should setup `async_ctx->buf` and call `async_nb_submit_request`.
+ * Instantiates an async_nb_job_t. The caller should setup `job->buf` and call `async_nb_submit_request`.
  */
-static struct async_nb_digestsign_ctx_t *async_nb_allocate(void)
+static struct async_nb_job_t *async_nb_job_new(void)
 {
-    struct async_nb_digestsign_ctx_t *async_ctx = h2o_mem_alloc(sizeof(*async_ctx));
-    *async_ctx =
-        (struct async_nb_digestsign_ctx_t){.super = {.destroy_ = async_nb_digestsign_ctx_free,
-                                                     .set_completion_callback = async_nb_digestsign_ctx_set_completion_callback},
-                                           .transaction = {.on_read_complete = async_nb_digestsign_handle_response}};
-    async_ctx->transaction.buf = &async_ctx->buf;
+    struct async_nb_job_t *job = h2o_mem_alloc(sizeof(*job));
+    *job = (struct async_nb_job_t){
+        .super = {.destroy_ = async_nb_job_free, .set_completion_callback = async_nb_job_set_completion_callback},
+        .transaction = {.on_read_complete = async_nb_job_handle_response}};
+    job->transaction.buf = &job->buf;
 
-    return async_ctx;
+    return job;
 }
 
-static void async_nb_submit_request(struct async_nb_digestsign_ctx_t *async_ctx)
+static void async_nb_job_submit(struct async_nb_job_t *job)
 {
-    async_nb_push(&async_nb.write_queue, &async_ctx->transaction);
+    async_nb_push(&async_nb.write_queue, &job->transaction);
     async_nb_submit_write_pending();
 }
 
-static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
-                               ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **_job, uint16_t *selected_algorithm,
+                                 ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
-    struct async_nb_digestsign_t *self = (struct async_nb_digestsign_t *)_self;
+    struct async_nb_picotls_context_t *self = (struct async_nb_picotls_context_t *)_self;
     const ptls_openssl_signature_scheme_t *scheme;
     int ret;
 
-    assert(async != NULL);
+    assert(_job != NULL);
 
-    if (*async != NULL) {
-        struct async_nb_digestsign_ctx_t *async_ctx = (struct async_nb_digestsign_ctx_t *)*async;
+    if (*_job != NULL) {
+        struct async_nb_job_t *job = (struct async_nb_job_t *)*_job;
         void *digest;
         size_t digestlen;
 
-        assert(!h2o_linklist_is_linked(&async_ctx->transaction.link));
+        assert(!h2o_linklist_is_linked(&job->transaction.link));
 
-        *selected_algorithm = async_ctx->ptls.scheme_id;
+        *selected_algorithm = job->ptls.scheme_id;
 
         /* obtain signature, dispose async context */
-        neverbleed_finish_digestsign(&async_ctx->buf, &digest, &digestlen);
-        async_nb_digestsign_ctx_free(&async_ctx->super);
-        *async = NULL;
+        neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+        async_nb_job_free(&job->super);
+        *_job = NULL;
 
         /* build response */
         if ((ret = ptls_buffer_reserve(output, digestlen)) == 0) {
@@ -724,16 +723,16 @@ static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls
         return PTLS_ALERT_HANDSHAKE_FAILURE;
 
     /* submit async request */
-    struct async_nb_digestsign_ctx_t *async_ctx = async_nb_allocate();
-    neverbleed_start_digestsign(&async_ctx->buf, self->key, scheme->scheme_md(), input.base, input.len);
-    async_ctx->ptls.scheme_id = scheme->scheme_id;
-    *async = &async_ctx->super;
-    async_nb_submit_request(async_ctx);
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, self->key, scheme->scheme_md(), input.base, input.len);
+    job->ptls.scheme_id = scheme->scheme_id;
+    *_job = &job->super;
+    async_nb_job_submit(job);
 
     return PTLS_ERROR_ASYNC_OPERATION;
 }
 
-static void async_nb_resume_quic_handshake(void *tls)
+static void async_nb_quic_resume_handshake(void *tls)
 {
     quicly_conn_t *quic = quicly_resume_handshake(tls);
 
@@ -744,20 +743,20 @@ static void async_nb_resume_quic_handshake(void *tls)
     }
 }
 
-static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
+static void async_nb_quic_start(quicly_async_handshake_t *self, ptls_t *tls)
 {
     ptls_async_job_t *job = ptls_get_async_job(tls);
 
     assert(job->set_completion_callback != NULL);
-    job->set_completion_callback(job, async_nb_resume_quic_handshake, tls);
+    job->set_completion_callback(job, async_nb_quic_resume_handshake, tls);
 }
 
-static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
+static quicly_async_handshake_t async_nb_quic_handler = {async_nb_quic_start};
 
 #ifdef OPENSSL_IS_BORINGSSL
 
-enum ssl_private_key_result_t boringssl_async_sign(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out,
-                                                   uint16_t signature_algorithm, const uint8_t *in, size_t len)
+enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
+                                                      uint16_t signature_algorithm, const uint8_t *in, size_t len)
 {
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
@@ -765,46 +764,46 @@ enum ssl_private_key_result_t boringssl_async_sign(SSL *ssl, uint8_t *out, size_
     EVP_PKEY *key = SSL_get_privatekey(ssl);
     const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
 
-    struct async_nb_digestsign_ctx_t *async_ctx = async_nb_allocate();
-    neverbleed_start_digestsign(&async_ctx->buf, key, md, in, len);
-    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), async_ctx);
-    async_nb_submit_request(async_ctx);
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, key, md, in, len);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), job);
+    async_nb_job_submit(job);
 
     return ssl_private_key_retry;
 }
 
-enum ssl_private_key_result_t boringssl_async_decrypt(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out, const uint8_t *in,
-                                                      size_t len)
+enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out, const uint8_t *in,
+                                                         size_t len)
 {
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
 
     EVP_PKEY *key = SSL_get_privatekey(ssl);
 
-    struct async_nb_digestsign_ctx_t *async_ctx = async_nb_allocate();
-    neverbleed_start_decrypt(&async_ctx->buf, key, in, len);
-    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), async_ctx);
-    async_nb_submit_request(async_ctx);
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_decrypt(&job->buf, key, in, len);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), job);
+    async_nb_job_submit(job);
 
     return ssl_private_key_retry;
 }
 
-enum ssl_private_key_result_t boringssl_async_complete(SSL *ssl, uint8_t *out, size_t *out_len, size_t max_out)
+enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out)
 {
-    struct async_nb_digestsign_ctx_t *async_ctx = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_object_index());
+    struct async_nb_job_t *job = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_object_index());
     void *digest;
     size_t digestlen;
 
-    assert(async_ctx != NULL);
+    assert(job != NULL);
 
-    neverbleed_finish_digestsign(&async_ctx->buf, &digest, &digestlen);
-    async_nb_digestsign_ctx_free(&async_ctx->super);
-    async_ctx = NULL;
+    neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+    async_nb_job_free(&job->super);
+    job = NULL;
     SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), NULL);
 
     assert(digestlen <= max_out);
     memcpy(out, digest, digestlen);
-    *out_len = digestlen;
+    *outlen = digestlen;
 
     ptls_clear_memory(digest, digestlen);
     free(digest);
@@ -1241,7 +1240,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_emit_certificate_ptls_t ec;
         struct {
             ptls_openssl_sign_certificate_t ossl;
-            struct async_nb_digestsign_t async_digestsign;
+            struct async_nb_picotls_context_t async_digestsign;
         } sc;
         ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
@@ -1326,8 +1325,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     /* create signer */
     if (use_neverbleed) {
-        pctx->sc.async_digestsign = (struct async_nb_digestsign_t){
-            .super = {async_nb_digestsign},
+        pctx->sc.async_digestsign = (struct async_nb_picotls_context_t){
+            .super = {async_nb_picotls_sign},
             .key = key,
             .schemes = ptls_openssl_lookup_signature_schemes(key),
         };
@@ -2018,7 +2017,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #elif defined(OPENSSL_IS_BORINGSSL)
         if (use_neverbleed) {
             static const SSL_PRIVATE_KEY_METHOD meth = {
-                .sign = boringssl_async_sign, .decrypt = boringssl_async_decrypt, .complete = boringssl_async_complete};
+                .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
             SSL_CTX_set_private_key_method(identity->ossl, &meth);
         }
 #endif
