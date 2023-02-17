@@ -57,16 +57,6 @@
 /* sentinels indicating that the endpoint is in benchmark mode */
 static const char input_file_is_benchmark[] = "is:benchmark";
 
-static ptls_hpke_kem_t *find_kem(ptls_key_exchange_algorithm_t *algo)
-{
-    for (size_t i = 0; ptls_openssl_hpke_kems[i] != NULL; ++i)
-        if (ptls_openssl_hpke_kems[i]->keyex == algo)
-            return ptls_openssl_hpke_kems[i];
-
-    fprintf(stderr, "HPKE KEM not found for %s\n", algo->name);
-    return NULL;
-}
-
 static void shift_buffer(ptls_buffer_t *buf, size_t delta)
 {
     if (delta != 0) {

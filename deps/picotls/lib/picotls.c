@@ -1668,8 +1668,9 @@ static int commission_handshake_secret(ptls_t *tls)
 
 static void log_client_random(ptls_t *tls)
 {
-    PTLS_PROBE(CLIENT_RANDOM, tls,
-               ptls_hexdump(alloca(sizeof(tls->client_random) * 2 + 1), tls->client_random, sizeof(tls->client_random)));
+    char buf[sizeof(tls->client_random) * 2 + 1];
+
+    PTLS_PROBE(CLIENT_RANDOM, tls, ptls_hexdump(buf, tls->client_random, sizeof(tls->client_random)));
     PTLS_LOG_CONN(client_random, tls, { PTLS_LOG_ELEMENT_HEXDUMP(bytes, tls->client_random, sizeof(tls->client_random)); });
 }
 
@@ -4370,14 +4371,15 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     if (!is_second_flight) {
         if (ch->cookie.all.len != 0 && key_share.algorithm != NULL) {
 
-            /* use cookie to check the integrity of the handshake, and update the context */
-            size_t sigsize = tls->ctx->cipher_suites[0]->hash->digest_size;
-            uint8_t *sig = alloca(sigsize);
-            if ((ret = calc_cookie_signature(tls, properties, key_share.algorithm, ch->cookie.tbs, sig)) != 0)
-                goto Exit;
-            if (!(ch->cookie.signature.len == sigsize && ptls_mem_equal(ch->cookie.signature.base, sig, sigsize))) {
-                ret = PTLS_ALERT_HANDSHAKE_FAILURE;
-                goto Exit;
+            { /* use cookie to check the integrity of the handshake, and update the context */
+                uint8_t sig[PTLS_MAX_DIGEST_SIZE];
+                size_t sigsize = tls->ctx->cipher_suites[0]->hash->digest_size;
+                if ((ret = calc_cookie_signature(tls, properties, key_share.algorithm, ch->cookie.tbs, sig)) != 0)
+                    goto Exit;
+                if (!(ch->cookie.signature.len == sigsize && ptls_mem_equal(ch->cookie.signature.base, sig, sigsize))) {
+                    ret = PTLS_ALERT_HANDSHAKE_FAILURE;
+                    goto Exit;
+                }
             }
             /* integrity check passed; update states */
             key_schedule_update_ch1hash_prefix(tls->key_schedule);

@@ -64,7 +64,7 @@ jobs:
       env:
         OPENSSL: ${{ matrix.openssl }}
       run: |
-        brew install perl libfaketime ${OPENSSL}
+        brew install perl libfaketime pkg-config ${OPENSSL}
         perl -v
         curl -sSfL https://cpanmin.us | perl - -v --notest Scope::Guard Test::TCP
 
