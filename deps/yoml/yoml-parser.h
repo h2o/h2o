@@ -120,6 +120,7 @@ static inline yoml_t *yoml__parse_mapping(yaml_parser_t *parser, yaml_event_t *e
             }
         }
         if ((value = yoml__parse_node(parser, NULL, parse_args)) == NULL) {
+            yoml_free(key, parse_args->mem_set);
             yoml_free(map, parse_args->mem_set);
             map = NULL;
             break;
