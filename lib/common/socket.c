@@ -1756,7 +1756,7 @@ static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_w
         SSL_get_all_async_fds(sock->ssl->ossl, &async_fd, &numfds);
         h2o_socket_start_async_handshake(h2o_socket_get_loop(sock), async_fd, sock, on_async_proceed_handshake);
 #elif defined(OPENSSL_IS_BORINGSSL)
-        ptls_async_job_t *job = SSL_get_ex_data(sock->ssl->ossl, h2o_socket_boringssl_get_async_object_index());
+        ptls_async_job_t *job = SSL_get_ex_data(sock->ssl->ossl, h2o_socket_boringssl_get_async_job_index());
         assert(job != NULL);
         assert(job->set_completion_callback != NULL);
         job->set_completion_callback(job, on_async_job_complete, sock);
@@ -2783,7 +2783,7 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 
 #ifdef OPENSSL_IS_BORINGSSL
 
-int h2o_socket_boringssl_get_async_object_index(void)
+int h2o_socket_boringssl_get_async_job_index(void)
 {
     static volatile int index;
     H2O_MULTITHREAD_ONCE({ index = SSL_get_ex_new_index(0, 0, NULL, NULL, NULL); });

@@ -555,7 +555,14 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
 #ifdef OPENSSL_IS_BORINGSSL
-int h2o_socket_boringssl_get_async_object_index(void);
+/**
+ * returns SSL_[gs]et_ext_data slot used to store `ptls_async_job_t` for handling async TLS handshake signature generation
+ */
+int h2o_socket_boringssl_get_async_job_index(void);
+/**
+ * If async resumption is in flight. When true is returned the TLS handshake is going to be discarded, and therefore the async
+ * signature calculation callback should return failure rather than starting the calculation.
+ */
 int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
 #endif
 

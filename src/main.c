@@ -766,7 +766,7 @@ enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, si
 
     struct async_nb_job_t *job = async_nb_job_new();
     neverbleed_start_digestsign(&job->buf, key, md, in, len);
-    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), job);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
     async_nb_job_submit(job);
 
     return ssl_private_key_retry;
@@ -782,7 +782,7 @@ enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out,
 
     struct async_nb_job_t *job = async_nb_job_new();
     neverbleed_start_decrypt(&job->buf, key, in, len);
-    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), job);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
     async_nb_job_submit(job);
 
     return ssl_private_key_retry;
@@ -790,7 +790,7 @@ enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out,
 
 enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out)
 {
-    struct async_nb_job_t *job = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_object_index());
+    struct async_nb_job_t *job = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_job_index());
     void *digest;
     size_t digestlen;
 
@@ -799,7 +799,7 @@ enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out
     neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
     async_nb_job_free(&job->super);
     job = NULL;
-    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_object_index(), NULL);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), NULL);
 
     assert(digestlen <= max_out);
     memcpy(out, digest, digestlen);
