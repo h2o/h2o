@@ -1018,7 +1018,7 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
     EVP_PKEY *pkey;
     RSA *rsa;
     uint8_t decryptbuf[1024];
-    size_t decryptlen;
+    int decryptlen;
 
     /* parse input */
     if (iobuf_shift_num(buf, &key_index) != 0 || (src = iobuf_shift_bytes(buf, &srclen)) == NULL) {
@@ -1034,14 +1034,14 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 
     rsa = EVP_PKEY_get1_RSA(pkey); /* get0 is available not available in OpenSSL 1.0.2 */
     assert(rsa != NULL);
+    assert(sizeof(decryptbuf) >= RSA_size(rsa));
 
-    if (!RSA_decrypt(rsa, &decryptlen, decryptbuf, sizeof(buf), src, srclen, RSA_NO_PADDING)) {
+    if ((decryptlen = RSA_private_decrypt(srclen, src, decryptbuf, rsa, RSA_NO_PADDING)) == -1) {
         errno = 0;
         warnf("RSA decryption error");
         decryptlen = 0; /* soft failure */
     }
 
-Respond:
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, decryptbuf, decryptlen);
     RSA_free(rsa);
