@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-latest]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -22,7 +22,7 @@ jobs:
           - name: boringssl
             command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204 CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl'
           - name: asan
-            command: make -f misc/docker-ci.mk CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0'
+            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204 CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0'
 
     timeout-minutes: 10
     steps:
