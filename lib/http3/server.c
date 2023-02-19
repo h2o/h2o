@@ -1626,8 +1626,8 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, 
             goto Fail;
         assert(h2o_http3_has_received_settings(&conn->h3));
         while (!h2o_linklist_is_empty(&conn->streams_resp_settings_blocked)) {
-            struct st_h2o_http3_server_stream_t *stream =
-            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->streams_resp_settings_blocked.next);
+            struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(
+                struct st_h2o_http3_server_stream_t, link_resp_settings_blocked, conn->streams_resp_settings_blocked.next);
             h2o_linklist_unlink(&stream->link_resp_settings_blocked);
             do_send(&stream->ostr_final, &stream->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
         }
