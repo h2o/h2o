@@ -278,9 +278,6 @@ static void close_socket(struct st_connect_generator_t *self)
 
 static void close_readwrite(struct st_connect_generator_t *self)
 {
-    int send_is_inflight =
-        self->is_tcp ? self->tcp.recvbuf_detached->size != 0 : self->sock != NULL && !h2o_socket_is_reading(self->sock);
-
     if (self->sock != NULL)
         close_socket(self);
     if (h2o_timer_is_linked(&self->timeout))
@@ -288,7 +285,7 @@ static void close_readwrite(struct st_connect_generator_t *self)
 
     /* immediately notify read-close if necessary, setting up delayed task to for destroying other items; the timer is reset if
      * `h2o_send` indirectly invokes `dispose_generator`. */
-    if (!self->read_closed && !send_is_inflight) {
+    if (!self->read_closed && (self->is_tcp ? self->tcp.recvbuf_detached->size == 0 : 1)) {
         h2o_timer_link(get_loop(self), 0, &self->timeout);
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
