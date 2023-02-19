@@ -729,10 +729,10 @@ struct h2olog_event_t {
       size_t bytes_buffered;
     } socket_write_tls_record;
     struct { // h2o:socket_read_file_async_start
-      struct st_h2o_socket_read_file_cmd_t * cmd;
+      struct st_h2o_async_io_cmd_t * cmd;
     } socket_read_file_async_start;
     struct { // h2o:socket_read_file_async_end
-      struct st_h2o_socket_read_file_cmd_t * cmd;
+      struct st_h2o_async_io_cmd_t * cmd;
     } socket_read_file_async_end;
     struct { // h2o:receive_request
       uint64_t conn_id;
@@ -2846,10 +2846,10 @@ struct h2olog_event_t {
       size_t bytes_buffered;
     } socket_write_tls_record;
     struct { // h2o:socket_read_file_async_start
-      struct st_h2o_socket_read_file_cmd_t * cmd;
+      struct st_h2o_async_io_cmd_t * cmd;
     } socket_read_file_async_start;
     struct { // h2o:socket_read_file_async_end
-      struct st_h2o_socket_read_file_cmd_t * cmd;
+      struct st_h2o_async_io_cmd_t * cmd;
     } socket_read_file_async_end;
     struct { // h2o:receive_request
       uint64_t conn_id;
@@ -5308,7 +5308,7 @@ int trace_h2o__socket_read_file_async_start(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_START, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
-  { // struct st_h2o_socket_read_file_cmd_t * cmd
+  { // struct st_h2o_async_io_cmd_t * cmd
     bpf_usdt_readarg(1, ctx, &event.socket_read_file_async_start.cmd);
   }
 
@@ -5322,7 +5322,7 @@ int trace_h2o__socket_read_file_async_end(struct pt_regs *ctx) {
   const void *buf = NULL;
   struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_H2O_SOCKET_READ_FILE_ASYNC_END, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
 
-  { // struct st_h2o_socket_read_file_cmd_t * cmd
+  { // struct st_h2o_async_io_cmd_t * cmd
     bpf_usdt_readarg(1, ctx, &event.socket_read_file_async_end.cmd);
   }
 

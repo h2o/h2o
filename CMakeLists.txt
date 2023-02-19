@@ -401,6 +401,7 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
 
+    lib/common/async_io.c
     lib/common/cache.c
     lib/common/file.c
     lib/common/filecache.c

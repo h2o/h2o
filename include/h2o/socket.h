@@ -38,7 +38,6 @@ extern "C" {
 #include "picotls/openssl.h" /* for H2O_CAN_OSSL_ASYNC */
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
-#include "h2o/filecache.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
@@ -113,24 +112,16 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-typedef struct st_h2o_socket_read_file_cmd_t h2o_socket_read_file_cmd_t;
-typedef void (*h2o_socket_read_file_cb)(h2o_socket_read_file_cmd_t *);
-struct st_h2o_socket_read_file_cmd_t {
-    struct {
-        h2o_socket_read_file_cb func;
-        void *data;
-    } cb;
-    /**
-     * result
-     */
-    const char *err;
-};
+/* forward declaration of async_io.h */
+struct st_h2o_async_io_t;
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
 #else
 #include "socket/evloop.h"
 #endif
+
+#include "h2o/async_io.h"
 
 struct st_h2o_socket_addr_t {
     socklen_t len;
@@ -155,8 +146,7 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * Mandatory callback for loading the bytes held by the vector. If the callback is `h2o_sendvec_read_raw`, the data is
      * available as raw bytes in `h2o_sendvec_t::raw`.
      */
-    void (*read_)(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
-                  void *cbdata);
+    void (*read_)(h2o_sendvec_t *vec, h2o_async_io_cmd_t **cmd, void *dst, size_t len, h2o_async_io_cb cb, void *cbdata);
     /**
      * Optional callback for sending contents of a vector directly to a socket. Returns number of bytes being sent (could be zero),
      * or, upon error, SIZE_MAX.
@@ -192,7 +182,7 @@ struct st_h2o_sendvec_puller_vec_t {
     h2o_sendvec_puller_t *puller;
     h2o_sendvec_t vec;
     size_t len;
-    h2o_socket_read_file_cmd_t *cmd;
+    h2o_async_io_cmd_t *cmd;
     char **dst;
     /**
      * If `buf` is non-NULL and if `dst` is non-NULL, `buf` is a chunk allocated from `h2o_socket_ssl_buffer_allocator` which is to
@@ -425,14 +415,6 @@ socklen_t h2o_socket_getpeername(h2o_socket_t *sock, struct sockaddr *sa);
  */
 void h2o_socket_setpeername(h2o_socket_t *sock, struct sockaddr *sa, socklen_t len);
 /**
- * Reads file without blocking. Read can complete either synchronously or asynchronously.
- * @param cmd  Upon return, `*cmd` points to an object referring to the read operation inflight. If the read completed
- *             synchronously, `*cmd` is set to NULL.
- * @param cb   Callback function to be invoked when read is complete. This callback can get called synchronously.
- */
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **cmd, h2o_loop_t *loop, h2o_filecache_ref_t *fileref, uint64_t offset,
-                          h2o_iovec_t dst, h2o_socket_read_file_cb cb, void *data);
-/**
  *
  */
 ptls_t *h2o_socket_get_ptls(h2o_socket_t *sock);
@@ -577,8 +559,7 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len);
 /**
  *
  */
-void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
-                          void *cbdata);
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_async_io_cmd_t **cmd, void *dst, size_t len, h2o_async_io_cb cb, void *cbdata);
 
 /**
  * GC resources

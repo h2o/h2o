@@ -127,8 +127,7 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-static void sendvec_read(h2o_sendvec_t *src, h2o_socket_read_file_cmd_t **cmd, void *dst, size_t len,
-                         h2o_socket_read_file_cb cb, void *cbdata)
+static void sendvec_read(h2o_sendvec_t *src, h2o_async_io_cmd_t **cmd, void *dst, size_t len, h2o_async_io_cb cb, void *cbdata)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg;
     uint64_t read_off = self->file.off;
@@ -136,7 +135,7 @@ static void sendvec_read(h2o_sendvec_t *src, h2o_socket_read_file_cmd_t **cmd, v
     self->file.off += len;
     self->bytesleft -= len;
     src->len -= len;
-    h2o_socket_read_file(cmd, self->req->conn->ctx->loop, self->file.ref, read_off, h2o_iovec_init(dst, len), cb, cbdata);
+    h2o_async_io_read_file(cmd, self->req->conn->ctx->loop, self->file.ref, read_off, h2o_iovec_init(dst, len), cb, cbdata);
 }
 
 #if defined(__linux__)

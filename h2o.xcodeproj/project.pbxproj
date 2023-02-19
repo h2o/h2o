@@ -57,6 +57,9 @@
 		08F320E01E7A9CBD0038FA5A /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
 		08F320E11E7A9CBF0038FA5A /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
 		08F320E21E7A9CC20038FA5A /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
+		08FE0365299F9F8B00141FA2 /* async_io.h in Headers */ = {isa = PBXBuildFile; fileRef = 08FE0364299F9F8B00141FA2 /* async_io.h */; };
+		08FE0367299FA1FE00141FA2 /* async_io.c in Sources */ = {isa = PBXBuildFile; fileRef = 08FE0366299FA1FE00141FA2 /* async_io.c */; };
+		08FE0368299FA20C00141FA2 /* async_io.c in Sources */ = {isa = PBXBuildFile; fileRef = 08FE0366299FA1FE00141FA2 /* async_io.c */; };
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
@@ -754,6 +757,8 @@
 		08F7EE8A298F8B6800730154 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = test.pl; sourceTree = "<group>"; };
 		08F7EE8B298F8CA700730154 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08F7EE8C298F8CA700730154 /* 40http3-io-batch10.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-io-batch10.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08FE0364299F9F8B00141FA2 /* async_io.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = async_io.h; sourceTree = "<group>"; };
+		08FE0366299FA1FE00141FA2 /* async_io.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = async_io.c; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1556,6 +1561,7 @@
 			isa = PBXGroup;
 			children = (
 				E96A24CE23E6743600CA970A /* absprio.c */,
+				08FE0366299FA1FE00141FA2 /* async_io.c */,
 				D08137371FD400F4004679DF /* balancer */,
 				10DA969D1CD2BFAC00679165 /* cache.c */,
 				107D4D541B5B30EE004A9B21 /* file.c */,
@@ -1975,6 +1981,7 @@
 			isa = PBXGroup;
 			children = (
 				E96A24CC23E673F400CA970A /* absprio.h */,
+				08FE0364299F9F8B00141FA2 /* async_io.h */,
 				D08137411FD408C1004679DF /* balancer.h */,
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
@@ -2967,6 +2974,7 @@
 				0812AB211D7FCFEB00004F23 /* async.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				7DA3F5AF20E0B0400000222F /* token_table.h in Headers */,
+				08FE0365299F9F8B00141FA2 /* async_io.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				E980423B22463044008B9745 /* cc.h in Headers */,
 				E9E5049421501CA5004DC170 /* http3_server.h in Headers */,
@@ -3362,6 +3370,7 @@
 				E919227725C9447D00C2D79B /* connect.c in Sources */,
 				10EC2A381A0B4DC70083514F /* socketpool.c in Sources */,
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
+				08FE0367299FA1FE00141FA2 /* async_io.c in Sources */,
 				E98403C92485172E00E3A6B1 /* local_cid.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
 				E98403CF2485172E00E3A6B1 /* retire_cid.c in Sources */,
@@ -3621,6 +3630,7 @@
 				107D4D4F1B58970D004A9B21 /* ssl.c in Sources */,
 				E9708B501E52C7E50029E0A5 /* time.c in Sources */,
 				E9708B4C1E52C7DF0029E0A5 /* serverutil.c in Sources */,
+				08FE0368299FA20C00141FA2 /* async_io.c in Sources */,
 				E987E5D51FD7BEB500DE4346 /* backward_references_hq.c in Sources */,
 				E987E5D71FD7BEB500DE4346 /* bit_cost.c in Sources */,
 				E9708B631E52C80F0029E0A5 /* headers_util.c in Sources */,

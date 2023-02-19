@@ -24,7 +24,7 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
-static void loopback_on_send_on_read_complete(h2o_socket_read_file_cmd_t *cmd)
+static void loopback_on_send_on_read_complete(h2o_async_io_cmd_t *cmd)
 {
     if (cmd->err != NULL)
         h2o_fatal("ohoh");
@@ -39,9 +39,9 @@ static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t 
     for (i = 0; i != inbufcnt; ++i) {
         size_t len = inbufs[i].len;
         h2o_buffer_reserve(&conn->body, len);
-        h2o_socket_read_file_cmd_t *cmd;
-        inbufs[i].callbacks->read_(inbufs + i, &cmd, conn->body->bytes + conn->body->size, len,
-                                   loopback_on_send_on_read_complete, NULL);
+        h2o_async_io_cmd_t *cmd;
+        inbufs[i].callbacks->read_(inbufs + i, &cmd, conn->body->bytes + conn->body->size, len, loopback_on_send_on_read_complete,
+                                   NULL);
         if (cmd != NULL)
             h2o_fatal("why async?");
         conn->body->size += len;

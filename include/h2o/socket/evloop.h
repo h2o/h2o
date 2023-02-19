@@ -54,7 +54,7 @@ typedef struct st_h2o_evloop_t {
     h2o_sliding_counter_t exec_time_nanosec_counter;
     uint64_t run_count;
 #if H2O_USE_IO_URING
-    struct st_h2o_evloop_read_file_t *_read_file;
+    struct st_h2o_async_io_t *_async_io;
 #endif
 } h2o_evloop_t;
 
@@ -65,9 +65,6 @@ typedef h2o_timerwheel_cb h2o_timer_cb;
 
 extern size_t h2o_evloop_socket_max_read_size;
 extern size_t h2o_evloop_socket_max_write_size;
-#if H2O_USE_IO_URING
-extern size_t h2o_evloop_io_uring_batch_size;
-#endif
 
 h2o_socket_t *h2o_evloop_socket_create(h2o_evloop_t *loop, int fd, int flags);
 h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);

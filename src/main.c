@@ -3163,9 +3163,9 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
 static int on_config_io_uring_batch_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #if H2O_USE_IO_URING
-    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_evloop_io_uring_batch_size) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_io_uring_batch_size) != 0)
         return -1;
-    if (h2o_evloop_io_uring_batch_size == 0) {
+    if (h2o_io_uring_batch_size == 0) {
         h2o_configurator_errprintf(cmd, node, "value must be above zero");
         return -1;
     }

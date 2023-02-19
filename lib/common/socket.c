@@ -2293,16 +2293,15 @@ void h2o_sendvec_init_raw(h2o_sendvec_t *vec, const void *base, size_t len)
     vec->len = len;
 }
 
-void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_socket_read_file_cmd_t **_cmd, void *dst, size_t len, h2o_socket_read_file_cb cb,
-                          void *cbdata)
+void h2o_sendvec_read_raw(h2o_sendvec_t *vec, h2o_async_io_cmd_t **_cmd, void *dst, size_t len, h2o_async_io_cb cb, void *cbdata)
 {
     assert(len <= vec->len);
     memcpy(dst, vec->raw, len);
     vec->raw += len;
     vec->len -= len;
 
-    /* the observed output is equivalent to the synchronous operation of `h2o_socket_read_file` */
-    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = cb, .data = cbdata}, .err = NULL};
+    /* the observed output is equivalent to the synchronous operation of `h2o_async_io_read_file` */
+    h2o_async_io_cmd_t cmd = {.cb = {.func = cb, .data = cbdata}, .err = NULL};
     cb(&cmd);
     *_cmd = NULL;
 }
@@ -2733,7 +2732,7 @@ uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, cons
 
 #endif
 
-static void sendvec_puller_on_complete_post_disposal(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_puller_on_complete_post_disposal(h2o_async_io_cmd_t *cmd)
 {
     h2o_mem_free_recycle(&h2o_socket_ssl_buffer_allocator, cmd->cb.data);
 }
@@ -2808,7 +2807,7 @@ static void sendvec_puller_on_vec_read_complete(h2o_sendvec_puller_t *self, int 
     }
 }
 
-static void sendvec_puller_on_async_vec_read_complete(h2o_socket_read_file_cmd_t *cmd)
+static void sendvec_puller_on_async_vec_read_complete(h2o_async_io_cmd_t *cmd)
 {
     struct st_h2o_sendvec_puller_vec_t *vec = cmd->cb.data;
     h2o_sendvec_puller_t *self = vec->puller;
@@ -2844,29 +2843,3 @@ void h2o_sendvec_puller_send(h2o_sendvec_puller_t *self, int fd)
             break;
     }
 }
-
-#if H2O_USE_LIBUV || !H2O_USE_IO_URING
-
-void h2o_socket_read_file(h2o_socket_read_file_cmd_t **_cmd, h2o_loop_t *loop, h2o_filecache_ref_t *fileref, uint64_t offset,
-                          h2o_iovec_t dst, h2o_socket_read_file_cb _cb, void *_data)
-{
-    h2o_socket_read_file_cmd_t cmd = {.cb = {.func = _cb, .data = _data}};
-
-    size_t off = 0;
-    while (off < dst.len) {
-        ssize_t ret;
-        while ((ret = pread(fileref->fd, dst.base + off, dst.len - off, offset + off)) == -1 && errno == EINTR)
-            ;
-        if (ret <= 0) {
-            cmd.err = h2o_socket_error_io;
-            break;
-        }
-        off += ret;
-    }
-
-    cmd.cb.func(&cmd);
-
-    *_cmd = NULL;
-}
-
-#endif
