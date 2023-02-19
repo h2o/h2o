@@ -584,6 +584,32 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     assert(req != NULL);
     h2o_buffer_consume(&req->sendbuf, delta);
+
+    if (delta != 0) {
+        fprintf(stderr, "got ack for stream %" PRId64 "\n", req->quic->stream_id);
+        struct st_h2o_httpclient__h3_conn_t *conn = req->conn;
+        if (conn->super._control_streams.egress.control->quic->sendstate.size_inflight == 1) {
+            h2o_iovec_t alloced = h2o_buffer_reserve(&conn->super._control_streams.egress.control->sendbuf, 100);
+            ptls_buffer_t buf;
+            int ret;
+            ptls_buffer_init(&buf, alloced.base, alloced.len);
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
+            ptls_buffer_push_block(&buf, -1, {
+                quicly_context_t *qctx = quicly_get_context(conn->super.super.quic);
+                if (qctx->transport_params.max_datagram_frame_size != 0) {
+                    ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+                    ptls_buffer_push_quicint(&buf, 1);
+                };
+            });
+            assert(!buf.is_allocated);
+            conn->super._control_streams.egress.control->sendbuf->size += buf.off;
+            quicly_stream_sync_sendbuf(conn->super._control_streams.egress.control->quic, 1);
+        }
+    }
+
+    return;
+Exit:
+    h2o_fatal("ohh");
 }
 
 static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len, int *wrote_all)

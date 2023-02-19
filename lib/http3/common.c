@@ -1143,14 +1143,16 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
     ptls_buffer_push_quicint(&buf, H2O_HTTP3_STREAM_TYPE_CONTROL);
 
     /* push SETTINGS frame */
-    ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
-    ptls_buffer_push_block(&buf, -1, {
-        quicly_context_t *qctx = quicly_get_context(conn->super.quic);
-        if (qctx->transport_params.max_datagram_frame_size != 0) {
-            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
-            ptls_buffer_push_quicint(&buf, 1);
-        };
-    });
+    if (!quicly_is_client(conn->super.quic)) {
+        ptls_buffer_push_quicint(&buf, H2O_HTTP3_FRAME_TYPE_SETTINGS);
+        ptls_buffer_push_block(&buf, -1, {
+            quicly_context_t *qctx = quicly_get_context(conn->super.quic);
+            if (qctx->transport_params.max_datagram_frame_size != 0) {
+                ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+                ptls_buffer_push_quicint(&buf, 1);
+            };
+        });
+    }
 
     assert(!buf.is_allocated);
     return buf.off;
