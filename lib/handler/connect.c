@@ -875,7 +875,6 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->src_req->write_req.ctx = self;
     if (self->udp.egress.buf->size != 0 || self->write_closed)
         udp_do_write_stream(self, h2o_iovec_init(NULL, 0));
-    h2o_socket_read_start(self->sock, udp_on_read);
 
     record_connect_success(self);
 
