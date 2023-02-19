@@ -1478,7 +1478,7 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
         kh_val(conn->datagram_flows, iter) = stream;
     }
 
-    /* If `datagram-flow-id` was provided and
+    /* If the client sent a `datagram-flow-id` request header field and:
      *  a) if the peer is willing to accept datagrams as well, use the same flow ID for sending datagrams from us,
      *  b) if the peer did not send H3_DATAGRAM Settings, use the stream, or
      *  c) if H3 SETTINGS hasn't been received yet, wait for it, then call `do_send` again. We might drop some packets from origin
