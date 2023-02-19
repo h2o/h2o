@@ -1527,7 +1527,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
         break;
-    } case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
+    }
+    case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
         assert(quicly_sendstate_is_open(&stream->quic->sendstate));
         break;
     case H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT:
