@@ -123,6 +123,12 @@ struct st_h2o_http3_server_conn_t {
         h2o_linklist_t pending;
     } delayed_streams;
     /**
+     * responses blocked by SETTINGS frame yet to arrive (e.g., CONNECT-UDP requests waiting for SETTINGS to see if
+     * datagram-flow-id can be sent). There is no separate state for streams linked here, because these streams are techincally
+     * indifferent from those that are currently queued by the filters after `h2o_send` is called.
+     */
+    h2o_linklist_t streams_resp_settings_blocked;
+    /**
      * next application-level timeout
      */
     h2o_timer_t timeout;
@@ -204,6 +210,7 @@ struct st_h2o_http3_server_stream_t {
     } sendbuf;
     enum h2o_http3_server_stream_state state;
     h2o_linklist_t link;
+    h2o_linklist_t link_resp_settings_blocked;
     h2o_ostream_t ostr_final;
     struct st_h2o_http3_req_scheduler_node_t scheduler;
     /**
@@ -769,6 +776,8 @@ void on_stream_destroy(quicly_stream_t *qs, int err)
 
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
+    if (h2o_linklist_is_linked(&stream->link_resp_settings_blocked))
+        h2o_linklist_unlink(&stream->link_resp_settings_blocked);
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
         pre_dispose_request(stream);
     if (!stream->req_disposed)
@@ -1444,12 +1453,19 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
     }
 }
 
-static h2o_iovec_t finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t *stream)
+/**
+ * returns boolean indicating if the response is ready to be sent, building the value of datagram-flow-id header field
+ */
+static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t *stream, h2o_send_state_t send_state,
+                                             h2o_iovec_t *datagram_flow_id)
 {
+    *datagram_flow_id = h2o_iovec_init(NULL, 0);
+
     /* Bail out if we cannot receive or send datagrams. */
-    if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL)) {
+    if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL) ||
+        send_state != H2O_SEND_STATE_IN_PROGRESS) {
         stream->datagram_flow_id = UINT64_MAX;
-        return h2o_iovec_init(NULL, 0);
+        return 1;
     }
 
     /* Register the flow id to the connection so that datagram frames being received from the client would be dispatched to
@@ -1462,19 +1478,28 @@ static h2o_iovec_t finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_
         kh_val(conn->datagram_flows, iter) = stream;
     }
 
-    /* If `datagram-flow-id` was provided and the peer is willing to accept datagrams as well, use the same flow ID for sending
-     * datagrams from us. Otherwise, do not use  */
-    if (stream->datagram_flow_id != UINT64_MAX && get_conn(stream)->h3.peer_settings.h3_datagram) {
-        /* register the route that would be used by the CONNECT handler for forwarding datagrams */
-        stream->req.forward_datagram.read_ = tunnel_on_udp_read;
-        /* build and return the value of datagram-flow-id header field */
-        h2o_iovec_t datagram_flow_id;
-        datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-        datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->datagram_flow_id);
-        return datagram_flow_id;
-    } else {
-        return h2o_iovec_init(NULL, 0);
+    /* If the client sent a `datagram-flow-id` request header field and:
+     *  a) if the peer is willing to accept datagrams as well, use the same flow ID for sending datagrams from us,
+     *  b) if the peer did not send H3_DATAGRAM Settings, use the stream, or
+     *  c) if H3 SETTINGS hasn't been received yet, wait for it, then call `do_send` again. We might drop some packets from origin
+     *     that arrive before H3 SETTINGS from the client, in the rare occasion of packet carrying H3 SETTINGS getting lost while
+     *     those carrying CONNECT-UDP request and the UDP datagram to be forwarded to the origin arrive. */
+    if (stream->datagram_flow_id != UINT64_MAX) {
+        struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+        if (!h2o_http3_has_received_settings(&conn->h3)) {
+            h2o_linklist_insert(&conn->streams_resp_settings_blocked, &stream->link_resp_settings_blocked);
+            return 0;
+        }
+        if (conn->h3.peer_settings.h3_datagram) {
+            /* register the route that would be used by the CONNECT handler for forwarding datagrams */
+            stream->req.forward_datagram.read_ = tunnel_on_udp_read;
+            /* build and return the value of datagram-flow-id header field */
+            datagram_flow_id->base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+            datagram_flow_id->len = sprintf(datagram_flow_id->base, "%" PRIu64, stream->datagram_flow_id);
+        }
     }
+
+    return 1;
 }
 
 static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)
@@ -1493,12 +1518,16 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     stream->proceed_requested = 0;
 
     switch (stream->state) {
-    case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS:
+    case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
+        h2o_iovec_t datagram_flow_id;
+        if (!finalize_do_send_setup_udp_tunnel(stream, send_state, &datagram_flow_id))
+            return;
         stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
-        write_response(stream, finalize_do_send_setup_udp_tunnel(stream));
+        write_response(stream, datagram_flow_id);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
         break;
+    }
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
         assert(quicly_sendstate_is_open(&stream->quic->sendstate));
         break;
@@ -1597,6 +1626,12 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, 
         if ((err = h2o_http3_handle_settings_frame(&conn->h3, payload, len, &err_desc)) != 0)
             goto Fail;
         assert(h2o_http3_has_received_settings(&conn->h3));
+        while (!h2o_linklist_is_empty(&conn->streams_resp_settings_blocked)) {
+            struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(
+                struct st_h2o_http3_server_stream_t, link_resp_settings_blocked, conn->streams_resp_settings_blocked.next);
+            h2o_linklist_unlink(&stream->link_resp_settings_blocked);
+            do_send(&stream->ostr_final, &stream->req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+        }
     } else {
         switch (type) {
         case H2O_HTTP3_FRAME_TYPE_SETTINGS:
@@ -1648,6 +1683,7 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     memset(&stream->sendbuf, 0, sizeof(stream->sendbuf));
     stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
+    stream->link_resp_settings_blocked = (h2o_linklist_t){NULL};
     stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
     stream->scheduler.link = (h2o_linklist_t){NULL};
     stream->scheduler.priority = h2o_absprio_default;
@@ -1912,6 +1948,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
+    assert(h2o_linklist_is_empty(&conn->streams_resp_settings_blocked));
     assert(conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS);
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));
 
@@ -1981,6 +2018,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
     h2o_linklist_init_anchor(&conn->delayed_streams.req_streaming);
     h2o_linklist_init_anchor(&conn->delayed_streams.pending);
+    h2o_linklist_init_anchor(&conn->streams_resp_settings_blocked);
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     conn->num_streams_req_streaming = 0;
