@@ -60,6 +60,19 @@ provider h2o {
     probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
 
     /**
+     *
+     */
+    probe async_io_start_read_file(struct st_h2o_socket_read_file_cmd_t *cmd);
+    /**
+     *
+     */
+    probe async_io_start_splice_file(struct st_h2o_socket_read_file_cmd_t *cmd);
+    /**
+     *
+     */
+    probe async_io_end(struct st_h2o_socket_read_file_cmd_t *cmd);
+
+    /**
      * HTTP-level event, indicating that a request has been received.
      */
     probe receive_request(uint64_t conn_id, uint64_t req_id, int http_version);
