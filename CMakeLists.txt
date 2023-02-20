@@ -411,7 +411,6 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
 
-    lib/common/async_io.c
     lib/common/cache.c
     lib/common/file.c
     lib/common/filecache.c
@@ -796,6 +795,7 @@ ENDIF ()
 IF (WITH_IO_URING)
     # io_uring is enabled only for standalone server, as it is impossible to cleanly shutdown synchronously
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_IO_URING=1")
+    LIST(APPEND STANDALONE_SOURCE_FILES lib/common/async_io.c)
 ENDIF ()
 ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
