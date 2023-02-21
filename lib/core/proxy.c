@@ -359,47 +359,6 @@ static void do_send(struct rp_generator_t *self)
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
-static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
-{
-    struct rp_generator_t *self = (void *)vec->cb_arg[0];
-
-    while (len != 0) {
-        ssize_t ret;
-        while ((ret = read(self->pipe_reader.fds[0], dst, len)) == -1 && errno == EINTR)
-            ;
-        if (ret <= 0) {
-            assert(errno != EAGAIN);
-            return 0;
-        }
-        dst += ret;
-        len -= ret;
-        vec->len -= ret;
-    }
-
-    return 1;
-}
-
-static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
-{
-#ifdef __linux__
-    struct rp_generator_t *self = (void *)vec->cb_arg[0];
-
-    ssize_t bytes_sent;
-    while ((bytes_sent = splice(self->pipe_reader.fds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
-        ;
-    if (bytes_sent == -1 && errno == EAGAIN)
-        return 0;
-    if (bytes_sent <= 0)
-        return SIZE_MAX;
-
-    vec->len -= bytes_sent;
-
-    return bytes_sent;
-#else
-    h2o_fatal("%s:not implemented", __FUNCTION__);
-#endif
-}
-
 static void do_send_from_pipe(struct rp_generator_t *self)
 {
     h2o_send_state_t send_state = self->had_body_error ? H2O_SEND_STATE_ERROR
@@ -416,16 +375,13 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-    static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
-    h2o_sendvec_t vec = {.callbacks = &callbacks};
-    if ((vec.len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
-        vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.cb_arg[0] = (uint64_t)self;
-    vec.cb_arg[1] = 0; /* unused */
+    size_t len;
+    if ((len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
+        len = H2O_PULL_SENDVEC_MAX_SIZE;
 
-    self->body_bytes_sent += vec.len;
+    self->body_bytes_sent += len;
     self->pipe_inflight = 1;
-    h2o_sendvec(self->src_req, &vec, 1, send_state);
+    h2o_sendvec_from_pipe(self->src_req, self->pipe_reader.fds[0], len, send_state);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)

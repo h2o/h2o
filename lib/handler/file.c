@@ -144,46 +144,8 @@ static void on_generator_dispose(void *_self)
 
 #ifdef H2O_USE_IO_URING
 
-static int sendvec_readpipe(h2o_sendvec_t *vec, void *dst, size_t len)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
-
-    while (len != 0) {
-        ssize_t ret;
-        while ((ret = read(self->splice_.pipefds[0], dst, len)) == -1 && errno == EINTR)
-            ;
-        if (ret <= 0) {
-            assert(errno != EAGAIN);
-            return 0;
-        }
-        dst += ret;
-        len -= ret;
-        vec->len -= ret;
-    }
-
-    return 1;
-}
-
-static size_t sendvec_sendpipe(h2o_sendvec_t *vec, int sockfd, size_t len)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)vec->cb_arg[0];
-
-    ssize_t bytes_sent;
-    while ((bytes_sent = splice(self->splice_.pipefds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
-        ;
-    if (bytes_sent == -1 && errno == EAGAIN)
-        return 0;
-    if (bytes_sent <= 0)
-        return SIZE_MAX;
-
-    vec->len -= bytes_sent;
-
-    return bytes_sent;
-}
-
 static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = sendvec_readpipe, .send_ = sendvec_sendpipe};
     struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
 
     if (self->src_req == NULL) {
@@ -201,8 +163,8 @@ static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
     self->file.off += self->splice_.len;
     self->bytesleft -= self->splice_.len;
 
-    h2o_sendvec_t vec = {.callbacks = &sendvec_callbacks, .len = self->splice_.len, .cb_arg[0] = (uint64_t)self};
-    h2o_sendvec(self->src_req, &vec, 1, self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
+    h2o_sendvec_from_pipe(self->src_req, self->splice_.pipefds[0], self->splice_.len,
+                          self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
 #endif
