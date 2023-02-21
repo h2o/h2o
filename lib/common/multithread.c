@@ -29,14 +29,10 @@
 #include "h2o/multithread.h"
 
 struct st_h2o_multithread_queue_t {
-#if H2O_USE_LIBUV
-    uv_async_t async;
-#else
     struct {
         int write;
         h2o_socket_t *read;
     } async;
-#endif
     pthread_mutex_t mutex;
     struct {
         h2o_linklist_t active;
@@ -72,9 +68,6 @@ static void queue_cb(h2o_multithread_queue_t *queue)
 #ifdef H2O_NO_64BIT_ATOMICS
 pthread_mutex_t h2o_conn_id_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
-
-#if H2O_USE_LIBUV
-#else
 
 #include <errno.h>
 #include <fcntl.h>
@@ -121,18 +114,12 @@ static void init_async(h2o_multithread_queue_t *queue, h2o_loop_t *loop)
     h2o_socket_read_start(queue->async.read, on_read);
 }
 
-#endif
-
 h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
 {
     h2o_multithread_queue_t *queue = h2o_mem_alloc(sizeof(*queue));
     memset(queue, 0, sizeof(*queue));
 
-#if H2O_USE_LIBUV
-    uv_async_init(loop, &queue->async, (uv_async_cb)queue_cb);
-#else
     init_async(queue, loop);
-#endif
     pthread_mutex_init(&queue->mutex, NULL);
     h2o_linklist_init_anchor(&queue->receivers.active);
     h2o_linklist_init_anchor(&queue->receivers.inactive);
@@ -140,23 +127,12 @@ h2o_multithread_queue_t *h2o_multithread_create_queue(h2o_loop_t *loop)
     return queue;
 }
 
-#if H2O_USE_LIBUV
-static void libuv_destroy_delayed(uv_handle_t *handle)
-{
-    h2o_multithread_queue_t *queue = H2O_STRUCT_FROM_MEMBER(h2o_multithread_queue_t, async, (uv_async_t *)handle);
-    free(queue);
-}
-#endif
-
 void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
 {
     assert(h2o_linklist_is_empty(&queue->receivers.active));
     assert(h2o_linklist_is_empty(&queue->receivers.inactive));
     pthread_mutex_destroy(&queue->mutex);
 
-#if H2O_USE_LIBUV
-    uv_close((uv_handle_t *)&queue->async, libuv_destroy_delayed);
-#else
     h2o_socket_read_stop(queue->async.read);
     h2o_socket_close(queue->async.read);
 #ifndef __linux__
@@ -164,7 +140,6 @@ void h2o_multithread_destroy_queue(h2o_multithread_queue_t *queue)
     close(queue->async.write);
 #endif
     free(queue);
-#endif
 }
 
 void h2o_multithread_register_receiver(h2o_multithread_queue_t *queue, h2o_multithread_receiver_t *receiver,
@@ -209,9 +184,6 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
     pthread_mutex_unlock(&receiver->queue->mutex);
 
     if (do_send) {
-#if H2O_USE_LIBUV
-        uv_async_send(&receiver->queue->async);
-#else
 #ifdef __linux__
         uint64_t tmp = 1;
         while (write(receiver->queue->async.write, &tmp, sizeof(tmp)) == -1 && errno == EINTR)
@@ -219,7 +191,6 @@ void h2o_multithread_send_message(h2o_multithread_receiver_t *receiver, h2o_mult
         while (write(receiver->queue->async.write, "", 1) == -1 && errno == EINTR)
 #endif
             ;
-#endif
     }
 }
 
@@ -236,11 +207,7 @@ h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *queue)
 {
     if (queue == NULL)
         return NULL;
-#if H2O_USE_LIBUV
-    return ((uv_handle_t *)&queue->async)->loop;
-#else
     return h2o_socket_get_loop(queue->async.read);
-#endif
 }
 
 void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity)

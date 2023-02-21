@@ -224,11 +224,7 @@ const char h2o_socket_error_ssl_handshake[] = "ssl handshake failure";
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
 
-#if H2O_USE_LIBUV
-#include "socket/uv-binding.c.h"
-#else
 #include "socket/evloop.c.h"
-#endif
 
 static int read_bio(BIO *b, char *out, int len)
 {
@@ -774,13 +770,8 @@ size_t h2o_socket_do_prepare_for_latency_optimized_write(h2o_socket_t *sock,
     can_prepare = 0;
 #endif
 
-#if H2O_USE_LIBUV
-    /* poll-then-write is impossible with libuv */
-    can_prepare = 0;
-#else
     if (can_prepare)
         loop_time = h2o_evloop_get_execution_time_millisec(h2o_socket_get_loop(sock));
-#endif
 
     /* obtain TCP states */
     if (can_prepare && obtain_tcp_info(h2o_socket_get_fd(sock), &rtt, &mss, &cwnd_size, &cwnd_avail) != 0)
@@ -958,11 +949,9 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o
     if (pull_index != SIZE_MAX) {
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
-#if !H2O_USE_LIBUV
         if (pull_index == cnt - 1 && vecs[pull_index].callbacks != NULL &&
             do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
             return;
-#endif
         /* Load the vector onto memory now. */
         size_t pulllen = flatten_sendvec(sock, &vecs[pull_index]);
         if (pulllen == SIZE_MAX) {
@@ -1135,11 +1124,7 @@ int h2o_socket_can_tls_offload(h2o_socket_t *sock)
     if (sock->ssl == NULL)
         return 0;
 
-#if H2O_USE_LIBUV
-    return 0;
-#else
     return can_tls_offload(sock);
-#endif
 }
 
 h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem_pool_t *pool)

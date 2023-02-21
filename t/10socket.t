@@ -66,7 +66,7 @@ sub doit {
     while (waitpid($pid, 0) != $pid) {}
 }
 
-for my $backend (qw(evloop libuv)) {
+for my $backend (qw(evloop)) {
     subtest $backend => sub {
         my $prog = bindir() . "/examples-socket-client-$backend";
         plan skip_all => "$prog not found"

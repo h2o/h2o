@@ -113,11 +113,7 @@ int main(int argc, char **argv)
         goto Exit;
     }
 
-#if H2O_USE_LIBUV
-    loop = uv_loop_new();
-#else
     loop = h2o_evloop_create();
-#endif
 
     client = h2o_redis_create_client(loop, sizeof(*client));
     client->on_connect = on_redis_connect;
@@ -127,11 +123,7 @@ int main(int argc, char **argv)
     h2o_redis_command(client, on_redis_command, "list all keys", "KEYS *");
 
     while (!exit_loop) {
-#if H2O_USE_LIBUV
-        uv_run(loop, UV_RUN_DEFAULT);
-#else
         h2o_evloop_run(loop, INT32_MAX);
-#endif
     }
 
     ret = 0;
@@ -141,12 +133,8 @@ Exit:
     h2o_redis_free(client);
 
     if (loop != NULL) {
-#if H2O_USE_LIBUV
-        uv_loop_delete(loop);
-#else
 // FIXME
 // h2o_evloop_destroy(loop);
-#endif
     }
     return ret;
 }

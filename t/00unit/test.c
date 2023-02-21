@@ -96,11 +96,7 @@ void h2o_loopback_run_loop(h2o_loopback_conn_t *conn)
     h2o_process_request(&conn->req);
 
     while (!conn->_is_complete) {
-#if H2O_USE_LIBUV
-        uv_run(conn->super.ctx->loop, UV_RUN_ONCE);
-#else
         h2o_evloop_run(conn->super.ctx->loop, INT32_MAX);
-#endif
     }
 }
 
@@ -186,12 +182,7 @@ int main(int argc, char **argv)
     }
 
     { /* tests that use the run loop */
-#if H2O_USE_LIBUV
-        test_loop = h2o_mem_alloc(sizeof(*test_loop));
-        uv_loop_init(test_loop);
-#else
         test_loop = h2o_evloop_create();
-#endif
 
         subtest("lib/t/test.c/loopback", test_loopback);
         subtest("lib/fastcgi.c", test_lib__handler__fastcgi_c);
@@ -201,12 +192,7 @@ int main(int argc, char **argv)
         subtest("issues/293.c", test_issues293);
         subtest("issues/percent-encode-zero-byte.c", test_percent_encode_zero_byte);
 
-#if H2O_USE_LIBUV
-        uv_loop_close(test_loop);
-        free(test_loop);
-#else
 // h2o_evloop_destroy(loop);
-#endif
     }
 
     { /* src tests */

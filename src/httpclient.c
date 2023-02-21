@@ -523,7 +523,6 @@ static void usage(const char *progname)
             quicly_spec_context.transport_params.max_udp_payload_size);
 }
 
-#if !H2O_USE_LIBUV
 h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
 {
     int fd;
@@ -541,7 +540,6 @@ h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
     }
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 }
-#endif
 
 static void on_sigfatal(int signo)
 {
@@ -608,14 +606,8 @@ int main(int argc, char **argv)
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
     h3ctx.load_session = load_http3_session;
 
-#if H2O_USE_LIBUV
-    ctx.loop = uv_loop_new();
-#else
     ctx.loop = h2o_evloop_create();
-#endif
 
-#if H2O_USE_LIBUV
-#else
     { /* initialize QUIC context */
         int fd;
         struct sockaddr_in sin;
@@ -632,7 +624,6 @@ int main(int argc, char **argv)
         h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
                               1 /* use_gso */, NULL);
     }
-#endif
 
     enum {
         OPT_INITIAL_UDP_PAYLOAD_SIZE = 0x100,
@@ -683,10 +674,6 @@ int main(int argc, char **argv)
             }
             break;
         case 'X': {
-#if H2O_USE_LIBUV
-            fprintf(stderr, "-X is not supported by the libuv backend\n");
-            exit(EXIT_FAILURE);
-#else
             uint16_t udp_port;
             if (sscanf(optarg, "%" SCNu16, &udp_port) != 1) {
                 fprintf(stderr, "failed to parse optarg of -X\n");
@@ -697,7 +684,6 @@ int main(int argc, char **argv)
             h3ctx.quic.initial_egress_max_udp_payload_size = 1400; /* increase initial UDP payload size so that we'd have room to
                                                                     * carry ordinary QUIC packets. */
             req.method = "CONNECT-UDP";
-#endif
         } break;
         case 'C':
             if (sscanf(optarg, "%u", &concurrency) != 1 || concurrency < 1) {
@@ -751,10 +737,6 @@ int main(int argc, char **argv)
             }
             break;
         case '3':
-#if H2O_USE_LIBUV
-            fprintf(stderr, "HTTP/3 is currently not supported by the libuv backend.\n");
-            exit(EXIT_FAILURE);
-#else
             if (optarg == NULL) {
                 /* parse the optional argument (glibc extension; see above) */
                 if (optind < argc && ('0' <= argv[optind][0] && argv[optind][0] <= '9') &&
@@ -771,7 +753,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse HTTP/3 ratio (-3)\n");
                 exit(EXIT_FAILURE);
             }
-#endif
             break;
         case 'W': {
             uint64_t v;
@@ -830,11 +811,7 @@ int main(int argc, char **argv)
             fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
             exit(EXIT_FAILURE);
         }
-#if H2O_USE_LIBUV
-        std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
-#else
         std_in.sock = h2o_evloop_socket_create(ctx.loop, 0, 0);
-#endif
         h2o_socket_read_start(std_in.sock, stdin_on_read);
     }
 
@@ -859,23 +836,15 @@ int main(int argc, char **argv)
         start_request(&ctx);
 
     while (cnt_left != 0) {
-#if H2O_USE_LIBUV
-        uv_run(ctx.loop, UV_RUN_ONCE);
-#else
         h2o_evloop_run(ctx.loop, INT32_MAX);
-#endif
     }
 
-#if H2O_USE_LIBUV
-/* libuv path currently does not support http3 */
-#else
     if (ctx.protocol_selector.ratio.http3 > 0) {
         h2o_quic_close_all_connections(&ctx.http3->h3);
         while (h2o_quic_num_connections(&ctx.http3->h3) != 0) {
             h2o_evloop_run(ctx.loop, INT32_MAX);
         }
     }
-#endif
 
     if (req.connect_to != NULL)
         free(req.connect_to);

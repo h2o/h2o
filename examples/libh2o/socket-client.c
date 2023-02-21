@@ -152,11 +152,7 @@ int main(int argc, char **argv)
     if (ssl_ctx != NULL && !skip_verify)
         SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
-#if H2O_USE_LIBUV
-    loop = uv_loop_new();
-#else
     loop = h2o_evloop_create();
-#endif
 
     /* resolve destination (FIXME use the function supplied by the loop) */
     memset(&hints, 0, sizeof(hints));
@@ -175,11 +171,7 @@ int main(int argc, char **argv)
     sock->data = &send_data;
 
     while (!exit_loop) {
-#if H2O_USE_LIBUV
-        uv_run(loop, UV_RUN_DEFAULT);
-#else
         h2o_evloop_run(loop, INT32_MAX);
-#endif
     }
 
     return 0;

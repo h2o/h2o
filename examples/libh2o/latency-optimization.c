@@ -338,11 +338,7 @@ int main(int argc, char **argv)
         SSL_CTX_set_cipher_list(ssl_ctx, "ECDHE-RSA-AES128-GCM-SHA256");
     }
 
-#if H2O_USE_LIBUV
-    loop = uv_loop_new();
-#else
     loop = h2o_evloop_create();
-#endif
 
     /* resolve host:port (FIXME use the function supplied by the loop) */
     memset(&hints, 0, sizeof(hints));
@@ -372,11 +368,7 @@ int main(int argc, char **argv)
     }
 
     while (1) {
-#if H2O_USE_LIBUV
-        uv_run(loop, UV_RUN_DEFAULT);
-#else
         h2o_evloop_run(loop, INT32_MAX);
-#endif
     }
 
     return 0;

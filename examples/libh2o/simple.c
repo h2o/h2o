@@ -94,53 +94,6 @@ static h2o_context_t ctx;
 static h2o_multithread_receiver_t libmemcached_receiver;
 static h2o_accept_ctx_t accept_ctx;
 
-#if H2O_USE_LIBUV
-
-static void on_accept(uv_stream_t *listener, int status)
-{
-    uv_tcp_t *conn;
-    h2o_socket_t *sock;
-
-    if (status != 0)
-        return;
-
-    conn = h2o_mem_alloc(sizeof(*conn));
-    uv_tcp_init(listener->loop, conn);
-
-    if (uv_accept(listener, (uv_stream_t *)conn) != 0) {
-        uv_close((uv_handle_t *)conn, (uv_close_cb)free);
-        return;
-    }
-
-    sock = h2o_uv_socket_create((uv_handle_t *)conn, (uv_close_cb)free);
-    h2o_accept(&accept_ctx, sock);
-}
-
-static int create_listener(void)
-{
-    static uv_tcp_t listener;
-    struct sockaddr_in addr;
-    int r;
-
-    uv_tcp_init(ctx.loop, &listener);
-    uv_ip4_addr("127.0.0.1", 7890, &addr);
-    if ((r = uv_tcp_bind(&listener, (struct sockaddr *)&addr, 0)) != 0) {
-        fprintf(stderr, "uv_tcp_bind:%s\n", uv_strerror(r));
-        goto Error;
-    }
-    if ((r = uv_listen((uv_stream_t *)&listener, 128, on_accept)) != 0) {
-        fprintf(stderr, "uv_listen:%s\n", uv_strerror(r));
-        goto Error;
-    }
-
-    return 0;
-Error:
-    uv_close((uv_handle_t *)&listener, NULL);
-    return r;
-}
-
-#else
-
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     h2o_socket_t *sock;
@@ -176,8 +129,6 @@ static int create_listener(void)
 
     return 0;
 }
-
-#endif
 
 static int setup_ssl(const char *cert_file, const char *key_file, const char *ciphers)
 {
@@ -254,13 +205,7 @@ int main(int argc, char **argv)
     if (logfh != NULL)
         h2o_access_log_register(pathconf, logfh);
 
-#if H2O_USE_LIBUV
-    uv_loop_t loop;
-    uv_loop_init(&loop);
-    h2o_context_init(&ctx, &loop, &config);
-#else
     h2o_context_init(&ctx, h2o_evloop_create(), &config);
-#endif
     if (USE_MEMCACHED)
         h2o_multithread_register_receiver(ctx.queue, &libmemcached_receiver, h2o_memcached_receiver);
 
@@ -276,12 +221,8 @@ int main(int argc, char **argv)
         goto Error;
     }
 
-#if H2O_USE_LIBUV
-    uv_run(ctx.loop, UV_RUN_DEFAULT);
-#else
     while (h2o_evloop_run(ctx.loop, INT32_MAX) == 0)
         ;
-#endif
 
 Error:
     return 1;

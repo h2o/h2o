@@ -1125,12 +1125,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
     /* run next write now instead of relying on the deferred timeout */
     if (h2o_timer_is_linked(&conn->output.defer_timeout))
         h2o_timer_unlink(&conn->output.defer_timeout);
-#if !H2O_USE_LIBUV
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_OPEN) {
         h2o_socket_notify_write(sock, on_notify_write);
         return;
     }
-#endif
     do_emit_writereq(conn);
     close_connection_if_necessary(conn);
 }

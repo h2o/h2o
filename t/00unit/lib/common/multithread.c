@@ -86,33 +86,13 @@ static void on_shutdown(h2o_multithread_receiver_t *receiver, h2o_linklist_t *li
     main_thread.received_shutdown = 1;
 }
 
-#if H2O_USE_LIBUV
-static h2o_loop_t *create_loop(void)
-{
-    h2o_loop_t *loop = h2o_mem_alloc(sizeof(*loop));
-    uv_loop_init(loop);
-    return loop;
-}
-
-static void destroy_loop(h2o_loop_t *loop)
-{
-    uv_run(loop, UV_RUN_NOWAIT);
-    uv_loop_close(loop);
-    free(loop);
-}
-#else
 #define create_loop h2o_evloop_create
 #define destroy_loop(loop) (0) /* FIXME */
-#endif
 
 static void *worker_main(void *_unused)
 {
     while (!worker_thread.should_exit) {
-#if H2O_USE_LIBUV
-        uv_run(worker_thread.loop, UV_RUN_ONCE);
-#else
         h2o_evloop_run(worker_thread.loop, INT32_MAX);
-#endif
     }
 
     return NULL;
@@ -136,11 +116,7 @@ void test_lib__common__multithread_c(void)
     send_empty_message(&worker_thread.ping_receiver);
 
     while (!main_thread.received_shutdown) {
-#if H2O_USE_LIBUV
-        uv_run(main_thread.loop, UV_RUN_ONCE);
-#else
         h2o_evloop_run(main_thread.loop, INT32_MAX);
-#endif
     }
 
     pthread_join(tid, NULL);

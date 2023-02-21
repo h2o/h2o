@@ -671,11 +671,9 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     }
 
     self->sock->data = self;
-#if !H2O_USE_LIBUV
     /* This is the maximum amount of data that will be buffered within userspace. It is hard-coded to 64KB to balance throughput
      * and latency, and because we do not expect the need to change the value. */
     h2o_evloop_socket_set_max_read_size(self->sock, 64 * 1024);
-#endif
     self->eyeball_delay.cb = on_connection_attempt_delay_timeout;
     h2o_timer_link(get_loop(self), self->handler->config.happy_eyeballs.connection_attempt_delay, &self->eyeball_delay);
 
@@ -871,11 +869,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     reset_io_timeout(self);
 
     /* setup, initiating transfer of early data */
-#if H2O_USE_LIBUV
-    self->sock = h2o_uv__poll_create(get_loop(self), fd, (uv_close_cb)free);
-#else
     self->sock = h2o_evloop_socket_create(get_loop(self), fd, H2O_SOCKET_FLAG_DONT_READ);
-#endif
     assert(self->sock != NULL);
     self->sock->data = self;
     self->src_req->write_req.cb = udp_write_stream;
