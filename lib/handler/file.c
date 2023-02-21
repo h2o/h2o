@@ -183,7 +183,7 @@ static size_t sendvec_sendpipe(h2o_sendvec_t *vec, int sockfd, size_t len)
 
 static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = sendvec_readpipe, .send_ =  sendvec_sendpipe};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = sendvec_readpipe, .send_ = sendvec_sendpipe};
     struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
 
     if (self->src_req == NULL) {
@@ -205,26 +205,7 @@ static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
     h2o_sendvec(self->src_req, &vec, 1, self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
-static void do_proceed(h2o_generator_t *_self, h2o_req_t *_req)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    h2o_async_io_cmd_t *cmd;
-
-    if (self->splice_.pipefds[0] == -1) {
-        if (pipe2(self->splice_.pipefds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-    }
-
-    self->splice_.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
-
-    h2o_mem_addref_shared(self);
-    h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_.pipefds[1],
-                             self->splice_.len, do_proceed_on_splice_complete, self);
-}
-
-#else
+#endif
 
 static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
 {
@@ -298,22 +279,30 @@ static size_t sendvec_sendfile(h2o_sendvec_t *src, int sockfd, size_t len)
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = do_pread, .send_ = sendvec_sendfile};
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    h2o_sendvec_t vec;
+    size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
 
-    vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.callbacks = &sendvec_callbacks;
-    vec.cb_arg[0] = (uint64_t)self;
-    vec.cb_arg[1] = self->file.off;
+    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_async_io_splice_file` */
+#if H2O_USE_IO_URING
+    if (self->splice_.pipefds[0] != -1) {
+        h2o_async_io_cmd_t *cmd;
+        self->splice_.len = bytes_to_send;
+        h2o_mem_addref_shared(self);
+        h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_.pipefds[1],
+                                 self->splice_.len, do_proceed_on_splice_complete, self);
+        return;
+    }
+#endif
+
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = do_pread, .send_ = sendvec_sendfile};
+    h2o_sendvec_t vec = {
+        .callbacks = &sendvec_callbacks, .len = bytes_to_send, .cb_arg[0] = (uint64_t)self, .cb_arg[1] = self->file.off};
 
     self->file.off += vec.len;
     self->bytesleft -= vec.len;
 
     h2o_sendvec(req, &vec, 1, self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
-
-#endif
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
@@ -437,8 +426,15 @@ Opened:
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
-    self->splice_.pipefds[0] = -1;
-    self->splice_.pipefds[1] = -1;
+    if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
+        if (pipe2(self->splice_.pipefds, O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+    } else {
+        self->splice_.pipefds[0] = -1;
+        self->splice_.pipefds[1] = -1;
+    }
     self->splice_.len = 0;
 #endif
 
