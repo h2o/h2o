@@ -193,20 +193,28 @@ static int dispatch_completed(h2o_loop_t *loop)
 
 static struct st_h2o_io_uring_cmd_t *start_command(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd)
 {
+    int needs_timer = 0;
+
     insert_queue(&loop->_async_io->submission, cmd);
 
-    /* Submit enqueued commands as much as possible, then read completed ones as much as possible. The hope here is that the read
-     * command generated right above gets issued and completes synchronously, which would be likely when the file is buffer cache.
-     * If that is the case, call the callback synchronously. */
-    if (submit_commands(loop, 1)) {
+    submit_commands(loop, 1);
+
+    /* if we have submitted all commands up to the current one, fetch completion events in hope that we might be able to complete
+     * the current one synchronously (as doing so improves locality) */
+    if (loop->_async_io->submission.head == NULL) {
         if (check_completion(loop, cmd)) {
             cmd->super.cb.func(&cmd->super);
             free(cmd);
             cmd = NULL;
         }
-    } else if (!h2o_timer_is_linked(&loop->_async_io->delayed)) {
-        h2o_timer_link(loop, 0, &loop->_async_io->delayed);
+        if (loop->_async_io->completion.head != NULL)
+            needs_timer = 1;
+    } else {
+        needs_timer = 1;
     }
+
+    if (needs_timer && !h2o_timer_is_linked(&loop->_async_io->delayed))
+        h2o_timer_link(loop, 0, &loop->_async_io->delayed);
 
     return cmd;
 }
