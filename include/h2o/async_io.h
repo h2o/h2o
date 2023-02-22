@@ -31,10 +31,7 @@ struct st_h2o_async_io_cmd_t {
         h2o_async_io_cb func;
         void *data;
     } cb;
-    /**
-     * result
-     */
-    const char *err;
+    int result;
 };
 
 #if H2O_USE_IO_URING

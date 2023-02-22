@@ -124,7 +124,6 @@ static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_
 
     while (1) {
         struct st_h2o_io_uring_cmd_t *cmd;
-        int res;
 
         { /* obtain completed command and its result */
             struct io_uring_cqe *cqe;
@@ -133,37 +132,8 @@ static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_
             if (ret != 0)
                 break;
             cmd = (struct st_h2o_io_uring_cmd_t *)cqe->user_data;
-            res = cqe->res;
+            cmd->super.result = cqe->res;
             io_uring_cqe_seen(&loop->_async_io->uring, cqe);
-        }
-
-        /* Check error. Or if partial read, schedule read of the remainder. */
-        if (res != cmd->splice_.len) {
-            if (res > 0 || res == -EAGAIN) {
-                /* partial read */
-                if (res > 0) {
-                    assert(res < cmd->splice_.len);
-                    cmd->splice_.offset += res;
-                    cmd->splice_.len -= res;
-                }
-                { /* H2O_PULL_SENDVEC_MAX_SIZE is equal to the default pipe buffer size of 64KB, therefore it is likely that we can
-                   * splice entire sendvec at once. However, when the input is not aligned to page boundary, we might need to expand
-                   * the buffer. */
-                    int sz = fcntl(cmd->splice_.pipefd, F_GETPIPE_SZ);
-                    char errbuf[256];
-                    if (sz == -1)
-                        h2o_fatal("fcntl(F_GETPIPE_SZ):%d:%s", errno, h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-                    sz += 16384;
-                    if (fcntl(cmd->splice_.pipefd, F_SETPIPE_SZ, sz) < sz)
-                        h2o_fatal("fcntl(F_SETPIPE_SZ):%d:%s", errno, h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-                }
-                insert_queue(&loop->_async_io->submission, cmd);
-                if (!h2o_timer_is_linked(&loop->_async_io->delayed))
-                    h2o_timer_link(loop, 0, &loop->_async_io->delayed);
-                continue;
-            } else {
-                cmd->super.err = h2o_socket_error_io; /* TODO notify partial read / eos? */
-            }
         }
 
         /* link to completion list or indicate to the caller that `cmd_sync` has completed */

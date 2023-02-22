@@ -68,10 +68,7 @@ struct st_h2o_sendfile_generator_t {
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
     } header_bufs;
 #ifdef H2O_USE_IO_URING
-    struct {
-        int pipefds[2];
-        size_t len;
-    } splice_;
+    int splice_fds[2];
 #endif
 };
 
@@ -127,11 +124,11 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         self->file.ref = NULL;
     }
 #if H2O_USE_IO_URING
-    if (self->splice_.pipefds[0] != -1) {
-        close(self->splice_.pipefds[0]);
-        self->splice_.pipefds[0] = -1;
-        close(self->splice_.pipefds[1]);
-        self->splice_.pipefds[1] = -1;
+    if (self->splice_fds[0] != -1) {
+        close(self->splice_fds[0]);
+        self->splice_fds[0] = -1;
+        close(self->splice_fds[1]);
+        self->splice_fds[1] = -1;
     }
 #endif
 }
@@ -155,15 +152,16 @@ static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
 
     h2o_mem_release_shared(self);
 
-    if (cmd->err != NULL) {
+    if (cmd->result <= 0) {
+        assert(cmd->result != -EINTR); /* could this ever happen? */
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_ERROR);
         return;
     }
 
-    self->file.off += self->splice_.len;
-    self->bytesleft -= self->splice_.len;
+    self->file.off += cmd->result;
+    self->bytesleft -= cmd->result;
 
-    h2o_sendvec_from_pipe(self->src_req, self->splice_.pipefds[0], self->splice_.len,
+    h2o_sendvec_from_pipe(self->src_req, self->splice_fds[0], cmd->result,
                           self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
@@ -246,12 +244,11 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
     /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_async_io_splice_file` */
 #if H2O_USE_IO_URING
-    if (self->splice_.pipefds[0] != -1) {
+    if (self->splice_fds[0] != -1) {
         h2o_async_io_cmd_t *cmd;
-        self->splice_.len = bytes_to_send;
         h2o_mem_addref_shared(self);
-        h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_.pipefds[1],
-                                 self->splice_.len, do_proceed_on_splice_complete, self);
+        h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1],
+                                 bytes_to_send, do_proceed_on_splice_complete, self);
         return;
     }
 #endif
@@ -389,15 +386,14 @@ Opened:
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
     if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
-        if (pipe2(self->splice_.pipefds, O_NONBLOCK | O_CLOEXEC) != 0) {
+        if (pipe2(self->splice_fds, O_NONBLOCK | O_CLOEXEC) != 0) {
             char errbuf[256];
             h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
     } else {
-        self->splice_.pipefds[0] = -1;
-        self->splice_.pipefds[1] = -1;
+        self->splice_fds[0] = -1;
+        self->splice_fds[1] = -1;
     }
-    self->splice_.len = 0;
 #endif
 
     return self;
