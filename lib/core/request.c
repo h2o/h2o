@@ -590,7 +590,7 @@ static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
 #define from_pipe_send NULL
 #endif
 
-void h2o_sendvec_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state)
+void h2o_send_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state)
 {
     static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
     h2o_sendvec_t vec = {.callbacks = &callbacks, .len = len, .cb_arg[0] = pipefd};

@@ -161,8 +161,8 @@ static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
     self->file.off += cmd->result;
     self->bytesleft -= cmd->result;
 
-    h2o_sendvec_from_pipe(self->src_req, self->splice_fds[0], cmd->result,
-                          self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
+    h2o_send_from_pipe(self->src_req, self->splice_fds[0], cmd->result,
+                       self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
 #endif

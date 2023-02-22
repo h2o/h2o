@@ -1568,8 +1568,14 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
  * @param state describes if the output is final, has an error, or is in progress
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+/**
+ * Same as `h2o_send` but sends `h2o_sendvec_t`s
+ */
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *vecs, size_t veccnt, h2o_send_state_t state);
-void h2o_sendvec_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state);
+/**
+ * Wrapper around `h2o_sendvec` that sends the contents of pipe
+ */
+void h2o_send_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state);
 
 /**
  * creates an uninitialized prefilter and returns pointer to it

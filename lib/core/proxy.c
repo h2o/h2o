@@ -381,7 +381,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
 
     self->body_bytes_sent += len;
     self->pipe_inflight = 1;
-    h2o_sendvec_from_pipe(self->src_req, self->pipe_reader.fds[0], len, send_state);
+    h2o_send_from_pipe(self->src_req, self->pipe_reader.fds[0], len, send_state);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
