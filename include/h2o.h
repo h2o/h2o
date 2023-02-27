@@ -945,6 +945,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     union {
         struct {
+            h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
@@ -1472,11 +1473,10 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
                                             size_t suffix_len);
 /**
  * Garbage collects resources kept for future reuse in the current thread. If `now` is set to zero, performs full GC. If a valid
- * pointer is passed to `ctx_optional`, resource associated to the context will be collected as well. This function returns when
- * it should be called the next time, or UINT64_MAX if there are no resources being held that can be acclaimed in the foreseeable
- * future.
+ * pointer is passed to `ctx_optional`, resource associated to the context will be collected as well. This function returns how long
+ * the next event loop can block before calling `h2o_cleanup_thread` again, in milliseconds.
  */
-uint64_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional);
+uint32_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional);
 
 extern uint64_t h2o_connection_id;
 

@@ -266,26 +266,36 @@ static void dispose_generator(struct st_connect_generator_t *self)
     h2o_timer_unlink(&self->timeout);
 }
 
-static void close_socket(struct st_connect_generator_t *self)
+static int close_socket(struct st_connect_generator_t *self)
 {
-    if (self->is_tcp)
+    int send_inflight;
+
+    if (self->is_tcp) {
         self->tcp.recvbuf_detached = self->sock->input;
+        send_inflight = self->tcp.recvbuf_detached->size != 0;
+    } else {
+        send_inflight = !h2o_socket_is_reading(self->sock);
+    }
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
     self->sock = NULL;
     self->socket_closed = 1;
+
+    return send_inflight;
 }
 
 static void close_readwrite(struct st_connect_generator_t *self)
 {
+    int send_inflight = 0;
+
     if (self->sock != NULL)
-        close_socket(self);
+        send_inflight = close_socket(self);
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
 
     /* immediately notify read-close if necessary, setting up delayed task to for destroying other items; the timer is reset if
      * `h2o_send` indirectly invokes `dispose_generator`. */
-    if (!self->read_closed && (self->is_tcp ? self->tcp.recvbuf_detached->size == 0 : 1)) {
+    if (!self->read_closed && !send_inflight) {
         h2o_timer_link(get_loop(self), 0, &self->timeout);
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -589,8 +599,7 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
     struct st_connect_generator_t *self = _sock->data;
 
     h2o_socket_read_stop(self->sock);
-    reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
-                             * within given interval */
+    h2o_timer_unlink(&self->timeout);
 
     if (err == NULL) {
         h2o_iovec_t vec = h2o_iovec_init(self->sock->input->bytes, self->sock->input->size);
@@ -813,8 +822,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
         self->src_req->forward_datagram.read_(self->src_req, &vec, 1);
     } else {
         h2o_socket_read_stop(self->sock);
-        reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
-                                 * within given interval */
+        h2o_timer_unlink(&self->timeout);
         size_t off = 0;
         self->udp.ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
         off = quicly_encodev(self->udp.ingress.buf + off, (uint64_t)rret) - self->udp.ingress.buf;
@@ -875,7 +883,6 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->src_req->write_req.ctx = self;
     if (self->udp.egress.buf->size != 0 || self->write_closed)
         udp_do_write_stream(self, h2o_iovec_init(NULL, 0));
-    h2o_socket_read_start(self->sock, udp_on_read);
 
     record_connect_success(self);
 

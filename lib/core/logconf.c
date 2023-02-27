@@ -282,6 +282,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("proxy.ssl.session-reused", ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED);
                     MAP_EXT_TO_TYPE("proxy.ssl.cipher", ELEMENT_TYPE_PROXY_SSL_CIPHER);
                     MAP_EXT_TO_TYPE("proxy.ssl.cipher-bits", ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS);
+                    MAP_EXT_TO_PROTO("extensible-priorities", extensible_priorities);
                     MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
                     MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
                     MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);

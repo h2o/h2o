@@ -4037,15 +4037,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
-    uint64_t next_buffer_gc_at = UINT64_MAX;
-    while (1) {
-        if (conf.shutdown_requested)
-            break;
+    while (!conf.shutdown_requested) {
+        h2o_context_t *ctx = &conf.threads[thread_index].ctx;
+        uint32_t max_wait = h2o_cleanup_thread(h2o_now(ctx->loop), ctx);
         update_listener_state(listeners);
-        /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop, next_buffer_gc_at == UINT64_MAX ? INT32_MAX : 1000);
-        if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at)
-            next_buffer_gc_at = h2o_cleanup_thread(h2o_now(conf.threads[thread_index].ctx.loop), &conf.threads[thread_index].ctx);
+        h2o_evloop_run(ctx->loop, max_wait);
     }
 
     if (thread_index == 0)
