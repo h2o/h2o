@@ -11,6 +11,7 @@ ENDIF ()
 
 FIND_PACKAGE(PkgConfig REQUIRED)
 INCLUDE(cmake/dtrace-utils.cmake)
+INCLUDE(cmake/boringssl-adjust.cmake)
 
 CHECK_DTRACE(${PROJECT_SOURCE_DIR}/picotls-probes.d)
 IF ((CMAKE_SIZEOF_VOID_P EQUAL 8) AND
@@ -120,6 +121,8 @@ SET(PTLSBENCH_LIBS
     picotls-minicrypto picotls-core)
 
 FIND_PACKAGE(OpenSSL)
+BORINGSSL_ADJUST()
+
 IF (OPENSSL_FOUND AND NOT (OPENSSL_VERSION VERSION_LESS "1.0.1"))
     MESSAGE(STATUS "  Enabling OpenSSL support")
     INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})

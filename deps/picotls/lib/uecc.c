@@ -87,6 +87,9 @@ static int secp256r1_create_key_exchange(ptls_key_exchange_algorithm_t *algo, pt
         return PTLS_ERROR_NO_MEMORY;
     ctx->super = (ptls_key_exchange_context_t){algo, ptls_iovec_init(ctx->pub, sizeof(ctx->pub)), secp256r1_on_exchange};
     ctx->pub[0] = TYPE_UNCOMPRESSED_PUBLIC_KEY;
+
+    /* RNG function must be set before calling uECC_make_key() */
+    assert(uECC_get_rng() != NULL);
     uECC_make_key(ctx->pub + 1, ctx->priv, uECC_secp256r1());
 
     *_ctx = &ctx->super;

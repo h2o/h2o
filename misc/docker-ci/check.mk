@@ -43,6 +43,13 @@ ossl3.0:
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='$(TEST_ENV)'
 
+boringssl:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='$(TEST_ENV)'
+
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
 		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \

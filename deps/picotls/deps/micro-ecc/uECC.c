@@ -13,73 +13,78 @@
     #define uECC_VLI_API static
 #endif
 
-#define CONCATX(a, ...) a ## __VA_ARGS__
-#define CONCAT(a, ...) CONCATX(a, __VA_ARGS__)
+#if (uECC_PLATFORM == uECC_avr) || \
+    (uECC_PLATFORM == uECC_arm) || \
+    (uECC_PLATFORM == uECC_arm_thumb) || \
+    (uECC_PLATFORM == uECC_arm_thumb2)
+    #define CONCATX(a, ...) a ## __VA_ARGS__
+    #define CONCAT(a, ...) CONCATX(a, __VA_ARGS__)
 
-#define STRX(a) #a
-#define STR(a) STRX(a)
+    #define STRX(a) #a
+    #define STR(a) STRX(a)
 
-#define EVAL(...)  EVAL1(EVAL1(EVAL1(EVAL1(__VA_ARGS__))))
-#define EVAL1(...) EVAL2(EVAL2(EVAL2(EVAL2(__VA_ARGS__))))
-#define EVAL2(...) EVAL3(EVAL3(EVAL3(EVAL3(__VA_ARGS__))))
-#define EVAL3(...) EVAL4(EVAL4(EVAL4(EVAL4(__VA_ARGS__))))
-#define EVAL4(...) __VA_ARGS__
+    #define EVAL(...)  EVAL1(EVAL1(EVAL1(EVAL1(__VA_ARGS__))))
+    #define EVAL1(...) EVAL2(EVAL2(EVAL2(EVAL2(__VA_ARGS__))))
+    #define EVAL2(...) EVAL3(EVAL3(EVAL3(EVAL3(__VA_ARGS__))))
+    #define EVAL3(...) EVAL4(EVAL4(EVAL4(EVAL4(__VA_ARGS__))))
+    #define EVAL4(...) __VA_ARGS__
 
-#define DEC_1  0
-#define DEC_2  1
-#define DEC_3  2
-#define DEC_4  3
-#define DEC_5  4
-#define DEC_6  5
-#define DEC_7  6
-#define DEC_8  7
-#define DEC_9  8
-#define DEC_10 9
-#define DEC_11 10
-#define DEC_12 11
-#define DEC_13 12
-#define DEC_14 13
-#define DEC_15 14
-#define DEC_16 15
-#define DEC_17 16
-#define DEC_18 17
-#define DEC_19 18
-#define DEC_20 19
-#define DEC_21 20
-#define DEC_22 21
-#define DEC_23 22
-#define DEC_24 23
-#define DEC_25 24
-#define DEC_26 25
-#define DEC_27 26
-#define DEC_28 27
-#define DEC_29 28
-#define DEC_30 29
-#define DEC_31 30
-#define DEC_32 31
+    #define DEC_1  0
+    #define DEC_2  1
+    #define DEC_3  2
+    #define DEC_4  3
+    #define DEC_5  4
+    #define DEC_6  5
+    #define DEC_7  6
+    #define DEC_8  7
+    #define DEC_9  8
+    #define DEC_10 9
+    #define DEC_11 10
+    #define DEC_12 11
+    #define DEC_13 12
+    #define DEC_14 13
+    #define DEC_15 14
+    #define DEC_16 15
+    #define DEC_17 16
+    #define DEC_18 17
+    #define DEC_19 18
+    #define DEC_20 19
+    #define DEC_21 20
+    #define DEC_22 21
+    #define DEC_23 22
+    #define DEC_24 23
+    #define DEC_25 24
+    #define DEC_26 25
+    #define DEC_27 26
+    #define DEC_28 27
+    #define DEC_29 28
+    #define DEC_30 29
+    #define DEC_31 30
+    #define DEC_32 31
 
-#define DEC(N) CONCAT(DEC_, N)
+    #define DEC(N) CONCAT(DEC_, N)
 
-#define SECOND_ARG(_, val, ...) val
-#define SOME_CHECK_0 ~, 0
-#define GET_SECOND_ARG(...) SECOND_ARG(__VA_ARGS__, SOME,)
-#define SOME_OR_0(N) GET_SECOND_ARG(CONCAT(SOME_CHECK_, N))
+    #define SECOND_ARG(_, val, ...) val
+    #define SOME_CHECK_0 ~, 0
+    #define GET_SECOND_ARG(...) SECOND_ARG(__VA_ARGS__, SOME,)
+    #define SOME_OR_0(N) GET_SECOND_ARG(CONCAT(SOME_CHECK_, N))
 
-#define EMPTY(...)
-#define DEFER(...) __VA_ARGS__ EMPTY()
+    #define EMPTY(...)
+    #define DEFER(...) __VA_ARGS__ EMPTY()
 
-#define REPEAT_NAME_0() REPEAT_0
-#define REPEAT_NAME_SOME() REPEAT_SOME
-#define REPEAT_0(...)
-#define REPEAT_SOME(N, stuff) DEFER(CONCAT(REPEAT_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), stuff) stuff
-#define REPEAT(N, stuff) EVAL(REPEAT_SOME(N, stuff))
+    #define REPEAT_NAME_0() REPEAT_0
+    #define REPEAT_NAME_SOME() REPEAT_SOME
+    #define REPEAT_0(...)
+    #define REPEAT_SOME(N, stuff) DEFER(CONCAT(REPEAT_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), stuff) stuff
+    #define REPEAT(N, stuff) EVAL(REPEAT_SOME(N, stuff))
 
-#define REPEATM_NAME_0() REPEATM_0
-#define REPEATM_NAME_SOME() REPEATM_SOME
-#define REPEATM_0(...)
-#define REPEATM_SOME(N, macro) macro(N) \
-    DEFER(CONCAT(REPEATM_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), macro)
-#define REPEATM(N, macro) EVAL(REPEATM_SOME(N, macro))
+    #define REPEATM_NAME_0() REPEATM_0
+    #define REPEATM_NAME_SOME() REPEATM_SOME
+    #define REPEATM_0(...)
+    #define REPEATM_SOME(N, macro) macro(N) \
+        DEFER(CONCAT(REPEATM_NAME_, SOME_OR_0(DEC(N))))()(DEC(N), macro)
+    #define REPEATM(N, macro) EVAL(REPEATM_SOME(N, macro))
+#endif
 
 #include "platform-specific.inc"
 
@@ -912,19 +917,54 @@ static uECC_word_t regularize_k(const uECC_word_t * const k,
     return carry;
 }
 
+/* Generates a random integer in the range 0 < random < top.
+   Both random and top have num_words words. */
+uECC_VLI_API int uECC_generate_random_int(uECC_word_t *random,
+                                          const uECC_word_t *top,
+                                          wordcount_t num_words) {
+    uECC_word_t mask = (uECC_word_t)-1;
+    uECC_word_t tries;
+    bitcount_t num_bits = uECC_vli_numBits(top, num_words);
+
+    if (!g_rng_function) {
+        return 0;
+    }
+
+    for (tries = 0; tries < uECC_RNG_MAX_TRIES; ++tries) {
+        if (!g_rng_function((uint8_t *)random, num_words * uECC_WORD_SIZE)) {
+            return 0;
+        }
+        random[num_words - 1] &= mask >> ((bitcount_t)(num_words * uECC_WORD_SIZE * 8 - num_bits));
+        if (!uECC_vli_isZero(random, num_words) &&
+                uECC_vli_cmp(top, random, num_words) == 1) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static uECC_word_t EccPoint_compute_public_key(uECC_word_t *result,
                                                uECC_word_t *private_key,
                                                uECC_Curve curve) {
     uECC_word_t tmp1[uECC_MAX_WORDS];
     uECC_word_t tmp2[uECC_MAX_WORDS];
     uECC_word_t *p2[2] = {tmp1, tmp2};
+    uECC_word_t *initial_Z = 0;
     uECC_word_t carry;
 
     /* Regularize the bitcount for the private key so that attackers cannot use a side channel
        attack to learn the number of leading zeros. */
     carry = regularize_k(private_key, tmp1, tmp2, curve);
 
-    EccPoint_mult(result, curve->G, p2[!carry], 0, curve->num_n_bits + 1, curve);
+    /* If an RNG function was specified, try to get a random initial Z value to improve
+       protection against side-channel attacks. */
+    if (g_rng_function) {
+        if (!uECC_generate_random_int(p2[carry], curve->p, curve->num_words)) {
+            return 0;
+        }
+        initial_Z = p2[carry];
+    }
+    EccPoint_mult(result, curve->G, p2[!carry], initial_Z, curve->num_n_bits + 1, curve);
 
     if (EccPoint_isZero(result, curve)) {
         return 0;
@@ -954,7 +994,7 @@ uECC_VLI_API void uECC_vli_bytesToNative(uint8_t *native,
 uECC_VLI_API void uECC_vli_nativeToBytes(uint8_t *bytes,
                                          int num_bytes,
                                          const uECC_word_t *native) {
-    wordcount_t i;
+    int i;
     for (i = 0; i < num_bytes; ++i) {
         unsigned b = num_bytes - 1 - i;
         bytes[i] = (uint8_t)(native[b / uECC_WORD_SIZE] >> (8 * (b % uECC_WORD_SIZE)));
@@ -964,7 +1004,7 @@ uECC_VLI_API void uECC_vli_nativeToBytes(uint8_t *bytes,
 uECC_VLI_API void uECC_vli_bytesToNative(uECC_word_t *native,
                                          const uint8_t *bytes,
                                          int num_bytes) {
-    wordcount_t i;
+    int i;
     uECC_vli_clear(native, (num_bytes + (uECC_WORD_SIZE - 1)) / uECC_WORD_SIZE);
     for (i = 0; i < num_bytes; ++i) {
         unsigned b = num_bytes - 1 - i;
@@ -974,32 +1014,6 @@ uECC_VLI_API void uECC_vli_bytesToNative(uECC_word_t *native,
 }
 
 #endif /* uECC_WORD_SIZE */
-
-/* Generates a random integer in the range 0 < random < top.
-   Both random and top have num_words words. */
-uECC_VLI_API int uECC_generate_random_int(uECC_word_t *random,
-                                          const uECC_word_t *top,
-                                          wordcount_t num_words) {
-    uECC_word_t mask = (uECC_word_t)-1;
-    uECC_word_t tries;
-    bitcount_t num_bits = uECC_vli_numBits(top, num_words);
-
-    if (!g_rng_function) {
-        return 0;
-    }
-
-    for (tries = 0; tries < uECC_RNG_MAX_TRIES; ++tries) {
-        if (!g_rng_function((uint8_t *)random, num_words * uECC_WORD_SIZE)) {
-            return 0;
-	    }
-        random[num_words - 1] &= mask >> ((bitcount_t)(num_words * uECC_WORD_SIZE * 8 - num_bits));
-        if (!uECC_vli_isZero(random, num_words) &&
-		        uECC_vli_cmp(top, random, num_words) == 1) {
-            return 1;
-        }
-    }
-    return 0;
-}
 
 int uECC_make_key(uint8_t *public_key,
                   uint8_t *private_key,
@@ -1115,7 +1129,7 @@ void uECC_decompress(const uint8_t *compressed, uint8_t *public_key, uECC_Curve 
 }
 #endif /* uECC_SUPPORT_COMPRESSED_POINT */
 
-int uECC_valid_point(const uECC_word_t *point, uECC_Curve curve) {
+uECC_VLI_API int uECC_valid_point(const uECC_word_t *point, uECC_Curve curve) {
     uECC_word_t tmp1[uECC_MAX_WORDS];
     uECC_word_t tmp2[uECC_MAX_WORDS];
     wordcount_t num_words = curve->num_words;
@@ -1210,7 +1224,7 @@ static void bits2int(uECC_word_t *native,
     bcopy((uint8_t *) native, bits, bits_size);
 #else
     uECC_vli_bytesToNative(native, bits, bits_size);
-#endif    
+#endif
     if (bits_size * 8 <= (unsigned)curve->num_n_bits) {
         return;
     }
@@ -1229,7 +1243,7 @@ static void bits2int(uECC_word_t *native,
     }
 }
 
-static int uECC_sign_with_k(const uint8_t *private_key,
+static int uECC_sign_with_k_internal(const uint8_t *private_key,
                             const uint8_t *message_hash,
                             unsigned hash_size,
                             uECC_word_t *k,
@@ -1239,6 +1253,7 @@ static int uECC_sign_with_k(const uint8_t *private_key,
     uECC_word_t tmp[uECC_MAX_WORDS];
     uECC_word_t s[uECC_MAX_WORDS];
     uECC_word_t *k2[2] = {tmp, s};
+    uECC_word_t *initial_Z = 0;
 #if uECC_VLI_NATIVE_LITTLE_ENDIAN
     uECC_word_t *p = (uECC_word_t *)signature;
 #else
@@ -1255,7 +1270,15 @@ static int uECC_sign_with_k(const uint8_t *private_key,
     }
 
     carry = regularize_k(k, tmp, s, curve);
-    EccPoint_mult(p, curve->G, k2[!carry], 0, num_n_bits + 1, curve);
+    /* If an RNG function was specified, try to get a random initial Z value to improve
+       protection against side-channel attacks. */
+    if (g_rng_function) {
+        if (!uECC_generate_random_int(k2[carry], curve->p, num_words)) {
+            return 0;
+        }
+        initial_Z = k2[carry];
+    }
+    EccPoint_mult(p, curve->G, k2[!carry], initial_Z, num_n_bits + 1, curve);
     if (uECC_vli_isZero(p, num_words)) {
         return 0;
     }
@@ -1299,8 +1322,20 @@ static int uECC_sign_with_k(const uint8_t *private_key,
     bcopy((uint8_t *) signature + curve->num_bytes, (uint8_t *) s, curve->num_bytes);
 #else
     uECC_vli_nativeToBytes(signature + curve->num_bytes, curve->num_bytes, s);
-#endif    
+#endif
     return 1;
+}
+
+/* For testing - sign with an explicitly specified k value */
+int uECC_sign_with_k(const uint8_t *private_key,
+                            const uint8_t *message_hash,
+                            unsigned hash_size,
+                            const uint8_t *k,
+                            uint8_t *signature,
+                            uECC_Curve curve) {
+    uECC_word_t k2[uECC_MAX_WORDS];
+    bits2int(k2, k, BITS_TO_BYTES(curve->num_n_bits), curve);
+    return uECC_sign_with_k_internal(private_key, message_hash, hash_size, k2, signature, curve);
 }
 
 int uECC_sign(const uint8_t *private_key,
@@ -1316,7 +1351,7 @@ int uECC_sign(const uint8_t *private_key,
             return 0;
         }
 
-        if (uECC_sign_with_k(private_key, message_hash, hash_size, k, signature, curve)) {
+        if (uECC_sign_with_k_internal(private_key, message_hash, hash_size, k, signature, curve)) {
             return 1;
         }
     }
@@ -1432,7 +1467,7 @@ int uECC_sign_deterministic(const uint8_t *private_key,
                 mask >> ((bitcount_t)(num_n_words * uECC_WORD_SIZE * 8 - num_n_bits));
         }
 
-        if (uECC_sign_with_k(private_key, message_hash, hash_size, T, signature, curve)) {
+        if (uECC_sign_with_k_internal(private_key, message_hash, hash_size, T, signature, curve)) {
             return 1;
         }
 
@@ -1472,7 +1507,7 @@ int uECC_verify(const uint8_t *public_key,
     uECC_word_t *_public = (uECC_word_t *)public_key;
 #else
     uECC_word_t _public[uECC_MAX_WORDS * 2];
-#endif    
+#endif
     uECC_word_t r[uECC_MAX_WORDS], s[uECC_MAX_WORDS];
     wordcount_t num_words = curve->num_words;
     wordcount_t num_n_words = BITS_TO_WORDS(curve->num_n_bits);

@@ -440,15 +440,47 @@ static void test_next_packet_number(void)
     ok(n == 65567);
 }
 
+static void test_address_token_codec_decode(ptls_aead_context_t *dec, const void *encrypted, size_t encrypted_len)
+{
+    quicly_address_token_plaintext_t output;
+    const char *err_desc;
+
+    ptls_openssl_random_bytes(&output, sizeof(output));
+
+    ok(quicly_decrypt_address_token(dec, &output, encrypted, encrypted_len, 0, &err_desc) == 0);
+    ok(output.type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY);
+    ok(output.issued_at == 234);
+    ok(output.remote.sa.sa_family == AF_INET);
+    ok(output.remote.sin.sin_addr.s_addr == htonl(0x7f000001));
+    ok(output.remote.sin.sin_port == htons(443));
+    ok(quicly_cid_is_equal(&output.retry.original_dcid, ptls_iovec_init("abcdefgh", 8)));
+    ok(quicly_cid_is_equal(&output.retry.client_cid, ptls_iovec_init("01234", 5)));
+    ok(quicly_cid_is_equal(&output.retry.server_cid, ptls_iovec_init("abcdef0123456789", 16)));
+    ok(output.appdata.len == 11);
+    ok(memcmp(output.appdata.bytes, "hello world", 11) == 0);
+}
+
 static void test_address_token_codec(void)
 {
     static const uint8_t zero_key[PTLS_MAX_SECRET_SIZE] = {0};
     ptls_aead_context_t *enc = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 1, zero_key, ""),
                         *dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, zero_key, "");
+
     quicly_address_token_plaintext_t input, output;
     ptls_buffer_t buf;
     const char *err_desc;
 
+    { /* test hard-coded sample */
+        static const uint8_t sample[] = {0x00, 0x39, 0xef, 0x13, 0x9a, 0xe1, 0xaa, 0x28, 0x51, 0x62, 0xf6, 0xd8, 0xc8, 0x93, 0x6a,
+                                         0xdf, 0xd1, 0xbe, 0xa4, 0xb5, 0x99, 0xb9, 0xd7, 0x99, 0x02, 0xe3, 0x9e, 0xf2, 0xd0, 0x30,
+                                         0x0b, 0x80, 0xcf, 0x66, 0xc4, 0x69, 0xc3, 0x86, 0x69, 0x92, 0xef, 0x3f, 0xd9, 0x64, 0x4b,
+                                         0x6e, 0x9e, 0x16, 0x3a, 0x4d, 0xb6, 0x2c, 0xfc, 0x99, 0xe4, 0x46, 0x88, 0x7a, 0x73, 0x0d,
+                                         0x69, 0x0e, 0xfb, 0xbf, 0x0e, 0x7c, 0xe3, 0x2d, 0x78, 0xf3, 0x90, 0xf6, 0xfd, 0xa4, 0x5e,
+                                         0x71, 0x23, 0x3a, 0x15, 0xf2, 0x5f, 0xa6, 0x9e, 0x36, 0x13, 0x69, 0x53, 0xc1};
+        test_address_token_codec_decode(dec, sample, sizeof(sample));
+    }
+
+    /* encrypt and decrypt */
     input = (quicly_address_token_plaintext_t){QUICLY_ADDRESS_TOKEN_TYPE_RETRY, 234};
     input.remote.sin.sin_family = AF_INET;
     input.remote.sin.sin_addr.s_addr = htonl(0x7f000001);
@@ -459,23 +491,8 @@ static void test_address_token_codec(void)
     strcpy((char *)input.appdata.bytes, "hello world");
     input.appdata.len = strlen((char *)input.appdata.bytes);
     ptls_buffer_init(&buf, "", 0);
-
     ok(quicly_encrypt_address_token(ptls_openssl_random_bytes, enc, &buf, 0, &input) == 0);
-
-    /* check that the output is ok */
-    ptls_openssl_random_bytes(&output, sizeof(output));
-    ok(quicly_decrypt_address_token(dec, &output, buf.base, buf.off, 0, &err_desc) == 0);
-    ok(input.type == output.type);
-    ok(input.issued_at == output.issued_at);
-    ok(input.remote.sa.sa_family == output.remote.sa.sa_family);
-    ok(input.remote.sin.sin_addr.s_addr == output.remote.sin.sin_addr.s_addr);
-    ok(input.remote.sin.sin_port == output.remote.sin.sin_port);
-    ok(quicly_cid_is_equal(&output.retry.original_dcid,
-                           ptls_iovec_init(input.retry.original_dcid.cid, input.retry.original_dcid.len)));
-    ok(quicly_cid_is_equal(&output.retry.client_cid, ptls_iovec_init(input.retry.client_cid.cid, input.retry.client_cid.len)));
-    ok(quicly_cid_is_equal(&output.retry.server_cid, ptls_iovec_init(input.retry.server_cid.cid, input.retry.server_cid.len)));
-    ok(input.appdata.len == output.appdata.len);
-    ok(memcmp(input.appdata.bytes, output.appdata.bytes, input.appdata.len) == 0);
+    test_address_token_codec_decode(dec, buf.base, buf.off);
 
     /* failure to decrypt a Retry token is a hard error */
     ptls_openssl_random_bytes(&output, sizeof(output));

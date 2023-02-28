@@ -13,9 +13,9 @@ Picotls is a [TLS 1.3 (RFC 8446)](https://tools.ietf.org/html/rfc8446) protocol 
 * supported extensions:
   * RFC 7250 (raw public keys)
   * RFC 8879 (certificate compression)
-  * Encrypted SNI (wg-draft-02)
+  * Encrypted Client Hello ([wg-draft-15](https://datatracker.ietf.org/doc/draft-ietf-tls-esni/))
 
-Primary goal of the project is to create a fast, tiny, low-latency TLS 1.3 implementation that can be used with the HTTP/2 protocol stack and the upcoming QUIC stack of the [H2O HTTP/2 server](https://h2o.examp1e.net).
+picotls is designed to be fast, tiny, and low-latency, with the primary user being the [H2O HTTP/2 server](https://h2o.examp1e.net) for serving HTTP/1, HTTP/2, and HTTP/3 over QUIC.
 
 The TLS protocol implementation of picotls is licensed under the MIT license.
 

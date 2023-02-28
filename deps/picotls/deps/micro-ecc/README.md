@@ -19,7 +19,7 @@ Features
 Usage Notes
 -----------
 ### Point Representation ###
-Compressed points are represented in the standard format as defined in http://www.secg.org/collateral/sec1_final.pdf; uncompressed points are represented in standard format, but without the `0x04` prefix. All functions except `uECC_compress()` only accept uncompressed points; use `uECC_compress()` and `uECC_decompress()` to convert between compressed and uncompressed point representations.
+Compressed points are represented in the standard format as defined in http://www.secg.org/sec1-v2.pdf; uncompressed points are represented in standard format, but without the `0x04` prefix. All functions except `uECC_decompress()` only accept uncompressed points; use `uECC_compress()` and `uECC_decompress()` to convert between compressed and uncompressed point representations.
 
 Private keys are represented in the standard format.
 
@@ -27,7 +27,7 @@ Private keys are represented in the standard format.
 
 I recommend just copying (or symlink) the uECC files into your project. Then just `#include "uECC.h"` to use the micro-ecc functions.
 
-For use with Arduino, you can just create a symlink to the `uECC` directory in your Arduino `libraries` directory. You can then use uECC just like any other Arduino library (uECC should show up in the **Sketch**=>**Import Library** submenu).
+For use with Arduino, you can use the Library Manager to download micro-ecc (**Sketch**=>**Include Library**=>**Manage Libraries**). You can then use uECC just like any other Arduino library (uECC should show up in the **Sketch**=>**Import Library** submenu).
 
 See uECC.h for documentation for each function.
 

@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		081F00CA2918823200534A86 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 081F00C92918823200534A86 /* hpke.c */; };
+		08A835E22995E04100D872CE /* chacha20poly1305.h in Headers */ = {isa = PBXBuildFile; fileRef = 08A835E12995E04100D872CE /* chacha20poly1305.h */; };
+		08A835E32995E04100D872CE /* chacha20poly1305.h in Headers */ = {isa = PBXBuildFile; fileRef = 08A835E12995E04100D872CE /* chacha20poly1305.h */; };
 		08F0FDF62910F67A00EE657D /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08F0FDF52910F67A00EE657D /* hpke.c */; };
 		105900431DC8D57000FB4085 /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = 106530E91D9B7C13005B2C60 /* picotls.c */; };
 		105900441DC8D57000FB4085 /* picotest.c in Sources */ = {isa = PBXBuildFile; fileRef = 106530E31D9B4021005B2C60 /* picotest.c */; };
@@ -203,6 +205,8 @@
 		081F00CC291A358800534A86 /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
 		081F00CD291A358800534A86 /* pembase64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pembase64.h; sourceTree = "<group>"; };
 		081F00CE291A358800534A86 /* ptlsbcrypt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ptlsbcrypt.h; sourceTree = "<group>"; };
+		08A835E12995E04100D872CE /* chacha20poly1305.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = chacha20poly1305.h; sourceTree = "<group>"; };
+		08A835EB2996971300D872CE /* boringssl-adjust.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = "boringssl-adjust.cmake"; sourceTree = "<group>"; };
 		08B3298229419DFC009D6766 /* ech-live.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ech-live.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08F0FDF52910F67A00EE657D /* hpke.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		105900241DC8D37500FB4085 /* aes.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = aes.c; path = src/aes.c; sourceTree = "<group>"; };
@@ -434,6 +438,7 @@
 				E99B75DE1F5CDDB500CF503E /* asn1.c */,
 				E9E4B12A2180530400514B47 /* certificate_compression.c */,
 				E9F20BDF22E34B210018D260 /* cifra */,
+				08A835E12995E04100D872CE /* chacha20poly1305.h */,
 				1059003F1DC8D53200FB4085 /* cifra.c */,
 				E97577022212405D00D1EF74 /* ffx.c */,
 				E9B43DBF24619D1700824E51 /* fusion.c */,
@@ -520,6 +525,7 @@
 		E95EBCC9227E9FF30022C32D /* cmake */ = {
 			isa = PBXGroup;
 			children = (
+				08A835EB2996971300D872CE /* boringssl-adjust.cmake */,
 				E95EBCCA227EA0180022C32D /* dtrace-utils.cmake */,
 			);
 			path = cmake;
@@ -560,6 +566,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				105900A21DC8E20D00FB4085 /* openssl.h in Headers */,
+				08A835E32995E04100D872CE /* chacha20poly1305.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -608,6 +615,7 @@
 				10EACB0E1DCEAF0F00CA0341 /* chash.h in Headers */,
 				10EACB0F1DCEAF0F00CA0341 /* sha2.h in Headers */,
 				E9BC76DE1EF3CCD100EB7A09 /* poly1305.h in Headers */,
+				08A835E22995E04100D872CE /* chacha20poly1305.h in Headers */,
 				10EACB101DCEAF0F00CA0341 /* aes.h in Headers */,
 				10EACB111DCEAF0F00CA0341 /* minicrypto.h in Headers */,
 				10EACB121DCEAF0F00CA0341 /* gf128.h in Headers */,

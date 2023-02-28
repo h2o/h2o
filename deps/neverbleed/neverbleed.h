@@ -77,6 +77,14 @@ void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const 
  * parses a digestsign response
  */
 void neverbleed_finish_digestsign(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len);
+/**
+ * builds a RSA decrypt request
+ */
+void neverbleed_start_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *input, size_t len);
+/**
+ * parses a decrypt response
+ */
+void neverbleed_finish_decrypt(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len);
 
 #if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
 /**
