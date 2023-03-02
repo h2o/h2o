@@ -134,8 +134,11 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, NULL, compressor->name.base, compressor->name.len);
     h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
     if (etag_header_index != -1) {
-        req->res.headers.entries[etag_header_index].value =
-            h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
+        if (!(req->res.headers.entries[etag_header_index].value.len >= 2 &&
+              h2o_memis(req->res.headers.entries[etag_header_index].value.base, 2, H2O_STRLIT("W/")))) {
+            req->res.headers.entries[etag_header_index].value =
+                h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
+        }
     }
     if (accept_ranges_header_index != -1) {
         req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
