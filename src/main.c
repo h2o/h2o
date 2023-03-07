@@ -3243,6 +3243,19 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_neverbleed_qat(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t v;
+
+    if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1) {
+        h2o_configurator_errprintf(cmd, node, "neverbleed-qat MUST be either OFF or ON");
+        return -1;
+    }
+
+    neverbleed_qat = (int)v;
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -4376,6 +4389,9 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
+        h2o_configurator_define_command(c, "neverbleed-qat",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_neverbleed_qat);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
