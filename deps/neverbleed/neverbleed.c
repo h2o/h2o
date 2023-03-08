@@ -72,15 +72,19 @@
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
 
+#ifdef __linux
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER) && !defined(OPENSSL_IS_BORINGSSL)
+#define USE_OFFLOAD 1
+#endif
 #if defined(OPENSSL_IS_BORINGSSL) && defined(NEVERBLEED_BORINGSSL_USE_QAT)
 #include "qat_bssl.h"
-
 /* the mapping seems to be missing */
 #ifndef ASYNC_WAIT_CTX_get_all_fds
 extern int bssl_async_wait_ctx_get_all_fds(ASYNC_WAIT_CTX *ctx, OSSL_ASYNC_FD *fd, size_t *numfds);
 #define ASYNC_WAIT_CTX_get_all_fds bssl_async_wait_ctx_get_all_fds
 #endif
-
+#define USE_OFFLOAD 1
+#endif
 #endif
 
 #if OPENSSL_VERSION_NUMBER < 0x1010000fL \
@@ -198,18 +202,6 @@ static void set_cloexec(int fd)
     if (fcntl(fd, F_SETFD, O_CLOEXEC) == -1)
         dief("failed to set O_CLOEXEC to fd %d", fd);
 }
-
-#ifdef __linux
-
-static int do_epoll_ctl(int epollfd, int op, int fd, struct epoll_event *event)
-{
-    int ret;
-    while ((ret = epoll_ctl(epollfd, op, fd, event) != 0) && errno == EINTR)
-        ;
-    return ret;
-}
-
-#endif
 
 static int read_nbytes(int fd, void *p, size_t sz)
 {
@@ -507,6 +499,23 @@ static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t *
     *thdata = get_thread_data((*exdata)->nb);
 }
 
+static struct {
+    struct {
+        pthread_mutex_t lock;
+        /**
+         * if the slot is use contains a non-NULL key; if not in use, contains the index of the next empty slot or SIZE_MAX if there
+         * are no more empty slots
+         */
+        union {
+            EVP_PKEY *pkey;
+            size_t next_empty;
+        } *slots;
+        size_t num_slots;
+        size_t first_empty;
+    } keys;
+    neverbleed_t *nb;
+} daemon_vars = {{.lock = PTHREAD_MUTEX_INITIALIZER, .first_empty = SIZE_MAX}};
+
 static __thread struct {
     int sockfd;
 #ifdef __linux
@@ -516,6 +525,8 @@ static __thread struct {
         neverbleed_iobuf_t *first, **next;
     } responses;
 } conn_ctx;
+
+#if USE_OFFLOAD
 
 struct engine_request {
     neverbleed_iobuf_t *buf;
@@ -543,22 +554,24 @@ struct engine_request {
 #endif
 };
 
-static struct {
-    struct {
-        pthread_mutex_t lock;
-        /**
-         * if the slot is use contains a non-NULL key; if not in use, contains the index of the next empty slot or SIZE_MAX if there
-         * are no more empty slots
-         */
-        union {
-            EVP_PKEY *pkey;
-            size_t next_empty;
-        } *slots;
-        size_t num_slots;
-        size_t first_empty;
-    } keys;
-    neverbleed_t *nb;
-} daemon_vars = {.keys = {.lock = PTHREAD_MUTEX_INITIALIZER, .first_empty = SIZE_MAX}};
+static void free_req(struct engine_request *req)
+{
+#ifdef OPENSSL_IS_BORINGSSL
+    bssl_qat_async_finish_job(req->async_ctx);
+#else
+    ASYNC_WAIT_CTX_free(req->async.ctx);
+#endif
+    OPENSSL_cleanse(req, sizeof(*req));
+    free(req);
+}
+
+static int do_epoll_ctl(int epollfd, int op, int fd, struct epoll_event *event)
+{
+    int ret;
+    while ((ret = epoll_ctl(epollfd, op, fd, event) != 0) && errno == EINTR)
+        ;
+    return ret;
+}
 
 static void register_wait_fd(struct engine_request *req)
 {
@@ -577,6 +590,8 @@ static void register_wait_fd(struct engine_request *req)
     if (do_epoll_ctl(conn_ctx.epollfd, EPOLL_CTL_ADD, req->async_fd, &ev) != 0)
         dief("epoll_ctl failed:%d\n", errno);
 }
+
+#endif
 
 static int send_responses(int cleanup)
 {
@@ -1003,7 +1018,7 @@ static EVP_PKEY *daemon_get_pkey(size_t key_index)
     return pkey;
 }
 
-#ifdef OPENSSL_IS_BORINGSSL
+#if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
 
 static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *signdata,
                                     size_t signlen)
@@ -1090,7 +1105,7 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
         md = NULL;
     }
 
-#ifdef OPENSSL_IS_BORINGSSL
+#if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (neverbleed_qat && EVP_PKEY_id(pkey) == EVP_PKEY_RSA) {
         bssl_offload_digestsign(buf, pkey, md, signdata, signlen);
         return 0;
@@ -1343,11 +1358,6 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
         snprintf(errbuf, sizeof(errbuf), "failed to parse the private key");
         goto Respond;
     }
-
-#ifdef OPENSSL_IS_BORINGSSL
-    if (neverbleed_qat && bssl_private_key_method_update(pkey) != 0)
-        dief("failed to set callbacks");
-#endif
 
     switch (EVP_PKEY_base_id(pkey)) {
     case EVP_PKEY_RSA: {
@@ -1631,20 +1641,10 @@ respond:
     return 0;
 }
 
-static void free_req(struct engine_request *req)
-{
-#ifdef OPENSSL_IS_BORINGSSL
-    bssl_qat_async_finish_job(req->async_ctx);
-#else
-    ASYNC_WAIT_CTX_free(req->async.ctx);
-#endif
-    OPENSSL_cleanse(req, sizeof(*req));
-    free(req);
-}
-
-#ifdef OPENSSL_IS_BORINGSSL
-
 #define offload_start(stub, buf) ((stub)(buf))
+
+#if USE_OFFLOAD
+#ifdef OPENSSL_IS_BORINGSSL
 
 static int offload_resume(struct engine_request *req)
 {
@@ -1689,6 +1689,7 @@ static int offload_jobfunc(void *_req)
     return req->stub(req->buf);
 }
 
+#undef offload_start
 static int offload_start(int (*stub)(neverbleed_iobuf_t *), neverbleed_iobuf_t *buf)
 {
     /* if engine is not used, run the stub synchronously */
@@ -1747,6 +1748,7 @@ static int offload_resume(struct engine_request *req)
 }
 
 #endif
+#endif
 
 /**
  * This function waits for the provided socket to become readable, then calls `nanosleep(1)` before returning.
@@ -1755,7 +1757,7 @@ static int offload_resume(struct engine_request *req)
  */
 static int wait_for_data(int cleanup)
 {
-#ifdef __linux
+#if USE_OFFLOAD
 
     struct epoll_event events[20];
     int has_read = 0, num_events;
@@ -1785,9 +1787,10 @@ static int wait_for_data(int cleanup)
     fd_set rfds;
     int ret;
     FD_ZERO(&rfds);
-    FD_SET(fd, &rfds);
+    if (!cleanup)
+        FD_SET(conn_ctx.sockfd, &rfds);
 
-    while ((ret = select(fd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
+    while ((ret = select(conn_ctx.sockfd + 1, &rfds, NULL, NULL, NULL)) == -1 && (errno == EAGAIN || errno == EINTR))
         ;
     if (ret == -1)
         dief("select(2):%d\n", errno);
@@ -1806,7 +1809,7 @@ static void *daemon_conn_thread(void *_sock_fd)
     conn_ctx.sockfd = (int)((char *)_sock_fd - (char *)NULL);
     conn_ctx.responses.next = &conn_ctx.responses.first;
 
-#ifdef __linux
+#if USE_OFFLOAD
     if ((conn_ctx.epollfd = epoll_create1(EPOLL_CLOEXEC)) == -1)
         dief("epoll_create1 failed:%d\n", errno);
     {
@@ -1963,20 +1966,18 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
     pthread_attr_setdetachstate(&thattr, 1);
 
     if (neverbleed_qat) {
-#ifdef OPENSSL_IS_BORINGSSL
-#ifdef NEVERBLEED_BORINGSSL_USE_QAT
+#if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
         ENGINE_load_qat();
         bssl_qat_set_default_string("RSA");
-#else
-        dief("QAT is not supported\n");
-#endif
-#else
+#elif USE_OFFLOAD && !defined(OPENSSL_IS_BORINGSSL)
         ENGINE *qat = ENGINE_by_id("qatengine");
         assert(qat != NULL);
         if (!ENGINE_init(qat))
             dief("failed to initialize QAT\n");
         if (!ENGINE_set_default_RSA(qat))
             dief("failed to assign RSA operations to QAT\n");
+#else
+        dief("QAT is not supported\n");
 #endif
     }
 
