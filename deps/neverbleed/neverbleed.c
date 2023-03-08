@@ -52,7 +52,7 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL || LIBRESSL_VERSION_NUMBER >= 0x3060200fL
 /* RSA_METHOD is opaque, so RSA_meth* are used. */
 #define NEVERBLEED_OPAQUE_RSA_METHOD
 #endif
