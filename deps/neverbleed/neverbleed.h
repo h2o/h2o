@@ -114,9 +114,13 @@ void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 
 /**
- * if set to a non-zero value, RSA operations are offloaded to QAT
+ * if set to a non-zero value, RSA operations are offloaded
  */
-extern int neverbleed_qat;
+extern enum neverbleed_offload_type {
+    NEVERBLEED_OFFLOAD_OFF = 0,
+    NEVERBLEED_OFFLOAD_QAT_ON,
+    NEVERBLEED_OFFLOAD_QAT_AUTO,
+} neverbleed_offload;
 
 /* inline function definitions */
 
