@@ -57,8 +57,8 @@
 #define NEVERBLEED_OPAQUE_RSA_METHOD
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) \
-    && (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) &&                                                            \
+    (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
 /* EC_KEY_METHOD and related APIs are avaliable, so ECDSA is enabled. */
 #define NEVERBLEED_ECDSA
 #endif
@@ -71,8 +71,7 @@
 #include <openssl/rsa.h>
 #include <openssl/ssl.h>
 
-#if OPENSSL_VERSION_NUMBER < 0x1010000fL \
-    || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
+#if OPENSSL_VERSION_NUMBER < 0x1010000fL || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
 
 static void RSA_get0_key(const RSA *rsa, const BIGNUM **n, const BIGNUM **e, const BIGNUM **d)
 {
@@ -661,8 +660,7 @@ static int sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
-        iobuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL || iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -742,8 +740,7 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
-        iobuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL || iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1591,7 +1588,7 @@ static void cleanup_fds(int listen_fd, int close_notify_fd)
     }
     for (k = 0; k < maxfd; k++) {
         if (k == listen_fd || k == close_notify_fd)
-                continue;
+            continue;
         switch (k) {
         case STDOUT_FILENO:
         case STDERR_FILENO:
