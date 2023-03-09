@@ -72,7 +72,8 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_o
 /**
  * builds a digestsign request
  */
-void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len);
+void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len,
+                                 int rsa_pss);
 /**
  * parses a digestsign response
  */
