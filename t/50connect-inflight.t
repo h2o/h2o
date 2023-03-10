@@ -50,7 +50,7 @@ my $tcp_origin_guard = do {
                     or die "sync pipe write failed:$!";
                 # Keep the socket open.
                 push @sockets, $sock;
-                $sock=undef;
+                $sock = undef;
             }
         }
         die "unreachable";
