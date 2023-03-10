@@ -2000,7 +2000,7 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
 
     switch (neverbleed_offload) {
     case NEVERBLEED_OFFLOAD_QAT_ON:
-    case NEVERBLEED_OFFLOAD_QAT_AUTO:
+    case NEVERBLEED_OFFLOAD_QAT_AUTO: {
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
         ENGINE_load_qat();
         bssl_qat_set_default_string("RSA");
@@ -2015,7 +2015,7 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
 #endif
         if (!use_offload && neverbleed_offload == NEVERBLEED_OFFLOAD_QAT_ON)
             dief("use of QAT is forced but unavailable\n");
-        break;
+    } break;
     default:
         break;
     }
