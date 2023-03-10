@@ -27,7 +27,8 @@ hosts:
         file.file: t/assets/doc_root/alice.txt
 EOT
 
-pipe SYNC_READ, SYNC_WRITE or die "pipe failed:$!";
+pipe(my $sync_read, my $sync_write)
+    or die "pipe failed:$!";
 
 my $tcp_origin_guard = do {
     my $listener = IO::Socket::INET->new(
@@ -46,7 +47,7 @@ my $tcp_origin_guard = do {
                 write_until_blocked($sock);
                 # Tell the client side of the test that we are done filling the pipe.
                 $!=0;
-                my $ret = syswrite(SYNC_WRITE, 'x', 1);
+                my $ret = syswrite($sync_write, 'x', 1);
                 die "sync pipe write failed:$!" unless $ret == 1;
                 # Keep the socket open.
                 push @sockets, $sock;
@@ -75,7 +76,7 @@ subtest "handwritten-h1-client" => sub {
         like $resp, qr{^HTTP/1\.1 200}s, "got 200 response" or BAIL_OUT;
     };
     subtest "fill-up-read-pipe" => sub {
-        is sysread(SYNC_READ, my $buf, 1), 1, "sync pipe read";
+        is sysread($sync_read, my $buf, 1), 1, "sync pipe read";
     };
     # The writes incidentally re-arm the io-timeout.
     subtest "fill-up-write-pipe" => sub {
