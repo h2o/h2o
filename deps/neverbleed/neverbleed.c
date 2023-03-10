@@ -58,8 +58,8 @@
 #define NEVERBLEED_OPAQUE_RSA_METHOD
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) \
-    && (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) &&                                                            \
+    (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
 /* EC_KEY_METHOD and related APIs are avaliable, so ECDSA is enabled. */
 #define NEVERBLEED_ECDSA
 #endif
@@ -87,8 +87,7 @@ extern int bssl_async_wait_ctx_get_all_fds(ASYNC_WAIT_CTX *ctx, OSSL_ASYNC_FD *f
 #endif
 #endif
 
-#if OPENSSL_VERSION_NUMBER < 0x1010000fL \
-    || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
+#if OPENSSL_VERSION_NUMBER < 0x1010000fL || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
 
 static void RSA_get0_key(const RSA *rsa, const BIGNUM **n, const BIGNUM **e, const BIGNUM **d)
 {
@@ -783,8 +782,7 @@ static int sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
-        iobuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL || iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -864,8 +862,7 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     unsigned siglen = 0;
     int ret;
 
-    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL ||
-        iobuf_shift_num(buf, &key_index) != 0) {
+    if (iobuf_shift_num(buf, &type) != 0 || (m = iobuf_shift_bytes(buf, &m_len)) == NULL || iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1100,12 +1097,13 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index, md_nid, signlen;
     void *signdata;
+    size_t rsa_pss;
     EVP_PKEY *pkey;
     const EVP_MD *md;
 
     /* parse input */
     if (iobuf_shift_num(buf, &key_index) != 0 || iobuf_shift_num(buf, &md_nid) != 0 ||
-        (signdata = iobuf_shift_bytes(buf, &signlen)) == NULL) {
+        (signdata = iobuf_shift_bytes(buf, &signlen)) == NULL || iobuf_shift_num(buf, &rsa_pss) != 0) {
         errno = 0;
         warnf("%s: failed to parse request", __FUNCTION__);
         return -1;
@@ -1142,7 +1140,7 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
         goto Softfail;
     if (EVP_DigestSignInit(mdctx, &pkey_ctx, md, NULL, pkey) != 1)
         goto Softfail;
-    if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA) {
+    if (EVP_PKEY_id(pkey) == EVP_PKEY_RSA && rsa_pss) {
         if (EVP_PKEY_CTX_set_rsa_padding(pkey_ctx, RSA_PKCS1_PSS_PADDING) != 1 ||
             EVP_PKEY_CTX_set_rsa_pss_saltlen(pkey_ctx, -1) != 1)
             goto Softfail;
@@ -1175,7 +1173,8 @@ Softfail:
     goto Respond;
 }
 
-void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len)
+void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len,
+                                 int rsa_pss)
 {
     struct st_neverbleed_rsa_exdata_t *exdata;
     struct st_neverbleed_thread_data_t *thdata;
@@ -1204,6 +1203,7 @@ void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const 
     iobuf_push_num(buf, exdata->key_index);
     iobuf_push_num(buf, md != NULL ? (size_t)EVP_MD_nid(md) : SIZE_MAX);
     iobuf_push_bytes(buf, input, len);
+    iobuf_push_num(buf, rsa_pss);
 }
 
 void neverbleed_finish_digestsign(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len)
@@ -1959,7 +1959,7 @@ static void cleanup_fds(int listen_fd, int close_notify_fd)
     }
     for (k = 0; k < maxfd; k++) {
         if (k == listen_fd || k == close_notify_fd)
-                continue;
+            continue;
         switch (k) {
         case STDOUT_FILENO:
         case STDERR_FILENO:
