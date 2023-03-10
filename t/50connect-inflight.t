@@ -86,7 +86,7 @@ subtest "handwritten-h1-client" => sub {
             PeerAddr => "127.0.0.1:$server->{port}",
             Proto    => "tcp",
         );
-        ok defined($sock2), "connect to server";
+        ok $sock2, "connect to server";
         my $req = "GET /ruok HTTP/1.1\r\n\r\n";
         is syswrite($sock2, $req), length $req, "send request";
         sysread $sock2, my $resp, 1024;
