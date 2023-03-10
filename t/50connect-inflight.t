@@ -74,7 +74,7 @@ subtest "handwritten-h1-client" => sub {
             or BAIL_OUT;
     };
     subtest "fill-up-read-pipe" => sub {
-        is sysread($sync_read, my $buf, 1), 1, "sync pipe read";
+        is sysread($sync_read, my $buf, 1), 1;
     };
     # The writes incidentally re-arm the io-timeout.
     subtest "fill-up-write-pipe" => sub {
