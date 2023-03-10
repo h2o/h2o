@@ -106,7 +106,7 @@ sub write_until_blocked {
     while (1) {
         my $buf = "x" x 65534;
         my $ret = syswrite($sock, $buf, length $buf);
-        if (defined($ret) && $ret > 0) {
+        if (defined($ret)) {
             $blocked = 0;
             next;
         }
