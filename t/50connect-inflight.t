@@ -77,14 +77,10 @@ subtest "handwritten-h1-client" => sub {
         is sysread($sync_read, my $buf, 1), 1;
     };
     # The writes incidentally re-arm the io-timeout.
-    subtest "fill-up-write-pipe" => sub {
-        write_until_blocked($sock);
-        pass;
-    };
-    subtest "wait-for-io-timeout" => sub {
-        sleep 6;
-        pass;
-    };
+    diag "fill-up-write-pipe";
+    write_until_blocked($sock);
+    diag "wait-for-io-timeout";
+    sleep 6;
     subtest "is-h2o-ok" => sub {
         my $sock2 = IO::Socket::INET->new(
             PeerAddr => "127.0.0.1:$server->{port}",
