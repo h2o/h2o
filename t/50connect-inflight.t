@@ -70,7 +70,8 @@ subtest "handwritten-h1-client" => sub {
         my $req = "CONNECT 127.0.0.1:$origin_port HTTP/1.1\r\n\r\n";
         is syswrite($sock, $req), length $req, "send request";
         sysread $sock, my $resp, 1024;
-        like $resp, qr{^HTTP/1\.1 200}s, "got 200 response" or BAIL_OUT;
+        like $resp, qr{^HTTP/1\.1 200}s, "got 200 response"
+            or BAIL_OUT;
     };
     subtest "fill-up-read-pipe" => sub {
         is sysread($sync_read, my $buf, 1), 1, "sync pipe read";
