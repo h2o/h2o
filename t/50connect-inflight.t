@@ -55,7 +55,6 @@ my $tcp_origin_guard = do {
         die "unreachable";
     }
     # parent process
-    undef $listener;
     Scope::Guard->new(sub {
         kill 'KILL', $pid;
         while (waitpid($pid, 0) != $pid) {}
