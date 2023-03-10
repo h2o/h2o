@@ -98,10 +98,10 @@ done_testing;
 
 sub write_until_blocked {
     my $sock = shift;
-    fcntl $sock, F_SETFL, O_NONBLOCK or die "failed to set O_NONBLOCK:$!";
-    if (!defined setsockopt($sock, IPPROTO_TCP, TCP_NODELAY, 1)) {
-        die "setsockopt(TCP_NODELAY) failed:$!";
-    }
+    fcntl($sock, F_SETFL, O_NONBLOCK)
+        or die "failed to set O_NONBLOCK:$!";
+    setsockopt($sock, IPPROTO_TCP, TCP_NODELAY, 1)
+        or die "setsockopt(TCP_NODELAY) failed:$!";
     my $blocked = 0;
     while (1) {
         my $buf = "x" x 65534;
@@ -128,5 +128,6 @@ sub write_until_blocked {
             die "socket write failed:$!";
         }
     }
-    fcntl $sock, F_SETFL, 0 or die "failed to clear O_NONBLOCK:$!";
+    fcntl($sock, F_SETFL, 0)
+        or die "failed to clear O_NONBLOCK:$!";
 }
