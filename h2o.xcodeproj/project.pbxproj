@@ -737,6 +737,7 @@
 		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		089FA83229BB6EB900F7B746 /* 50connect-inflight.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-inflight.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08A835E42996351100D872CE /* build.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = build.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.make; };
 		08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu1604; sourceTree = "<group>"; };
 		08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2004; sourceTree = "<group>"; };
@@ -2268,6 +2269,7 @@
 				E93BB45025DA530E009C24D8 /* 50connect.t */,
 				086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */,
 				08B3D43A26042CAF002F195C /* 50connect-deadlock.t */,
+				089FA83229BB6EB900F7B746 /* 50connect-inflight.t */,
 				0810E6A8286DACB600333FA4 /* 50connect-proxy-status.t */,
 				E9AFBF11212A9801000F5DB8 /* 50date-header.t */,
 				086001C42730B7170043886F /* 50dnsresolver.t */,
