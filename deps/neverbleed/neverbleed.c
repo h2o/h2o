@@ -1033,28 +1033,45 @@ static struct engine_request *bssl_offload_create_request(neverbleed_iobuf_t *bu
     return req;
 }
 
-static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *signdata,
-                                    size_t signlen)
+static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *signdata, size_t signlen,
+                                    int rsa_pss)
 {
     uint8_t digest[EVP_MAX_MD_SIZE];
+    unsigned digestlen;
 
     { /* generate digest of signdata */
         EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-        unsigned digestlen;
         if (mdctx == NULL)
             dief("no memory\n");
-        if (!EVP_DigestInit_ex(mdctx, md, NULL) ||
-            !EVP_DigestUpdate(mdctx, signdata, signlen) ||
+        if (!EVP_DigestInit_ex(mdctx, md, NULL) || !EVP_DigestUpdate(mdctx, signdata, signlen) ||
             !EVP_DigestFinal_ex(mdctx, digest, &digestlen))
             dief("digest calculation failed\n");
         EVP_MD_CTX_free(mdctx);
     }
 
     struct engine_request *req = bssl_offload_create_request(buf, pkey);
+    size_t rsa_size = RSA_size(req->data.rsa), padded_len;
+    int padding;
 
     /* generate padded octets to be signed */
-    if (!RSA_padding_add_PKCS1_PSS_mgf1(req->data.rsa, req->data.digestsign.padded, digest, md, md, -1))
-        dief("RSA_paddding_add_PKCS1_PSS_mgf1 failed\n");
+    if (rsa_pss) {
+        if (!RSA_padding_add_PKCS1_PSS_mgf1(req->data.rsa, req->data.digestsign.padded, digest, md, md, -1))
+            dief("RSA_paddding_add_PKCS1_PSS_mgf1 failed\n");
+        padded_len = rsa_size;
+        padding = RSA_NO_PADDING;
+    } else {
+        /* PKCS1 padding */
+        int hash_nid = EVP_MD_type(md), is_alloced;
+        uint8_t *tbs;
+        if (!RSA_add_pkcs1_prefix(&tbs, &padded_len, &is_alloced, hash_nid, digest, digestlen))
+            dief("RSA_add_pkcs1_prefix failed\n");
+        if (padded_len > rsa_size)
+            dief("output of RSA_add_pkcs1_prefix is unexpectedly large\n");
+        memcpy(req->data.digestsign.padded, tbs, padded_len);
+        if (is_alloced)
+            OPENSSL_free(tbs);
+        padding = RSA_PKCS1_PADDING;
+    }
 
     OPENSSL_cleanse(digest, sizeof(digest));
 
@@ -1062,9 +1079,8 @@ static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, con
     RSA_METHOD *meth = bssl_engine_get_rsa_method();
     if (meth == NULL)
         dief("failed to obtain QAT RSA method table\n");
-    size_t siglen, padded_len = RSA_size(req->data.rsa);
-    if (!meth->sign_raw(req->data.rsa, &siglen, req->data.output, padded_len, req->data.digestsign.padded, padded_len,
-                        RSA_NO_PADDING))
+    size_t siglen;
+    if (!meth->sign_raw(req->data.rsa, &siglen, req->data.output, rsa_size, req->data.digestsign.padded, padded_len, padding))
         dief("sign_raw failure\n");
     if (siglen != 0)
         dief("sign_raw completed synchronously unexpectedly\n");
@@ -1125,7 +1141,7 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
 
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload && EVP_PKEY_id(pkey) == EVP_PKEY_RSA) {
-        bssl_offload_digestsign(buf, pkey, md, signdata, signlen);
+        bssl_offload_digestsign(buf, pkey, md, signdata, signlen, rsa_pss);
         return 0;
     }
 #endif
