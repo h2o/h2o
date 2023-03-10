@@ -46,9 +46,8 @@ my $tcp_origin_guard = do {
             if (my $sock = $listener->accept) {
                 write_until_blocked($sock);
                 # Tell the client side of the test that we are done filling the pipe.
-                $!=0;
-                my $ret = syswrite($sync_write, 'x', 1);
-                die "sync pipe write failed:$!" unless $ret == 1;
+                syswrite($sync_write, 'x', 1) == 1
+                    or die "sync pipe write failed:$!";
                 # Keep the socket open.
                 push @sockets, $sock;
                 $sock=undef;
