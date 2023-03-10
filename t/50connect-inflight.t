@@ -65,7 +65,7 @@ subtest "handwritten-h1-client" => sub {
     my $sock = IO::Socket::INET->new(
         PeerAddr => "127.0.0.1:$server->{port}",
         Proto    => "tcp",
-    ) or BAIL_OUT("failed to connect to server:$!");
+    ) or die "failed to connect to server:$!";
     subtest "establish-tunnel" => sub {
         my $req = "CONNECT 127.0.0.1:$origin_port HTTP/1.1\r\n\r\n";
         is syswrite($sock, $req), length $req, "send request";
