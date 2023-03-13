@@ -34,10 +34,6 @@ sub doit {
     my $etag = shift;
     my $expect_etag = shift;
 
-    my $ce_header = "";
-    if ($resp_content_encoding ne "") {
-        $ce_header = "content-encoding:$resp_content_encoding\r\n";
-    }
     open(
         my $curl,
         "-|",
@@ -46,13 +42,18 @@ sub doit {
 
     my $client_socket = $socket->accept();
     $client_socket->recv(my $req, 1024);
-    my $cl = length($msg);
-    $client_socket->send("HTTP/1.1 200 Ok\r\ncontent-length:${cl}\r\n${ce_header}etag:${etag}\r\n${x_compress_header}connection:close\r\n\r\n$msg");
+    my @resp = ("HTTP/1.1 200 OK", "Connection: close", "Content-Length: " . length $msg, "ETag: $etag");
+    push @resp, "Content-Encoding: $resp_content_encoding"
+        if $resp_content_encoding;
+    push @resp, $x_compress_header
+        if $x_compress_header;
+    push @resp, "", $msg; # empty line and the response body
+    $client_socket->send(join "\r\n", @resp);
     close($client_socket);
 
     my $seen_etag = "";
     while(<$curl>) {
-        if (/< etag: (.*)\r\n/) {
+        if (/< etag: (.*)\r\n/i) {
             $seen_etag = $1;
         }
     }
@@ -61,10 +62,10 @@ sub doit {
 }
 
 
-doit("The compressed response", "x-compress-hint: on\r\n", "", "theetag", "W/theetag");
-doit("The compressed response", "x-compress-hint: on\r\n", "", "W/theetag", "W/theetag");
-doit("The compressed response", "x-compress-hint: on\r\n", "gzip", "theetag", "theetag");
-doit("The compressed response", "x-compress-hint: on\r\n", "gzip", "W/theetag", "W/theetag");
+doit("The compressed response", "x-compress-hint: on", undef, "theetag", "W/theetag");
+doit("The compressed response", "x-compress-hint: on", undef, "W/theetag", "W/theetag");
+doit("The compressed response", "x-compress-hint: on", "gzip", "theetag", "theetag");
+doit("The compressed response", "x-compress-hint: on", "gzip", "W/theetag", "W/theetag");
 
 
 
