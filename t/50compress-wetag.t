@@ -15,8 +15,7 @@ my $socket = new IO::Socket::INET (
     Proto => 'tcp',
     Listen => 1,
     Reuse => 1
-);
-die "cannot create socket $!\n" unless $socket;
+) or die "cannot create socket $!\n";
 
 check_port($upstream_port) or die "can't connect to server socket";
 # accent and close check_port's connection
