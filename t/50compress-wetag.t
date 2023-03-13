@@ -17,11 +17,6 @@ my $socket = new IO::Socket::INET (
     Reuse => 1
 ) or die "cannot create socket $!\n";
 
-check_port($upstream_port) or die "can't connect to server socket";
-# accent and close check_port's connection
-my $client_socket = $socket->accept();
-close($client_socket);
-
 my $server = spawn_h2o(<< "EOT");
 compress: ON
 compress-minimum-size: 1
@@ -50,7 +45,7 @@ sub doit {
     ) or die "failed to launch curl:$!";
 
     my $req;
-    $client_socket = $socket->accept();
+    my $client_socket = $socket->accept();
     $client_socket->recv($req, 1024);
     my $cl = length($msg);
     $client_socket->send("HTTP/1.1 200 Ok\r\ncontent-length:${cl}\r\n${ce_header}etag:${etag}\r\n${x_compress_header}connection:close\r\n\r\n$msg");
