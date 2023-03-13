@@ -44,9 +44,8 @@ sub doit {
         "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
     ) or die "failed to launch curl:$!";
 
-    my $req;
     my $client_socket = $socket->accept();
-    $client_socket->recv($req, 1024);
+    $client_socket->recv(my $req, 1024);
     my $cl = length($msg);
     $client_socket->send("HTTP/1.1 200 Ok\r\ncontent-length:${cl}\r\n${ce_header}etag:${etag}\r\n${x_compress_header}connection:close\r\n\r\n$msg");
     close($client_socket);
