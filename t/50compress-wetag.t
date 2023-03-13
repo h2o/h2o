@@ -28,11 +28,7 @@ hosts:
 EOT
 
 sub fetch {
-    my $msg = shift;
-    my $x_compress_header = shift;
-    my $resp_content_encoding = shift;
-    my $etag = shift;
-    my $expect_etag = shift;
+    my ($msg, $x_compress_header, $resp_content_encoding, $etag) = @_;
 
     open(
         my $curl,
