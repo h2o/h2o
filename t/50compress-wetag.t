@@ -9,7 +9,7 @@ plan skip_all => 'curl not found'
 
 my $upstream_port = empty_port();
 $| = 1;
-my $socket = new IO::Socket::INET (
+my $upstream_listener = IO::Socket::INET->new(
     LocalHost => '127.0.0.1',
     LocalPort => $upstream_port,
     Proto => 'tcp',
@@ -40,16 +40,16 @@ sub doit {
         "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
     ) or die "failed to launch curl:$!";
 
-    my $client_socket = $socket->accept();
-    $client_socket->recv(my $req, 1024);
+    my $conn = $upstream_listener->accept();
+    $conn->recv(my $req, 1024);
     my @resp = ("HTTP/1.1 200 OK", "Connection: close", "Content-Length: " . length $msg, "ETag: $etag");
     push @resp, "Content-Encoding: $resp_content_encoding"
         if $resp_content_encoding;
     push @resp, $x_compress_header
         if $x_compress_header;
     push @resp, "", $msg; # empty line and the response body
-    $client_socket->send(join "\r\n", @resp);
-    close($client_socket);
+    $conn->send(join "\r\n", @resp);
+    close($conn);
 
     my $seen_etag = "";
     while(<$curl>) {
@@ -69,5 +69,5 @@ doit("The compressed response", "x-compress-hint: on", "gzip", "W/theetag", "W/t
 
 
 
-$socket->close();
+$upstream_listener->close();
 done_testing();
