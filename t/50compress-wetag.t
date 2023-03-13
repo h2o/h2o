@@ -35,9 +35,9 @@ sub fetch {
     my $expect_etag = shift;
 
     open(
-    my $curl,
-    "-|",
-    "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
+        my $curl,
+        "-|",
+        "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
     ) or die "failed to launch curl:$!";
 
     my $conn = $upstream_listener->accept();
