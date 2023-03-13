@@ -44,7 +44,11 @@ sub doit {
     if ($resp_content_encoding ne "") {
         $ce_header = "content-encoding:$resp_content_encoding\r\n";
     }
-    open(CURL, "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1 |");
+    open(
+        my $curl,
+        "-|",
+        "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
+    ) or die "failed to launch curl:$!";
 
     my $req;
     $client_socket = $socket->accept();
@@ -54,7 +58,7 @@ sub doit {
     close($client_socket);
 
     my $seen_etag = "";
-    while(<CURL>) {
+    while(<$curl>) {
         if (/< etag: (.*)\r\n/) {
             $seen_etag = $1;
         }
