@@ -27,7 +27,7 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
 
-sub doit {
+sub fetch {
     my $msg = shift;
     my $x_compress_header = shift;
     my $resp_content_encoding = shift;
@@ -35,39 +35,41 @@ sub doit {
     my $expect_etag = shift;
 
     open(
-        my $curl,
-        "-|",
-        "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
+    my $curl,
+    "-|",
+    "curl -Haccept-encoding:br,gzip -Hhost:host.example.com -svo /dev/null http://127.0.0.1:$server->{'port'}/ 2>&1",
     ) or die "failed to launch curl:$!";
 
     my $conn = $upstream_listener->accept();
     $conn->recv(my $req, 1024);
     my @resp = ("HTTP/1.1 200 OK", "Connection: close", "Content-Length: " . length $msg, "ETag: $etag");
     push @resp, "Content-Encoding: $resp_content_encoding"
-        if $resp_content_encoding;
+    if $resp_content_encoding;
     push @resp, $x_compress_header
-        if $x_compress_header;
+    if $x_compress_header;
     push @resp, "", $msg; # empty line and the response body
     $conn->send(join "\r\n", @resp);
     close($conn);
 
-    my $seen_etag = "";
-    while(<$curl>) {
-        if (/< etag: (.*)\r\n/i) {
-            $seen_etag = $1;
-        }
-    }
-
-    ok($seen_etag eq $expect_etag, "The seen etag header (".$seen_etag.") was the one expected (".$expect_etag.")");
+    do { local $/; <$curl> };
 }
 
-
-doit("The compressed response", "x-compress-hint: on", undef, "theetag", "W/theetag");
-doit("The compressed response", "x-compress-hint: on", undef, "W/theetag", "W/theetag");
-doit("The compressed response", "x-compress-hint: on", "gzip", "theetag", "theetag");
-doit("The compressed response", "x-compress-hint: on", "gzip", "W/theetag", "W/theetag");
-
-
+subtest "identity + strong" => sub {
+    my $resp = fetch("The compressed response", "x-compress-hint: on", undef, "theetag");
+    like $resp, qr{^<\s*etag:\s*W/theetag\s*}im;
+};
+subtest "identity + weak" => sub {
+    my $resp = fetch("The compressed response", "x-compress-hint: on", undef, "W/theetag");
+    like $resp, qr{^<\s*etag:\s*W/theetag\s*}im;
+};
+subtest "gzip + strong" => sub {
+    my $resp = fetch("The compressed response", "x-compress-hint: on", "gzip", "theetag");
+    like $resp, qr{^<\s*etag:\s*theetag\s*}im;
+};
+subtest "gzip + weak" => sub {
+    my $resp = fetch("The compressed response", "x-compress-hint: on", "gzip", "W/theetag");
+    like $resp, qr{^<\s*etag:\s*W/theetag\s*}im;
+};
 
 $upstream_listener->close();
 done_testing();
