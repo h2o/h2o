@@ -724,7 +724,7 @@ static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, pt
 
     /* submit async request */
     struct async_nb_job_t *job = async_nb_job_new();
-    neverbleed_start_digestsign(&job->buf, self->key, scheme->scheme_md(), input.base, input.len);
+    neverbleed_start_digestsign(&job->buf, self->key, scheme->scheme_md(), input.base, input.len, 1);
     job->ptls.scheme_id = scheme->scheme_id;
     *_job = &job->super;
     async_nb_job_submit(job);
@@ -763,9 +763,10 @@ enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, si
 
     EVP_PKEY *key = SSL_get_privatekey(ssl);
     const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
+    int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
 
     struct async_nb_job_t *job = async_nb_job_new();
-    neverbleed_start_digestsign(&job->buf, key, md, in, len);
+    neverbleed_start_digestsign(&job->buf, key, md, in, len, rsa_pss);
     SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
     async_nb_job_submit(job);
 

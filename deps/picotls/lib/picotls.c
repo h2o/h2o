@@ -3561,9 +3561,16 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
         src = end;
     });
 
-    ch->first_extension_at = src - start + 2;
+    /* CH defined in TLS versions below 1.2 might not have extensions (or they might, see what OpenSSL 1.0.0 sends); so bail out
+     * after parsing the main variables. Zero is returned as it is a valid ClientHello. However `ptls_t::selected_version` remains
+     * zero indicating that no compatible version were found. */
+    if (ch->legacy_version < 0x0303 && src == end) {
+        ret = 0;
+        goto Exit;
+    }
 
     /* decode extensions */
+    ch->first_extension_at = src - start + 2;
     decode_extensions(src, end, PTLS_HANDSHAKE_TYPE_CLIENT_HELLO, &exttype, {
         ch->psk.is_last_extension = 0;
         if (ctx->on_extension != NULL && tls_cbarg != NULL &&
@@ -4850,6 +4857,23 @@ static int parse_record_header(struct st_ptls_record_t *rec, const uint8_t *src)
 static int parse_record(ptls_t *tls, struct st_ptls_record_t *rec, const uint8_t *src, size_t *len)
 {
     int ret;
+
+    assert(*len != 0);
+
+    /* Check if the first byte is something that we can handle, otherwise do not bother parsing / buffering the entire record as it
+     * is obviously broken. SSL 2.0 handshakes fall into this path as well. */
+    if (tls->recvbuf.rec.base == NULL) {
+        uint8_t type = src[0];
+        switch (type) {
+        case PTLS_CONTENT_TYPE_CHANGE_CIPHER_SPEC:
+        case PTLS_CONTENT_TYPE_ALERT:
+        case PTLS_CONTENT_TYPE_HANDSHAKE:
+        case PTLS_CONTENT_TYPE_APPDATA:
+            break;
+        default:
+            return PTLS_ALERT_DECODE_ERROR;
+        }
+    }
 
     if (tls->recvbuf.rec.base == NULL && *len >= 5) {
         /* fast path */
