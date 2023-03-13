@@ -737,6 +737,7 @@
 		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		089FA83329BEC70800F7B746 /* 50compress-wetag.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50compress-wetag.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08A835E42996351100D872CE /* build.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = build.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.make; };
 		08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu1604; sourceTree = "<group>"; };
 		08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2004; sourceTree = "<group>"; };
@@ -2264,6 +2265,7 @@
 				109EEFD91D77B336001F11D1 /* 50chunked-encoding-proxying.t */,
 				107086741B79A08D002B8F18 /* 50compress.t */,
 				E9BC76C11EE3D9A900EB7A09 /* 50compress-hint.t */,
+				089FA83329BEC70800F7B746 /* 50compress-wetag.t */,
 				E9AFBF18212A9802000F5DB8 /* 50config.t */,
 				E93BB45025DA530E009C24D8 /* 50connect.t */,
 				086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */,
