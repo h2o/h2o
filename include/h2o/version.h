@@ -26,7 +26,7 @@
 #include "h2o/gitrev.h"
 #endif
 
-#define h2O_VERSION_BASE "2.3.0-DEV"
+#define H2O_VERSION_BASE "2.3.0-DEV"
 #define H2O_VERSION_MAJOR 2
 #define H2O_VERSION_MINOR 3
 #define H2O_VERSION_PATCH 0
