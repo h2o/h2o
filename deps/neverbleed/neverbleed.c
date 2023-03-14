@@ -1730,7 +1730,7 @@ static int offload_start(int (*stub)(neverbleed_iobuf_t *), neverbleed_iobuf_t *
         dief("no memory");
     *req = (struct engine_request){.buf = buf, .async_fd = -1, .stub = stub};
 
-    if ((req->async.ctx =  ASYNC_WAIT_CTX_new()) == NULL)
+    if ((req->async.ctx = ASYNC_WAIT_CTX_new()) == NULL)
         dief("failed to create ASYNC_WAIT_CTX\n");
 
     int ret;
