@@ -616,6 +616,10 @@ ELSE ()
 ENDIF (WSLAY_FOUND)
 
 EXECUTE_PROCESS(
+    COMMAND sed -n -E "/#define {1,}H2O_VERSION_BASE .*-DEV\"$/s//YES/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
+    OUTPUT_VARIABLE IS_PRERELEASE
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+EXECUTE_PROCESS(
     COMMAND sed -n -E "/#define {1,}H2O_LIBRARY_VERSION {1,}\"(.*)\"$/s//\\1/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
     OUTPUT_VARIABLE LIBRARY_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -623,7 +627,8 @@ EXECUTE_PROCESS(
     COMMAND sed -n -E "/#define {1,}H2O_LIBRARY_VERSION {1,}\"(.*)\\.[0-9]{1,}\"$/s//\\1/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
     OUTPUT_VARIABLE LIBRARY_SOVERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-MESSAGE(STATUS "extracted version numbers from ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h; library version=${LIBRARY_VERSION}, soversion=${LIBRARY_SOVERSION}")
+MESSAGE(STATUS "extracted version numbers from ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h:\n\tprerelease=${IS_PRERELEASE}\n\tlibrary version=${LIBRARY_VERSION}\n\tlibrary soversion=${LIBRARY_SOVERSION}")
+
 SET_TARGET_PROPERTIES(libh2o PROPERTIES
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
@@ -1068,7 +1073,7 @@ IF (WITH_H2OLOG)
 ENDIF (WITH_H2OLOG)
 
 # gitrev
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
+IF (IS_PRERELEASE)
     # To ask generate_gitrev.pl whether or not a gitrev is available,
     # since only the script knows how to calculate the gitrev.
     EXECUTE_PROCESS(
