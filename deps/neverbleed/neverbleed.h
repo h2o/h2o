@@ -54,6 +54,8 @@ typedef struct st_neverbleed_iobuf_t {
     char *start;
     char *end;
     size_t capacity;
+    struct st_neverbleed_iobuf_t *next;
+    unsigned processing : 1;
 } neverbleed_iobuf_t;
 
 /**
@@ -112,6 +114,15 @@ int neverbleed_get_fd(neverbleed_t *nb);
 static size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+
+/**
+ * if set to a non-zero value, RSA operations are offloaded
+ */
+extern enum neverbleed_offload_type {
+    NEVERBLEED_OFFLOAD_OFF = 0,
+    NEVERBLEED_OFFLOAD_QAT_ON,
+    NEVERBLEED_OFFLOAD_QAT_AUTO,
+} neverbleed_offload;
 
 /* inline function definitions */
 
