@@ -411,6 +411,8 @@ struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
+    int allocated;
+    int expect_response;
     void (*on_read_complete)(struct async_nb_transaction_t *transaction);
 };
 
@@ -464,9 +466,20 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err);
 static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     /* add to the read queue the entry for which we have written the request, and start reading from the socket */
-    async_nb_push(&async_nb.read_queue, async_nb_pop(&async_nb.write_queue));
+    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.write_queue);
+    if (transaction->expect_response) {
+        async_nb_push(&async_nb.read_queue, transaction);
+    }
+
     if (!h2o_socket_is_reading(async_nb.sock))
         h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
+
+    if (transaction->allocated) {
+        assert(!h2o_linklist_is_linked(&transaction->link));
+        neverbleed_transaction_dispose(transaction->buf);
+        free(transaction->buf);
+        free(transaction);
+    }
 
     /* submit more requests if there's anything queued */
     async_nb_submit_write_pending();
@@ -548,7 +561,8 @@ static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
 
 static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *buf)
 {
-    struct async_nb_transaction_fd_notify_t transaction = {{.buf = buf, .on_read_complete = async_nb_notify_fd}};
+    struct async_nb_transaction_fd_notify_t transaction = {
+        {.buf = buf, .allocated = 0, .expect_response = 1, .on_read_complete = async_nb_notify_fd}};
     int readfd;
 
     /* setup fd to notify OpenSSL; eventfd is used if available, as it is lightweight and uses only one file descriptor */
@@ -597,26 +611,47 @@ static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *bu
 
 #endif
 
-static void async_nb_transaction(neverbleed_iobuf_t *buf)
+static void async_nb_transaction(neverbleed_iobuf_t *buf, int expect_response)
 {
 #if H2O_CAN_OSSL_ASYNC
     /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     ASYNC_JOB *job;
-   if ((job = ASYNC_get_current_job()) != NULL) {
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        assert(expect_response);
         assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
         async_nb_do_async_transaction(job, buf);
         return;
     }
 #endif
 
-    /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
-    if (async_nb.sock != NULL) {
-        while (async_nb.read_queue.len != 0)
-            async_nb_read_ready(async_nb.sock, NULL);
-    }
+    if (!expect_response && async_nb.sock != NULL) {
+        /* this is an optimization for fire-and-forget transactions which do not require a response.
+           these transactions are queued on the async socket with `expect_response` being false, are free'd
+           upon write completion in `async_nb_on_write_complete`
+        */
+        struct async_nb_transaction_t *transaction = h2o_mem_alloc(sizeof(*transaction));
+        *transaction = (struct async_nb_transaction_t){
+            .buf = h2o_mem_alloc(sizeof(*transaction->buf)),
+            .link = (h2o_linklist_t){},
+            .allocated = 1,
+            .expect_response = 0,
+        };
+        h2o_memcpy(transaction->buf, buf, sizeof(*buf));
 
-    async_nb_run_sync(buf, neverbleed_transaction_write);
-    async_nb_run_sync(buf, neverbleed_transaction_read);
+        async_nb_push(&async_nb.write_queue, transaction);
+        async_nb_submit_write_pending();
+    } else {
+        /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
+        if (async_nb.sock != NULL) {
+            while (async_nb.read_queue.len != 0)
+                async_nb_read_ready(async_nb.sock, NULL);
+        }
+
+        async_nb_run_sync(buf, neverbleed_transaction_write);
+
+        if (expect_response)
+            async_nb_run_sync(buf, neverbleed_transaction_read);
+    }
 }
 
 struct async_nb_picotls_context_t {
@@ -672,7 +707,7 @@ static struct async_nb_job_t *async_nb_job_new(void)
     struct async_nb_job_t *job = h2o_mem_alloc(sizeof(*job));
     *job = (struct async_nb_job_t){
         .super = {.destroy_ = async_nb_job_free, .set_completion_callback = async_nb_job_set_completion_callback},
-        .transaction = {.on_read_complete = async_nb_job_handle_response}};
+        .transaction = {.allocated = 0, .expect_response = 1, .on_read_complete = async_nb_job_handle_response}};
     job->transaction.buf = &job->buf;
 
     return job;
