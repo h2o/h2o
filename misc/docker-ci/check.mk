@@ -80,11 +80,6 @@ _mount:
 	sudo mount -t tmpfs tmpfs -o size=1G /tmp
 	sudo mkdir -p /sys/fs/bpf
 	sudo mount -t bpf bpf -o mode=700 /sys/fs/bpf
-	# allow write of mruby executables being generated (FIXME don't generate here)
-	sudo mkdir -p /tmp/mruby-bin /tmp/h2get-mruby-bin
-	sudo chown ci:ci /tmp/mruby-bin /tmp/h2get-mruby-bin
-	sudo mount --bind /tmp/mruby-bin $(SRC_DIR)/deps/mruby/bin
-	sudo mount --bind /tmp/h2get-mruby-bin $(SRC_DIR)/misc/h2get/deps/mruby/bin
 
 _do_check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.

@@ -761,7 +761,7 @@ IF (WITH_MRUBY)
     ADD_CUSTOM_TARGET(mruby
         # deps/mruby/tasks/toolchains/clang.rake looks for CC, CXX and LD.
         # There are no C++ files in deps/mruby, use the C compiler for linking.
-        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
+        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby-bin ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
                    "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.2.0/.libs/libonigmo.a"
