@@ -1077,7 +1077,7 @@ IF (IS_PRERELEASE)
     # To ask generate_gitrev.pl whether or not a gitrev is available,
     # since only the script knows how to calculate the gitrev.
     EXECUTE_PROCESS(
-        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl ${CMAKE_CURRENT_BINARY_DIR}/h2o-gitrev.h
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         RESULT_VARIABLE GITREV_RESULT_CODE
         OUTPUT_QUIET
@@ -1087,7 +1087,7 @@ IF (IS_PRERELEASE)
     IF (GITREV_RESULT_CODE EQUAL 0)
         ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
         ADD_CUSTOM_TARGET(gitrev ALL
-            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl ${CMAKE_CURRENT_BINARY_DIR}/h2o-gitrev.h
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         ADD_DEPENDENCIES(libh2o gitrev)
         ADD_DEPENDENCIES(libh2o-evloop gitrev)

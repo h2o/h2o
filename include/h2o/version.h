@@ -23,7 +23,7 @@
 #define h2o__version_h
 
 #ifdef H2O_HAS_GITREV_H
-#include "h2o/gitrev.h"
+#include "h2o-gitrev.h"
 #endif
 
 #define H2O_VERSION_BASE "2.3.0-DEV"
