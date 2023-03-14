@@ -106,7 +106,7 @@ extern void (*neverbleed_post_fork_cb)(void);
  * The callback returns a boolean indicating if it handled the task. It may return false to delagate the task back to the default
  * logic.
  */
-extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *);
+extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *, int);
 
 typedef void (*neverbleed_cb)(int);
 
@@ -114,6 +114,7 @@ int neverbleed_get_fd(neverbleed_t *nb);
 static size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+void neverbleed_transaction_dispose(neverbleed_iobuf_t *buf);
 
 /**
  * if set to a non-zero value, RSA operations are offloaded

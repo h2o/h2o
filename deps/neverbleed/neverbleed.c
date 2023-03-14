@@ -374,12 +374,25 @@ static void iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed
 }
 
 /**
+ * Only sends a request, does not read a response
+ */
+static void iobuf_transaction_no_response(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
+{
+    if (neverbleed_transaction_cb != NULL) {
+        neverbleed_transaction_cb(buf, 0);
+    } else {
+        iobuf_transaction_write(buf, thdata);
+        iobuf_dispose(buf);
+    }
+}
+
+/**
  * Sends a request and reads a response.
  */
 static void iobuf_transaction(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
     if (neverbleed_transaction_cb != NULL) {
-        neverbleed_transaction_cb(buf);
+        neverbleed_transaction_cb(buf, 1);
     } else {
         iobuf_transaction_write(buf, thdata);
         iobuf_transaction_read(buf, thdata);
@@ -485,6 +498,11 @@ void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
     iobuf_transaction_write(buf, thdata);
+}
+
+void neverbleed_transaction_dispose(neverbleed_iobuf_t *buf)
+{
+    iobuf_dispose(buf);
 }
 
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
@@ -983,17 +1001,10 @@ static void priv_ecdsa_finish(EC_KEY *key)
     ecdsa_get_privsep_data(key, &exdata, &thdata);
 
     neverbleed_iobuf_t buf = {NULL};
-    size_t ret;
-
     iobuf_push_str(&buf, "del_pkey");
     iobuf_push_num(&buf, exdata->key_index);
-    iobuf_transaction(&buf, thdata);
-
-    if (iobuf_shift_num(&buf, &ret) != 0) {
-        errno = 0;
-        dief("failed to parse response");
-    }
-    iobuf_dispose(&buf);
+    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
+    iobuf_transaction_no_response(&buf, thdata);
 }
 
 #endif
@@ -1632,26 +1643,17 @@ static int priv_rsa_finish(RSA *rsa)
     get_privsep_data(rsa, &exdata, &thdata);
 
     neverbleed_iobuf_t buf = {NULL};
-    size_t ret;
-
     iobuf_push_str(&buf, "del_pkey");
     iobuf_push_num(&buf, exdata->key_index);
-    iobuf_transaction(&buf, thdata);
+    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
+    iobuf_transaction_no_response(&buf, thdata);
 
-    if (iobuf_shift_num(&buf, &ret) != 0) {
-        errno = 0;
-        dief("failed to parse response");
-    }
-    iobuf_dispose(&buf);
-
-    return (int)ret;
+    return 1;
 }
 
 static int del_pkey_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
-
-    int ret = 0;
 
     if (iobuf_shift_num(buf, &key_index) != 0) {
         errno = 0;
@@ -1667,15 +1669,9 @@ static int del_pkey_stub(neverbleed_iobuf_t *buf)
         daemon_vars.keys.first_empty = key_index;
     } else {
         warnf("%s: invalid key index %zu", __FUNCTION__, key_index);
-        goto respond;
     }
     pthread_mutex_unlock(&daemon_vars.keys.lock);
 
-    ret = 1;
-
-respond:
-    iobuf_dispose(buf);
-    iobuf_push_num(buf, ret);
     return 0;
 }
 
@@ -1909,6 +1905,9 @@ static void *daemon_conn_thread(void *_sock_fd)
         } else if (strcmp(cmd, "del_pkey") == 0) {
             if (del_pkey_stub(buf) != 0)
                 break;
+            iobuf_dispose(buf);
+            // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
+            continue;
         } else if (strcmp(cmd, "setuidgid") == 0) {
             if (setuidgid_stub(buf) != 0)
                 break;
@@ -2200,5 +2199,5 @@ Fail:
 }
 
 void (*neverbleed_post_fork_cb)(void) = NULL;
-void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *) = NULL;
+void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *, int) = NULL;
 enum neverbleed_offload_type neverbleed_offload = NEVERBLEED_OFFLOAD_OFF;
