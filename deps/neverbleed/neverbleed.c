@@ -53,7 +53,7 @@
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER)
+#if defined(LIBRESSL_VERSION_NUMBER) ? LIBRESSL_VERSION_NUMBER >= 0x3050000fL : OPENSSL_VERSION_NUMBER >= 0x1010000fL
 /* RSA_METHOD is opaque, so RSA_meth* are used. */
 #define NEVERBLEED_OPAQUE_RSA_METHOD
 #endif
@@ -936,7 +936,6 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     struct st_neverbleed_rsa_exdata_t *exdata;
     EC_KEY *ec_key;
     EC_GROUP *ec_group;
-    BN_CTX *bn_ctx = BN_CTX_new();
     EC_POINT *ec_pubkey;
     EVP_PKEY *pkey;
 
@@ -960,7 +959,7 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
 
     ec_pubkey = EC_POINT_new(ec_group);
     assert(ec_pubkey != NULL);
-    if (!EC_POINT_oct2point(ec_group, ec_pubkey, pubkey, pubkey_len, bn_ctx)) {
+    if (!EC_POINT_oct2point(ec_group, ec_pubkey, pubkey, pubkey_len, NULL)) {
         fprintf(stderr, "failed to get ECDSA ephemeral public key from BIGNUM\n");
         abort();
     }
@@ -970,7 +969,6 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     EVP_PKEY_set1_EC_KEY(pkey, ec_key);
 
     EC_POINT_free(ec_pubkey);
-    BN_CTX_free(bn_ctx);
     EC_GROUP_free(ec_group);
     EC_KEY_free(ec_key);
 
@@ -1384,7 +1382,6 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
     const EC_GROUP *ec_group;
     void *ec_pubkeybytes = NULL;
     size_t ec_pubkeylen;
-    BN_CTX *bn_ctx = NULL;
 #endif
 
     if ((fn = iobuf_shift_str(buf)) == NULL) {
@@ -1422,9 +1419,9 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
         type = NEVERBLEED_TYPE_ECDSA;
         ec_group = EC_KEY_get0_group(ec_key);
         ec_pubkey = EC_KEY_get0_public_key(ec_key);
-        ec_pubkeylen = EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, bn_ctx);
+        ec_pubkeylen = EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, NULL, 0, NULL);
         if (!(ec_pubkeylen > 0 && (ec_pubkeybytes = malloc(ec_pubkeylen)) != NULL &&
-              EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, ec_pubkeybytes, ec_pubkeylen, bn_ctx) ==
+              EC_POINT_point2oct(ec_group, ec_pubkey, POINT_CONVERSION_UNCOMPRESSED, ec_pubkeybytes, ec_pubkeylen, NULL) ==
                   ec_pubkeylen))
             dief("failed to serialize EC public key");
         break;
@@ -1470,8 +1467,6 @@ Respond:
 #ifdef NEVERBLEED_ECDSA
     if (ec_pubkeybytes != NULL)
         free(ec_pubkeybytes);
-    if (bn_ctx != NULL)
-        BN_CTX_free(bn_ctx);
 #endif
     if (fp != NULL)
         fclose(fp);
