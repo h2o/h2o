@@ -557,8 +557,7 @@ static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
 
 static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *buf)
 {
-    struct async_nb_transaction_fd_notify_t transaction = {
-        {.buf = buf, .on_read_complete = async_nb_notify_fd}};
+    struct async_nb_transaction_fd_notify_t transaction = {{.buf = buf, .on_read_complete = async_nb_notify_fd}};
     int readfd;
 
     /* setup fd to notify OpenSSL; eventfd is used if available, as it is lightweight and uses only one file descriptor */
