@@ -1750,7 +1750,7 @@ static int offload_resume(struct engine_request *req)
 {
     int ret;
 
-    switch (ASYNC_start_job(&req->async.job, req->async.ctx, &ret, offload_jobfunc, req, sizeof(req))) {
+    switch (ASYNC_start_job(&req->async.job, req->async.ctx, &ret, offload_jobfunc, &req, sizeof(req))) {
     case ASYNC_PAUSE:
         /* assume that wait fd is unchanged */
         return 0;
@@ -1832,6 +1832,7 @@ static void *daemon_conn_thread(void *_sock_fd)
 {
     conn_ctx.sockfd = (int)((char *)_sock_fd - (char *)NULL);
     conn_ctx.responses.next = &conn_ctx.responses.first;
+    neverbleed_iobuf_t *buf = NULL;
 
 #if USE_OFFLOAD
     if ((conn_ctx.epollfd = epoll_create1(EPOLL_CLOEXEC)) == -1)
@@ -1858,7 +1859,8 @@ static void *daemon_conn_thread(void *_sock_fd)
     while (1) {
         if (wait_for_data(0) != 0)
             break;
-        neverbleed_iobuf_t *buf = malloc(sizeof(*buf));
+        free(buf);
+        buf = malloc(sizeof(*buf));
         if (buf == NULL)
             dief("no memory");
         *buf = (neverbleed_iobuf_t){};
@@ -1906,7 +1908,6 @@ static void *daemon_conn_thread(void *_sock_fd)
             if (del_pkey_stub(buf) != 0)
                 break;
             iobuf_dispose(buf);
-            free(buf);
             // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
             continue;
         } else if (strcmp(cmd, "setuidgid") == 0) {
@@ -1923,6 +1924,7 @@ static void *daemon_conn_thread(void *_sock_fd)
         }
         /* add response to chain */
         *conn_ctx.responses.next = buf;
+        buf = NULL; /* do not free */
         conn_ctx.responses.next = &buf->next;
         /* send responses if possible */
         if (send_responses(0) != 0)
@@ -1930,6 +1932,7 @@ static void *daemon_conn_thread(void *_sock_fd)
     }
 
 Exit:
+    free(buf);
     /* run the loop while async ops are running */
     while (conn_ctx.responses.first != NULL)
         wait_for_data(1);
