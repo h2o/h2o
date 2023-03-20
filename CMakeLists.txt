@@ -872,7 +872,11 @@ IF (BROTLI_FOUND)
     ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 ENDIF ()
 
-ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} time t/run-tests t/*.t
+find_program(TIME "time")
+if (NOT TIME)
+	message(WARNING "program `time` not found; `make check` will fail")
+endif()
+ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} ${TIME} t/run-tests t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS checkdepends)
 
