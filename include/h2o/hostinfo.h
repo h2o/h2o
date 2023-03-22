@@ -78,13 +78,28 @@ inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
     size_t i = 0;
     struct addrinfo *ai = res;
     do {
+#ifdef H2O_HOSTINFO_SELECT_AF
+        H2O_BUILD_ASSERT(H2O_HOSTINFO_SELECT_AF == AF_INET || H2O_HOSTINFO_SELECT_AF == AF_INET6 ||
+                         H2O_HOSTINFO_SELECT_AF == AF_UNSPEC);
+        if (AF_UNSPEC != H2O_HOSTINFO_SELECT_AF && ai->ai_addr->sa_family != H2O_HOSTINFO_SELECT_AF)
+            continue;
+#endif
         ++i;
     } while ((ai = ai->ai_next) != NULL);
 
     /* choose one, distributed by rand() :-p */
     i = rand() % i;
-    for (ai = res; i != 0; ai = ai->ai_next, --i)
-        ;
+    ai = res;
+    do {
+#ifdef H2O_HOSTINFO_SELECT_AF /* AF_INET, AF_INET6 */
+        while (AF_UNSPEC != H2O_HOSTINFO_SELECT_AF && ai->ai_addr->sa_family != H2O_HOSTINFO_SELECT_AF)
+            ai = ai->ai_next;
+#endif
+        if (i == 0)
+            break;
+        --i;
+        ai = ai->ai_next;
+    } while (1);
     return ai;
 }
 
