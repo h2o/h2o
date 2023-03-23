@@ -489,11 +489,9 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (errstr != NULL) {
+        /* Call `on_body_on_close`. This function might dispose `self`, in which case `generator_disposed` would be set to true. */
         self->generator_disposed = &generator_disposed;
         on_body_on_close(self, errstr);
-        /* At this point, the generator (`self`) may have been disposed and therefore untouchable.
-         * If that is the case, `generator_disposed` becomes true, and since `self` no longer exists,
-         * there is no risk of `&generator_disposed` leaking outside of this function. */
         if (!generator_disposed)
             self->generator_disposed = NULL;
     }
