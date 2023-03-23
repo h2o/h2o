@@ -2,9 +2,11 @@
 use strict;
 use warnings;
 
+my $outpath = shift @ARGV
+    or die "Usage: $0 <outpath>\n";
+
 my $gitrev = exec_git_command('git rev-parse --short HEAD') or die "failed to get current revision";
 my $content = "#define H2O_GITREV $gitrev\n";
-my $outpath = 'include/h2o/gitrev.h';
 
 my $current = -f $outpath ? do {
     open(my $fh, '<', $outpath) or die "failed to open $outpath: $!";
