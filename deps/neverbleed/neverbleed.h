@@ -103,10 +103,8 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
 extern void (*neverbleed_post_fork_cb)(void);
 /**
  * An optional callback used for replacing `iobuf_transaction`; i.e., the logic that sends the request and receives the response.
- * The callback returns a boolean indicating if it handled the task. It may return false to delagate the task back to the default
- * logic. When the second argument is 1, this indicates no reponse is expected for this transaction.
  */
-extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *, int);
+extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *req, int responseless);
 
 typedef void (*neverbleed_cb)(int);
 

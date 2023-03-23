@@ -1924,8 +1924,9 @@ static void *daemon_conn_thread(void *_sock_fd)
         }
         /* add response to chain */
         *conn_ctx.responses.next = buf;
-        buf = NULL; /* do not free */
         conn_ctx.responses.next = &buf->next;
+        buf = NULL; /* do not free */
+
         /* send responses if possible */
         if (send_responses(0) != 0)
             break;
