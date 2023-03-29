@@ -1,3 +1,5 @@
+MRuby::Lockfile.disable
+
 MRuby::Build.new do |conf|
   # load specific toolchain settings
 
