@@ -165,7 +165,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
 
     /* url */
-    h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
+    if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
+        h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
         if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
