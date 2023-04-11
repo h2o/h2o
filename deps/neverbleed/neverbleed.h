@@ -103,6 +103,8 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
 extern void (*neverbleed_post_fork_cb)(void);
 /**
  * An optional callback used for replacing `iobuf_transaction`; i.e., the logic that sends the request and receives the response.
+ *
+ * If `responseless` equals `1`, the ownership of stack-allocated `req` is given to the callback. In this case, `req` must be free'd using `neverbleed_iobuf_dispose`
  */
 extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *req, int responseless);
 

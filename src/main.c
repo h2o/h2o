@@ -647,8 +647,11 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
 
         async_nb_run_sync(buf, neverbleed_transaction_write);
 
-        if (!reponseless)
+        if (!reponseless) {
             async_nb_run_sync(buf, neverbleed_transaction_read);
+        } else {
+            neverbleed_iobuf_dispose(buf);
+        }
     }
 }
 
