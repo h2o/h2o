@@ -1005,6 +1005,7 @@ static void priv_ecdsa_finish(EC_KEY *key)
     iobuf_push_num(&buf, exdata->key_index);
     // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
     iobuf_transaction_no_response(&buf, thdata);
+    free(exdata);
 }
 
 #endif
@@ -1648,6 +1649,7 @@ static int priv_rsa_finish(RSA *rsa)
     // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
     iobuf_transaction_no_response(&buf, thdata);
 
+    free(exdata);
     return 1;
 }
 
