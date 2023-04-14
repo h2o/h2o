@@ -87,7 +87,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #endif
             + CMSG_SPACE(1) /* sentry */
         ];
-    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */ };
+    } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
     struct msghdr mess = {
         .msg_name = &dest->sa,
         .msg_namelen = quicly_get_socklen(&dest->sa),
@@ -804,8 +804,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         dgrams[dgram_index].ttl = ctx->default_ttl;
         /* preprocess (and drop the packet if it failed) */
         if (ctx->preprocess_packet != NULL &&
-            !ctx->preprocess_packet(ctx, &mess[dgram_index].msg_hdr, &dgrams[dgram_index].destaddr,
-                                    &dgrams[dgram_index].srcaddr, &dgrams[dgram_index].ttl)) {
+            !ctx->preprocess_packet(ctx, &mess[dgram_index].msg_hdr, &dgrams[dgram_index].destaddr, &dgrams[dgram_index].srcaddr,
+                                    &dgrams[dgram_index].ttl)) {
             dgrams[dgram_index].vec.iov_len = 0; /* mark as unused */
         } else {
             assert(dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET || dgrams[dgram_index].srcaddr.sa.sa_family == AF_INET6);
@@ -834,8 +834,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             if (dgrams[dgram_index - 1].destaddr.sa.sa_family == AF_UNSPEC &&
                 dgrams[dgram_index].destaddr.sa.sa_family == AF_UNSPEC) {
                 /* ok */
-            } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) ==
-                       0) {
+            } else if (h2o_socket_compare_address(&dgrams[dgram_index - 1].destaddr.sa, &dgrams[dgram_index].destaddr.sa, 1) == 0) {
                 /* ok */
             } else {
                 goto ProcessPackets;
@@ -877,8 +876,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 
     ProcessPackets:
         if (packet_index != 0) {
-            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr,
-                            dgrams[dgram_index - 1].ttl, packets, packet_index);
+            process_packets(ctx, &dgrams[dgram_index - 1].destaddr, &dgrams[dgram_index - 1].srcaddr, dgrams[dgram_index - 1].ttl,
+                            packets, packet_index);
             if (has_decoded) {
                 packets[0] = packets[packet_index];
                 packet_index = 1;
@@ -1098,8 +1097,16 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
 
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
 {
+    /* Setup relation between `h2o_quic_conn_t` and `quicly_conn_t`. At this point, `conn` will not have `quic` associated, though
+     * the back pointer might have alreday been set up (see how we call `quicly_accept`). */
+    assert(conn->quic == NULL);
+    void **backptr = quicly_get_data(quic);
+    if (*backptr == NULL) {
+        *backptr = conn;
+    } else {
+        assert(*backptr == conn);
+    }
     conn->quic = quic;
-    *quicly_get_data(conn->quic) = conn;
 
     /* register to the idmap */
     int r;

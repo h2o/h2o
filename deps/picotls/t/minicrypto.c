@@ -52,7 +52,7 @@ static void test_secp256r1_sign(void)
     uECC_make_key(pub, signer.key, uECC_secp256r1());
     ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
 
-    ok(secp256r1sha256_sign(&signer.super, NULL, &selected, &sigbuf, ptls_iovec_init(msg, 32),
+    ok(secp256r1sha256_sign(&signer.super, NULL, NULL, &selected, &sigbuf, ptls_iovec_init(msg, 32),
                             (uint16_t[]){PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256}, 1) == 0);
     ok(selected == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256);
 
@@ -155,7 +155,7 @@ int main(int argc, char **argv)
                              ptls_minicrypto_key_exchanges,
                              ptls_minicrypto_cipher_suites,
                              {&cert, 1},
-                             NULL,
+                             {{NULL}},
                              NULL,
                              NULL,
                              &sign_certificate.super};

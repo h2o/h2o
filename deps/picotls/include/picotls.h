@@ -85,7 +85,7 @@ extern "C" {
 #define PTLS_AESCCM_INTEGRITY_LIMIT 0xB504F3                   /* 2^23.5 */
 
 #define PTLS_CHACHA20_KEY_SIZE 32
-#define PTLS_CHACHA20_IV_SIZE 16
+#define PTLS_CHACHA20_IV_SIZE 16 /* contrary to RFC 7539, follow OpenSSL way of using first 32 bits as ctr and latter 96 as IV */
 #define PTLS_CHACHA20POLY1305_IV_SIZE 12
 #define PTLS_CHACHA20POLY1305_TAG_SIZE 16
 #define PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT UINT64_MAX       /* at least 2^64 */
@@ -99,6 +99,9 @@ extern "C" {
 
 #define PTLS_SHA384_BLOCK_SIZE 128
 #define PTLS_SHA384_DIGEST_SIZE 48
+
+#define PTLS_SHA512_BLOCK_SIZE 128
+#define PTLS_SHA512_DIGEST_SIZE 64
 
 #define PTLS_MAX_SECRET_SIZE 32
 #define PTLS_MAX_IV_SIZE 16
@@ -132,7 +135,7 @@ extern "C" {
 
 /* negotiated_groups */
 #define PTLS_GROUP_SECP256R1 23
-#define PTLS_GROUP_NAME_SECP256R1 "scep256r1"
+#define PTLS_GROUP_NAME_SECP256R1 "secp256r1"
 #define PTLS_GROUP_SECP384R1 24
 #define PTLS_GROUP_NAME_SECP384R1 "secp384r1"
 #define PTLS_GROUP_SECP521R1 25
@@ -153,11 +156,20 @@ extern "C" {
 #define PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512 0x0806
 #define PTLS_SIGNATURE_ED25519 0x0807
 
-/* ESNI */
-#define PTLS_ESNI_VERSION_DRAFT03 0xff02
-
-#define PTLS_ESNI_RESPONSE_TYPE_ACCEPT 0
-#define PTLS_ESNI_RESPONSE_TYPE_RETRY_REQUEST 1
+/* HPKE */
+#define PTLS_HPKE_MODE_BASE 0
+#define PTLS_HPKE_MODE_PSK 1
+#define PTLS_HPKE_MODE_AUTH 2
+#define PTLS_HPKE_MODE_AUTH_PSK 3
+#define PTLS_HPKE_KEM_P256_SHA256 16
+#define PTLS_HPKE_KEM_P384_SHA384 17
+#define PTLS_HPKE_KEM_X25519_SHA256 32
+#define PTLS_HPKE_HKDF_SHA256 1
+#define PTLS_HPKE_HKDF_SHA384 2
+#define PTLS_HPKE_HKDF_SHA512 3
+#define PTLS_HPKE_AEAD_AES_128_GCM 1
+#define PTLS_HPKE_AEAD_AES_256_GCM 2
+#define PTLS_HPKE_AEAD_CHACHA20POLY1305 3
 
 /* error classes and macros */
 #define PTLS_ERROR_CLASS_SELF_ALERT 0
@@ -194,9 +206,11 @@ extern "C" {
 #define PTLS_ALERT_INTERNAL_ERROR 80
 #define PTLS_ALERT_USER_CANCELED 90
 #define PTLS_ALERT_MISSING_EXTENSION 109
+#define PTLS_ALERT_UNSUPPORTED_EXTENSION 110
 #define PTLS_ALERT_UNRECOGNIZED_NAME 112
 #define PTLS_ALERT_CERTIFICATE_REQUIRED 116
 #define PTLS_ALERT_NO_APPLICATION_PROTOCOL 120
+#define PTLS_ALERT_ECH_REQUIRED 121
 
 /* TLS 1.2 */
 #define PTLS_TLS12_MASTER_SECRET_SIZE 48
@@ -215,9 +229,9 @@ extern "C" {
 #define PTLS_ERROR_STATELESS_RETRY (PTLS_ERROR_CLASS_INTERNAL + 6)
 #define PTLS_ERROR_NOT_AVAILABLE (PTLS_ERROR_CLASS_INTERNAL + 7)
 #define PTLS_ERROR_COMPRESSION_FAILURE (PTLS_ERROR_CLASS_INTERNAL + 8)
-#define PTLS_ERROR_ESNI_RETRY (PTLS_ERROR_CLASS_INTERNAL + 8)
 #define PTLS_ERROR_REJECT_EARLY_DATA (PTLS_ERROR_CLASS_INTERNAL + 9)
 #define PTLS_ERROR_DELEGATE (PTLS_ERROR_CLASS_INTERNAL + 10)
+#define PTLS_ERROR_ASYNC_OPERATION (PTLS_ERROR_CLASS_INTERNAL + 11)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -247,6 +261,7 @@ extern "C" {
 #define PTLS_HANDSHAKE_TYPE_KEY_UPDATE 24
 #define PTLS_HANDSHAKE_TYPE_COMPRESSED_CERTIFICATE 25
 #define PTLS_HANDSHAKE_TYPE_MESSAGE_HASH 254
+#define PTLS_HANDSHAKE_TYPE_PSEUDO_HRR -1
 
 #define PTLS_CERTIFICATE_TYPE_X509 0
 #define PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY 2
@@ -262,6 +277,14 @@ extern "C" {
         0x38, 0xb0, 0x60, 0xa7, 0x51, 0xac, 0x96, 0x38, 0x4c, 0xd9, 0x32, 0x7e, 0xb1, 0xb1, 0xe3, 0x6a, 0x21, 0xfd, 0xb7, 0x11,    \
             0x14, 0xbe, 0x07, 0x43, 0x4c, 0x0c, 0xc7, 0xbf, 0x63, 0xf6, 0xe1, 0xda, 0x27, 0x4e, 0xde, 0xbf, 0xe7, 0x6f, 0x65,      \
             0xfb, 0xd5, 0x1a, 0xd2, 0xf1, 0x48, 0x98, 0xb9, 0x5b                                                                   \
+    }
+
+#define PTLS_ZERO_DIGEST_SHA512                                                                                                    \
+    {                                                                                                                              \
+        0xcf, 0x83, 0xe1, 0x35, 0x7e, 0xef, 0xb8, 0xbd, 0xf1, 0x54, 0x28, 0x50, 0xd6, 0x6d, 0x80, 0x07, 0xd6, 0x20, 0xe4, 0x05,    \
+            0x0b, 0x57, 0x15, 0xdc, 0x83, 0xf4, 0xa9, 0x21, 0xd3, 0x6c, 0xe9, 0xce, 0x47, 0xd0, 0xd1, 0x3c, 0x5d, 0x85, 0xf2,      \
+            0xb0, 0xff, 0x83, 0x18, 0xd2, 0x87, 0x7e, 0xec, 0x2f, 0x63, 0xb9, 0x31, 0xbd, 0x47, 0x41, 0x7a, 0x81, 0xa5, 0x38,      \
+            0x32, 0x7a, 0xf9, 0x27, 0xda, 0x3e                                                                                     \
     }
 
 #define PTLS_TO__STR(n) #n
@@ -375,7 +398,8 @@ typedef struct st_ptls_aead_context_t {
     const struct st_ptls_aead_algorithm_t *algo;
     /* field above this line must not be altered by the crypto binding */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
-    void (*do_xor_iv)(struct st_ptls_aead_context_t *ctx, const void *bytes, size_t len);
+    void (*do_get_iv)(struct st_ptls_aead_context_t *ctx, void *iv);
+    void (*do_set_iv)(struct st_ptls_aead_context_t *ctx, const void *iv);
     void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
     size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
     size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
@@ -490,6 +514,10 @@ typedef struct st_ptls_hash_context_t {
  */
 typedef const struct st_ptls_hash_algorithm_t {
     /**
+     * name of the hash algorithm
+     */
+    const char *name;
+    /**
      * block size
      */
     size_t block_size;
@@ -537,39 +565,25 @@ typedef struct st_ptls_message_emitter_t {
 } ptls_message_emitter_t;
 
 /**
- * holds ESNIKeys and the private key (instantiated by ptls_esni_parse, freed using ptls_esni_dispose)
+ * HPKE KEM
  */
-typedef struct st_ptls_esni_context_t {
-    ptls_key_exchange_context_t **key_exchanges;
-    struct {
-        ptls_cipher_suite_t *cipher_suite;
-        uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
-    } * cipher_suites;
-    uint16_t padded_length;
-    uint64_t not_before;
-    uint64_t not_after;
-    uint16_t version;
-} ptls_esni_context_t;
+typedef const struct st_ptls_hpke_kem_t {
+    uint16_t id;
+    ptls_key_exchange_algorithm_t *keyex;
+    ptls_hash_algorithm_t *hash;
+} ptls_hpke_kem_t;
 
-/**
- * holds the ESNI secret, as exchanged during the handshake
- */
+typedef struct st_ptls_hpke_cipher_suite_id_t {
+    uint16_t kdf;
+    uint16_t aead;
+} ptls_hpke_cipher_suite_id_t;
 
-#define PTLS_ESNI_NONCE_SIZE 16
-
-typedef struct st_ptls_esni_secret_t {
-    ptls_iovec_t secret;
-    uint8_t nonce[PTLS_ESNI_NONCE_SIZE];
-    uint8_t esni_contents_hash[PTLS_MAX_DIGEST_SIZE];
-    struct {
-        ptls_key_exchange_algorithm_t *key_share;
-        ptls_cipher_suite_t *cipher;
-        ptls_iovec_t pubkey;
-        uint8_t record_digest[PTLS_MAX_DIGEST_SIZE];
-        uint16_t padded_length;
-    } client;
-    uint16_t version;
-} ptls_esni_secret_t;
+typedef const struct st_ptls_hpke_cipher_suite_t {
+    ptls_hpke_cipher_suite_id_t id;
+    const char *name; /* in form of "<kdf>/<aead>" using the sames specified in IANA HPKE registry */
+    ptls_hash_algorithm_t *hash;
+    ptls_aead_algorithm_t *aead;
+} ptls_hpke_cipher_suite_t;
 
 #define PTLS_CALLBACK_TYPE0(ret, name)                                                                                             \
     typedef struct st_ptls_##name##_t {                                                                                            \
@@ -594,6 +608,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
      */
     ptls_iovec_t raw_message;
     /**
+     * points to the cipher-suites section of the raw_message (see above)
+     */
+    ptls_iovec_t cipher_suites;
+    /**
      *
      */
     struct {
@@ -609,17 +627,9 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         size_t count;
     } certificate_compression_algorithms;
     struct {
-        const uint16_t *list;
-        size_t count;
-    } cipher_suites;
-    struct {
         const uint8_t *list;
         size_t count;
     } server_certificate_types;
-    /**
-     * if ESNI was used
-     */
-    unsigned esni : 1;
     /**
      * set to 1 if ClientHello is too old (or too new) to be handled by picotls
      */
@@ -641,19 +651,41 @@ PTLS_CALLBACK_TYPE(int, on_client_hello, ptls_t *tls, ptls_on_client_hello_param
 PTLS_CALLBACK_TYPE(int, emit_certificate, ptls_t *tls, ptls_message_emitter_t *emitter, ptls_key_schedule_t *key_sched,
                    ptls_iovec_t context, int push_status_request, const uint16_t *compress_algos, size_t num_compress_algos);
 /**
- * when gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate.
+ * An object that represents an asynchronous task (e.g., RSA signature generation).
+ * When `ptls_handshake` returns `PTLS_ERROR_ASYNC_OPERATION`, it has an associated task in flight. The user should obtain the
+ * reference to the associated task by calling `ptls_get_async_job`, then either wait for the file descriptor obtained from
+ * the `get_fd` callback to become readable, or set a completion callback via `set_completion_callback` and wait for its
+ * invocation. Once notified, the user should invoke `ptls_handshake` again.
+ * Async jobs typically provide support for only one of the two methods.
  */
-PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
-                   const uint16_t *algorithms, size_t num_algorithms);
+typedef struct st_ptls_async_job_t {
+    void (*destroy_)(struct st_ptls_async_job_t *self);
+    /**
+     * optional callback returning a file descriptor that becomes readable when the job is complete
+     */
+    int (*get_fd)(struct st_ptls_async_job_t *self);
+    /**
+     * optional callback for setting a completion callback
+     */
+    void (*set_completion_callback)(struct st_ptls_async_job_t *self, void (*cb)(void *), void *cbdata);
+} ptls_async_job_t;
+/**
+ * When gerenating CertificateVerify, the core calls the callback to sign the handshake context using the certificate. This callback
+ * supports asynchronous mode; see `ptls_openssl_sign_certificate_t` for more information.
+ */
+PTLS_CALLBACK_TYPE(int, sign_certificate, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                   ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms);
 /**
  * after receiving Certificate, the core calls the callback to verify the certificate chain and to obtain a pointer to a
  * callback that should be used for verifying CertificateVerify. If an error occurs between a successful return from this
  * callback to the invocation of the verify_sign callback, verify_sign is called with both data and sign set to an empty buffer.
  * The implementor of the callback should use that as the opportunity to free any temporary data allocated for the verify_sign
  * callback.
+ * The name of the server to be verified, if any, is provided explicitly as `server_name`. When ECH is offered by the client but
+ * the was rejected by the server, this value can be different from that being sent via `ptls_get_server_name`.
  */
 typedef struct st_ptls_verify_certificate_t {
-    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls,
+    int (*cb)(struct st_ptls_verify_certificate_t *self, ptls_t *tls, const char *server_name,
               int (**verify_sign)(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t sign), void **verify_data,
               ptls_iovec_t *certs, size_t num_certs);
     /**
@@ -707,10 +739,12 @@ typedef struct st_ptls_decompress_certificate_t {
               ptls_iovec_t input);
 } ptls_decompress_certificate_t;
 /**
- * provides access to the ESNI shared secret (Zx).  API is subject to change.
+ * ECH: creates the AEAD context to be used for "Open"-ing inner CH. Given `config_id`, the callback looks up the ECH config and the
+ * corresponding private key, invokes `ptls_hpke_setup_base_r` with provided `cipher`, `enc`, and `info_prefix` (which will be
+ * "tls ech" || 00).
  */
-PTLS_CALLBACK_TYPE(int, update_esni_key, ptls_t *tls, ptls_iovec_t secret, ptls_hash_algorithm_t *hash,
-                   const void *hashed_esni_contents);
+PTLS_CALLBACK_TYPE(ptls_aead_context_t *, ech_create_opener, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher, ptls_t *tls,
+                   uint8_t config_id, ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix);
 
 /**
  * the configuration
@@ -740,9 +774,30 @@ struct st_ptls_context_t {
         size_t count;
     } certificates;
     /**
-     * list of ESNI data terminated by NULL
+     * ECH
      */
-    ptls_esni_context_t **esni;
+    struct {
+        struct {
+            /**
+             * list of HPKE symmetric cipher-suites (set to NULL to disable ECH altogether)
+             */
+            ptls_hpke_cipher_suite_t **ciphers;
+            /**
+             * KEMs being supported
+             */
+            ptls_hpke_kem_t **kems;
+        } client;
+        struct {
+            /**
+             * callback that does ECDH key exchange and returns the AEAD context
+             */
+            ptls_ech_create_opener_t *create_opener;
+            /**
+             * ECHConfigList to be sent to the client when there is mismatch (or when the client sends a grease)
+             */
+            ptls_iovec_t retry_configs;
+        } server;
+    } ech;
     /**
      *
      */
@@ -772,8 +827,7 @@ struct st_ptls_context_t {
      */
     size_t max_buffer_size;
     /**
-     * the field is obsolete; should be set to NULL for QUIC draft-17.  Note also that even though everybody did, it was incorrect
-     * to set the value to "quic " in the earlier versions of the draft.
+     * this field is obsolete and ignored
      */
     const char *hkdf_label_prefix__obsolete;
     /**
@@ -842,10 +896,6 @@ struct st_ptls_context_t {
     /**
      *
      */
-    ptls_update_esni_key_t *update_esni_key;
-    /**
-     *
-     */
     ptls_on_extension_t *on_extension;
     /**
      * (optional) list of supported tls12 cipher-suites terminated by NULL
@@ -903,9 +953,19 @@ typedef struct st_ptls_handshake_properties_t {
              */
             unsigned negotiate_before_key_exchange : 1;
             /**
-             * ESNIKeys (the value of the TXT record, after being base64-"decoded")
+             * ECH
              */
-            ptls_iovec_t esni_keys;
+            struct {
+                /**
+                 * Config offered by server e.g., by HTTPS RR. If config.base is non-NULL but config.len is zero, a grease ECH will
+                 * be sent, assuming that X25519-SHA256 KEM and SHA256-AES-128-GCM HPKE cipher is available.
+                 */
+                ptls_iovec_t configs;
+                /**
+                 * slot to save the config obtained from server on mismatch; user must free the returned blob by calling `free`
+                 */
+                ptls_iovec_t *retry_configs;
+            } ech;
         } client;
         struct {
             /**
@@ -1101,7 +1161,7 @@ static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
         ptls_buffer_push(_buf, (type));                                                                                            \
         ptls_buffer_push_block(_buf, 3, block);                                                                                    \
         if (_key_sched != NULL)                                                                                                    \
-            ptls__key_schedule_update_hash(_key_sched, _buf->base + mess_start, _buf->off - mess_start);                           \
+            ptls__key_schedule_update_hash(_key_sched, _buf->base + mess_start, _buf->off - mess_start, 0);                        \
     } while (0)
 
 #define ptls_push_message(emitter, key_sched, type, block)                                                                         \
@@ -1114,6 +1174,7 @@ static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
             goto Exit;                                                                                                             \
     } while (0)
 
+int ptls_decode8(uint8_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode16(uint16_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode24(uint32_t *value, const uint8_t **src, const uint8_t *end);
 int ptls_decode32(uint32_t *value, const uint8_t **src, const uint8_t *end);
@@ -1292,7 +1353,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
     do {                                                                                                                           \
         if (PTLS_UNLIKELY(!ptlslog_skip)) {                                                                                        \
             if (sizeof(v) <= sizeof(uint32_t)) {                                                                                   \
-                if (PTLS_UNLIKELY(!ptls_log__do_push_unsigned32(&ptlslogbuf, (v))))                                                \
+                if (PTLS_UNLIKELY(!ptls_log__do_push_unsigned32(&ptlslogbuf, (uint32_t)(v))))                                      \
                     ptlslog_skip = 1;                                                                                              \
             } else {                                                                                                               \
                 if (PTLS_UNLIKELY(!ptls_log__do_push_unsigned64(&ptlslogbuf, (v))))                                                \
@@ -1368,6 +1429,10 @@ ptls_context_t *ptls_get_context(ptls_t *tls);
  */
 void ptls_set_context(ptls_t *tls, ptls_context_t *ctx);
 /**
+ * get the signature context
+ */
+ptls_async_job_t *ptls_get_async_job(ptls_t *tls);
+/**
  * returns the client-random
  */
 ptls_iovec_t ptls_get_client_random(ptls_t *tls);
@@ -1418,6 +1483,10 @@ int ptls_handshake_is_complete(ptls_t *tls);
  * returns if a PSK (or PSK-DHE) handshake was performed
  */
 int ptls_is_psk_handshake(ptls_t *tls);
+/**
+ * return if a ECH handshake was performed, as well as optionally the kem and cipher-suite being used
+ */
+int ptls_is_ech_handshake(ptls_t *tls, uint8_t *config_id, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher);
 /**
  * returns a pointer to user data pointer (client is reponsible for freeing the associated data prior to calling ptls_free)
  */
@@ -1541,7 +1610,9 @@ void ptls_aead_free(ptls_aead_context_t *ctx);
  * Permutes the static IV by applying given bytes using bit-wise XOR. This API can be used for supplying nonces longer than 64-
  * bits.
  */
-static void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len);
+void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len);
+static void ptls_aead_get_iv(ptls_aead_context_t *ctx, void *iv);
+static void ptls_aead_set_iv(ptls_aead_context_t *ctx, const void *iv);
 /**
  * Encrypts one AEAD block, given input and output vectors.
  */
@@ -1577,7 +1648,7 @@ static size_t ptls_aead_encrypt_final(ptls_aead_context_t *ctx, void *output);
 static size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                                 const void *aad, size_t aadlen);
 /**
- * Return the current read epoch.
+ * Return the current read epoch (i.e., that of the message being received or to be)
  */
 size_t ptls_get_read_epoch(ptls_t *tls);
 /**
@@ -1620,7 +1691,7 @@ static void ptls_aead__do_encrypt_v(ptls_aead_context_t *ctx, void *_output, ptl
 /**
  * internal
  */
-void ptls__key_schedule_update_hash(ptls_key_schedule_t *sched, const uint8_t *msg, size_t msglen);
+void ptls__key_schedule_update_hash(ptls_key_schedule_t *sched, const uint8_t *msg, size_t msglen, int use_outer);
 /**
  * clears memory
  */
@@ -1634,23 +1705,27 @@ extern int (*volatile ptls_mem_equal)(const void *x, const void *y, size_t len);
  */
 int ptls_server_name_is_ipaddr(const char *name);
 /**
+ * encodes one ECH Config
+ */
+int ptls_ech_encode_config(ptls_buffer_t *buf, uint8_t config_id, ptls_hpke_kem_t *kem, ptls_iovec_t public_key,
+                           ptls_hpke_cipher_suite_t **ciphers, uint8_t max_name_length, const char *public_name);
+/**
  * loads a certificate chain to ptls_context_t::certificates. `certificate.list` and each element of the list is allocated by
  * malloc.  It is the responsibility of the user to free them when discarding the TLS context.
  */
 int ptls_load_certificates(ptls_context_t *ctx, char const *cert_pem_file);
 /**
- *
+ * SetupBaseS function of RFC 9180. Given `kem`, `algo`, `info`, and receiver's public key, returns an ephemeral public key and an
+ * AEAD context used for encrypting data.
  */
-int ptls_esni_init_context(ptls_context_t *ctx, ptls_esni_context_t *esni, ptls_iovec_t esni_keys,
-                           ptls_key_exchange_context_t **key_exchanges);
+int ptls_hpke_setup_base_s(ptls_hpke_kem_t *kem, ptls_hpke_cipher_suite_t *cipher, ptls_iovec_t *pk_s, ptls_aead_context_t **ctx,
+                           ptls_iovec_t pk_r, ptls_iovec_t info);
 /**
- *
+ * SetupBaseR function of RFC 9180. Given `kem`, `algo`, `info`, receiver's private key (`keyex`), and the esnder's public key,
+ * returns the AEAD context to be used for decrypting data.
  */
-void ptls_esni_dispose_context(ptls_esni_context_t *esni);
-/**
- * Obtain the ESNI secrets negotiated during the handshake.
- */
-ptls_esni_secret_t *ptls_get_esni_secret(ptls_t *ctx);
+int ptls_hpke_setup_base_r(ptls_hpke_kem_t *kem, ptls_hpke_cipher_suite_t *cipher, ptls_key_exchange_context_t *keyex,
+                           ptls_aead_context_t **ctx, ptls_iovec_t pk_s, ptls_iovec_t info);
 /**
  *
  */
@@ -1745,9 +1820,14 @@ inline void ptls_cipher_encrypt(ptls_cipher_context_t *ctx, void *output, const 
     ctx->do_transform(ctx, output, input, len);
 }
 
-inline void ptls_aead_xor_iv(ptls_aead_context_t *ctx, const void *bytes, size_t len)
+inline void ptls_aead_get_iv(ptls_aead_context_t *ctx, void *iv)
 {
-    ctx->do_xor_iv(ctx, bytes, len);
+    ctx->do_get_iv(ctx, iv);
+}
+
+inline void ptls_aead_set_iv(ptls_aead_context_t *ctx, const void *iv)
+{
+    ctx->do_set_iv(ctx, iv);
 }
 
 inline size_t ptls_aead_encrypt(ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,

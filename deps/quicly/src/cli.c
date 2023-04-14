@@ -31,6 +31,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <picotls.h>
+#include <openssl/err.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #if QUICLY_HAVE_FUSION
 #include "picotls/fusion.h"
 #endif
@@ -91,6 +95,7 @@ static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
                                 .get_time = &ptls_get_time,
                                 .key_exchanges = key_exchanges,
                                 .cipher_suites = cipher_suites,
+                                .ech.client = {ptls_openssl_hpke_cipher_suites, ptls_openssl_hpke_kems},
                                 .require_dhe_on_psk = 1,
                                 .save_ticket = &save_session_ticket,
                                 .on_client_hello = &on_client_hello};
@@ -538,7 +543,7 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
         perror("bind(2) failed");
         return 1;
     }
-    ret = quicly_connect(&conn, &ctx, host, sa, NULL, &next_cid, resumption_token, &hs_properties, &resumed_transport_params);
+    ret = quicly_connect(&conn, &ctx, host, sa, NULL, &next_cid, resumption_token, &hs_properties, &resumed_transport_params, NULL);
     assert(ret == 0);
     ++next_cid.master_id;
     enqueue_requests(conn);
@@ -608,6 +613,7 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
         if (conn != NULL) {
             ret = send_pending(fd, conn);
             if (ret != 0) {
+                ech_save_retry_configs();
                 quicly_free(conn);
                 conn = NULL;
                 if (ret == QUICLY_ERROR_FREE_CONNECTION) {
@@ -806,7 +812,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                             } else if (enforce_retry && (ret == QUICLY_TRANSPORT_ERROR_INVALID_TOKEN ||
                                                          (ret == 0 && token_buf.type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY))) {
                                 /* Token that looks like retry was unusable, and we require retry. There's no chance of the
-                                 * handshake succeeding. Therefore, send close without aquiring state. */
+                                 * handshake succeeding. Therefore, send close without acquiring state. */
                                 uint8_t payload[ctx.transport_params.max_udp_payload_size];
                                 size_t payload_len = quicly_send_close_invalid_token(&ctx, packet.version, packet.cid.src,
                                                                                      packet.cid.dest.encrypted, err_desc, payload);
@@ -830,7 +836,7 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                             break;
                         } else {
                             /* new connection */
-                            int ret = quicly_accept(&conn, &ctx, NULL, &remote.sa, &packet, token, &next_cid, NULL);
+                            int ret = quicly_accept(&conn, &ctx, NULL, &remote.sa, &packet, token, &next_cid, NULL, NULL);
                             if (ret == 0) {
                                 assert(conn != NULL);
                                 ++next_cid.master_id;
@@ -1020,6 +1026,11 @@ static void usage(const char *cmd)
            "                            29)\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
+           "  --ech-config <file>       file that contains ECHConfigList or an empty file to\n"
+           "                            grease ECH; will be overwritten when receiving\n"
+           "                            retry_configs from the server\n"
+           "  --ech-key <file>          ECH private key for each ECH config provided by\n"
+           "                            --ech-config\n"
            "  -f fraction               increases the induced ack frequency to specified\n"
            "                            fraction of CWND (default: 0)\n"
            "  -G                        enable UDP generic segmentation offload\n"
@@ -1040,7 +1051,7 @@ static void usage(const char *cmd)
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
            "  -u size                   initial size of UDP datagram payload\n"
-           "  -U size                   maximum size of UDP datagarm payload\n"
+           "  -U size                   maximum size of UDP datagram payload\n"
            "  -V                        verify peer using the default certificates\n"
            "  -v                        verbose mode (-vv emits packet dumps as well)\n"
            "  -w packets                initial congestion window (default: 10)\n"
@@ -1073,7 +1084,15 @@ int main(int argc, char **argv)
     struct sockaddr_storage sa;
     socklen_t salen;
     unsigned udpbufsize = 0;
-    int ch, fd;
+    int ch, opt_index, fd;
+
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    (void)OSSL_PROVIDER_load(NULL, "legacy");
+    (void)OSSL_PROVIDER_load(NULL, "default");
+#endif
 
     reqs = malloc(sizeof(*reqs));
     memset(reqs, 0, sizeof(*reqs));
@@ -1094,8 +1113,20 @@ int main(int argc, char **argv)
         address_token_aead.dec = ptls_aead_new(&ptls_openssl_aes128gcm, &ptls_openssl_sha256, 0, secret, "");
     }
 
-    while ((ch = getopt(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h")) != -1) {
+    static const struct option longopts[] = {
+        {"ech-key", required_argument, NULL, 0}, {"ech-configs", required_argument, NULL, 0}, {NULL}};
+    while ((ch = getopt_long(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h", longopts,
+                             &opt_index)) != -1) {
         switch (ch) {
+        case 0: /* longopts */
+            if (strcmp(longopts[opt_index].name, "ech-key") == 0) {
+                ech_setup_key(&tlsctx, optarg);
+            } else if (strcmp(longopts[opt_index].name, "ech-configs") == 0) {
+                ech_setup_configs(optarg);
+            } else {
+                assert(!"unexpected longname");
+            }
+            break;
         case 'a':
             assert(negotiated_protocols.count < PTLS_ELEMENTSOF(negotiated_protocols.list));
             negotiated_protocols.list[negotiated_protocols.count++] = ptls_iovec_init(optarg, strlen(optarg));
@@ -1401,6 +1432,8 @@ int main(int argc, char **argv)
         hs_properties.client.negotiated_protocols.count = negotiated_protocols.count;
         if (session_file != NULL)
             load_session();
+        hs_properties.client.ech.configs = ech.config_list;
+        hs_properties.client.ech.retry_configs = &ech.retry.configs;
     }
     if (argc != 2) {
         fprintf(stderr, "missing host and port\n");

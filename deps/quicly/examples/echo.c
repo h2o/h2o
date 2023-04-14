@@ -175,7 +175,7 @@ static void process_msg(int is_client, quicly_conn_t **conns, struct msghdr *msg
             quicly_receive(conns[i], NULL, msg->msg_name, &decoded);
         } else if (!is_client) {
             /* assume that the packet is a new connection */
-            quicly_accept(conns + i, &ctx, NULL, msg->msg_name, &decoded, NULL, &next_cid, NULL);
+            quicly_accept(conns + i, &ctx, NULL, msg->msg_name, &decoded, NULL, &next_cid, NULL, NULL);
         }
     }
 }
@@ -386,7 +386,7 @@ int main(int argc, char **argv)
         /* initiate a connection, and open a stream */
         int ret;
         if ((ret = quicly_connect(&client, &ctx, host, (struct sockaddr *)&sa, NULL, &next_cid, ptls_iovec_init(NULL, 0), NULL,
-                                  NULL)) != 0) {
+                                  NULL, NULL)) != 0) {
             fprintf(stderr, "quicly_connect failed:%d\n", ret);
             exit(1);
         }

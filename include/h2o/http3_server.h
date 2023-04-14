@@ -58,6 +58,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
  * amends the quicly context so that it could be used for the server
  */
 void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic);
+/**
+ * Given a QUIC connection context, returns the application-level connection context. Caller must not supply QUIC connections used
+ * for other purposes than serving HTTP response (e.g., that created by http3client).
+ */
+h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic);
 
 #ifdef __cplusplus
 }

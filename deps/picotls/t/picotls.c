@@ -44,6 +44,18 @@ static void test_is_ipaddr(void)
     ok(ptls_server_name_is_ipaddr("2001:db8::2:1"));
 }
 
+static void test_extension_bitmap(void)
+{
+    struct st_ptls_extension_bitmap_t bitmap = {0};
+
+    /* disallowed extension is rejected */
+    ok(!extension_bitmap_testandset(&bitmap, PTLS_HANDSHAKE_TYPE_SERVER_HELLO, PTLS_EXTENSION_TYPE_COOKIE));
+
+    /* allowed extension is accepted first, rejected upon repetition */
+    ok(extension_bitmap_testandset(&bitmap, PTLS_HANDSHAKE_TYPE_SERVER_HELLO, PTLS_EXTENSION_TYPE_KEY_SHARE));
+    ok(!extension_bitmap_testandset(&bitmap, PTLS_HANDSHAKE_TYPE_SERVER_HELLO, PTLS_EXTENSION_TYPE_KEY_SHARE));
+}
+
 static void test_select_cipher(void)
 {
 #define C(x) ((x) >> 8) & 0xff, (x)&0xff
@@ -78,6 +90,7 @@ static void test_select_cipher(void)
 ptls_context_t *ctx, *ctx_peer;
 ptls_verify_certificate_t *verify_certificate;
 struct st_ptls_ffx_test_variants_t ffx_variants[7];
+static unsigned server_sc_callcnt, client_sc_callcnt, async_sc_callcnt;
 
 static ptls_cipher_suite_t *find_cipher(ptls_context_t *ctx, uint16_t id)
 {
@@ -195,6 +208,53 @@ static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
     ok(dec1len == SIZE_MAX);
 
     ptls_aead_free(c);
+}
+
+static void test_ciphersuite_stream(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
+{
+    const char *traffic_secret = "012345678901234567890123456789012345678901234567",
+               *text[] = {
+                   "CHAPTER I.\n",
+                   "Down the Rabbit-Hole\n",
+                   "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to do: once "
+                   "or twice she had peeped into the book her sister was reading, but it had no pictures or conversations in it, "
+                   "“and what is the use of a book,” thought Alice “without pictures or conversations?”\n",
+                   "So she was considering in her own mind (as well as she could, for the hot day made her feel very sleepy and "
+                   "stupid), whether the pleasure of making a daisy-chain would be worth the trouble of getting up and picking the "
+                   "daisies, when suddenly a White Rabbit with pink eyes ran close by her.\n",
+                   NULL,
+               };
+    ptls_aead_context_t *c;
+    char enc[1024], dec[1024];
+    size_t enclen, declen;
+
+    /* encrypt */
+    c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
+    assert(c != NULL);
+    ptls_aead_encrypt_init(c, 0, NULL, 0);
+    enclen = 0;
+    for (size_t i = 0; text[i] != NULL; ++i)
+        enclen += ptls_aead_encrypt_update(c, enc + enclen, text[i], strlen(text[i]));
+    enclen += ptls_aead_encrypt_final(c, enc + enclen);
+    ptls_aead_free(c);
+
+    /* decrypt */
+    c = ptls_aead_new(cs2->aead, cs2->hash, 0, traffic_secret, NULL);
+    declen = ptls_aead_decrypt(c, dec, enc, enclen, 0, NULL, 0);
+    ok(declen != SIZE_MAX);
+    ok(declen == enclen - cs1->aead->tag_size);
+    ptls_aead_free(c);
+
+    /* check text */
+    for (size_t i = 0, decoff = 0;; ++i) {
+        if (text[i] == NULL) {
+            ok(decoff == declen);
+            break;
+        }
+        ok(decoff + strlen(text[i]) <= declen);
+        ok(memcmp(dec + decoff, text[i], strlen(text[i])) == 0);
+        decoff += strlen(text[i]);
+    }
 }
 
 static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
@@ -359,6 +419,7 @@ static void test_aes128gcm(void)
                         *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256);
 
     test_ciphersuite(cs, cs_peer);
+    test_ciphersuite_stream(cs, cs_peer);
     test_aad_ciphersuite(cs, cs_peer);
     test_aad96_ciphersuite(cs, cs_peer);
 }
@@ -370,6 +431,7 @@ static void test_aes256gcm(void)
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
         test_aad96_ciphersuite(cs, cs_peer);
     }
@@ -382,6 +444,7 @@ static void test_chacha20poly1305(void)
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
         test_aad_ciphersuite(cs, cs_peer);
         test_aad96_ciphersuite(cs, cs_peer);
     }
@@ -497,6 +560,96 @@ static void test_base64_decode(void)
     ptls_buffer_dispose(&buf);
 }
 
+static void test_ech_decode_config(void)
+{
+    static ptls_hpke_kem_t p256 = {PTLS_HPKE_KEM_P256_SHA256}, *kems[] = {&p256, NULL};
+    static ptls_hpke_cipher_suite_t aes128gcmsha256 = {{PTLS_HPKE_HKDF_SHA256, PTLS_HPKE_AEAD_AES_128_GCM}},
+                                    *ciphers[] = {&aes128gcmsha256, NULL};
+    struct st_decoded_ech_config_t decoded;
+
+    { /* broken list */
+        const uint8_t *src = (const uint8_t *)"a", *end = src + 1;
+        int ret = decode_one_ech_config(kems, ciphers, &decoded, &src, end);
+        ok(ret == PTLS_ALERT_DECODE_ERROR);
+    }
+
+    {
+        ptls_iovec_t input = ptls_iovec_init(ECH_CONFIG_LIST, sizeof(ECH_CONFIG_LIST) - 1);
+        const uint8_t *src = input.base + 6 /* dive into ECHConfigContents */, *const end = input.base + input.len;
+        int ret = decode_one_ech_config(kems, ciphers, &decoded, &src, end);
+        ok(ret == 0);
+        ok(decoded.id == 0x12);
+        ok(decoded.kem == &p256);
+        ok(decoded.public_key.len == 65);
+        ok(decoded.public_key.base == input.base + 11);
+        ok(decoded.cipher == &aes128gcmsha256);
+        ok(decoded.max_name_length == 64);
+        ok(decoded.public_name.len == sizeof("example.com") - 1);
+        ok(memcmp(decoded.public_name.base, "example.com", sizeof("example.com") - 1) == 0);
+    }
+}
+
+static void test_rebuild_ch_inner(void)
+{
+    ptls_buffer_t buf;
+    ptls_buffer_init(&buf, "", 0);
+
+#define TEST(_expected_err)                                                                                                        \
+    do {                                                                                                                           \
+        const uint8_t *src = encoded_inner;                                                                                        \
+        buf.off = 0;                                                                                                               \
+        ok(rebuild_ch_inner_extensions(&buf, &src, encoded_inner + sizeof(encoded_inner), outer, outer + sizeof(outer)) ==         \
+           _expected_err);                                                                                                         \
+        if (_expected_err == 0) {                                                                                                  \
+            ok(src == encoded_inner + sizeof(encoded_inner));                                                                      \
+            ok(buf.off == sizeof(expected));                                                                                       \
+            ok(memcmp(buf.base, expected, sizeof(expected)) == 0);                                                                 \
+        }                                                                                                                          \
+    } while (0)
+
+    { /* replace none */
+        static const uint8_t encoded_inner[] = {0x00, 0x09, 0x12, 0x34, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f},
+                             outer[] = {0xde, 0xad},
+                             expected[] = {0x00, 0x09, 0x12, 0x34, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f};
+        TEST(0);
+    }
+
+    { /* replace one */
+        static const uint8_t encoded_inner[] = {0x00, 0x07, 0xfd, 0x00, 0x00, 0x03, 0x02, 0x00, 0x01},
+                             outer[] = {0x00, 0x01, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f},
+                             expected[] = {0x00, 0x09, 0x00, 0x01, 0x00, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f};
+        TEST(0);
+    }
+
+    { /* replace multi */
+        static const uint8_t encoded_inner[] = {0x00, 0x13, 0x00, 0x01, 0x00, 0x01, 0x31, 0xfd, 0x00, 0x00, 0x05,
+                                                0x04, 0x00, 0x02, 0x00, 0x04, 0x00, 0x05, 0x00, 0x01, 0x35},
+                             outer[] = {0x00, 0x01, 0x00, 0x01, 0x41, 0x00, 0x02, 0x00, 0x01, 0x42, 0x00, 0x03, 0x00,
+                                        0x01, 0x43, 0x00, 0x04, 0x00, 0x01, 0x44, 0x00, 0x05, 0x00, 0x01, 0x45},
+                             expected[] = {0x00, 0x14, 0x00, 0x01, 0x00, 0x01, 0x31, 0x00, 0x02, 0x00, 0x01,
+                                           0x42, 0x00, 0x04, 0x00, 0x01, 0x44, 0x00, 0x05, 0x00, 0x01, 0x35};
+        TEST(0);
+    }
+
+    { /* outer extension not found */
+        static const uint8_t encoded_inner[] = {0x00, 0x13, 0x00, 0x01, 0x00, 0x01, 0x31, 0xfd, 0x00, 0x00, 0x05,
+                                                0x04, 0x00, 0x02, 0x00, 0x04, 0x00, 0x05, 0x00, 0x01, 0x35},
+                             outer[] = {0x00, 0x01, 0x00, 0x01, 0x41, 0x00, 0x02, 0x00, 0x01, 0x42, 0x00, 0x03, 0x00, 0x01, 0x43},
+                             expected[] = {0x00, 0x14, 0x00, 0x01, 0x00, 0x01, 0x31, 0x00, 0x02, 0x00, 0x01,
+                                           0x42, 0x00, 0x04, 0x00, 0x01, 0x44, 0x00, 0x05, 0x00, 0x01, 0x35};
+        TEST(PTLS_ALERT_ILLEGAL_PARAMETER);
+    }
+
+#undef TEST
+    ptls_buffer_dispose(&buf);
+}
+
+static void test_ech(void)
+{
+    subtest("decode-config", test_ech_decode_config);
+    subtest("rebuild_ch_inner", test_rebuild_ch_inner);
+}
+
 static struct {
     struct {
         uint8_t buf[32];
@@ -604,16 +757,12 @@ static void test_fragmented_message(void)
 #undef SET_RECORD
 }
 
-static int was_esni;
-
 static int save_client_hello(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
     ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     if (params->negotiated_protocols.count != 0)
         ptls_set_negotiated_protocol(tls, (const char *)params->negotiated_protocols.list[0].base,
                                      params->negotiated_protocols.list[0].len);
-    if (params->esni)
-        ++was_esni;
     return 0;
 }
 
@@ -632,6 +781,15 @@ static int on_extension_cb(ptls_on_extension_t *self, ptls_t *tls, uint8_t hstyp
     return 0;
 }
 
+static int can_ech(ptls_context_t *ctx, int is_server)
+{
+    if (is_server) {
+        return ctx->ech.server.create_opener != NULL;
+    } else {
+        return ctx->ech.client.ciphers != NULL;
+    }
+}
+
 static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int check_ch, int require_client_authentication)
 {
     ptls_t *client, *server;
@@ -642,6 +800,10 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     int ret;
     const char *req = "GET / HTTP/1.0\r\n\r\n";
     const char *resp = "HTTP/1.0 200 OK\r\n\r\nhello world\n";
+
+    client_sc_callcnt = 0;
+    server_sc_callcnt = 0;
+    async_sc_callcnt = 0;
 
     if (check_ch)
         ctx->verify_certificate = verify_certificate;
@@ -661,16 +823,16 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ptls_set_server_name(client, "test.example.com", 0);
     }
 
+    if (can_ech(ctx, 0)) {
+        ptls_set_server_name(client, "test.example.com", 0);
+        client_hs_prop.client.ech.configs = ptls_iovec_init(ECH_CONFIG_LIST, sizeof(ECH_CONFIG_LIST) - 1);
+    }
+
     static ptls_on_extension_t cb = {on_extension_cb};
     ctx_peer->on_extension = &cb;
 
     if (require_client_authentication)
         ctx_peer->require_client_authentication = 1;
-
-    if (ctx_peer->esni != NULL) {
-        was_esni = 0;
-        client_hs_prop.client.esni_keys = ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1);
-    }
 
     switch (mode) {
     case TEST_HANDSHAKE_HRR:
@@ -725,19 +887,26 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
 
     if (require_client_authentication) {
+        /* at the moment, async sign-certificate is not supported in this path, neither on the client-side or the server-side */
         ok(ptls_is_psk_handshake(server) == 0);
         ok(ret == PTLS_ERROR_IN_PROGRESS);
-    } else {
+    } else if (mode == TEST_HANDSHAKE_EARLY_DATA) {
         ok(ret == 0);
+    } else {
+        ok(ret == 0 || ret == PTLS_ERROR_ASYNC_OPERATION);
     }
 
     ok(sbuf.off != 0);
     if (check_ch) {
         ok(ptls_get_server_name(server) != NULL);
-        ok(strcmp(ptls_get_server_name(server), "test.example.com") == 0);
+        if (can_ech(ctx, 0) && !can_ech(ctx_peer, 1)) {
+            /* server should be using CHouter.sni that includes the public name of the ECH extension */
+            ok(strcmp(ptls_get_server_name(server), "example.com") == 0);
+        } else {
+            ok(strcmp(ptls_get_server_name(server), "test.example.com") == 0);
+        }
         ok(ptls_get_negotiated_protocol(server) != NULL);
         ok(strcmp(ptls_get_negotiated_protocol(server), "h2") == 0);
-        ok(was_esni == (ctx_peer->esni != NULL));
     } else {
         ok(ptls_get_server_name(server) == NULL);
         ok(ptls_get_negotiated_protocol(server) == NULL);
@@ -763,6 +932,21 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     } else {
         ok(consumed == cbuf.off);
         cbuf.off = 0;
+    }
+
+    while (ret == PTLS_ERROR_ASYNC_OPERATION) {
+        consumed = sbuf.off;
+        ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ok(consumed == sbuf.off);
+        ok(cbuf.off == 0);
+        sbuf.off = 0;
+        ret = ptls_handshake(server, &sbuf, NULL, NULL, &server_hs_prop);
+    }
+    if (require_client_authentication) {
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+    } else {
+        ok(ret == 0);
     }
 
     consumed = sbuf.off;
@@ -867,6 +1051,14 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         decbuf.off = 0;
     }
 
+    if (can_ech(ctx_peer, 1) && can_ech(ctx, 0)) {
+        ok(ptls_is_ech_handshake(client, NULL, NULL, NULL));
+        ok(ptls_is_ech_handshake(server, NULL, NULL, NULL));
+    } else {
+        ok(!ptls_is_ech_handshake(client, NULL, NULL, NULL));
+        ok(!ptls_is_ech_handshake(server, NULL, NULL, NULL));
+    }
+
     ptls_buffer_dispose(&cbuf);
     ptls_buffer_dispose(&sbuf);
     ptls_buffer_dispose(&decbuf);
@@ -882,58 +1074,86 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
 }
 
 static ptls_sign_certificate_t *sc_orig;
-size_t sc_callcnt;
 
-static int sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output,
-                            ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+static int sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                            ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
-    ++sc_callcnt;
-    return sc_orig->cb(sc_orig, tls, selected_algorithm, output, input, algorithms, num_algorithms);
+    ++*(ptls_is_server(tls) ? &server_sc_callcnt : &client_sc_callcnt);
+    return sc_orig->cb(sc_orig, tls, async, selected_algorithm, output, input, algorithms, num_algorithms);
+}
+
+static int async_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async,
+                                  uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+                                  const uint16_t *algorithms, size_t num_algorithms)
+{
+    static struct {
+        ptls_async_job_t super;
+        uint16_t selected_algorithm;
+    } async_ctx;
+
+    if (async != NULL) {
+        if (*async == NULL) {
+            /* first invocation, make a fake call to the backend and obtain the algorithm, return it, but not the signature */
+            ptls_buffer_t fakebuf;
+            ptls_buffer_init(&fakebuf, "", 0);
+            int ret = sign_certificate(self, tls, NULL, selected_algorithm, &fakebuf, input, algorithms, num_algorithms);
+            assert(ret == 0);
+            ptls_buffer_dispose(&fakebuf);
+            async_ctx.super.destroy_ = (void (*)(ptls_async_job_t *))0xdeadbeef;
+            async_ctx.selected_algorithm = *selected_algorithm;
+            *async = &async_ctx.super;
+            --server_sc_callcnt;
+            ++async_sc_callcnt;
+            return PTLS_ERROR_ASYNC_OPERATION;
+        } else {
+            /* second invocation, restore algorithm, and delegate the call */
+            assert(*async == &async_ctx.super);
+            assert(algorithms == NULL);
+            algorithms = &async_ctx.selected_algorithm;
+            num_algorithms = 1;
+            *async = NULL;
+        }
+    }
+
+    return sign_certificate(self, tls, NULL, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
 static ptls_sign_certificate_t *second_sc_orig;
 
-static int second_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *output,
-                                   ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+static int second_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, ptls_async_job_t **async,
+                                   uint16_t *selected_algorithm, ptls_buffer_t *output, ptls_iovec_t input,
+                                   const uint16_t *algorithms, size_t num_algorithms)
 {
-    ++sc_callcnt;
-    return second_sc_orig->cb(second_sc_orig, tls, selected_algorithm, output, input, algorithms, num_algorithms);
+    ++*(ptls_is_server(tls) ? &server_sc_callcnt : &client_sc_callcnt);
+    return second_sc_orig->cb(second_sc_orig, tls, async, selected_algorithm, output, input, algorithms, num_algorithms);
 }
 
-static void test_full_handshake_impl(int require_client_authentication)
+static void test_full_handshake_impl(int require_client_authentication, int is_async)
 {
-    sc_callcnt = 0;
+    test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_1RTT, 0, 0, require_client_authentication);
+    ok(server_sc_callcnt == 1);
+    ok(async_sc_callcnt == is_async);
+    ok(client_sc_callcnt == require_client_authentication);
 
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_1RTT, 0, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 2);
-    } else {
-        ok(sc_callcnt == 1);
-    }
-
-    test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_1RTT, 0, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 4);
-    } else {
-        ok(sc_callcnt == 2);
-    }
+    ok(server_sc_callcnt == 1);
+    ok(async_sc_callcnt == is_async);
+    ok(client_sc_callcnt == require_client_authentication);
 
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_1RTT, 0, 1, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 6);
-    } else {
-        ok(sc_callcnt == 3);
-    }
+    ok(server_sc_callcnt == 1);
+    ok(async_sc_callcnt == is_async);
+    ok(client_sc_callcnt == require_client_authentication);
 }
 
 static void test_full_handshake(void)
 {
-    test_full_handshake_impl(0);
+    test_full_handshake_impl(0, 0);
 }
 
 static void test_full_handshake_with_client_authentication(void)
 {
-    test_full_handshake_impl(1);
+    test_full_handshake_impl(1, 0);
 }
 
 static void test_key_update(void)
@@ -943,16 +1163,14 @@ static void test_key_update(void)
 
 static void test_hrr_handshake(void)
 {
-    sc_callcnt = 0;
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_HRR, 0, 0, 0);
-    ok(sc_callcnt == 1);
+    ok(server_sc_callcnt == 1);
 }
 
 static void test_hrr_stateless_handshake(void)
 {
-    sc_callcnt = 0;
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_HRR_STATELESS, 0, 0, 0);
-    ok(sc_callcnt == 1);
+    ok(server_sc_callcnt == 1);
 }
 
 static int on_copy_ticket(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src)
@@ -1003,44 +1221,31 @@ static void test_resumption_impl(int different_preferred_key_share, int require_
     ctx_peer->encrypt_ticket = &et;
     ctx->save_ticket = &st;
 
-    sc_callcnt = 0;
     test_handshake(saved_ticket, different_preferred_key_share ? TEST_HANDSHAKE_2RTT : TEST_HANDSHAKE_1RTT, 1, 0, 0);
-    ok(sc_callcnt == 1);
+    ok(server_sc_callcnt == 1);
     ok(saved_ticket.base != NULL);
 
     /* psk using saved ticket */
     test_handshake(saved_ticket, TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 3);
-    } else {
-        ok(sc_callcnt == 1);
-    }
+    ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
+    ok(client_sc_callcnt == require_client_authentication);
 
     /* 0-rtt psk using saved ticket */
     test_handshake(saved_ticket, TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 5);
-    } else {
-        ok(sc_callcnt == 1);
-    }
+    ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
+    ok(client_sc_callcnt == require_client_authentication);
 
     ctx->require_dhe_on_psk = 1;
 
     /* psk-dhe using saved ticket */
     test_handshake(saved_ticket, TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 7);
-    } else {
-        ok(sc_callcnt == 1);
-    }
+    ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
+    ok(client_sc_callcnt == require_client_authentication);
 
     /* 0-rtt psk-dhe using saved ticket */
     test_handshake(saved_ticket, TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication);
-    if (require_client_authentication) {
-        ok(sc_callcnt == 9);
-    } else {
-        ok(sc_callcnt == 1);
-    }
+    ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
+    ok(client_sc_callcnt == require_client_authentication);
 
     ctx->require_dhe_on_psk = 0;
     ctx_peer->ticket_lifetime = 0;
@@ -1065,6 +1270,18 @@ static void test_resumption_different_preferred_key_share(void)
 static void test_resumption_with_client_authentication(void)
 {
     test_resumption_impl(0, 1);
+}
+
+static void test_async_sign_certificate(void)
+{
+    assert(ctx_peer->sign_certificate->cb == sign_certificate);
+
+    ptls_sign_certificate_t async_sc = {async_sign_certificate}, *orig_sc = ctx_peer->sign_certificate;
+    ctx_peer->sign_certificate = &async_sc;
+
+    test_full_handshake_impl(0, 1);
+
+    ctx_peer->sign_certificate = orig_sc;
 }
 
 static void test_enforce_retry(int use_cookie)
@@ -1210,6 +1427,63 @@ static void test_stateless_hrr_aad_change(void)
 
     ptls_buffer_dispose(&cbuf);
     ptls_buffer_dispose(&sbuf);
+}
+
+static void test_ech_config_mismatch(void)
+{
+    ptls_t *client, *server;
+    ptls_buffer_t cbuf, sbuf, decryptbuf;
+    size_t consumed;
+    int ret;
+    ptls_iovec_t retry_configs = {NULL};
+    ptls_handshake_properties_t client_hs_prop = {
+        .client.ech = {
+            .configs = ptls_iovec_init((void *)ECH_ALTERNATIVE_CONFIG_LIST, sizeof(ECH_ALTERNATIVE_CONFIG_LIST) - 1),
+            .retry_configs = &retry_configs,
+        }};
+
+    client = ptls_new(ctx, 0);
+    ptls_set_server_name(client, "test.example.com", 0);
+    server = ptls_new(ctx_peer, 1);
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(&sbuf, "", 0);
+    ptls_buffer_init(&decryptbuf, "", 0);
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_hs_prop);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(cbuf.off == consumed);
+    cbuf.off = 0;
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, &client_hs_prop);
+    ok(ret == PTLS_ALERT_ECH_REQUIRED);
+    ok(sbuf.off == consumed);
+    ok(retry_configs.len == sizeof(ECH_CONFIG_LIST) - 1);
+    ok(memcmp(retry_configs.base, ECH_CONFIG_LIST, retry_configs.len) == 0);
+    sbuf.off = 0;
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed < cbuf.off);
+    memmove(cbuf.base, cbuf.base + consumed, cbuf.off - consumed);
+    cbuf.off -= consumed;
+
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decryptbuf, cbuf.base, &consumed);
+    ok(ret == PTLS_ALERT_TO_PEER_ERROR(PTLS_ALERT_ECH_REQUIRED));
+    ok(cbuf.off == consumed);
+
+    ptls_free(client);
+    ptls_free(server);
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&decryptbuf);
+    free(retry_configs.base);
 }
 
 typedef uint8_t traffic_secrets_t[2 /* is_enc */][4 /* epoch */][PTLS_MAX_DIGEST_SIZE /* octets */];
@@ -1497,6 +1771,28 @@ static void test_handshake_api(void)
     ctx_peer->max_early_data_size = 0;
 }
 
+static void test_all_handshakes_core(void)
+{
+    subtest("full-handshake", test_full_handshake);
+    subtest("full-handshake+client-auth", test_full_handshake_with_client_authentication);
+    subtest("hrr-handshake", test_hrr_handshake);
+    /* resumption does not work when the client offers ECH but the server does not recognize that */
+    if (!(can_ech(ctx, 0) && !can_ech(ctx_peer, 1))) {
+        subtest("resumption", test_resumption);
+        subtest("resumption-different-preferred-key-share", test_resumption_different_preferred_key_share);
+        subtest("resumption-with-client-authentication", test_resumption_with_client_authentication);
+    }
+    subtest("async-sign-certificate", test_async_sign_certificate);
+    subtest("enforce-retry-stateful", test_enforce_retry_stateful);
+    if (!(can_ech(ctx_peer, 1) && can_ech(ctx, 0))) {
+        subtest("hrr-stateless-handshake", test_hrr_stateless_handshake);
+        subtest("enforce-retry-stateless", test_enforce_retry_stateless);
+        subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
+    }
+    subtest("key-update", test_key_update);
+    subtest("handshake-api", test_handshake_api);
+}
+
 static void test_all_handshakes(void)
 {
     ptls_sign_certificate_t server_sc = {sign_certificate};
@@ -1509,22 +1805,27 @@ static void test_all_handshakes(void)
         ctx->sign_certificate = &client_sc;
     }
 
-    subtest("full-handshake", test_full_handshake);
-    subtest("full-handshake-with-client-authentication", test_full_handshake_with_client_authentication);
-    subtest("hrr-handshake", test_hrr_handshake);
-    subtest("hrr-stateless-handshake", test_hrr_stateless_handshake);
-    subtest("resumption", test_resumption);
-    subtest("resumption-different-preferred-key-share", test_resumption_different_preferred_key_share);
-    subtest("resumption-with-client-authentication", test_resumption_with_client_authentication);
+    struct {
+        ptls_ech_create_opener_t *create_opener;
+        ptls_hpke_cipher_suite_t **client_ciphers;
+    } orig_ech = {ctx_peer->ech.server.create_opener, ctx->ech.client.ciphers};
 
-    subtest("enforce-retry-stateful", test_enforce_retry_stateful);
-    subtest("enforce-retry-stateless", test_enforce_retry_stateless);
+    /* first run tests wo. ECH */
+    ctx_peer->ech.server.create_opener = NULL;
+    ctx->ech.client.ciphers = NULL;
+    subtest("no-ech", test_all_handshakes_core);
+    ctx_peer->ech.server.create_opener = orig_ech.create_opener;
+    ctx->ech.client.ciphers = orig_ech.client_ciphers;
 
-    subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
-
-    subtest("key-update", test_key_update);
-
-    subtest("handshake-api", test_handshake_api);
+    if (can_ech(ctx_peer, 1) && can_ech(ctx, 0)) {
+        subtest("ech", test_all_handshakes_core);
+        if (ctx != ctx_peer) {
+            ctx->ech.client.ciphers = NULL;
+            subtest("ech (server-only)", test_all_handshakes_core);
+            ctx->ech.client.ciphers = orig_ech.client_ciphers;
+        }
+        subtest("ech-config-mismatch", test_ech_config_mismatch);
+    }
 
     ctx_peer->sign_certificate = sc_orig;
 
@@ -1617,74 +1918,122 @@ static void test_quic(void)
     subtest("block", test_quicblock);
 }
 
-static int test_legacy_ch_callback_called = 0;
-
-static const uint8_t legacy_ch_tls12[] = {
-    0x16, 0x03, 0x01, 0x00, 0xd2, 0x01, 0x00, 0x00, 0xce, 0x03, 0x03, 0xd1, 0x01, 0x0e, 0x39, 0xea, 0x22, 0x28, 0x89, 0x99,
-    0x42, 0xec, 0x70, 0xfa, 0xb3, 0x47, 0x01, 0xce, 0x61, 0x8d, 0xee, 0x0e, 0x3e, 0xf7, 0xe9, 0x4f, 0x0a, 0x8e, 0x94, 0x28,
-    0xe5, 0xe3, 0xd3, 0x00, 0x00, 0x5c, 0xc0, 0x30, 0xc0, 0x2c, 0xc0, 0x28, 0xc0, 0x24, 0xc0, 0x14, 0xc0, 0x0a, 0x00, 0x9f,
-    0x00, 0x6b, 0x00, 0x39, 0xcc, 0xa9, 0xcc, 0xa8, 0xcc, 0xaa, 0xff, 0x85, 0x00, 0xc4, 0x00, 0x88, 0x00, 0x81, 0x00, 0x9d,
-    0x00, 0x3d, 0x00, 0x35, 0x00, 0xc0, 0x00, 0x84, 0xc0, 0x2f, 0xc0, 0x2b, 0xc0, 0x27, 0xc0, 0x23, 0xc0, 0x13, 0xc0, 0x09,
-    0x00, 0x9e, 0x00, 0x67, 0x00, 0x33, 0x00, 0xbe, 0x00, 0x45, 0x00, 0x9c, 0x00, 0x3c, 0x00, 0x2f, 0x00, 0xba, 0x00, 0x41,
-    0xc0, 0x11, 0xc0, 0x07, 0x00, 0x05, 0x00, 0x04, 0xc0, 0x12, 0xc0, 0x08, 0x00, 0x16, 0x00, 0x0a, 0x00, 0xff, 0x01, 0x00,
-    0x00, 0x49, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x0d, 0x00, 0x00, 0x0a, 0x69, 0x5f, 0x6e, 0x65, 0x65, 0x64, 0x5f, 0x73, 0x6e,
-    0x69, 0x00, 0x0b, 0x00, 0x02, 0x01, 0x00, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x18, 0x00,
-    0x23, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x1c, 0x00, 0x1a, 0x06, 0x01, 0x06, 0x03, 0xef, 0xef, 0x05, 0x01, 0x05, 0x03, 0x04,
-    0x01, 0x04, 0x03, 0xee, 0xee, 0xed, 0xed, 0x03, 0x01, 0x03, 0x03, 0x02, 0x01, 0x02, 0x03};
+static ptls_on_client_hello_parameters_t *legacy_params;
 
 static int test_legacy_ch_tls12_callback(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
 {
-    test_legacy_ch_callback_called = 1;
-    ok(params->incompatible_version);
-    ok(sizeof(legacy_ch_tls12) - 5 == params->raw_message.len);
-    ok(memcmp(legacy_ch_tls12 + 5, params->raw_message.base, params->raw_message.len) == 0);
-    ok(params->server_name.len == sizeof("i-need_sni") - 1);
-    ok(memcmp(params->server_name.base, "i_need_sni", sizeof("i-need_sni") - 1) == 0);
+    assert(legacy_params == NULL);
+    legacy_params = malloc(sizeof(*legacy_params));
+    *legacy_params = *params;
     return 0;
 }
 
-static const uint8_t legacy_ch_tls11[] = {
-    0x16, 0x03, 0x01, 0x00, 0x71, 0x01, 0x00, 0x00, 0x6d, 0x03, 0x02, 0xa5, 0xac, 0xfc, 0xef, 0x36, 0xa0, 0x4e, 0x1b, 0xa1,
-    0x9d, 0x01, 0x98, 0x3e, 0xae, 0x07, 0x2e, 0x23, 0xdc, 0xce, 0x62, 0xc8, 0xb6, 0x7e, 0xd0, 0x5c, 0x2e, 0xeb, 0x63, 0x26,
-    0x74, 0xe7, 0x61, 0x00, 0x00, 0x2e, 0xc0, 0x14, 0xc0, 0x0a, 0x00, 0x39, 0xff, 0x85, 0x00, 0x88, 0x00, 0x81, 0x00, 0x35,
-    0x00, 0x84, 0xc0, 0x13, 0xc0, 0x09, 0x00, 0x33, 0x00, 0x45, 0x00, 0x2f, 0x00, 0x41, 0xc0, 0x11, 0xc0, 0x07, 0x00, 0x05,
-    0x00, 0x04, 0xc0, 0x12, 0xc0, 0x08, 0x00, 0x16, 0x00, 0x0a, 0x00, 0xff, 0x01, 0x00, 0x00, 0x16, 0x00, 0x0b, 0x00, 0x02,
-    0x01, 0x00, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x18, 0x00, 0x23, 0x00, 0x00};
-
-static int test_legacy_ch_tls11_callback(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
+static void test_legacy_ch(void)
 {
-    test_legacy_ch_callback_called = 1;
-    ok(params->incompatible_version);
-    ok(sizeof(legacy_ch_tls11) - 5 == params->raw_message.len);
-    ok(memcmp(legacy_ch_tls11 + 5, params->raw_message.base, params->raw_message.len) == 0);
-    ok(params->server_name.len == 0);
-    ok(params->server_name.base == NULL);
-    return 0;
-}
+    static const uint8_t tls12[] = {
+        0x16, 0x03, 0x01, 0x00, 0xd2, 0x01, 0x00, 0x00, 0xce, 0x03, 0x03, 0xd1, 0x01, 0x0e, 0x39, 0xea, 0x22, 0x28, 0x89, 0x99,
+        0x42, 0xec, 0x70, 0xfa, 0xb3, 0x47, 0x01, 0xce, 0x61, 0x8d, 0xee, 0x0e, 0x3e, 0xf7, 0xe9, 0x4f, 0x0a, 0x8e, 0x94, 0x28,
+        0xe5, 0xe3, 0xd3, 0x00, 0x00, 0x5c, 0xc0, 0x30, 0xc0, 0x2c, 0xc0, 0x28, 0xc0, 0x24, 0xc0, 0x14, 0xc0, 0x0a, 0x00, 0x9f,
+        0x00, 0x6b, 0x00, 0x39, 0xcc, 0xa9, 0xcc, 0xa8, 0xcc, 0xaa, 0xff, 0x85, 0x00, 0xc4, 0x00, 0x88, 0x00, 0x81, 0x00, 0x9d,
+        0x00, 0x3d, 0x00, 0x35, 0x00, 0xc0, 0x00, 0x84, 0xc0, 0x2f, 0xc0, 0x2b, 0xc0, 0x27, 0xc0, 0x23, 0xc0, 0x13, 0xc0, 0x09,
+        0x00, 0x9e, 0x00, 0x67, 0x00, 0x33, 0x00, 0xbe, 0x00, 0x45, 0x00, 0x9c, 0x00, 0x3c, 0x00, 0x2f, 0x00, 0xba, 0x00, 0x41,
+        0xc0, 0x11, 0xc0, 0x07, 0x00, 0x05, 0x00, 0x04, 0xc0, 0x12, 0xc0, 0x08, 0x00, 0x16, 0x00, 0x0a, 0x00, 0xff, 0x01, 0x00,
+        0x00, 0x49, 0x00, 0x00, 0x00, 0x0f, 0x00, 0x0d, 0x00, 0x00, 0x0a, 0x69, 0x5f, 0x6e, 0x65, 0x65, 0x64, 0x5f, 0x73, 0x6e,
+        0x69, 0x00, 0x0b, 0x00, 0x02, 0x01, 0x00, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x18, 0x00,
+        0x23, 0x00, 0x00, 0x00, 0x0d, 0x00, 0x1c, 0x00, 0x1a, 0x06, 0x01, 0x06, 0x03, 0xef, 0xef, 0x05, 0x01, 0x05, 0x03, 0x04,
+        0x01, 0x04, 0x03, 0xee, 0xee, 0xed, 0xed, 0x03, 0x01, 0x03, 0x03, 0x02, 0x01, 0x02, 0x03};
+    static const uint8_t tls11[] = {
+        0x16, 0x03, 0x01, 0x00, 0x71, 0x01, 0x00, 0x00, 0x6d, 0x03, 0x02, 0xa5, 0xac, 0xfc, 0xef, 0x36, 0xa0, 0x4e, 0x1b, 0xa1,
+        0x9d, 0x01, 0x98, 0x3e, 0xae, 0x07, 0x2e, 0x23, 0xdc, 0xce, 0x62, 0xc8, 0xb6, 0x7e, 0xd0, 0x5c, 0x2e, 0xeb, 0x63, 0x26,
+        0x74, 0xe7, 0x61, 0x00, 0x00, 0x2e, 0xc0, 0x14, 0xc0, 0x0a, 0x00, 0x39, 0xff, 0x85, 0x00, 0x88, 0x00, 0x81, 0x00, 0x35,
+        0x00, 0x84, 0xc0, 0x13, 0xc0, 0x09, 0x00, 0x33, 0x00, 0x45, 0x00, 0x2f, 0x00, 0x41, 0xc0, 0x11, 0xc0, 0x07, 0x00, 0x05,
+        0x00, 0x04, 0xc0, 0x12, 0xc0, 0x08, 0x00, 0x16, 0x00, 0x0a, 0x00, 0xff, 0x01, 0x00, 0x00, 0x16, 0x00, 0x0b, 0x00, 0x02,
+        0x01, 0x00, 0x00, 0x0a, 0x00, 0x08, 0x00, 0x06, 0x00, 0x1d, 0x00, 0x17, 0x00, 0x18, 0x00, 0x23, 0x00, 0x00};
+    static const uint8_t tls10_no_exts[] = {
+        0x16, 0x03, 0x01, 0x00, 0x4b, 0x01, 0x00, 0x00, 0x47, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x05, 0x00, 0x2f, 0x00, 0x33, 0x00, 0x32, 0x00, 0x0a, 0x00, 0x16,
+        0x00, 0x13, 0x00, 0x09, 0x00, 0x15, 0x00, 0x12, 0x00, 0x03, 0x00, 0x08, 0x00, 0x14, 0x00, 0x11, 0x00, 0xff, 0x01, 0x00};
+    /* client hello generated by openssl 1.0.0s; s_client -bugs -no_ticket -cipher DES-CBC-SHA -connect */
+    static const uint8_t tls10_with_exts[] = {0x16, 0x03, 0x01, 0x00, 0x2f, 0x01, 0x00, 0x00, 0x2b, 0x03, 0x01, 0x63, 0xfc,
+                                              0x5a, 0x16, 0xde, 0x7a, 0xfc, 0xc1, 0x0c, 0x54, 0x12, 0xa6, 0xd3, 0x8c, 0xcf,
+                                              0xda, 0xd3, 0xcc, 0x50, 0x19, 0x42, 0x5c, 0xb0, 0x81, 0xf6, 0xe2, 0xf9, 0x4b,
+                                              0x06, 0x71, 0x68, 0x38, 0x00, 0x00, 0x04, 0x00, 0x09, 0x00, 0xff, 0x01, 0x00};
+    /* client hello generated by openssl 0.9.8; we do not bother parsing it */
+    static const uint8_t ssl2[] = {
+        0x80, 0x80, 0x01, 0x03, 0x01, 0x00, 0x57, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00, 0x16, 0x00, 0x00, 0x13, 0x00, 0x00,
+        0x0a, 0x07, 0x00, 0xc0, 0x00, 0x00, 0x66, 0x00, 0x00, 0x07, 0x00, 0x00, 0x05, 0x00, 0x00, 0x04, 0x05, 0x00, 0x80,
+        0x03, 0x00, 0x80, 0x01, 0x00, 0x80, 0x08, 0x00, 0x80, 0x00, 0x00, 0x65, 0x00, 0x00, 0x64, 0x00, 0x00, 0x63, 0x00,
+        0x00, 0x62, 0x00, 0x00, 0x61, 0x00, 0x00, 0x60, 0x00, 0x00, 0x15, 0x00, 0x00, 0x12, 0x00, 0x00, 0x09, 0x06, 0x00,
+        0x40, 0x00, 0x00, 0x14, 0x00, 0x00, 0x11, 0x00, 0x00, 0x08, 0x00, 0x00, 0x06, 0x00, 0x00, 0x03, 0x04, 0x00, 0x80,
+        0x02, 0x00, 0x80, 0xfb, 0xb8, 0x0c, 0x85, 0xac, 0x46, 0x33, 0x39, 0x70, 0x40, 0x8e, 0x39, 0x05, 0x92, 0x9f, 0xa6,
+        0x6d, 0x34, 0xd3, 0x91, 0x23, 0xaf, 0xbe, 0x51, 0x50, 0x72, 0x32, 0xbb, 0xda, 0x8c, 0xf4, 0x35};
 
-static void test_tls12_hello(void)
-{
     ptls_on_client_hello_t on_client_hello = {test_legacy_ch_tls12_callback}, *orig = ctx->on_client_hello;
     ctx->on_client_hello = &on_client_hello;
 
     ptls_buffer_t sendbuf;
     ptls_buffer_init(&sendbuf, "", 0);
 
-    test_legacy_ch_callback_called = 0;
     ptls_t *tls = ptls_new(ctx, 1);
-    size_t len = sizeof(legacy_ch_tls12);
-    int ret = ptls_handshake(tls, &sendbuf, legacy_ch_tls12, &len, NULL);
+    size_t len = sizeof(tls12);
+    int ret = ptls_handshake(tls, &sendbuf, tls12, &len, NULL);
     ptls_free(tls);
     ok(ret == PTLS_ALERT_PROTOCOL_VERSION);
-    ok(test_legacy_ch_callback_called);
+    ok(legacy_params != NULL);
+    ok(legacy_params->incompatible_version);
+    ok(sizeof(tls12) - 5 == legacy_params->raw_message.len);
+    ok(memcmp(tls12 + 5, legacy_params->raw_message.base, legacy_params->raw_message.len) == 0);
+    ok(legacy_params->server_name.len == sizeof("i-need_sni") - 1);
+    ok(memcmp(legacy_params->server_name.base, "i_need_sni", sizeof("i-need_sni") - 1) == 0);
+    free(legacy_params);
+    legacy_params = NULL;
 
-    on_client_hello.cb = test_legacy_ch_tls11_callback;
-    test_legacy_ch_callback_called = 0;
     tls = ptls_new(ctx, 1);
-    len = sizeof(legacy_ch_tls11);
-    ret = ptls_handshake(tls, &sendbuf, legacy_ch_tls11, &len, NULL);
+    len = sizeof(tls11);
+    ret = ptls_handshake(tls, &sendbuf, tls11, &len, NULL);
     ptls_free(tls);
     ok(ret == PTLS_ALERT_PROTOCOL_VERSION);
+    ok(legacy_params->incompatible_version);
+    ok(sizeof(tls11) - 5 == legacy_params->raw_message.len);
+    ok(memcmp(tls11 + 5, legacy_params->raw_message.base, legacy_params->raw_message.len) == 0);
+    ok(legacy_params->server_name.len == 0);
+    ok(legacy_params->server_name.base == NULL);
+    free(legacy_params);
+    legacy_params = NULL;
+
+    tls = ptls_new(ctx, 1);
+    len = sizeof(tls10_no_exts);
+    ret = ptls_handshake(tls, &sendbuf, tls10_no_exts, &len, NULL);
+    ptls_free(tls);
+    ok(ret == PTLS_ALERT_PROTOCOL_VERSION);
+    ok(legacy_params->incompatible_version);
+    ok(sizeof(tls10_no_exts) - 5 == legacy_params->raw_message.len);
+    ok(memcmp(tls10_no_exts + 5, legacy_params->raw_message.base, legacy_params->raw_message.len) == 0);
+    ok(legacy_params->server_name.len == 0);
+    ok(legacy_params->server_name.base == NULL);
+    free(legacy_params);
+    legacy_params = NULL;
+
+    tls = ptls_new(ctx, 1);
+    len = sizeof(tls10_with_exts);
+    ret = ptls_handshake(tls, &sendbuf, tls10_with_exts, &len, NULL);
+    ptls_free(tls);
+    ok(ret == PTLS_ALERT_PROTOCOL_VERSION);
+    ok(legacy_params->incompatible_version);
+    ok(sizeof(tls10_with_exts) - 5 == legacy_params->raw_message.len);
+    ok(memcmp(tls10_with_exts + 5, legacy_params->raw_message.base, legacy_params->raw_message.len) == 0);
+    ok(legacy_params->server_name.len == 0);
+    ok(legacy_params->server_name.base == NULL);
+    free(legacy_params);
+    legacy_params = NULL;
+
+    tls = ptls_new(ctx, 1);
+    len = sizeof(ssl2);
+    ret = ptls_handshake(tls, &sendbuf, ssl2, &len, NULL);
+    ptls_free(tls);
+    ok(ret == PTLS_ALERT_DECODE_ERROR);
+    ok(legacy_params == NULL); /* SSL2 is not even parsed */
 
     ctx->on_client_hello = orig;
 }
@@ -1710,7 +2059,8 @@ static void test_escape_json_unsafe_string(void)
 void test_picotls(void)
 {
     subtest("is_ipaddr", test_is_ipaddr);
-    subtest("select_cypher", test_select_cipher);
+    subtest("extension_bitmap", test_extension_bitmap);
+    subtest("select_cipher", test_select_cipher);
     subtest("sha256", test_sha256);
     subtest("sha384", test_sha384);
     subtest("hmac-sha256", test_hmac_sha256);
@@ -1724,22 +2074,12 @@ void test_picotls(void)
     subtest("chacha20", test_chacha20);
     subtest("ffx", test_ffx);
     subtest("base64-decode", test_base64_decode);
+    subtest("ech", test_ech);
     subtest("fragmented-message", test_fragmented_message);
     subtest("handshake", test_all_handshakes);
     subtest("quic", test_quic);
-    subtest("tls12-hello", test_tls12_hello);
+    subtest("legacy-ch", test_legacy_ch);
     subtest("ptls_escape_json_unsafe_string", test_escape_json_unsafe_string);
-}
-
-void test_picotls_esni(ptls_key_exchange_context_t **keys)
-{
-    ptls_esni_context_t esni, *esni_list[] = {&esni, NULL};
-    ptls_esni_init_context(ctx_peer, &esni, ptls_iovec_init(ESNIKEYS, sizeof(ESNIKEYS) - 1), keys);
-    ctx_peer->esni = esni_list;
-
-    subtest("esni-handshake", test_picotls);
-
-    ctx_peer->esni = NULL;
 }
 
 void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_algorithm_t *server)

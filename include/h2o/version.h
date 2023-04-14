@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014,2015 DeNA Co., Ltd.
+ * Copyright (c) 2014-2023 DeNA Co., Ltd., Kazuho Oku, Fastly
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -23,19 +23,22 @@
 #define h2o__version_h
 
 #ifdef H2O_HAS_GITREV_H
-#include "h2o/gitrev.h"
+#include "h2o-gitrev.h"
 #endif
 
-#ifdef H2O_GITREV
-#define H2O_VERSION "2.3.0-DEV@" H2O_TO_STR(H2O_GITREV)
-#else
-#define H2O_VERSION "2.3.0-DEV"
-#endif
-
+#define H2O_VERSION_BASE "2.3.0-DEV"
 #define H2O_VERSION_MAJOR 2
 #define H2O_VERSION_MINOR 3
 #define H2O_VERSION_PATCH 0
 
+#ifdef H2O_GITREV
+#define H2O_VERSION H2O_VERSION_BASE "@" H2O_TO_STR(H2O_GITREV)
+#else
+#define H2O_VERSION H2O_VERSION_BASE
+#endif
+
+/* `H2O_LIBRARY_VERSION` is a hard-coded string with three digits, that's the format we parse in CMakeLists.txt */
+#define H2O_LIBRARY_VERSION "0.16.0"
 #define H2O_LIBRARY_VERSION_MAJOR 0
 #define H2O_LIBRARY_VERSION_MINOR 16
 #define H2O_LIBRARY_VERSION_PATCH 0

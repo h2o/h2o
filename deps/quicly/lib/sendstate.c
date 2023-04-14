@@ -90,7 +90,7 @@ void quicly_sendstate_reset(quicly_sendstate_t *state)
         state->final_size = state->size_inflight;
 
     ret = quicly_ranges_add(&state->acked, 0, state->final_size + 1);
-    assert(ret == 0 && "guaranteed to succeed, because the numebr of ranges never increases");
+    assert(ret == 0 && "guaranteed to succeed, because the number of ranges never increases");
     quicly_ranges_clear(&state->pending);
 }
 

@@ -167,6 +167,10 @@ provider h2o {
       */
     probe connect_error(uint64_t conn_id, uint64_t req_id, const char *error_type, const char *details, const char *rcode);
     /**
+      * Success establishing a CONNECT or CONNECT-UDP tunnel.
+      */
+    probe connect_success(uint64_t conn_id, uint64_t req_id, struct sockaddr *dest);
+    /**
       * Idle timeout on a CONNECT or CONNECT-UDP tunnel.
       */
     probe connect_io_timeout(uint64_t conn_id, uint64_t req_id);

@@ -21,27 +21,17 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 CMAKE_POLICY(SET CMP0003 NEW)
+CMAKE_POLICY(SET CMP0042 NEW)
 
 PROJECT(h2o)
-
-SET(VERSION_MAJOR "2")
-SET(VERSION_MINOR "3")
-SET(VERSION_PATCH "0")
-SET(VERSION_PRERELEASE "-DEV")
-SET(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}${VERSION_PRERELEASE}")
-SET(LIBRARY_VERSION_MAJOR "0")
-SET(LIBRARY_VERSION_MINOR "16")
-SET(LIBRARY_VERSION_PATCH "0")
-SET(LIBRARY_VERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}.${LIBRARY_VERSION_PATCH}${VERSION_PRERELEASE}")
-SET(LIBRARY_SOVERSION "${LIBRARY_VERSION_MAJOR}.${LIBRARY_VERSION_MINOR}")
 
 INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
 INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
+INCLUDE(deps/picotls/cmake/boringssl-adjust.cmake)
 
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o-evloop.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o-evloop.pc @ONLY)
 
@@ -67,6 +57,7 @@ IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR D
     ENDIF ()
 ENDIF ()
 FIND_PACKAGE(OpenSSL REQUIRED)
+BORINGSSL_ADJUST()
 FIND_PACKAGE(ZLIB REQUIRED)
 
 CHECK_C_SOURCE_COMPILES("
@@ -145,7 +136,17 @@ ENDIF ()
 
 CMAKE_PUSH_CHECK_STATE()
 SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
-CHECK_C_SOURCE_COMPILES("int main(void) {}" CC_HAS_AESNI256)
+CHECK_C_SOURCE_COMPILES("
+#include <emmintrin.h>
+#include <immintrin.h>
+int main(void) {
+    __m256i  ord0, ord1, ord2, ord3 = _mm256_setzero_si256();
+    ord0 = _mm256_aesenc_epi128(ord1, ord2);
+    ord3 = _mm256_aesenclast_epi128(ord0, ord1);
+    ord1 = _mm256_clmulepi64_epi128(ord3, ord2, 0x00);
+    return 0;
+}
+" CC_HAS_AESNI256)
 CMAKE_POP_CHECK_STATE()
 IF (CC_HAS_AESNI256)
     SET(WITH_FUSION_DEFAULT "ON")
@@ -153,6 +154,7 @@ ELSE ()
     SET(WITH_FUSION_DEFAULT "OFF")
 ENDIF ()
 OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
+MESSAGE(STATUS "FUSION support : ${WITH_FUSION}")
 
 # KTLS
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -366,6 +368,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
     deps/picotls/lib/certificate_compression.c
+    deps/picotls/lib/hpke.c
     deps/picotls/lib/pembase64.c
     deps/picotls/lib/picotls.c
     deps/picotls/lib/openssl.c
@@ -612,6 +615,20 @@ ELSE ()
     ADD_LIBRARY(libh2o-evloop ${LIB_SOURCE_FILES})
 ENDIF (WSLAY_FOUND)
 
+EXECUTE_PROCESS(
+    COMMAND sed -n -E "/#define {1,}H2O_VERSION_BASE .*-DEV\"$/s//YES/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
+    OUTPUT_VARIABLE IS_PRERELEASE
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+EXECUTE_PROCESS(
+    COMMAND sed -n -E "/#define {1,}H2O_LIBRARY_VERSION {1,}\"(.*)\"$/s//\\1/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
+    OUTPUT_VARIABLE LIBRARY_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+EXECUTE_PROCESS(
+    COMMAND sed -n -E "/#define {1,}H2O_LIBRARY_VERSION {1,}\"(.*)\\.[0-9]{1,}\"$/s//\\1/p" ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h
+    OUTPUT_VARIABLE LIBRARY_SOVERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+MESSAGE(STATUS "extracted version numbers from ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h:\n\tprerelease=${IS_PRERELEASE}\n\tlibrary version=${LIBRARY_VERSION}\n\tlibrary soversion=${LIBRARY_SOVERSION}")
+
 SET_TARGET_PROPERTIES(libh2o PROPERTIES
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
@@ -744,7 +761,7 @@ IF (WITH_MRUBY)
     ADD_CUSTOM_TARGET(mruby
         # deps/mruby/tasks/toolchains/clang.rake looks for CC, CXX and LD.
         # There are no C++ files in deps/mruby, use the C compiler for linking.
-        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} ruby minirake
+        MRUBY_TOOLCHAIN=${MRUBY_TOOLCHAIN} CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} LD=${CMAKE_C_COMPILER} MRUBY_CONFIG=${CMAKE_CURRENT_SOURCE_DIR}/misc/mruby_config.rb MRUBY_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby MRUBY_ADDITIONAL_CONFIG=${MRUBY_ADDITIONAL_CONFIG} INSTALL_DIR=${CMAKE_CURRENT_BINARY_DIR}/mruby-bin ruby minirake
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby
         BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a"
                    "${CMAKE_CURRENT_BINARY_DIR}/mruby/host/mrbgems/mruby-onig-regexp/onigmo-6.2.0/.libs/libonigmo.a"
@@ -1043,7 +1060,7 @@ IF (WITH_H2OLOG)
         CXX_STANDARD 11
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
-        COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+        COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DBORINGSSL_NO_CXX"
     )
 
     TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
@@ -1056,11 +1073,11 @@ IF (WITH_H2OLOG)
 ENDIF (WITH_H2OLOG)
 
 # gitrev
-IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
+IF (IS_PRERELEASE)
     # To ask generate_gitrev.pl whether or not a gitrev is available,
     # since only the script knows how to calculate the gitrev.
     EXECUTE_PROCESS(
-        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+        COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl ${CMAKE_CURRENT_BINARY_DIR}/h2o-gitrev.h
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         RESULT_VARIABLE GITREV_RESULT_CODE
         OUTPUT_QUIET
@@ -1070,7 +1087,7 @@ IF ("${VERSION_PRERELEASE}" STREQUAL "-DEV")
     IF (GITREV_RESULT_CODE EQUAL 0)
         ADD_DEFINITIONS("-DH2O_HAS_GITREV_H")
         ADD_CUSTOM_TARGET(gitrev ALL
-            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl
+            COMMAND perl ${CMAKE_CURRENT_SOURCE_DIR}/misc/generate_gitrev.pl ${CMAKE_CURRENT_BINARY_DIR}/h2o-gitrev.h
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         ADD_DEPENDENCIES(libh2o gitrev)
         ADD_DEPENDENCIES(libh2o-evloop gitrev)

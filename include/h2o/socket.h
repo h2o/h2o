@@ -35,6 +35,7 @@ extern "C" {
 #include <openssl/ssl.h>
 #include <openssl/opensslconf.h>
 #include "picotls.h"
+#include "picotls/openssl.h" /* for H2O_CAN_OSSL_ASYNC */
 #include "h2o/cache.h"
 #include "h2o/ebpf.h"
 #include "h2o/memory.h"
@@ -66,6 +67,13 @@ extern "C" {
 #else
 #define H2O_USE_ALPN 0
 #define H2O_USE_NPN 0
+#endif
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && !defined(OPENSSL_IS_BORINGSSL) && OPENSSL_VERSION_NUMBER >= 0x1010100fL
+#define H2O_USE_OPENSSL_CLIENT_HELLO_CB 1
+#endif
+#if PTLS_OPENSSL_HAVE_ASYNC && H2O_USE_OPENSSL_CLIENT_HELLO_CB
+#define H2O_CAN_OSSL_ASYNC 1
 #endif
 
 /**
@@ -388,6 +396,10 @@ h2o_iovec_t h2o_socket_log_ssl_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *p
 h2o_iovec_t h2o_socket_log_ssl_session_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_server_name(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 static h2o_iovec_t h2o_socket_log_ssl_negotiated_protocol(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_ech_config_id(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_ech_kem(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_ech_cipher(h2o_socket_t *sock, h2o_mem_pool_t *pool);
+h2o_iovec_t h2o_socket_log_ssl_ech_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 h2o_iovec_t h2o_socket_log_ssl_backend(h2o_socket_t *sock, h2o_mem_pool_t *pool);
 int h2o_socket_ssl_new_session_cb(SSL *s, SSL_SESSION *sess);
 
@@ -480,6 +492,21 @@ static int h2o_socket_skip_tracing(h2o_socket_t *sock);
  */
 void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
 
+#if H2O_CAN_OSSL_ASYNC
+/**
+ * When generating a TLS handshake signature asynchronously, it is necessary to wait for a notification on a file descriptor at
+ * which point the TLS handshake machinery is to be resumed. This function sets up a callback that would be called when that
+ * notification is received. The callback must invoke `h2o_socket_async_handshake_on_notify` to do the necessary clean up, as well
+ * as obtain the `data` pointer it has supplied.
+ */
+void h2o_socket_start_async_handshake(h2o_loop_t *loop, int async_fd, void *data, h2o_socket_cb cb);
+/**
+ * The function to be called by the callback supplied to `h2o_socket_start_async_handshake`. It returns the `data` pointer supplied
+ * to `h2o_socket_start_async_handshake`.
+ */
+void *h2o_socket_async_handshake_on_notify(h2o_socket_t *async_sock, const char *err);
+#endif
+
 /**
  * Initializes a send vector that refers to mutable memory region. When the `proceed` callback is invoked, it is possible for the
  * generator to reuse (or release) that memory region.
@@ -526,6 +553,18 @@ int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct 
  * callback for initializing the ebpf lookup key from `h2o_socket_t`
  */
 int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
+
+#ifdef OPENSSL_IS_BORINGSSL
+/**
+ * returns SSL_[gs]et_ext_data slot used to store `ptls_async_job_t` for handling async TLS handshake signature generation
+ */
+int h2o_socket_boringssl_get_async_job_index(void);
+/**
+ * If async resumption is in flight. When true is returned the TLS handshake is going to be discarded, and therefore the async
+ * signature calculation callback should return failure rather than starting the calculation.
+ */
+int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
+#endif
 
 /* inline defs */
 
