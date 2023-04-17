@@ -26,6 +26,10 @@
 #include <sys/un.h>
 #include <openssl/engine.h>
 
+#ifdef __FreeBSD__
+#include <pthread_np.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
