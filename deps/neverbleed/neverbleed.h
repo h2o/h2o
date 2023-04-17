@@ -54,6 +54,8 @@ typedef struct st_neverbleed_iobuf_t {
     char *start;
     char *end;
     size_t capacity;
+    struct st_neverbleed_iobuf_t *next;
+    unsigned processing : 1;
 } neverbleed_iobuf_t;
 
 /**
@@ -72,11 +74,20 @@ int neverbleed_setuidgid(neverbleed_t *nb, const char *user, int change_socket_o
 /**
  * builds a digestsign request
  */
-void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len);
+void neverbleed_start_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const EVP_MD *md, const void *input, size_t len,
+                                 int rsa_pss);
 /**
  * parses a digestsign response
  */
 void neverbleed_finish_digestsign(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len);
+/**
+ * builds a RSA decrypt request
+ */
+void neverbleed_start_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *input, size_t len);
+/**
+ * parses a decrypt response
+ */
+void neverbleed_finish_decrypt(neverbleed_iobuf_t *buf, void **digest, size_t *digest_len);
 
 #if NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP
 /**
@@ -91,17 +102,26 @@ int neverbleed_setaffinity(neverbleed_t *nb, NEVERBLEED_CPU_SET_T *cpuset);
  */
 extern void (*neverbleed_post_fork_cb)(void);
 /**
- * An optional callback used for replacing `iobuf_transaction`; i.e., the logic that sends the request and receives the response. The
- * callback returns a boolean indicating if it handled the task. It may return false to delagate the task back to the default logic.
+ * An optional callback used for replacing `iobuf_transaction`; i.e., the logic that sends the request and receives the response.
  */
-extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *);
+extern void (*neverbleed_transaction_cb)(neverbleed_iobuf_t *req, int responseless);
 
 typedef void (*neverbleed_cb)(int);
 
 int neverbleed_get_fd(neverbleed_t *nb);
 static size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
+void neverbleed_iobuf_dispose(neverbleed_iobuf_t *buf);
 void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+
+/**
+ * if set to a non-zero value, RSA operations are offloaded
+ */
+extern enum neverbleed_offload_type {
+    NEVERBLEED_OFFLOAD_OFF = 0,
+    NEVERBLEED_OFFLOAD_QAT_ON,
+    NEVERBLEED_OFFLOAD_QAT_AUTO,
+} neverbleed_offload;
 
 /* inline function definitions */
 

@@ -1165,12 +1165,20 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const voi
     return enclen;
 }
 
-static inline void aesgcm_xor_iv(ptls_aead_context_t *_ctx, const void *_bytes, size_t len)
+static inline void aesgcm_get_iv(ptls_aead_context_t *_ctx, void *iv)
 {
     struct aesgcm_context *ctx = (struct aesgcm_context *)_ctx;
-    __m128i xor_mask = loadn128(_bytes, len);
-    xor_mask = _mm_shuffle_epi8(xor_mask, byteswap128);
-    ctx->static_iv = _mm_xor_si128(ctx->static_iv, xor_mask);
+
+    __m128i m128 = _mm_shuffle_epi8(ctx->static_iv, byteswap128);
+    storen128(iv, PTLS_AESGCM_IV_SIZE, m128);
+}
+
+static inline void aesgcm_set_iv(ptls_aead_context_t *_ctx, const void *iv)
+{
+    struct aesgcm_context *ctx = (struct aesgcm_context *)_ctx;
+
+    ctx->static_iv = loadn128(iv, PTLS_AESGCM_IV_SIZE);
+    ctx->static_iv = _mm_shuffle_epi8(ctx->static_iv, byteswap128);
 }
 
 static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv, size_t key_size)
@@ -1183,7 +1191,8 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
         return 0;
 
     ctx->super.dispose_crypto = aesgcm_dispose_crypto;
-    ctx->super.do_xor_iv = aesgcm_xor_iv;
+    ctx->super.do_get_iv = aesgcm_get_iv;
+    ctx->super.do_set_iv = aesgcm_set_iv;
     ctx->super.do_encrypt_init = aead_do_encrypt_init;
     ctx->super.do_encrypt_update = aead_do_encrypt_update;
     ctx->super.do_encrypt_final = aead_do_encrypt_final;
@@ -2108,7 +2117,8 @@ static int non_temporal_setup(ptls_aead_context_t *_ctx, int is_enc, const void 
         return 0;
 
     ctx->super.dispose_crypto = aesgcm_dispose_crypto;
-    ctx->super.do_xor_iv = aesgcm_xor_iv;
+    ctx->super.do_get_iv = aesgcm_get_iv;
+    ctx->super.do_set_iv = aesgcm_set_iv;
     ctx->super.do_encrypt_init = NULL;
     ctx->super.do_encrypt_update = NULL;
     ctx->super.do_encrypt_final = NULL;

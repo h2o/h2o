@@ -31,6 +31,10 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <picotls.h>
+#include <openssl/err.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/provider.h>
+#endif
 #if QUICLY_HAVE_FUSION
 #include "picotls/fusion.h"
 #endif
@@ -1081,6 +1085,14 @@ int main(int argc, char **argv)
     socklen_t salen;
     unsigned udpbufsize = 0;
     int ch, opt_index, fd;
+
+    ERR_load_crypto_strings();
+    OpenSSL_add_all_algorithms();
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
+    (void)OSSL_PROVIDER_load(NULL, "legacy");
+    (void)OSSL_PROVIDER_load(NULL, "default");
+#endif
 
     reqs = malloc(sizeof(*reqs));
     memset(reqs, 0, sizeof(*reqs));

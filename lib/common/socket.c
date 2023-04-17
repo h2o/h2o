@@ -1403,9 +1403,18 @@ const char *h2o_socket_get_error_string(int errnum, const char *default_err)
     }
 }
 
-static void create_ossl(h2o_socket_t *sock)
+static void create_ossl(h2o_socket_t *sock, int is_server)
 {
     sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+#ifdef OPENSSL_IS_BORINGSSL
+    if (is_server) {
+        SSL_set_accept_state(sock->ssl->ossl);
+    } else {
+        SSL_set_connect_state(sock->ssl->ossl);
+    }
+#else
+    assert(SSL_is_server(sock->ssl->ossl) == !!is_server);
+#endif
     /* set app data to be used in h2o_socket_ssl_new_session_cb */
     SSL_set_app_data(sock->ssl->ossl, sock);
     setup_bio(sock);
@@ -1746,6 +1755,11 @@ static void do_proceed_handshake_async(h2o_socket_t *sock, ptls_buffer_t *ptls_w
         assert(numfds == 1);
         SSL_get_all_async_fds(sock->ssl->ossl, &async_fd, &numfds);
         h2o_socket_start_async_handshake(h2o_socket_get_loop(sock), async_fd, sock, on_async_proceed_handshake);
+#elif defined(OPENSSL_IS_BORINGSSL)
+        ptls_async_job_t *job = SSL_get_ex_data(sock->ssl->ossl, h2o_socket_boringssl_get_async_job_index());
+        assert(job != NULL);
+        assert(job->set_completion_callback != NULL);
+        job->set_completion_callback(job, on_async_job_complete, sock);
 #else
         h2o_fatal("how can OpenSSL ask async when the async API is unavailable");
 #endif
@@ -1838,7 +1852,7 @@ Redo:
                    "async operation should start only after resumption state is obtained and OpenSSL decides not to resume");
 #endif
             SSL_free(sock->ssl->ossl);
-            create_ossl(sock);
+            create_ossl(sock, 1);
             if (has_pending_ssl_bytes(sock->ssl))
                 dispose_ssl_output_buffer(sock->ssl);
             h2o_buffer_consume(&sock->ssl->input.encrypted, sock->ssl->input.encrypted->size);
@@ -1858,12 +1872,16 @@ Redo:
 
     /* handshake failed either in strict mTLS mode or others */
     if (ret == 0 || (ret < 0 && SSL_get_error(sock->ssl->ossl, ret) != SSL_ERROR_WANT_READ)) {
+        int is_async = 0;
 #if H2O_CAN_OSSL_ASYNC
-        if (SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC) {
+        is_async = SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_ASYNC;
+#elif defined(OPENSSL_IS_BORINGSSL)
+        is_async = SSL_get_error(sock->ssl->ossl, ret) == SSL_ERROR_WANT_PRIVATE_KEY_OPERATION;
+#endif
+        if (is_async) {
             do_proceed_handshake_async(sock, NULL);
             return;
         }
-#endif
 
         /* OpenSSL 1.1.0 emits an alert immediately, we  send it now. 1.0.2 emits the error when SSL_shutdown is called in
          * shutdown_ssl. */
@@ -1949,7 +1967,7 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     } else if (ret == PTLS_ALERT_PROTOCOL_VERSION) {
         /* the client cannot use tls1.3, fallback to openssl */
         ptls_free(ptls);
-        create_ossl(sock);
+        create_ossl(sock, 1);
         proceed_handshake_openssl(sock);
     } else {
         /* picotls is responsible for handling the handshake */
@@ -1998,7 +2016,7 @@ static void proceed_handshake(h2o_socket_t *sock, const char *err)
     } else if (sock->ssl->ossl != NULL) {
         proceed_handshake_openssl(sock);
     } else if (h2o_socket_ssl_get_picotls_context(sock->ssl->ssl_ctx) == NULL) {
-        create_ossl(sock);
+        create_ossl(sock, 1);
         proceed_handshake_openssl(sock);
     } else {
         proceed_handshake_undetermined(sock);
@@ -2034,7 +2052,7 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         else
             h2o_socket_read_start(sock, proceed_handshake);
     } else {
-        create_ossl(sock);
+        create_ossl(sock, 0);
         if (alpn_protos.base != NULL)
             SSL_set_alpn_protos(sock->ssl->ossl, (const unsigned char *)alpn_protos.base, (unsigned)alpn_protos.len);
         h2o_cache_t *session_cache = h2o_socket_ssl_get_session_cache(sock->ssl->ssl_ctx);
@@ -2759,6 +2777,23 @@ uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf
 uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
 {
     return flags;
+}
+
+#endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+int h2o_socket_boringssl_get_async_job_index(void)
+{
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_get_ex_new_index(0, 0, NULL, NULL, NULL); });
+    return index;
+}
+
+int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl)
+{
+    h2o_socket_t *sock = BIO_get_data(SSL_get_rbio(ssl));
+    return SSL_is_server(ssl) && sock->ssl->handshake.server.async_resumption.state == ASYNC_RESUMPTION_STATE_REQUEST_SENT;
 }
 
 #endif

@@ -518,7 +518,7 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
-    ERR_load_CRYPTO_strings();
+    ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
 
     ptls_iovec_t cert = {};

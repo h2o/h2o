@@ -321,6 +321,10 @@ static struct {
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
     int ssl_zerocopy;
+    struct {
+        h2o_sem_t semaphore;
+        unsigned capacity;
+    } ocsp_updater;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -347,6 +351,7 @@ static struct {
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
     .ssl_zerocopy = 0,
+    .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
 };
 
 static __thread size_t thread_index;
@@ -411,6 +416,7 @@ struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
+    int reponseless;
     void (*on_read_complete)(struct async_nb_transaction_t *transaction);
 };
 
@@ -464,9 +470,17 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err);
 static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     /* add to the read queue the entry for which we have written the request, and start reading from the socket */
-    async_nb_push(&async_nb.read_queue, async_nb_pop(&async_nb.write_queue));
-    if (!h2o_socket_is_reading(async_nb.sock))
-        h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
+    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.write_queue);
+    if (!transaction->reponseless) {
+        async_nb_push(&async_nb.read_queue, transaction);
+        if (!h2o_socket_is_reading(async_nb.sock))
+            h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
+    } else {
+        // no reponse expected, free the transaction
+        assert(!h2o_linklist_is_linked(&transaction->link));
+        neverbleed_iobuf_dispose(transaction->buf);
+        free(transaction);
+    }
 
     /* submit more requests if there's anything queued */
     async_nb_submit_write_pending();
@@ -597,93 +611,139 @@ static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *bu
 
 #endif
 
-static void async_nb_transaction(neverbleed_iobuf_t *buf)
+static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
 {
 #if H2O_CAN_OSSL_ASYNC
     /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
     ASYNC_JOB *job;
-   if ((job = ASYNC_get_current_job()) != NULL) {
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        assert(!reponseless);
         assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
         async_nb_do_async_transaction(job, buf);
         return;
     }
 #endif
 
-    /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
-    if (async_nb.sock != NULL) {
-        while (async_nb.read_queue.len != 0)
-            async_nb_read_ready(async_nb.sock, NULL);
-    }
+    if (reponseless && async_nb.sock != NULL) {
+        /* this is an optimization for fire-and-forget transactions which do not require a response.
+           these transactions are queued on the async socket with `reponseless` being true, and are free'd
+           upon write completion in `async_nb_on_write_complete`
+        */
+        struct async_nb_transaction_t *transaction = h2o_mem_alloc(sizeof(*transaction));
+        *transaction = (struct async_nb_transaction_t){
+            .buf = h2o_mem_alloc(sizeof(*transaction->buf)),
+            .link = (h2o_linklist_t){},
+            .reponseless = 1,
+        };
 
-    async_nb_run_sync(buf, neverbleed_transaction_write);
-    async_nb_run_sync(buf, neverbleed_transaction_read);
+        /* transfer ownership of stack `buf` to heap allocated `transaction->buf` */
+        h2o_memcpy(transaction->buf, buf, sizeof(*buf));
+        memset(buf, 0, sizeof(*buf));
+        buf = NULL;
+
+        async_nb_push(&async_nb.write_queue, transaction);
+        async_nb_submit_write_pending();
+    } else {
+        /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
+        if (async_nb.sock != NULL) {
+            while (async_nb.read_queue.len != 0)
+                async_nb_read_ready(async_nb.sock, NULL);
+        }
+
+        async_nb_run_sync(buf, neverbleed_transaction_write);
+
+        if (!reponseless)
+            async_nb_run_sync(buf, neverbleed_transaction_read);
+    }
 }
 
-struct async_nb_digestsign_t {
+struct async_nb_picotls_context_t {
     ptls_sign_certificate_t super;
     EVP_PKEY *key;
     const ptls_openssl_signature_scheme_t *schemes;
 };
 
-struct async_nb_digestsign_ctx_t {
+struct async_nb_job_t {
     ptls_async_job_t super;
     struct async_nb_transaction_t transaction;
     struct {
         void (*func)(void *);
         void *data;
     } on_complete;
-    const ptls_openssl_signature_scheme_t *scheme;
+    struct {
+        uint16_t scheme_id;
+    } ptls;
     neverbleed_iobuf_t buf;
 };
 
-static void async_nb_digestsign_ctx_free(ptls_async_job_t *job)
+static void async_nb_job_free(ptls_async_job_t *job)
 {
-    struct async_nb_digestsign_ctx_t *ctx = (struct async_nb_digestsign_ctx_t *)job;
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
 
     assert(!h2o_linklist_is_linked(&ctx->transaction.link));
 
-    free(ctx->buf.buf);
+    neverbleed_iobuf_dispose(&ctx->buf);
     free(ctx);
 }
 
-static void async_nb_digestsign_ctx_set_completion_callback(ptls_async_job_t *job, void (*cb)(void *), void *cbdata)
+static void async_nb_job_set_completion_callback(ptls_async_job_t *job, void (*cb)(void *), void *cbdata)
 {
-    struct async_nb_digestsign_ctx_t *ctx = (struct async_nb_digestsign_ctx_t *)job;
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
 
     ctx->on_complete.func = cb;
     ctx->on_complete.data = cbdata;
 }
 
-static void async_nb_digestsign_handle_response(struct async_nb_transaction_t *transaction)
+static void async_nb_job_handle_response(struct async_nb_transaction_t *transaction)
 {
-    struct async_nb_digestsign_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(struct async_nb_digestsign_ctx_t, transaction, transaction);
+    struct async_nb_job_t *ctx = H2O_STRUCT_FROM_MEMBER(struct async_nb_job_t, transaction, transaction);
 
     assert(ctx->on_complete.func != NULL);
     ctx->on_complete.func(ctx->on_complete.data);
 }
 
-static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
-                               ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+/*
+ * Instantiates an async_nb_job_t. The caller should setup `job->buf` and call `async_nb_submit_request`.
+ */
+static struct async_nb_job_t *async_nb_job_new(void)
 {
-    struct async_nb_digestsign_t *self = (struct async_nb_digestsign_t *)_self;
+    struct async_nb_job_t *job = h2o_mem_alloc(sizeof(*job));
+    *job = (struct async_nb_job_t){
+        .super = {.destroy_ = async_nb_job_free, .set_completion_callback = async_nb_job_set_completion_callback},
+        .transaction = {.on_read_complete = async_nb_job_handle_response}};
+    job->transaction.buf = &job->buf;
+
+    return job;
+}
+
+static void async_nb_job_submit(struct async_nb_job_t *job)
+{
+    async_nb_push(&async_nb.write_queue, &job->transaction);
+    async_nb_submit_write_pending();
+}
+
+static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **_job, uint16_t *selected_algorithm,
+                                 ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+{
+    struct async_nb_picotls_context_t *self = (struct async_nb_picotls_context_t *)_self;
     const ptls_openssl_signature_scheme_t *scheme;
     int ret;
 
-    assert(async != NULL);
+    assert(_job != NULL);
 
-    if (*async != NULL) {
-        struct async_nb_digestsign_ctx_t *async_ctx = (struct async_nb_digestsign_ctx_t *)*async;
+    if (*_job != NULL) {
+        struct async_nb_job_t *job = (struct async_nb_job_t *)*_job;
         void *digest;
         size_t digestlen;
 
-        assert(!h2o_linklist_is_linked(&async_ctx->transaction.link));
+        assert(!h2o_linklist_is_linked(&job->transaction.link));
 
-        *selected_algorithm = async_ctx->scheme->scheme_id;
+        *selected_algorithm = job->ptls.scheme_id;
 
         /* obtain signature, dispose async context */
-        neverbleed_finish_digestsign(&async_ctx->buf, &digest, &digestlen);
-        async_nb_digestsign_ctx_free(&async_ctx->super);
-        *async = NULL;
+        neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+        async_nb_job_free(&job->super);
+        *_job = NULL;
 
         /* build response */
         if ((ret = ptls_buffer_reserve(output, digestlen)) == 0) {
@@ -700,25 +760,17 @@ static int async_nb_digestsign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls
     if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
         return PTLS_ALERT_HANDSHAKE_FAILURE;
 
-    /* build async context, generate request */
-    struct async_nb_digestsign_ctx_t *async_ctx = h2o_mem_alloc(sizeof(*async_ctx));
-    *async_ctx =
-        (struct async_nb_digestsign_ctx_t){.super = {.destroy_ = async_nb_digestsign_ctx_free,
-                                                     .set_completion_callback = async_nb_digestsign_ctx_set_completion_callback},
-                                           .transaction = {.on_read_complete = async_nb_digestsign_handle_response},
-                                           .scheme = scheme};
-    neverbleed_start_digestsign(&async_ctx->buf, self->key, scheme->scheme_md(), input.base, input.len);
-    async_ctx->transaction.buf = &async_ctx->buf;
-    *async = &async_ctx->super;
-
-    /* submit */
-    async_nb_push(&async_nb.write_queue, &async_ctx->transaction);
-    async_nb_submit_write_pending();
+    /* submit async request */
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, self->key, scheme->scheme_md(), input.base, input.len, 1);
+    job->ptls.scheme_id = scheme->scheme_id;
+    *_job = &job->super;
+    async_nb_job_submit(job);
 
     return PTLS_ERROR_ASYNC_OPERATION;
 }
 
-static void async_nb_resume_quic_handshake(void *tls)
+static void async_nb_quic_resume_handshake(void *tls)
 {
     quicly_conn_t *quic = quicly_resume_handshake(tls);
 
@@ -729,15 +781,76 @@ static void async_nb_resume_quic_handshake(void *tls)
     }
 }
 
-static void async_nb_start_quic(quicly_async_handshake_t *self, ptls_t *tls)
+static void async_nb_quic_start(quicly_async_handshake_t *self, ptls_t *tls)
 {
     ptls_async_job_t *job = ptls_get_async_job(tls);
 
     assert(job->set_completion_callback != NULL);
-    job->set_completion_callback(job, async_nb_resume_quic_handshake, tls);
+    job->set_completion_callback(job, async_nb_quic_resume_handshake, tls);
 }
 
-static quicly_async_handshake_t async_nb_quic_handler = {async_nb_start_quic};
+static quicly_async_handshake_t async_nb_quic_handler = {async_nb_quic_start};
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
+                                                      uint16_t signature_algorithm, const uint8_t *in, size_t len)
+{
+    if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
+        return ssl_private_key_failure;
+
+    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
+    int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
+
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, key, md, in, len, rsa_pss);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
+    async_nb_job_submit(job);
+
+    return ssl_private_key_retry;
+}
+
+enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out, const uint8_t *in,
+                                                         size_t len)
+{
+    if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
+        return ssl_private_key_failure;
+
+    EVP_PKEY *key = SSL_get_privatekey(ssl);
+
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_decrypt(&job->buf, key, in, len);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
+    async_nb_job_submit(job);
+
+    return ssl_private_key_retry;
+}
+
+enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out)
+{
+    struct async_nb_job_t *job = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_job_index());
+    void *digest;
+    size_t digestlen;
+
+    assert(job != NULL);
+
+    neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+    async_nb_job_free(&job->super);
+    job = NULL;
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), NULL);
+
+    assert(digestlen <= max_out);
+    memcpy(out, digest, digestlen);
+    *outlen = digestlen;
+
+    ptls_clear_memory(digest, digestlen);
+    free(digest);
+
+    return ssl_private_key_success;
+}
+
+#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -999,8 +1112,6 @@ Exit:
     return ret;
 }
 
-static h2o_sem_t ocsp_updater_semaphore;
-
 static void *ocsp_updater_thread(void *_identity)
 {
     struct listener_ssl_identity_t *identity = _identity;
@@ -1019,9 +1130,9 @@ static void *ocsp_updater_thread(void *_identity)
             continue;
         }
         /* fetch the response */
-        h2o_sem_wait(&ocsp_updater_semaphore);
+        h2o_sem_wait(&conf.ocsp_updater.semaphore);
         status = get_ocsp_response(identity->ocsp_stapling->cmd, identity->cert_chain_pem, &resp);
-        h2o_sem_post(&ocsp_updater_semaphore);
+        h2o_sem_post(&conf.ocsp_updater.semaphore);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -1166,7 +1277,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         struct st_emit_certificate_ptls_t ec;
         struct {
             ptls_openssl_sign_certificate_t ossl;
-            struct async_nb_digestsign_t async_digestsign;
+            struct async_nb_picotls_context_t async_digestsign;
         } sc;
         ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
@@ -1231,7 +1342,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(fakeconn != NULL);
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
-        cert = SSL_get_certificate(fakeconn);
+        if ((cert = SSL_get_certificate(fakeconn)) != NULL)
+            X509_up_ref(cert); /* boringssl calls the destructor when SSL_free is called */
         /* obtain peer verify mode */
         use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
@@ -1250,8 +1362,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 
     /* create signer */
     if (use_neverbleed) {
-        pctx->sc.async_digestsign = (struct async_nb_digestsign_t){
-            .super = {async_nb_digestsign},
+        pctx->sc.async_digestsign = (struct async_nb_picotls_context_t){
+            .super = {async_nb_picotls_sign},
             .key = key,
             .schemes = ptls_openssl_lookup_signature_schemes(key),
         };
@@ -1300,6 +1412,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     }
 
     identity->ptls.ctx = &pctx->ctx;
+
+    X509_free(cert);
 
     return NULL;
 }
@@ -1937,6 +2051,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 #if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
+#elif defined(OPENSSL_IS_BORINGSSL)
+        if (use_neverbleed) {
+            static const SSL_PRIVATE_KEY_METHOD meth = {
+                .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
+            SSL_CTX_set_private_key_method(identity->ossl, &meth);
+        }
 #endif
 
         SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
@@ -3064,7 +3184,7 @@ static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_conf
         h2o_configurator_errprintf(cmd, node, "num-ocsp-updaters must be >=1");
         return -1;
     }
-    h2o_sem_set_capacity(&ocsp_updater_semaphore, n);
+    conf.ocsp_updater.capacity = n;
     return 0;
 }
 
@@ -3155,6 +3275,25 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
         return -1;
     default:
         return -1;
+    }
+
+    return 0;
+}
+
+static int on_config_neverbleed_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,QAT,QAT-AUTO")) {
+    case 0:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_OFF;
+        break;
+    case 1:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_QAT_ON;
+        break;
+    case 2:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_QAT_AUTO;
+        break;
+    default:
+        h2o_fatal("logic flaw");
     }
 
     return 0;
@@ -4309,6 +4448,9 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
+        h2o_configurator_define_command(c, "neverbleed-offload",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_neverbleed_offload);
         h2o_configurator_define_command(c, "io_uring-batch-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_io_uring_batch_size);
@@ -4412,10 +4554,9 @@ int main(int argc, char **argv)
     conf.quic.conn_callbacks.super.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
+    h2o_sem_init(&conf.ocsp_updater.semaphore, 0); /* raised after unsetenv is called, as the updater thread refers to `environ` */
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
-
-    h2o_sem_init(&ocsp_updater_semaphore, H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS);
 
     init_openssl();
     setup_configurators();
@@ -4745,6 +4886,9 @@ int main(int argc, char **argv)
     assert(conf.thread_map.size != 0);
     h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
     h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
+
+    /* launch threads that fetch OCSP responses for stapling */
+    h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */

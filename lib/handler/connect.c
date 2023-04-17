@@ -290,6 +290,9 @@ static void close_readwrite(struct st_connect_generator_t *self)
 
     if (self->sock != NULL)
         send_inflight = close_socket(self);
+    else if (self->is_tcp)
+        send_inflight = self->tcp.recvbuf_detached->size != 0;
+
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
 

@@ -65,7 +65,9 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_secp521r1;
 #define PTLS_OPENSSL_HAS_X25519 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #endif
-#ifndef OPENSSL_NO_BF
+
+/* when boringssl is used, existence of libdecrepit is assumed */
+#if !defined(OPENSSL_NO_BF) || defined(OPENSSL_IS_BORINGSSL)
 #define PTLS_OPENSSL_HAVE_BF 1
 #endif
 

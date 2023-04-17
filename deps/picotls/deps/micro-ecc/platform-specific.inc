@@ -8,6 +8,10 @@
 #if (defined(_WIN32) || defined(_WIN64))
 /* Windows */
 
+// use pragma syntax to prevent tweaking the linker script for getting CryptXYZ function
+#pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "advapi32.lib")
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <wincrypt.h>
@@ -59,6 +63,29 @@ static int default_RNG(uint8_t *dest, unsigned size) {
     
     close(fd);
     return 1;
+}
+#define default_RNG_defined 1
+
+#elif defined(RIOT_VERSION)
+
+#include <random.h>
+
+static int default_RNG(uint8_t *dest, unsigned size) {
+    random_bytes(dest, size);
+    return 1;
+}
+#define default_RNG_defined 1
+
+#elif defined(NRF52_SERIES)
+
+#include "app_error.h"
+#include "nrf_crypto_rng.h"
+
+static int default_RNG(uint8_t *dest, unsigned size) 
+{
+    // make sure to call nrf_crypto_init and nrf_crypto_rng_init first
+    ret_code_t ret_code = nrf_crypto_rng_vector_generate(dest, size);
+    return (ret_code == NRF_SUCCESS) ? 1 : 0;
 }
 #define default_RNG_defined 1
 
