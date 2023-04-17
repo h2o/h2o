@@ -321,6 +321,10 @@ static struct {
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
     int ssl_zerocopy;
+    struct {
+        h2o_sem_t semaphore;
+        unsigned capacity;
+    } ocsp_updater;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -347,6 +351,7 @@ static struct {
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
     .ssl_zerocopy = 0,
+    .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
 };
 
 static __thread size_t thread_index;
@@ -1110,8 +1115,6 @@ Exit:
     return ret;
 }
 
-static h2o_sem_t ocsp_updater_semaphore;
-
 static void *ocsp_updater_thread(void *_identity)
 {
     struct listener_ssl_identity_t *identity = _identity;
@@ -1130,9 +1133,9 @@ static void *ocsp_updater_thread(void *_identity)
             continue;
         }
         /* fetch the response */
-        h2o_sem_wait(&ocsp_updater_semaphore);
+        h2o_sem_wait(&conf.ocsp_updater.semaphore);
         status = get_ocsp_response(identity->ocsp_stapling->cmd, identity->cert_chain_pem, &resp);
-        h2o_sem_post(&ocsp_updater_semaphore);
+        h2o_sem_post(&conf.ocsp_updater.semaphore);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -3184,7 +3187,7 @@ static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_conf
         h2o_configurator_errprintf(cmd, node, "num-ocsp-updaters must be >=1");
         return -1;
     }
-    h2o_sem_set_capacity(&ocsp_updater_semaphore, n);
+    conf.ocsp_updater.capacity = n;
     return 0;
 }
 
@@ -4535,10 +4538,9 @@ int main(int argc, char **argv)
     conf.quic.conn_callbacks.super.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
+    h2o_sem_init(&conf.ocsp_updater.semaphore, 0); /* raised after unsetenv is called, as the updater thread refers to `environ` */
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
-
-    h2o_sem_init(&ocsp_updater_semaphore, H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS);
 
     init_openssl();
     setup_configurators();
@@ -4865,6 +4867,9 @@ int main(int argc, char **argv)
     assert(conf.thread_map.size != 0);
     h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
     h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
+
+    /* launch threads that fetch OCSP responses for stapling */
+    h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
