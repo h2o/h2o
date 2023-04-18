@@ -514,7 +514,13 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
 static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size);
+    if (h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size) != 0)
+        return -1;
+    if (self->vars->conf.max_buffer_size == 0) {
+        h2o_configurator_errprintf(cmd, node, "proxy.buffer_size must be a positive value");
+        return -1;
+    }
+    return 0;
 }
 
 static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
