@@ -63,6 +63,16 @@ void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_lin
 static struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res);
 
 /**
+ * interrupt all name look up thread
+ */
+void h2o_hostinfo_interrupt(void);
+
+/**
+ * wait all name look up thread quit
+ */
+void h2o_hostinfo_wait(void);
+
+/**
  * equiv. to inet_pton(AF_INET4)
  */
 int h2o_hostinfo_aton(h2o_iovec_t host, struct in_addr *addr);

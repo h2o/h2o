@@ -46,7 +46,10 @@ static struct {
     h2o_linklist_t pending; /* anchor of h2o_hostinfo_getaddr_req_t::_pending */
     size_t num_threads;
     size_t num_threads_idle;
-} queue = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, {&queue.pending, &queue.pending}, 0, 0};
+    uint32_t quit; /* quit flag */
+    pthread_cond_t reply_cond;
+} queue = {PTHREAD_MUTEX_INITIALIZER, PTHREAD_COND_INITIALIZER, {&queue.pending, &queue.pending}, 0, 0, 0,
+           PTHREAD_COND_INITIALIZER};
 
 size_t h2o_hostinfo_max_threads = 1;
 
@@ -82,6 +85,11 @@ static void *lookup_thread_main(void *_unused)
         }
         ++queue.num_threads_idle;
         pthread_cond_wait(&queue.cond, &queue.mutex);
+        if (queue.quit) {
+            pthread_cond_signal(&queue.reply_cond);
+            pthread_mutex_unlock(&queue.mutex);
+            return NULL;
+        }
     }
 
     h2o_fatal("unreachable");
@@ -167,6 +175,27 @@ void h2o_hostinfo_getaddr_cancel(h2o_hostinfo_getaddr_req_t *req)
 
     if (should_free)
         free(req);
+}
+
+void h2o_hostinfo_interrupt(void)
+{
+    pthread_mutex_lock(&queue.mutex);
+    queue.quit = 1;
+    pthread_cond_broadcast(&queue.cond);
+    pthread_mutex_unlock(&queue.mutex);
+}
+
+void h2o_hostinfo_wait(void)
+{
+    pthread_mutex_lock(&queue.mutex);
+    while (queue.num_threads_idle != queue.num_threads) {
+        pthread_cond_wait(&queue.reply_cond, &queue.mutex);
+    }
+    /* prepare for reuse */
+    queue.quit = 0;
+    queue.num_threads_idle = 0;
+    queue.num_threads = 0;
+    pthread_mutex_unlock(&queue.mutex);
 }
 
 void h2o_hostinfo_getaddr_receiver(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
