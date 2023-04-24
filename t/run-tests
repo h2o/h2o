@@ -20,6 +20,8 @@ my @failures;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
+$ENV{NET_EMPTYPORT_SRCFILE} = "$tempdir/emptyport";
+
 while (@scripts or %pids) {
     # spawn
     while (@scripts and keys %pids < $jobs) {
