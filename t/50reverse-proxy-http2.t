@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);

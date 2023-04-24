@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use feature qw/say/;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use IO::Socket::INET;
