@@ -11,7 +11,7 @@ use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -36,6 +36,7 @@ our @EXPORT = qw(
     spawn_server
     spawn_h2o
     spawn_h2o_raw
+    empty_port
     empty_ports
     create_data_file
     md5_file
@@ -316,6 +317,53 @@ sub spawn_h2o_raw {
         pid      => $pid,
         conf_file => $conffn,
     };
+}
+
+sub empty_port_using_file {
+    my ($host, $port, $proto) = @_;
+    my $fn = $ENV{NET_EMPTYPORT_SRCFILE};
+
+    # lock-open the source file, and read the last port number
+    open my $fh, '+>>', $fn
+        or die "failed to open file:$fn:$!";
+    flock $fh, LOCK_EX
+        or die "failed to lock file:$fn:$!";
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    $port = <$fh>
+        unless $port;
+    $port ||= 65536; # if failed to read, start with an invalid number (see below)
+    # find the next available port
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        ++$port;
+        $port = 32768 if $port > 49152;
+        last if Net::EmptyPort::can_bind($host, $port, $proto);
+        die "empty port not found"
+            if $fail_cnt >= 100;
+    }
+    # write the last port number to file
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    truncate $fh, 0
+        or die "failed to trancate file:$fn:$!";
+    print $fh $port;
+    # close file (and unlock implicitly)
+    close $fh;
+
+    $port;
+}
+
+sub empty_port {
+    my ($host, $port, $proto) = @_ && ref $_[0] eq 'HASH' ? ($_[0]->{host}, $_[0]->{port}, $_[0]->{proto}) : (undef, @_);
+    $host = '127.0.0.1'
+        unless defined $host;
+    $proto = $proto ? lc($proto) : 'tcp';
+
+    if ($ENV{NET_EMPTYPORT_SRCFILE}) {
+        empty_port_using_file($host, $port, $proto);
+    } else {
+        Net::EmptyPort::empty_port({host => $host, port => $port, proto => $proto});
+    }
 }
 
 sub empty_ports {
