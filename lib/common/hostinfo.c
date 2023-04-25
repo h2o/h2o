@@ -84,12 +84,12 @@ static void *lookup_thread_main(void *_unused)
             pthread_mutex_lock(&queue.mutex);
         }
         ++queue.num_threads_idle;
-        pthread_cond_wait(&queue.cond, &queue.mutex);
         if (queue.quit) {
             pthread_cond_signal(&queue.reply_cond);
             pthread_mutex_unlock(&queue.mutex);
             return NULL;
         }
+        pthread_cond_wait(&queue.cond, &queue.mutex);
     }
 
     h2o_fatal("unreachable");
