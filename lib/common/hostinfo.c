@@ -20,6 +20,9 @@
  * IN THE SOFTWARE.
  */
 #include "h2o/hostinfo.h"
+#if defined(HAVE_PRCTL)
+#include <sys/prctl.h>
+#endif
 
 struct st_h2o_hostinfo_getaddr_req_t {
     h2o_multithread_receiver_t *_receiver;
@@ -72,6 +75,9 @@ static void lookup_and_respond(h2o_hostinfo_getaddr_req_t *req)
 
 static void *lookup_thread_main(void *_unused)
 {
+#if defined(HAVE_PRCTL)
+    prctl(PR_SET_NAME, (unsigned long)"name_lookup", 0, 0, 0);
+#endif
     pthread_mutex_lock(&queue.mutex);
 
     while (1) {
