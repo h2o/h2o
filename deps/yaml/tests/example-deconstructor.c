@@ -107,7 +107,7 @@ main(int argc, char *argv[])
     /* Create and emit the SEQUENCE-START event. */
 
     if (!yaml_sequence_start_event_initialize(&output_event,
-                NULL, "tag:yaml.org,2002:seq", 1,
+                NULL, (yaml_char_t *)"tag:yaml.org,2002:seq", 1,
                 YAML_BLOCK_SEQUENCE_STYLE))
         goto event_error;
     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -131,7 +131,7 @@ main(int argc, char *argv[])
         /* Create and emit a MAPPING-START event. */
 
         if (!yaml_mapping_start_event_initialize(&output_event,
-                    NULL, "tag:yaml.org,2002:map", 1,
+                    NULL, (yaml_char_t *)"tag:yaml.org,2002:map", 1,
                     YAML_BLOCK_MAPPING_STYLE))
             goto event_error;
         if (!yaml_emitter_emit(&emitter, &output_event))
@@ -146,7 +146,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -155,7 +155,7 @@ main(int argc, char *argv[])
                 /* Write 'STREAM-START'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "STREAM-START", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"STREAM-START", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -171,7 +171,7 @@ main(int argc, char *argv[])
                     /* Write 'encoding'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "encoding", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"encoding", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -180,8 +180,8 @@ main(int argc, char *argv[])
                     /* Write the stream encoding. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
-                                (encoding == YAML_UTF8_ENCODING ? "utf-8" :
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
+                                (yaml_char_t *)(encoding == YAML_UTF8_ENCODING ? "utf-8" :
                                  encoding == YAML_UTF16LE_ENCODING ? "utf-16-le" :
                                  encoding == YAML_UTF16BE_ENCODING ? "utf-16-be" :
                                  "unknown"), -1,
@@ -198,7 +198,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -207,7 +207,7 @@ main(int argc, char *argv[])
                 /* Write 'STREAM-END'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "STREAM-END", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"STREAM-END", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -220,7 +220,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -229,7 +229,7 @@ main(int argc, char *argv[])
                 /* Write 'DOCUMENT-START'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "DOCUMENT-START", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"DOCUMENT-START", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -246,7 +246,7 @@ main(int argc, char *argv[])
                     /* Write 'version'. */
                     
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "version", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"version", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -255,7 +255,7 @@ main(int argc, char *argv[])
                     /* Write '{'. */
 
                     if (!yaml_mapping_start_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:map", 1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:map", 1,
                                 YAML_FLOW_MAPPING_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -264,7 +264,7 @@ main(int argc, char *argv[])
                     /* Write 'major'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "major", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"major", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -274,7 +274,7 @@ main(int argc, char *argv[])
 
                     sprintf(number, "%d", version->major);
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:int", number, -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:int", (yaml_char_t *)number, -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -283,7 +283,7 @@ main(int argc, char *argv[])
                     /* Write 'minor'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "minor", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"minor", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -293,7 +293,7 @@ main(int argc, char *argv[])
 
                     sprintf(number, "%d", version->minor);
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:int", number, -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:int", (yaml_char_t *)number, -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -317,7 +317,7 @@ main(int argc, char *argv[])
                     /* Write 'tags'. */
                     
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "tags", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"tags", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -326,7 +326,7 @@ main(int argc, char *argv[])
                     /* Start a block sequence. */
 
                     if (!yaml_sequence_start_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:seq", 1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:seq", 1,
                                 YAML_BLOCK_SEQUENCE_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -339,7 +339,7 @@ main(int argc, char *argv[])
                         /* Write '{'. */
 
                         if (!yaml_mapping_start_event_initialize(&output_event,
-                                    NULL, "tag:yaml.org,2002:map", 1,
+                                    NULL, (yaml_char_t *)"tag:yaml.org,2002:map", 1,
                                     YAML_FLOW_MAPPING_STYLE))
                             goto event_error;
                         if (!yaml_emitter_emit(&emitter, &output_event))
@@ -348,7 +348,7 @@ main(int argc, char *argv[])
                         /* Write 'handle'. */
 
                         if (!yaml_scalar_event_initialize(&output_event,
-                                    NULL, "tag:yaml.org,2002:str", "handle", -1,
+                                    NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"handle", -1,
                                     1, 1, YAML_PLAIN_SCALAR_STYLE))
                             goto event_error;
                         if (!yaml_emitter_emit(&emitter, &output_event))
@@ -357,7 +357,7 @@ main(int argc, char *argv[])
                         /* Write the tag directive handle. */
 
                         if (!yaml_scalar_event_initialize(&output_event,
-                                    NULL, "tag:yaml.org,2002:str",
+                                    NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                     tag->handle, -1,
                                     0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                             goto event_error;
@@ -367,7 +367,7 @@ main(int argc, char *argv[])
                         /* Write 'prefix'. */
 
                         if (!yaml_scalar_event_initialize(&output_event,
-                                    NULL, "tag:yaml.org,2002:str", "prefix", -1,
+                                    NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"prefix", -1,
                                     1, 1, YAML_PLAIN_SCALAR_STYLE))
                             goto event_error;
                         if (!yaml_emitter_emit(&emitter, &output_event))
@@ -376,7 +376,7 @@ main(int argc, char *argv[])
                         /* Write the tag directive prefix. */
 
                         if (!yaml_scalar_event_initialize(&output_event,
-                                    NULL, "tag:yaml.org,2002:str",
+                                    NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                     tag->prefix, -1,
                                     0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                             goto event_error;
@@ -402,7 +402,7 @@ main(int argc, char *argv[])
                 /* Write 'implicit'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "implicit", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"implicit", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -411,8 +411,8 @@ main(int argc, char *argv[])
                 /* Write if the document is implicit. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.document_start.implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t *)(input_event.data.document_start.implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -426,7 +426,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -435,7 +435,7 @@ main(int argc, char *argv[])
                 /* Write 'DOCUMENT-END'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "DOCUMENT-END", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"DOCUMENT-END", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -444,7 +444,7 @@ main(int argc, char *argv[])
                 /* Write 'implicit'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "implicit", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"implicit", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -453,8 +453,8 @@ main(int argc, char *argv[])
                 /* Write if the document is implicit. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.document_end.implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t *)(input_event.data.document_end.implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -468,7 +468,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -477,7 +477,7 @@ main(int argc, char *argv[])
                 /* Write 'ALIAS'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "ALIAS", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"ALIAS", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -486,7 +486,7 @@ main(int argc, char *argv[])
                 /* Write 'anchor'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "anchor", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"anchor", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -495,7 +495,7 @@ main(int argc, char *argv[])
                 /* Write the alias anchor. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str",
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                             input_event.data.alias.anchor, -1,
                             0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                     goto event_error;
@@ -509,7 +509,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -518,7 +518,7 @@ main(int argc, char *argv[])
                 /* Write 'SCALAR'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "SCALAR", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"SCALAR", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -531,7 +531,7 @@ main(int argc, char *argv[])
                     /* Write 'anchor'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "anchor", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"anchor", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -540,7 +540,7 @@ main(int argc, char *argv[])
                     /* Write the scalar anchor. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.scalar.anchor, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -555,7 +555,7 @@ main(int argc, char *argv[])
                     /* Write 'tag'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "tag", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"tag", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -564,7 +564,7 @@ main(int argc, char *argv[])
                     /* Write the scalar tag. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.scalar.tag, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -577,7 +577,7 @@ main(int argc, char *argv[])
                 /* Write 'value'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "value", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"value", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -586,7 +586,7 @@ main(int argc, char *argv[])
                 /* Write the scalar value. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str",
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                             input_event.data.scalar.value,
                             input_event.data.scalar.length,
                             0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
@@ -599,7 +599,7 @@ main(int argc, char *argv[])
                 /* Write 'implicit'. */
                 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "implicit", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"implicit", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -608,7 +608,7 @@ main(int argc, char *argv[])
                 /* Write '{'. */
 
                 if (!yaml_mapping_start_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:map", 1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:map", 1,
                             YAML_FLOW_MAPPING_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -617,7 +617,7 @@ main(int argc, char *argv[])
                 /* Write 'plain'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "plain", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"plain", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -626,8 +626,8 @@ main(int argc, char *argv[])
                 /* Write if the scalar is implicit in the plain style. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.scalar.plain_implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t * )(input_event.data.scalar.plain_implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -637,7 +637,7 @@ main(int argc, char *argv[])
                 /* Write 'quoted'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "non-plain", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"non-plain", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -646,8 +646,8 @@ main(int argc, char *argv[])
                 /* Write if the scalar is implicit in a non-plain style. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.scalar.quoted_implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t *)(input_event.data.scalar.quoted_implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -670,7 +670,7 @@ main(int argc, char *argv[])
                     /* Write 'style'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "style", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"style", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -679,8 +679,8 @@ main(int argc, char *argv[])
                     /* Write the scalar style. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
-                                (style == YAML_PLAIN_SCALAR_STYLE ? "plain" :
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
+                                (yaml_char_t *)(style == YAML_PLAIN_SCALAR_STYLE ? "plain" :
                                  style == YAML_SINGLE_QUOTED_SCALAR_STYLE ?
                                         "single-quoted" :
                                  style == YAML_DOUBLE_QUOTED_SCALAR_STYLE ?
@@ -701,7 +701,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -710,7 +710,7 @@ main(int argc, char *argv[])
                 /* Write 'SEQUENCE-START'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "SEQUENCE-START", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"SEQUENCE-START", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -723,7 +723,7 @@ main(int argc, char *argv[])
                     /* Write 'anchor'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "anchor", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"anchor", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -732,7 +732,7 @@ main(int argc, char *argv[])
                     /* Write the sequence anchor. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.sequence_start.anchor, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -747,7 +747,7 @@ main(int argc, char *argv[])
                     /* Write 'tag'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "tag", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"tag", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -756,7 +756,7 @@ main(int argc, char *argv[])
                     /* Write the sequence tag. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.sequence_start.tag, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -767,7 +767,7 @@ main(int argc, char *argv[])
                 /* Write 'implicit'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "implicit", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"implicit", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -776,8 +776,8 @@ main(int argc, char *argv[])
                 /* Write if the sequence tag is implicit. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.sequence_start.implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t *)(input_event.data.sequence_start.implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -794,7 +794,7 @@ main(int argc, char *argv[])
                     /* Write 'style'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "style", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"style", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -803,8 +803,8 @@ main(int argc, char *argv[])
                     /* Write the scalar style. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
-                                (style == YAML_BLOCK_SEQUENCE_STYLE ? "block" :
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
+                                (yaml_char_t *)(style == YAML_BLOCK_SEQUENCE_STYLE ? "block" :
                                  style == YAML_FLOW_SEQUENCE_STYLE ? "flow" :
                                  "unknown"), -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
@@ -820,7 +820,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -829,7 +829,7 @@ main(int argc, char *argv[])
                 /* Write 'SEQUENCE-END'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "SEQUENCE-END", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"SEQUENCE-END", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -842,7 +842,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -851,7 +851,7 @@ main(int argc, char *argv[])
                 /* Write 'MAPPING-START'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "MAPPING-START", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"MAPPING-START", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -864,7 +864,7 @@ main(int argc, char *argv[])
                     /* Write 'anchor'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "anchor", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"anchor", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -873,7 +873,7 @@ main(int argc, char *argv[])
                     /* Write the mapping anchor. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.mapping_start.anchor, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -888,7 +888,7 @@ main(int argc, char *argv[])
                     /* Write 'tag'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "tag", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"tag", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -897,7 +897,7 @@ main(int argc, char *argv[])
                     /* Write the mapping tag. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
                                 input_event.data.mapping_start.tag, -1,
                                 0, 1, YAML_DOUBLE_QUOTED_SCALAR_STYLE))
                         goto event_error;
@@ -908,7 +908,7 @@ main(int argc, char *argv[])
                 /* Write 'implicit'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "implicit", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"implicit", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -917,8 +917,8 @@ main(int argc, char *argv[])
                 /* Write if the mapping tag is implicit. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:bool",
-                            (input_event.data.mapping_start.implicit ?
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:bool",
+                            (yaml_char_t *)(input_event.data.mapping_start.implicit ?
                              "true" : "false"), -1,
                             1, 0, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
@@ -935,7 +935,7 @@ main(int argc, char *argv[])
                     /* Write 'style'. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str", "style", -1,
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"style", -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
                         goto event_error;
                     if (!yaml_emitter_emit(&emitter, &output_event))
@@ -944,8 +944,8 @@ main(int argc, char *argv[])
                     /* Write the scalar style. */
 
                     if (!yaml_scalar_event_initialize(&output_event,
-                                NULL, "tag:yaml.org,2002:str",
-                                (style == YAML_BLOCK_MAPPING_STYLE ? "block" :
+                                NULL, (yaml_char_t *)"tag:yaml.org,2002:str",
+                                (yaml_char_t *)(style == YAML_BLOCK_MAPPING_STYLE ? "block" :
                                  style == YAML_FLOW_MAPPING_STYLE ? "flow" :
                                  "unknown"), -1,
                                 1, 1, YAML_PLAIN_SCALAR_STYLE))
@@ -961,7 +961,7 @@ main(int argc, char *argv[])
                 /* Write 'type'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "type", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"type", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -970,7 +970,7 @@ main(int argc, char *argv[])
                 /* Write 'MAPPING-END'. */
 
                 if (!yaml_scalar_event_initialize(&output_event,
-                            NULL, "tag:yaml.org,2002:str", "MAPPING-END", -1,
+                            NULL, (yaml_char_t *)"tag:yaml.org,2002:str", (yaml_char_t *)"MAPPING-END", -1,
                             1, 1, YAML_PLAIN_SCALAR_STYLE))
                     goto event_error;
                 if (!yaml_emitter_emit(&emitter, &output_event))
@@ -1033,12 +1033,12 @@ parser_error:
 
         case YAML_READER_ERROR:
             if (parser.problem_value != -1) {
-                fprintf(stderr, "Reader error: %s: #%X at %d\n", parser.problem,
-                        parser.problem_value, parser.problem_offset);
+                fprintf(stderr, "Reader error: %s: #%X at %ld\n", parser.problem,
+                        parser.problem_value, (long)parser.problem_offset);
             }
             else {
-                fprintf(stderr, "Reader error: %s at %d\n", parser.problem,
-                        parser.problem_offset);
+                fprintf(stderr, "Reader error: %s at %ld\n", parser.problem,
+                        (long)parser.problem_offset);
             }
             break;
 
@@ -1046,14 +1046,14 @@ parser_error:
             if (parser.context) {
                 fprintf(stderr, "Scanner error: %s at line %d, column %d\n"
                         "%s at line %d, column %d\n", parser.context,
-                        parser.context_mark.line+1, parser.context_mark.column+1,
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        (int)parser.context_mark.line+1, (int)parser.context_mark.column+1,
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             else {
                 fprintf(stderr, "Scanner error: %s at line %d, column %d\n",
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             break;
 
@@ -1061,14 +1061,14 @@ parser_error:
             if (parser.context) {
                 fprintf(stderr, "Parser error: %s at line %d, column %d\n"
                         "%s at line %d, column %d\n", parser.context,
-                        parser.context_mark.line+1, parser.context_mark.column+1,
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        (int)parser.context_mark.line+1, (int)parser.context_mark.column+1,
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             else {
                 fprintf(stderr, "Parser error: %s at line %d, column %d\n",
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             break;
 

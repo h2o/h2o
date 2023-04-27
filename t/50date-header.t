@@ -6,6 +6,8 @@ use t::Util;
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
 plan skip_all => 'Starlet not found'
@@ -31,9 +33,9 @@ hosts:
   default:
     paths:
       /proxy-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$date_upstream_port
       /proxy-no-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$no_date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$no_date_upstream_port
       /mruby-date:
         mruby.handler: |
           Proc.new do |env|
@@ -55,9 +57,9 @@ hosts:
   default:
     paths:
       /proxy-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$date_upstream_port
       /proxy-no-date:
-        proxy.reverse.url: http://127.0.0.1.xip.io:$no_date_upstream_port
+        proxy.reverse.url: http://localhost.examp1e.net:$no_date_upstream_port
       /mruby-date:
         mruby.handler: |
           Proc.new do |env|

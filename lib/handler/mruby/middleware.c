@@ -119,21 +119,23 @@ static void on_gc_dispose_app_input_stream(mrb_state *mrb, void *_subreq)
 const static struct mrb_data_type app_request_type = {"app_request_type", on_gc_dispose_app_request};
 const static struct mrb_data_type app_input_stream_type = {"app_input_stream", on_gc_dispose_app_input_stream};
 
-static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len)
+static h2o_iovec_t convert_env_key_to_header_name(h2o_mem_pool_t *pool, const char *name, size_t len, int has_key_prefix)
 {
 #define KEY_PREFIX "HTTP_"
 #define KEY_PREFIX_LEN (sizeof(KEY_PREFIX) - 1)
-    if (len < KEY_PREFIX_LEN || !h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN)) {
+    if (has_key_prefix && (len < KEY_PREFIX_LEN || !h2o_memis(name, KEY_PREFIX_LEN, KEY_PREFIX, KEY_PREFIX_LEN))) {
         return h2o_iovec_init(NULL, 0);
     }
 
     h2o_iovec_t ret;
 
-    ret.len = len - KEY_PREFIX_LEN;
+    ret.len = has_key_prefix ? len - KEY_PREFIX_LEN : len;
     ret.base = h2o_mem_alloc_pool(pool, char, ret.len);
 
-    name += KEY_PREFIX_LEN;
-    len -= KEY_PREFIX_LEN;
+    if (has_key_prefix) {
+        name += KEY_PREFIX_LEN;
+        len -= KEY_PREFIX_LEN;
+    }
 
     char *d = ret.base;
     for (; len != 0; ++name, --len)
@@ -147,8 +149,8 @@ static h2o_iovec_t convert_env_to_header_name(h2o_mem_pool_t *pool, const char *
 static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_header_t *header,
                                     void *cb_data)
 {
-    mrb_value result_hash = mrb_obj_value(cb_data);
-    mrb_value n;
+    mrb_value n, result_hash = mrb_obj_value(cb_data);
+
     if (h2o_iovec_is_token(header->name)) {
         const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
         n = h2o_mruby_token_string(shared_ctx, token);
@@ -156,7 +158,19 @@ static int iterate_headers_callback(h2o_mruby_shared_context_t *shared_ctx, h2o_
         n = h2o_mruby_new_str(shared_ctx->mrb, header->name->base, header->name->len);
     }
     mrb_value v = h2o_mruby_new_str(shared_ctx->mrb, header->value.base, header->value.len);
-    mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
+
+    mrb_value existing = mrb_hash_fetch(shared_ctx->mrb, result_hash, n, mrb_nil_value());
+    if (mrb_nil_p(existing)) {
+        mrb_hash_set(shared_ctx->mrb, result_hash, n, v);
+    } else if (mrb_array_p(existing)) {
+        mrb_ary_push(shared_ctx->mrb, existing, v);
+    } else {
+        mrb_value a = mrb_ary_new_capa(shared_ctx->mrb, 2);
+        mrb_ary_push(shared_ctx->mrb, a, existing);
+        mrb_ary_push(shared_ctx->mrb, a, v);
+        mrb_hash_set(shared_ctx->mrb, result_hash, n, a);
+    }
+
     return 0;
 }
 
@@ -197,11 +211,16 @@ static mrb_value build_app_response(struct st_mruby_subreq_t *subreq)
     return resp;
 }
 
-static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_iovec_t *inbufs, size_t inbufcnt)
+static void append_bufs(struct st_mruby_subreq_t *subreq, h2o_sendvec_t *inbufs, size_t inbufcnt)
 {
-    int i;
+    size_t i;
     for (i = 0; i != inbufcnt; ++i) {
-        h2o_buffer_append(&subreq->buf, inbufs[i].base, inbufs[i].len);
+        size_t len = inbufs[i].len;
+        char *dst = h2o_buffer_reserve(&subreq->buf, len).base;
+        assert(dst != NULL && "no memory or disk space; FIXME bail out gracefully");
+        if (!(*inbufs[i].callbacks->read_)(inbufs + i, dst, len))
+            h2o_fatal("FIXME handle error from pull handler");
+        subreq->buf->size += len;
     }
 }
 
@@ -216,7 +235,7 @@ static mrb_value detach_receiver(struct st_mruby_subreq_t *subreq)
 }
 
 static void send_response_shortcutted(struct st_mruby_subreq_t *subreq);
-static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_iovec_t *inbufs, size_t inbufcnt,
+static void subreq_ostream_send(h2o_ostream_t *_self, h2o_req_t *_subreq, h2o_sendvec_t *inbufs, size_t inbufcnt,
                                 h2o_send_state_t state)
 {
     struct st_mruby_subreq_t *subreq = (void *)_subreq;
@@ -287,14 +306,14 @@ static void prepare_subreq_entity(h2o_req_t *subreq, h2o_mruby_context_t *ctx, m
 
     // TODO: fastpath?
     if (!mrb_respond_to(mrb, rack_input, mrb_intern_lit(mrb, "read"))) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "'rack.input' must respond to 'read'"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "'rack.input' must respond to 'read'"));
         return;
     }
     mrb_value body = mrb_funcall(mrb, rack_input, "read", 0);
     if (mrb->exc != NULL)
         return;
     if (!mrb_string_p(body)) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "return value of `read` must be a string"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "return value of `read` must be a string"));
         return;
     }
     subreq->entity = h2o_strdup(&subreq->pool, RSTRING_PTR(body), RSTRING_LEN(body));
@@ -389,9 +408,29 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->remote.len;
 }
 
-static h2o_socket_t *get_socket(h2o_conn_t *conn)
+static int skip_tracing(h2o_conn_t *conn)
 {
-    return NULL;
+    return 1;
+}
+
+static uint64_t get_req_id(h2o_req_t *req)
+{
+    /* only one sub-request on this dummy connection */
+    return 0;
+}
+
+static int handle_header_raw_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *raw_key, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+
+    h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, raw_key->base, raw_key->len, 0);
+    if (name.base == NULL)
+        return 0;
+
+    value = h2o_strdup(&req->pool, value.base, value.len);
+    h2o_add_header_by_str(&req->pool, &req->headers, name.base, name.len, 1, NULL, value.base, value.len);
+
+    return 0;
 }
 
 static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *env_key, h2o_iovec_t value, void *_req)
@@ -399,14 +438,15 @@ static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
     h2o_req_t *req = _req;
     const h2o_token_t *token;
 
-    /* convert env key to header name (lower case) */
-    h2o_iovec_t name = convert_env_to_header_name(&req->pool, env_key->base, env_key->len);
+    h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, env_key->base, env_key->len, 1);
     if (name.base == NULL)
         return 0;
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
         if (token == H2O_TOKEN_CONTENT_LENGTH) {
             /* skip. use CONTENT_LENGTH instead of HTTP_CONTENT_LENGTH */
+        } else if (token == H2O_TOKEN_CONTENT_TYPE) {
+            /* ditto */
         } else {
             value = h2o_strdup(&req->pool, value.base, value.len);
             h2o_add_header(&req->pool, &req->headers, token, NULL, value.base, value.len);
@@ -423,16 +463,18 @@ static void on_subreq_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t
 {
     struct st_mruby_subreq_t *subreq = (void *)data;
     mrb_state *mrb = subreq->ctx->shared->mrb;
+    struct RObject *exc_backup = mrb->exc;
+    mrb->exc = NULL;
 
     assert(!mrb_nil_p(subreq->error_stream));
 
     h2o_iovec_t concat = h2o_concat(&subreq->super.pool, prefix, msg);
     mrb_value msgstr = h2o_mruby_new_str(mrb, concat.base, concat.len);
     mrb_funcall(mrb, subreq->error_stream, "write", 1, msgstr);
-    if (mrb->exc != NULL) {
+    if (mrb->exc != NULL)
         h2o_error_printf("%s\n", RSTRING_PTR(mrb_inspect(mrb, mrb_obj_value(mrb->exc))));
-        mrb->exc = NULL;
-    }
+
+    mrb->exc = exc_backup;
 }
 
 /**
@@ -517,6 +559,11 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
         RETRIEVE_ENV_NUM(content_length);
         if (!mrb_nil_p(content_length))
             data->subreq->super.content_length = mrb_fixnum(content_length);
+    } else if (CHECK_KEY("CONTENT_TYPE")) {
+        mrb_value content_type = mrb_nil_value();
+        RETRIEVE_ENV_STR(content_type);
+        if (!mrb_nil_p(content_type))
+            h2o_mruby_iterate_header_values(data->ctx->shared, key, content_type, handle_header_raw_key, &data->subreq->super);
     } else if (CHECK_KEY("HTTP_HOST")) {
         RETRIEVE_ENV_STR(data->env.http_host);
     } else if (CHECK_KEY("PATH_INFO")) {
@@ -554,11 +601,11 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
     } else if (CHECK_KEY("rack.run_once")) {
     } else if (CHECK_KEY("rack.url_scheme")) {
         RETRIEVE_ENV_STR(data->env.scheme);
+    } else if (CHECK_KEY("rack.early_hints")) {
     } else if (keystr_len >= 5 && memcmp(keystr, "HTTP_", 5) == 0) {
-        mrb_value http_header = mrb_nil_value();
-        RETRIEVE_ENV_STR(http_header);
-        if (!mrb_nil_p(http_header))
-            h2o_mruby_iterate_header_values(data->ctx->shared, key, http_header, handle_header_env_key, &data->subreq->super);
+        if (!mrb_nil_p(value) &&
+            h2o_mruby_iterate_header_values(data->ctx->shared, key, value, handle_header_env_key, &data->subreq->super) != 0)
+            return -1;
     } else if (keystr_len != 0) {
         /* set to req->env */
         mrb_value reqenv = mrb_nil_value();
@@ -588,12 +635,12 @@ static int retrieve_env(mrb_state *mrb, mrb_value key, mrb_value value, void *_d
 
 static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_value env, int is_reprocess)
 {
-    static const h2o_conn_callbacks_t callbacks = {get_sockname, /* stringify address */
-                                                   get_peername, /* ditto */
-                                                   NULL,         /* push (no push in subrequest) */
-                                                   get_socket,   /* get underlying socket */
-                                                   NULL,         /* get debug state */
-                                                   {{{NULL}}}};
+    static const h2o_conn_callbacks_t callbacks = {
+        .get_sockname = get_sockname,
+        .get_peername = get_peername,
+        .skip_tracing = skip_tracing,
+        .get_req_id = get_req_id,
+    };
 
     mrb_state *mrb = ctx->shared->mrb;
     int gc_arena = mrb_gc_arena_save(mrb);
@@ -612,7 +659,8 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->state = INITIAL;
     subreq->chain_proceed = 0;
 
-    /* initialize super and conn */
+    /* Initialize super and conn. At the moment, `conn.super` (i.e., `h2o_conn_t`) is instantiated directly (TODO consider using
+     * `h2o_create_connection`). */
     subreq->conn.super.ctx = ctx->shared->ctx;
     h2o_init_request(&subreq->super, &subreq->conn.super, NULL);
     h2o_ostream_t *ostream = h2o_add_ostream(&subreq->super, H2O_ALIGNOF(*ostream), sizeof(*ostream), &subreq->super._ostr_top);
@@ -652,10 +700,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #define CHECK_REQUIRED(k, v, non_empty)                                                                                            \
     do {                                                                                                                           \
         if (mrb_nil_p(v)) {                                                                                                        \
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: " k));             \
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "missing required environment key: " k));                 \
             goto Failed;                                                                                                           \
         } else if (non_empty && RSTRING_LEN(v) == 0) {                                                                             \
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, k " must be not empty"));                             \
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, k " must be not empty"));                                 \
             goto Failed;                                                                                                           \
         }                                                                                                                          \
     } while (0)
@@ -667,15 +715,15 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
 #undef CHECK_REQUIRED
 
     if (RSTRING_LEN(data.env.script_name) != 0 && RSTRING_PTR(data.env.script_name)[0] != '/') {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "SCRIPT_NAME must start with `/`"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "SCRIPT_NAME must start with `/`"));
         goto Failed;
     }
     if (RSTRING_LEN(data.env.path_info) != 0 && RSTRING_PTR(data.env.path_info)[0] != '/') {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "PATH_INFO must start with `/`"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "PATH_INFO must start with `/`"));
         goto Failed;
     }
     if (mrb_nil_p(data.env.http_host) && (mrb_nil_p(data.env.server_name) || mrb_nil_p(data.env.server_port))) {
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "HTTP_HOST or (SERVER_NAME and SERVER_PORT) is required"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "HTTP_HOST or (SERVER_NAME and SERVER_PORT) is required"));
         goto Failed;
     }
 
@@ -685,7 +733,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
         size_t confpath_len_wo_slash = confpath.base[confpath.len - 1] == '/' ? confpath.len - 1 : confpath.len;
         if (!(RSTRING_LEN(data.env.script_name) == confpath_len_wo_slash &&
               memcmp(RSTRING_PTR(data.env.script_name), confpath.base, confpath_len_wo_slash) == 0)) {
-            mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(
+            mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(
                 mrb, E_RUNTIME_ERROR, "can't modify `SCRIPT_NAME` with `H2O.next`. Is `H2O.reprocess` what you want?"));
             goto Failed;
         }
@@ -715,7 +763,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     h2o_url_t url_parsed;
     if (h2o_url_parse(url_str.base, url_str.len, &url_parsed) != 0) {
         /* TODO is there any other way to show better error message? */
-        mrb->exc = mrb_obj_ptr(mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
+        mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
         goto Failed;
     }
 
@@ -782,7 +830,7 @@ static mrb_value middleware_wait_response_callback(h2o_mruby_context_t *mctx, mr
 
     if ((subreq = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &app_request_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppRequest#join wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "AppRequest#join wrong self");
     }
 
     subreq->receiver = *receiver;
@@ -833,7 +881,11 @@ static mrb_value middleware_request_method(mrb_state *mrb, mrb_value self)
 
     h2o_req_t *super = &subreq->super;
     if (mrb_bool(reprocess)) {
-        h2o_reprocess_request_deferred(super, super->method, super->scheme, super->authority, super->path, super->overrides, 1);
+        h2o_url_t resolved;
+        if (h2o_req_resolve_internal_redirect_url(super, super->path, &resolved) != 0)
+            mrb_exc_raise(mrb, mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "failed to resolve reprocess uri"));
+        h2o_reprocess_request_deferred(super, super->method, resolved.scheme, resolved.authority, resolved.path, super->overrides,
+                                       1);
     } else {
         h2o_delegate_request_deferred(super);
     }
@@ -849,9 +901,9 @@ static mrb_value middleware_wait_chunk_callback(h2o_mruby_context_t *mctx, mrb_v
 
     mrb_value obj = mrb_ary_entry(args, 0);
     if (DATA_PTR(obj) == NULL) {
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "downstream HTTP closed");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "downstream HTTP closed");
     } else if ((subreq = mrb_data_check_get_ptr(mrb, obj, &app_input_stream_type)) == NULL) {
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "AppInputStream#each wrong self");
     }
 
     if (subreq->buf->size != 0) {

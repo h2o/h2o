@@ -37,18 +37,18 @@ struct st_compress_encoder_t {
     h2o_compress_context_t *compressor;
 };
 
-static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void do_send(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
+    struct st_compress_encoder_t *self = (void *)_self;
+    h2o_sendvec_t *outbufs;
+    size_t outbufcnt;
+
     if (inbufcnt == 0 && h2o_send_state_is_in_progress(state)) {
-        h2o_ostream_send_next(_self, req, inbufs, inbufcnt, state);
+        h2o_ostream_send_next(&self->super, req, inbufs, inbufcnt, state);
         return;
     }
 
-    struct st_compress_encoder_t *self = (void *)_self;
-    h2o_iovec_t *outbufs;
-    size_t outbufcnt;
-
-    self->compressor->transform(self->compressor, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    state = h2o_compress_transform(self->compressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
     h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
 }
 
@@ -70,10 +70,10 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
 
     switch (req->compress_hint) {
     case H2O_COMPRESS_HINT_DISABLE:
-        /* compression was explicitely disabled, skip */
+        /* compression was explicitly disabled, skip */
         goto Next;
     case H2O_COMPRESS_HINT_ENABLE:
-        /* compression was explicitely enabled */
+        /* compression was explicitly enabled */
         break;
     case H2O_COMPRESS_HINT_ENABLE_BR:
         compressible_types_mask = H2O_COMPRESSIBLE_BROTLI;
@@ -98,13 +98,16 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (compressible_types == 0)
         goto Next;
 
-    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges) */
-    size_t content_encoding_header_index = -1, accept_ranges_header_index = -1;
+    /* skip if content-encoding header is being set (as well as obtain the location of accept-ranges moreover identify index of etag
+     * to modified weaken) */
+    size_t content_encoding_header_index = -1, accept_ranges_header_index = -1, etag_header_index = -1;
     for (i = 0; i != req->res.headers.size; ++i) {
         if (req->res.headers.entries[i].name == &H2O_TOKEN_CONTENT_ENCODING->buf)
             content_encoding_header_index = i;
         else if (req->res.headers.entries[i].name == &H2O_TOKEN_ACCEPT_RANGES->buf)
             accept_ranges_header_index = i;
+        else if (req->res.headers.entries[i].name == &H2O_TOKEN_ETAG->buf)
+            etag_header_index = i;
         else
             continue;
     }
@@ -130,6 +133,13 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     req->res.content_length = SIZE_MAX;
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONTENT_ENCODING, NULL, compressor->name.base, compressor->name.len);
     h2o_set_header_token(&req->pool, &req->res.headers, H2O_TOKEN_VARY, H2O_STRLIT("accept-encoding"));
+    if (etag_header_index != -1) {
+        if (!(req->res.headers.entries[etag_header_index].value.len >= 2 &&
+              h2o_memis(req->res.headers.entries[etag_header_index].value.base, 2, H2O_STRLIT("W/")))) {
+            req->res.headers.entries[etag_header_index].value =
+                h2o_concat(&req->pool, h2o_iovec_init(H2O_STRLIT("W/")), req->res.headers.entries[etag_header_index].value);
+        }
+    }
     if (accept_ranges_header_index != -1) {
         req->res.headers.entries[accept_ranges_header_index].value = h2o_iovec_init(H2O_STRLIT("none"));
     } else {
@@ -155,4 +165,27 @@ void h2o_compress_register(h2o_pathconf_t *pathconf, h2o_compress_args_t *args)
     struct st_compress_filter_t *self = (void *)h2o_create_filter(pathconf, sizeof(*self));
     self->super.on_setup_ostream = on_setup_ostream;
     self->args = *args;
+}
+
+h2o_send_state_t h2o_compress_transform(h2o_compress_context_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
+                                        h2o_send_state_t state, h2o_sendvec_t **outbufs, size_t *outbufcnt)
+{
+    h2o_sendvec_t flattened;
+
+    if (inbufcnt != 0 && inbufs->callbacks->read_ != &h2o_sendvec_read_raw) {
+        assert(inbufcnt == 1);
+        size_t buflen = inbufs->len;
+        assert(buflen <= H2O_PULL_SENDVEC_MAX_SIZE);
+        if (self->push_buf == NULL)
+            self->push_buf = h2o_mem_alloc(h2o_send_state_is_in_progress(state) ? H2O_PULL_SENDVEC_MAX_SIZE : buflen);
+        if (!(*inbufs->callbacks->read_)(inbufs, self->push_buf, buflen)) {
+            *outbufs = NULL;
+            *outbufcnt = 0;
+            return H2O_SEND_STATE_ERROR;
+        }
+        h2o_sendvec_init_raw(&flattened, self->push_buf, buflen);
+        inbufs = &flattened;
+    }
+
+    return self->do_transform(self, inbufs, inbufcnt, state, outbufs, outbufcnt);
 }

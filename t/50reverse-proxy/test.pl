@@ -8,7 +8,10 @@ use Test::More;
 use URI::Escape;
 use t::Util;
 
-my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket);
+my ($aggregated_mode, $h2o_keepalive, $starlet_keepalive, $starlet_force_chunked, $unix_socket, $zerocopy);
+my $ssl_offload = "off";
+
+my @orig_argv = @ARGV;
 
 GetOptions(
     "mode=i"                  => sub {
@@ -17,11 +20,25 @@ GetOptions(
         $starlet_keepalive = ($m & 2) != 0;
         $starlet_force_chunked = ($m & 4) != 0;
         $unix_socket = ($m & 8) != 0;
+        $zerocopy = ($m & 16) != 0;
+        for (($m >> 5) & 3) {
+            if (/^0$/) {
+                $ssl_offload = "off";
+            } elsif (/^1$/) {
+                $ssl_offload = "kernel";
+            } elsif (/^2$/) {
+                $ssl_offload = "zerocopy";
+            } else {
+                die "unexpected tls.zerocopy mode:$m";
+            }
+        }
     },
     "h2o-keepalive=i"         => \$h2o_keepalive,
     "starlet-keepalive=i"     => \$starlet_keepalive,
     "starlet-force-chunked=i" => \$starlet_force_chunked,
     "unix-socket=i"           => \$unix_socket,
+    "zerocopy=i"              => \$zerocopy,
+    "ssl-offload=s"           => \$ssl_offload,
 ) or exit(1);
 
 plan skip_all => 'plackup not found'
@@ -31,6 +48,18 @@ plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 plan skip_all => 'skipping unix-socket tests, requires Starlet >= 0.25'
     if $unix_socket && `perl -MStarlet -e 'print \$Starlet::VERSION'` < 0.25;
+plan skip_all => 'zerocopy requires linux'
+    if $zerocopy and $^O ne 'linux';
+plan skip_all => 'ktls not supported'
+    if $ssl_offload eq "kernel" and not server_features()->{ktls};
+plan skip_all => 'SO_ZEROCOPY requires linux'
+    if $ssl_offload eq "zerocopy" and not server_features()->{"ssl-zerocopy"};
+
+# when zerocopy is about to be tested, restart as root so that RLIMIT_MEMLOCK would be raised to unlimited
+if ($ssl_offload eq "zerocopy" && $< != 0) {
+    @ARGV = @orig_argv;
+    run_as_root()
+}
 
 my %files = map { do {
     my $fn = DOC_ROOT . "/$_";
@@ -46,7 +75,7 @@ my ($unix_socket_file, $unix_socket_guard) = do {
     unlink $fn;
     +(
         $fn,
-        Scope::Guard->new(sub {
+        make_guard(sub {
             unlink $fn;
         }),
     );
@@ -56,7 +85,7 @@ my $upstream = $unix_socket_file ? "[unix:$unix_socket_file]" : "127.0.0.1:@{[em
 
 my $guard = do {
     local $ENV{FORCE_CHUNKED} = $starlet_force_chunked;
-    my @args = (qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
+    my @args = (qw(plackup -s Starlet --max-workers=20 --keepalive-timeout 100 --access-log /dev/null --listen), $unix_socket_file || $upstream);
     if ($starlet_keepalive) {
         push @args, "--max-keepalive-reqs=100";
     }
@@ -94,6 +123,8 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 reproxy: ON
 @{[ $h2o_keepalive ? "" : "proxy.timeout.keepalive: 0" ]}
+proxy.zerocopy: @{[ $zerocopy ? "ALWAYS" : "OFF" ]}
+ssl-offload: $ssl_offload
 EOT
 
 run_with_curl($server, sub {
@@ -115,16 +146,20 @@ run_with_curl($server, sub {
             is md5_hex($content), $files{$file}->{md5}, "$proto://127.0.0.1/echo (POST, chunked, $file, md5)";
         }
     }
-    my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-    is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
-    is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
-    if ($curl !~ /--http2/) {
-        $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
-        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
-        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+    SKIP: {
+        skip "On GitHub Actions, too few pages can be pinned", 2
+            if $ssl_offload eq 'zerocopy' and ($ENV{TEST_PLATFORM} || '') eq 'github-actions';
+        my $content = `$curl --silent --show-error --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+        is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, mmap-backed, size)";
+        is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, mmap-backed, md5)";
+        if ($curl !~ /--http2/) {
+            $content = `$curl --silent --show-error --header 'Transfer-Encoding: chunked' --data-binary \@$huge_file $proto://127.0.0.1:$port/echo`;
+            is length($content), $huge_file_size, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, size)";
+            is md5_hex($content), $huge_file_md5, "$proto://127.0.0.1/echo (POST, chunked, mmap-backed, md5)";
+        }
     }
     subtest 'rewrite-redirect' => sub {
-        $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
+        my $content = `$curl --silent --dump-header /dev/stdout --max-redirs 0 "$proto://127.0.0.1:$port/?resp:status=302&resp:location=http://@{[uri_escape($upstream)]}/abc"`;
         like $content, qr{HTTP/[^ ]+ 302\s}m;
         like $content, qr{^location: ?$proto://127.0.0.1:$port/abc\r$}m;
     };

@@ -33,6 +33,8 @@ extern "C" {
 
 #define H2O_STRLIT(s) (s), sizeof(s) - 1
 
+#define H2O_INT8_LONGEST_STR "-127"
+#define H2O_UINT8_LONGEST_STR "255"
 #define H2O_INT16_LONGEST_STR "-32768"
 #define H2O_UINT16_LONGEST_STR "65535"
 #define H2O_INT32_LONGEST_STR "-2147483648"
@@ -40,6 +42,10 @@ extern "C" {
 #define H2O_INT64_LONGEST_STR "-9223372036854775808"
 #define H2O_UINT64_LONGEST_STR "18446744073709551615"
 #define H2O_UINT64_LONGEST_HEX_STR "FFFFFFFFFFFFFFFF"
+
+#define H2O_SIZE_T_LONGEST_STR                                                                                                     \
+    H2O_UINT64_LONGEST_STR /* As it is hard to define a macro based on the actual size of size_t, we hard-code it to 64-bits and   \
+                              assert that in string.c */
 
 /**
  * duplicates given string
@@ -65,6 +71,10 @@ static int h2o_tolower(int ch);
  * tr/A-Z/a-z/
  */
 static void h2o_strtolower(char *s, size_t len);
+/**
+ * copies and converts the string to lower-case
+ */
+static void h2o_strcopytolower(char *d, const char *s, size_t len);
 /**
  * tr/a-z/A-Z/
  */
@@ -123,9 +133,19 @@ h2o_iovec_t h2o_str_stripws(const char *s, size_t len);
  */
 size_t h2o_strstr(const char *haysack, size_t haysack_len, const char *needle, size_t needle_len);
 /**
+ * Parses a string into tokens or name-value pairs. Each token is returned as a tuple of (returned_pointer, *element_len). When the
+ * input is fully consumed, NULL is returned. See t/00unit/lib/common/string.c for examples.
  *
+ * @param iter   Iterator. When calling the function for the first time, this vector should point to the entire string to be parsed.
+ * @param inner  Separator to separate tokens.
+ * @param outer  The outer separator. When parsing a flat list, the values of `inner` and `outer` should be identical. When parsing
+ *               a nested list, this value specifies the outer separator.  For example, (inner, outer) would be set to (';', ',')
+ *               when parsing a Cache-Control header field value. In such case, boundary of sublists is signaled to the caller by
+ *               returning a token pointing to the outer separator.
+ * @param value  [optional] When a non-NULL address is given and if the found element contains `=`, that element is split into a
+ *               name-value pair and the range of the value is returned using this parameter. The name is returned as the token.
  */
-const char *h2o_next_token(h2o_iovec_t *iter, int separator, size_t *element_len, h2o_iovec_t *value);
+const char *h2o_next_token(h2o_iovec_t *iter, int inner, int outer, size_t *element_len, h2o_iovec_t *value);
 /**
  * tests if string needle exists within a separator-separated string (for handling "#rule" of RFC 2616)
  */
@@ -145,12 +165,29 @@ h2o_iovec_t h2o_htmlescape(h2o_mem_pool_t *pool, const char *src, size_t len);
     h2o_concat_list(pool, (h2o_iovec_t[]){__VA_ARGS__}, sizeof((h2o_iovec_t[]){__VA_ARGS__}) / sizeof(h2o_iovec_t))
 h2o_iovec_t h2o_concat_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count);
 /**
+ * joins the separated strings of iovecs into a single iovec
+ */
+h2o_iovec_t h2o_join_list(h2o_mem_pool_t *pool, h2o_iovec_t *list, size_t count, h2o_iovec_t delimiter);
+/**
+ * splits the string str into a list of iovec
+ */
+void h2o_split(h2o_mem_pool_t *pool, h2o_iovec_vector_t *list, h2o_iovec_t str, const char needle);
+/**
  * emits a two-line string to buf that graphically points to given location within the source string
  * @return 0 if successful
  */
 int h2o_str_at_position(char *buf, const char *src, size_t src_len, int lineno, int column);
 
 int h2o__lcstris_core(const char *target, const char *test, size_t test_len);
+
+/**
+ * Encode a Structured Field Value [RFC 8941] of type String ("sf-string" in the RFC)
+ * @param pool memory pool (or NULL to use malloc)
+ * @param s source string
+ * @param slen length of source string; if slen==SIZE_MAX, then strlen(s) will be used
+ * @return buffer pointing to the encoded string (buf is NUL-terminated but the length does not include the NUL char)
+ */
+h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t slen);
 
 /* inline defs */
 
@@ -161,8 +198,13 @@ inline int h2o_tolower(int ch)
 
 inline void h2o_strtolower(char *s, size_t len)
 {
-    for (; len != 0; ++s, --len)
-        *s = h2o_tolower(*s);
+    h2o_strcopytolower(s, s, len);
+}
+
+inline void h2o_strcopytolower(char *d, const char *s, size_t len)
+{
+    for (; len != 0; ++d, ++s, --len)
+        *d = h2o_tolower(*s);
 }
 
 inline int h2o_toupper(int ch)

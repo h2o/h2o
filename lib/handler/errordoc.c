@@ -67,7 +67,7 @@ static void on_prefilter_setup_stream(h2o_req_prefilter_t *_self, h2o_req_t *req
     h2o_setup_next_prefilter(&self->super, req, slot);
 }
 
-static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
+static void on_ostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
 {
     /* nothing to do */
 }

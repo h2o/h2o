@@ -5,6 +5,9 @@
 module Comparable
 
   ##
+  # call-seq:
+  #   obj < other    -> true or false
+  #
   # Return true if +self+ is less
   # than +other+. Otherwise return
   # false.
@@ -19,6 +22,9 @@ module Comparable
   end
 
   ##
+  # call-seq:
+  #   obj <= other   -> true or false
+  #
   # Return true if +self+ is less
   # than or equal to +other+.
   # Otherwise return false.
@@ -33,6 +39,9 @@ module Comparable
   end
 
   ##
+  # call-seq:
+  #   obj == other   -> true or false
+  #
   # Return true if +self+ is equal
   # to +other+. Otherwise return
   # false.
@@ -44,6 +53,9 @@ module Comparable
   end
 
   ##
+  # call-seq:
+  #   obj > other    -> true or false
+  #
   # Return true if +self+ is greater
   # than +other+. Otherwise return
   # false.
@@ -58,6 +70,9 @@ module Comparable
   end
 
   ##
+  # call-seq:
+  #   obj >= other   -> true or false
+  #
   # Return true if +self+ is greater
   # than or equal to +other+.
   # Otherwise return false.
@@ -72,6 +87,9 @@ module Comparable
   end
 
   ##
+  # call-seq:
+  #   obj.between?(min,max) -> true or false
+  #
   # Return true if +self+ is greater
   # than or equal to +min+ and
   # less than or equal to +max+.

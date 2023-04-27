@@ -140,7 +140,7 @@ const static struct mrb_data_type input_stream_type = {"http_input_stream", on_g
 
 static mrb_value create_already_consumed_error(mrb_state *mrb)
 {
-    return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
+    return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "http response body is already consumed");
 }
 
 static h2o_buffer_t **peek_content(h2o_mruby_http_request_context_t *ctx, int *is_final)
@@ -414,8 +414,7 @@ static int headers_sort_cb(const void *_x, const void *_y)
     return memcmp(x->name->base, y->name->base, x->name->len);
 }
 
-static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                         h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
 
@@ -429,14 +428,13 @@ static h2o_httpclient_body_cb do_on_head(h2o_httpclient_t *client, const char *e
         ctx->client = NULL;
     }
 
-    qsort(headers, num_headers, sizeof(headers[0]), headers_sort_cb);
-    post_response(ctx, status, headers, num_headers, header_requires_dup);
+    qsort(args->headers, args->num_headers, sizeof(args->headers[0]), headers_sort_cb);
+    post_response(ctx, args->status, args->headers, args->num_headers, args->header_requires_dup);
 
     return on_body;
 }
 
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, int version, int status, h2o_iovec_t msg,
-                                      h2o_header_t *headers, size_t num_headers, int header_requires_dup)
+static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
     if (try_dispose_context(ctx))
@@ -445,7 +443,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
     mrb_gc_protect(ctx->ctx->shared->mrb, ctx->refs.request);
 
-    h2o_httpclient_body_cb cb = do_on_head(client, errstr, version, status, msg, headers, num_headers, header_requires_dup);
+    h2o_httpclient_body_cb cb = do_on_head(client, errstr, args);
 
     mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
 
@@ -595,7 +593,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             // FIXME: how to handle fastpath and who frees this?
             ctx->req.body = h2o_strdup(&ctx->pool, RSTRING_PTR(body), RSTRING_LEN(body));
             if (!ctx->req.has_transfer_encoding) {
-                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_UINT64_LONGEST_STR) - 1);
+                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
                 size_t l = (size_t)sprintf(buf, "%zu", ctx->req.body.len);
                 h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONTENT_LENGTH, NULL, buf, l);
             }
@@ -607,7 +605,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
 
     h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx, &shared_ctx->ctx->proxy.connpool,
-                           &url, on_connect);
+                           &url, NULL, on_connect);
 
     return ctx->refs.request;
 }
@@ -620,7 +618,7 @@ static mrb_value http_join_response_callback(h2o_mruby_context_t *mctx, mrb_valu
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &request_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "HttpRequest#join wrong self");
     }
 
     attach_receiver(ctx, *receiver);
@@ -636,7 +634,7 @@ static mrb_value http_fetch_chunk_callback(h2o_mruby_context_t *mctx, mrb_value 
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &input_stream_type)) == NULL) {
         *run_again = 1;
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "_HttpInputStream#each wrong self");
     }
 
     mrb_value first = mrb_ary_entry(args, 1);

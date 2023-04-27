@@ -110,7 +110,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     /* update readable flags, perform writes */
     if (ret > 0) {
         size_t i;
-        h2o_sliding_counter_start(&loop->super.exec_time_counter, loop->super._now_millisec);
+        h2o_sliding_counter_start(&loop->super.exec_time_nanosec_counter, loop->super._now_nanosec);
         for (i = 0; i != pollfds.size; ++i) {
             /* set read_ready flag before calling the write cb, since app. code invoked by the latter may close the socket, clearing
              * the former flag */
@@ -156,12 +156,14 @@ static void evloop_do_on_socket_create(struct st_h2o_evloop_socket_t *sock)
         assert(loop->socks.entries[sock->fd]->_flags == H2O_SOCKET_FLAG_IS_DISPOSED);
 }
 
-static void evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
+static int evloop_do_on_socket_close(struct st_h2o_evloop_socket_t *sock)
 {
     struct st_h2o_evloop_poll_t *loop = (struct st_h2o_evloop_poll_t *)sock->loop;
 
     if (sock->fd != -1)
         loop->socks.entries[sock->fd] = NULL;
+
+    return 0;
 }
 
 static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock)

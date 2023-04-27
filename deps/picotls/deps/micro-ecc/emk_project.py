@@ -12,6 +12,11 @@ cxx_flags = ["-std=c++11", "-Wno-reorder", "-fno-rtti", "-fno-exceptions"]
 c_link_flags = []
 cxx_link_flags = ["-fno-rtti", "-fno-exceptions"]
 
+if "root" in emk.options:
+    root = emk.options["root"]
+else:
+    root = "/"
+
 def setup_build_dir():
     build_arch = None
     if "arch" in emk.options:
@@ -54,9 +59,9 @@ def setup_avr():
     global c
     global link
 
-    c.compiler = c.GccCompiler("/Projects/avr-tools/bin/avr-")
+    c.compiler = c.GccCompiler(root + "Projects/avr-tools/bin/avr-")
     c.flags += ["-mmcu=atmega256rfr2", "-ffunction-sections", "-fdata-sections"]
-    link.linker = link.GccLinker("/Projects/avr-tools/bin/avr-")
+    link.linker = link.GccLinker(root + "Projects/avr-tools/bin/avr-")
     link.flags += ["-mmcu=atmega256rfr2", "-mrelax", "-Wl,--gc-sections"]
     link.strip = True
 
@@ -66,30 +71,30 @@ def setup_arm_thumb():
     global asm
     global utils
 
-    asm.assembler = asm.GccAssembler("/cross/arm_cortex/bin/arm-none-eabi-")
-    c.compiler = c.GccCompiler("/cross/arm_cortex/bin/arm-none-eabi-")
-    link.linker = link.GccLinker("/cross/arm_cortex/bin/arm-none-eabi-")
+    asm.assembler = asm.GccAssembler(root + "cross/arm_cortex/bin/arm-none-eabi-")
+    c.compiler = c.GccCompiler(root + "cross/arm_cortex/bin/arm-none-eabi-")
+    link.linker = link.GccLinker(root + "cross/arm_cortex/bin/arm-none-eabi-")
 
     c.flags.extend(["-mcpu=cortex-m0", "-mthumb", "-ffunction-sections", "-fdata-sections", "-fno-builtin-fprintf", "-fno-builtin-printf"])
     c.defines["LPC11XX"] = 1
-    
+
     link.local_flags.extend(["-mcpu=cortex-m0", "-mthumb", "-nostartfiles", "-nostdlib", "-Wl,--gc-sections"])
-    link.local_flags.extend(["-Tflash.lds", "-L/Projects/lpc11xx/core", "/Projects/lpc11xx/core/" + emk.build_dir + "/board_cstartup.o"])
+    link.local_flags.extend(["-Tflash.lds", "-L" + root + "Projects/lpc11xx/core", root + "Projects/lpc11xx/core/" + emk.build_dir + "/board_cstartup.o"])
     link.local_syslibs += ["gcc"]
-    link.depdirs += ["/Projects/lpc11xx/stdlib"]
+    link.depdirs += [root + "Projects/lpc11xx/stdlib"]
 
     def do_objcopy(produces, requires):
-        utils.call("/cross/arm_cortex/bin/arm-none-eabi-objcopy", "-O", "binary", requires[0], produces[0])
+        utils.call(root + "cross/arm_cortex/bin/arm-none-eabi-objcopy", "-O", "binary", requires[0], produces[0])
 
     def handle_exe(path):
-        emk.depend(path, "/Projects/lpc11xx/core/" + emk.build_dir + "/board_cstartup.o")
+        emk.depend(path, root + "Projects/lpc11xx/core/" + emk.build_dir + "/board_cstartup.o")
         emk.rule(do_objcopy, path + ".bin", path, cwd_safe=True, ex_safe=True)
         emk.autobuild(path + ".bin")
 
     link.exe_funcs.append(handle_exe)
     link.strip = True
-    
-    emk.recurse("/Projects/lpc11xx/core")
+
+    emk.recurse(root + "Projects/lpc11xx/core")
 
 def setup_linux_rpi():
     global c
@@ -97,7 +102,7 @@ def setup_linux_rpi():
 
     c.compiler = c.GccCompiler("/Volumes/xtools/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-")
     link.linker = link.GccLinker("/Volumes/xtools/arm-none-linux-gnueabi/bin/arm-none-linux-gnueabi-")
-    
+
     c.flags.extend(["-fomit-frame-pointer"])
 
 setup_build_dir()

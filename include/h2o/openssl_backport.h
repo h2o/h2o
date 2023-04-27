@@ -23,6 +23,8 @@
 #define h2o__openssl_backport_h
 
 #include <stdlib.h>
+#include <openssl/ssl.h>
+#include <openssl/opensslconf.h>
 
 /* backports for OpenSSL 1.0.2 */
 #if OPENSSL_VERSION_NUMBER < 0x10100000L || (defined(LIBRESSL_VERSION_NUMBER) && LIBRESSL_VERSION_NUMBER < 0x2070000fL)
@@ -52,9 +54,14 @@ static inline BIO_METHOD *BIO_meth_new(int type, const char *name)
 
 #ifndef OPENSSL_IS_BORINGSSL
 #define SSL_CTX_up_ref(ctx) CRYPTO_add(&(ctx)->references, 1, CRYPTO_LOCK_SSL_CTX)
-
+#define X509_up_ref(x509) CRYPTO_add(&(x509)->references, 1, CRYPTO_LOCK_X509)
 #define X509_STORE_up_ref(store) CRYPTO_add(&(store)->references, 1, CRYPTO_LOCK_X509_STORE)
+#define EVP_PKEY_up_ref(pkey) CRYPTO_add(&(pkey)->references, 1, CRYPTO_LOCK_EVP_PKEY)
+#define X509_STORE_get0_param(p) ((p)->param)
 #endif
+
+#define OPENSSL_VERSION SSLEAY_VERSION
+#define OpenSSL_version SSLeay_version
 
 #endif
 

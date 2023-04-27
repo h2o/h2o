@@ -1,0 +1,10 @@
+# It also works with MRB_NO_STDIO.
+
+MRuby::GemBox.new do |conf|
+  # Use standard Math module
+  conf.gem :core => "mruby-math"
+
+  # Use Rational/Complex numbers
+  conf.gem :core => "mruby-rational"
+  conf.gem :core => "mruby-complex"
+end

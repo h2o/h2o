@@ -36,6 +36,7 @@
 <li><a href="configure/mruby.html">Using Mruby</a></li>
 <li><a href="configure/dos_detection.html">Using DoS Detection</a></li>
 <li><a href="configure/access_control.html">Access Control</a></li>
+<li><a href="configure/h2olog.html">Using h2olog for Tracing</a></li>
 </ul>
 </li>
 <li><a href="https://github.com/h2o/h2o/wiki#configuration-examples" target="_blank">Configuration Examples (Wiki)</a>

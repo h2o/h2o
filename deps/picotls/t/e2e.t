@@ -1,4 +1,4 @@
-#! /usr/bin/perl
+#! /usr/bin/env perl
 
 use strict;
 use warnings;
@@ -15,15 +15,20 @@ my $cli = "$ENV{BINARY_DIR}/cli";
 my $port = empty_port();
 my $tempdir = tempdir(CLEANUP => 1);
 
+my @cli_opts = ();
+if ($ENV{PTLSLOG}) {
+    push @cli_opts, "-j$ENV{PTLSLOG}";
+}
+
 subtest "hello" => sub {
-    my $guard = spawn_server(qw(-i t/assets/hello.txt));
+    my $guard = spawn_server("rsa", qw(-i t/assets/hello.txt));
     subtest "full-handshake" => sub {
-        my $resp = `$cli 127.0.0.1 $port 2> /dev/null`;
+        my $resp = `$cli @cli_opts 127.0.0.1 $port 2> /dev/null`;
         is $resp, "hello";
     };
     subtest "resumption" => sub {
         for (1..10) {
-            my $resp = `$cli -s $tempdir/session 127.0.0.1 $port 2> /dev/null`;
+            my $resp = `$cli @cli_opts -s $tempdir/session 127.0.0.1 $port 2> /dev/null`;
             is $resp, "hello";
         }
     };
@@ -33,26 +38,28 @@ unlink "$tempdir/session";
 
 subtest "early-data" => sub {
     subtest "success" => sub {
-        my $guard = spawn_server(qw(-i t/assets/hello.txt -l), "$tempdir/events");
-        my $resp = `$cli -s $tempdir/session 127.0.0.1 $port`;
+        plan skip_all => "faketime not found"
+            unless system("which faketime > /dev/null 2>&1") == 0;
+        my $guard = spawn_server("rsa", qw(-i t/assets/hello.txt -l), "$tempdir/events");
+        my $resp = `$cli @cli_opts -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
-        $resp = `$cli -e -s $tempdir/session 127.0.0.1 $port`;
+        $resp = `$cli @cli_opts -e -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
         like slurp_file("$tempdir/events"), qr/^CLIENT_EARLY_TRAFFIC_SECRET /m;
-        $resp = `$cli -e -s $tempdir/session 127.0.0.1 $port`;
+        $resp = `$cli @cli_opts -e -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
         is 2, (() = slurp_file("$tempdir/events") =~ /^CLIENT_EARLY_TRAFFIC_SECRET /mg);
         # check +15 seconds jitter
-        $resp = `faketime -f +15 $cli -e -s $tempdir/session 127.0.0.1 $port`;
+        $resp = `faketime -f +15 $cli @cli_opts -e -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
         is 2, (() = slurp_file("$tempdir/events") =~ /^CLIENT_EARLY_TRAFFIC_SECRET /mg);
         # re-fetch the ticket
         unlink "$tempdir/session";
-        $resp = `$cli -e -s $tempdir/session 127.0.0.1 $port`;
+        $resp = `$cli @cli_opts -e -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
         is 2, (() = slurp_file("$tempdir/events") =~ /^CLIENT_EARLY_TRAFFIC_SECRET /mg);
         # check -15 seconds jitter
-        $resp = `faketime -f -15 $cli -e -s $tempdir/session 127.0.0.1 $port`;
+        $resp = `faketime -f -15 $cli @cli_opts -e -s $tempdir/session 127.0.0.1 $port`;
         is $resp, "hello";
         is 2, (() = slurp_file("$tempdir/events") =~ /^CLIENT_EARLY_TRAFFIC_SECRET /mg);
     };
@@ -61,17 +68,38 @@ subtest "early-data" => sub {
 subtest "certificate-compression" => sub {
     plan skip_all => "feature disabled"
         unless system("$cli -b -h > /dev/null 2>&1") == 0;
-    my $guard = spawn_server(qw(-i t/assets/hello.txt -b));
-    my $resp = `$cli 127.0.0.1 $port 2> /dev/null`;
-    isnt $resp, "hello";
-    $resp = `$cli -b 127.0.0.1 $port 2> /dev/null`;
+    my $guard = spawn_server("rsa", qw(-i t/assets/hello.txt -b));
+    my $resp = `$cli @cli_opts 127.0.0.1 $port 2> /dev/null`;
     is $resp, "hello";
+    $resp = `$cli @cli_opts -b 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello";
+};
+
+# This test acts as an end-to-end testing of the certificate verifier of the OpenSSL backend.
+subtest "raw-public-keys" => sub {
+    my @key_types = do {
+        my $help = `$cli -h`;
+        $help =~ /^Supported signature algorithms:\s*(.*)\s*$/m
+            or die "failed to extract list of supported signature algorithms from $cli -h";
+        split /,\s*/, $1;
+    };
+    die "unexpected list of supported signature algorithms: @key_types"
+        unless grep /^rsa$/, @key_types;
+    for my $key_type (@key_types) {
+        subtest $key_type => sub {
+            my $guard = spawn_server($key_type, qw(-r - -i t/assets/hello.txt));
+            my $resp = `$cli @cli_opts -v -r t/assets/$key_type/pub.pem 127.0.0.1 $port 2> /dev/null`;
+            is $resp, "hello";
+        };
+    }
 };
 
 done_testing;
 
 sub spawn_server {
-    my @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
+    my $key_type = shift;
+    my $cert_type = grep(/^-r$/, @_) ? "pub" : "cert";
+    my @cmd = ($cli, @cli_opts, "-k", "t/assets/$key_type/key.pem", "-c", "t/assets/$key_type/$cert_type.pem", @_, "127.0.0.1", $port);
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;

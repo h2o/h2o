@@ -21,9 +21,9 @@ main(void)
     assert(strcmp(buf, yaml_get_version_string()) == 0);
 
     /* Print structure sizes. */
-    printf("sizeof(token) = %d\n", sizeof(yaml_token_t));
-    printf("sizeof(event) = %d\n", sizeof(yaml_event_t));
-    printf("sizeof(parser) = %d\n", sizeof(yaml_parser_t));
+    printf("sizeof(token) = %ld\n", (long)sizeof(yaml_token_t));
+    printf("sizeof(event) = %ld\n", (long)sizeof(yaml_event_t));
+    printf("sizeof(parser) = %ld\n", (long)sizeof(yaml_parser_t));
 
     return 0;
 }

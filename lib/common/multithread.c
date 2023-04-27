@@ -232,6 +232,17 @@ void h2o_multithread_create_thread(pthread_t *tid, const pthread_attr_t *attr, v
     }
 }
 
+h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *queue)
+{
+    if (queue == NULL)
+        return NULL;
+#if H2O_USE_LIBUV
+    return ((uv_handle_t *)&queue->async)->loop;
+#else
+    return h2o_socket_get_loop(queue->async.read);
+#endif
+}
+
 void h2o_sem_init(h2o_sem_t *sem, ssize_t capacity)
 {
     pthread_mutex_init(&sem->_mutex, NULL);
@@ -283,27 +294,20 @@ void h2o_barrier_init(h2o_barrier_t *barrier, size_t count)
     barrier->_out_of_wait = count;
 }
 
-int h2o_barrier_wait(h2o_barrier_t *barrier)
+void h2o_barrier_wait(h2o_barrier_t *barrier)
 {
-    int ret;
     pthread_mutex_lock(&barrier->_mutex);
     barrier->_count--;
     if (barrier->_count == 0) {
         pthread_cond_broadcast(&barrier->_cond);
-        ret = 1;
     } else {
-        while (barrier->_count)
+        while (barrier->_count != 0)
             pthread_cond_wait(&barrier->_cond, &barrier->_mutex);
-        ret = 0;
     }
     pthread_mutex_unlock(&barrier->_mutex);
-    /*
-     * this is needed to synchronize h2o_barrier_destroy with the
-     * exit of this function, so make sure that we can't destroy the
-     * mutex or the condition before all threads have exited wait()
-     */
+    /* This is needed to synchronize h2o_barrier_dispose with the exit of this function, so make sure that we can't destroy the
+     * mutex or the condition before all threads have exited wait(). */
     __sync_sub_and_fetch(&barrier->_out_of_wait, 1);
-    return ret;
 }
 
 int h2o_barrier_done(h2o_barrier_t *barrier)
@@ -311,11 +315,54 @@ int h2o_barrier_done(h2o_barrier_t *barrier)
     return __sync_add_and_fetch(&barrier->_count, 0) == 0;
 }
 
-void h2o_barrier_destroy(h2o_barrier_t *barrier)
+void h2o_barrier_add(h2o_barrier_t *barrier, size_t delta)
+{
+    __sync_add_and_fetch(&barrier->_count, delta);
+}
+
+void h2o_barrier_dispose(h2o_barrier_t *barrier)
 {
     while (__sync_add_and_fetch(&barrier->_out_of_wait, 0) != 0) {
         sched_yield();
     }
     pthread_mutex_destroy(&barrier->_mutex);
     pthread_cond_destroy(&barrier->_cond);
+}
+
+void h2o_error_reporter__on_timeout(h2o_timer_t *_timer)
+{
+    h2o_error_reporter_t *reporter = H2O_STRUCT_FROM_MEMBER(h2o_error_reporter_t, _timer, _timer);
+
+    pthread_mutex_lock(&reporter->_mutex);
+
+    uint64_t total_successes = __sync_fetch_and_add(&reporter->_total_successes, 0),
+             cur_successes = total_successes - reporter->prev_successes;
+
+    reporter->_report_errors(reporter, total_successes, cur_successes);
+
+    reporter->prev_successes = total_successes;
+    reporter->cur_errors = 0;
+
+    pthread_mutex_unlock(&reporter->_mutex);
+}
+
+uintptr_t h2o_error_reporter_record_error(h2o_loop_t *loop, h2o_error_reporter_t *reporter, uint64_t delay_ticks,
+                                          uintptr_t new_data)
+{
+    uintptr_t old_data;
+
+    pthread_mutex_lock(&reporter->_mutex);
+
+    if (reporter->cur_errors == 0) {
+        reporter->prev_successes = __sync_fetch_and_add_8(&reporter->_total_successes, 0);
+        assert(!h2o_timer_is_linked(&reporter->_timer));
+        h2o_timer_link(loop, delay_ticks, &reporter->_timer);
+    }
+    ++reporter->cur_errors;
+    old_data = reporter->data;
+    reporter->data = new_data;
+
+    pthread_mutex_unlock(&reporter->_mutex);
+
+    return old_data;
 }

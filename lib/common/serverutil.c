@@ -146,7 +146,7 @@ pid_t h2o_spawnp(const char *cmd, char *const *argv, const int *mapped_fds, int 
     extern int pipe2(int pipefd[2], int flags);
 #endif
 
-    /* posix_spawnp of Linux does not return error if the executable does not exist, see
+    /* Before glibc 2.24, posix_spawnp of Linux does not return error if the executable does not exist, see
      * https://gist.github.com/kazuho/0c233e6f86d27d6e4f09
      */
     extern char **environ;
@@ -233,6 +233,7 @@ Error:
     if (!cloexec_mutex_is_locked)
         pthread_mutex_unlock(&cloexec_mutex);
     free(env);
+    posix_spawn_file_actions_destroy(&file_actions);
     if (errno != 0)
         return -1;
 
@@ -241,9 +242,9 @@ Error:
 #endif
 }
 
-int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *child_status)
+int h2o_read_command(const char *cmd, char **argv, h2o_iovec_t std_in, h2o_buffer_t **resp, int *child_status)
 {
-    int respfds[2] = {-1, -1};
+    int respfds[2] = {-1, -1}, inputfds[2] = {-1, -1};
     pid_t pid = -1;
     int mutex_locked = 0, ret = -1;
 
@@ -252,22 +253,41 @@ int h2o_read_command(const char *cmd, char **argv, h2o_buffer_t **resp, int *chi
     pthread_mutex_lock(&cloexec_mutex);
     mutex_locked = 1;
 
-    /* create pipe for reading the result */
+    /* create pipes for reading the result and for supplying input */
     if (pipe(respfds) != 0)
         goto Exit;
-    if (fcntl(respfds[0], F_SETFD, O_CLOEXEC) < 0)
+    if (fcntl(respfds[0], F_SETFD, FD_CLOEXEC) < 0)
+        goto Exit;
+    if (pipe(inputfds) != 0)
+        goto Exit;
+    if (fcntl(inputfds[1], F_SETFD, FD_CLOEXEC) < 0)
         goto Exit;
 
     /* spawn */
-    int mapped_fds[] = {respfds[1], 1, /* stdout of the child process is read from the pipe */
+    int mapped_fds[] = {inputfds[0], 0, /* stdin of the child process is what is being provide as input */
+                        respfds[1], 1,  /* stdout of the child process is read from the pipe */
                         -1};
     if ((pid = h2o_spawnp(cmd, argv, mapped_fds, 1)) == -1)
         goto Exit;
     close(respfds[1]);
     respfds[1] = -1;
+    close(inputfds[0]);
+    inputfds[0] = -1;
 
     pthread_mutex_unlock(&cloexec_mutex);
     mutex_locked = 0;
+
+    /* supply input */
+    for (size_t off = 0; off < std_in.len;) {
+        ssize_t r;
+        while ((r = write(inputfds[1], std_in.base + off, std_in.len - off)) == -1 && errno == EINTR)
+            ;
+        if (r < 0)
+            break;
+        off += r;
+    }
+    close(inputfds[1]);
+    inputfds[1] = -1;
 
     /* read the response from pipe */
     while (1) {
@@ -293,10 +313,16 @@ Exit:
             ret = 0;
         }
     }
-    if (respfds[0] != -1)
-        close(respfds[0]);
-    if (respfds[1] != -1)
-        close(respfds[1]);
+#define CLOSE_FD(x)                                                                                                                \
+    do {                                                                                                                           \
+        if ((x) != -1)                                                                                                             \
+            close(x);                                                                                                              \
+    } while (0)
+    CLOSE_FD(respfds[0]);
+    CLOSE_FD(respfds[1]);
+    CLOSE_FD(inputfds[0]);
+    CLOSE_FD(inputfds[1]);
+#undef CLOSE_FD
     if (ret != 0)
         h2o_buffer_dispose(resp);
 

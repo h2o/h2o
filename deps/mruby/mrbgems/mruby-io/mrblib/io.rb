@@ -26,11 +26,11 @@ class IO
     end
   end
 
-  def self.popen(command, mode = 'r', opts={}, &block)
+  def self.popen(command, mode = 'r', **opts, &block)
     if !self.respond_to?(:_popen)
       raise NotImplementedError, "popen is not supported on this platform"
     end
-    io = self._popen(command, mode, opts)
+    io = self._popen(command, mode, **opts)
     return io unless block
 
     begin
@@ -61,39 +61,14 @@ class IO
     end
   end
 
-  def self.read(path, length=nil, offset=nil, opt=nil)
-    if not opt.nil?        # 4 arguments
-      offset ||= 0
-    elsif not offset.nil?  # 3 arguments
-      if offset.is_a? Hash
-        opt = offset
-        offset = 0
-      else
-        opt = {}
-      end
-    elsif not length.nil?  # 2 arguments
-      if length.is_a? Hash
-        opt = length
-        offset = 0
-        length = nil
-      else
-        offset = 0
-        opt = {}
-      end
-    else                   # only 1 argument
-      opt = {}
-      offset = 0
-      length = nil
-    end
-
+  def self.read(path, length=nil, offset=0, mode: "r")
     str = ""
     fd = -1
     io = nil
     begin
       if path[0] == "|"
-        io = IO.popen(path[1..-1], (opt[:mode] || "r"))
+        io = IO.popen(path[1..-1], mode)
       else
-        mode = opt[:mode] || "r"
         fd = IO.sysopen(path, mode)
         io = IO.open(fd, mode)
       end
@@ -123,8 +98,8 @@ class IO
 
   def write(string)
     str = string.is_a?(String) ? string : string.to_s
-    return str.size unless str.size > 0
-    if 0 < @buf.length
+    return 0 if str.empty?
+    unless @buf.empty?
       # reset real pos ignore buf
       seek(pos, SEEK_SET)
     end
@@ -140,8 +115,8 @@ class IO
   def eof?
     _check_readable
     begin
-      buf = _read_buf
-      return buf.size == 0
+      _read_buf
+      return @buf.empty?
     rescue EOFError
       return true
     end
@@ -150,7 +125,7 @@ class IO
 
   def pos
     raise IOError if closed?
-    sysseek(0, SEEK_CUR) - @buf.length
+    sysseek(0, SEEK_CUR) - @buf.bytesize
   end
   alias_method :tell, :pos
 
@@ -170,23 +145,34 @@ class IO
   end
 
   def _read_buf
-    return @buf if @buf && @buf.size > 0
-    @buf = sysread(BUF_SIZE)
+    return @buf if @buf && @buf.bytesize > 0
+    sysread(BUF_SIZE, @buf)
   end
 
   def ungetc(substr)
     raise TypeError.new "expect String, got #{substr.class}" unless substr.is_a?(String)
     if @buf.empty?
-      @buf = substr.dup
+      @buf.replace(substr)
     else
-      @buf = substr + @buf
+      @buf[0,0] = substr
     end
     nil
   end
 
+  def ungetbyte(c)
+    if c.is_a? String
+      c = c.getbyte(0)
+    else
+      c &= 0xff
+    end
+    s = " "
+    s.setbyte(0,c)
+    ungetc s
+  end
+
   def read(length = nil, outbuf = "")
     unless length.nil?
-      unless length.is_a? Fixnum
+      unless length.is_a? Integer
         raise TypeError.new "can't convert #{length.class} into Integer"
       end
       if length < 0
@@ -198,7 +184,7 @@ class IO
     end
 
     array = []
-    while 1
+    while true
       begin
         _read_buf
       rescue EOFError
@@ -207,9 +193,8 @@ class IO
       end
 
       if length
-        consume = (length <= @buf.size) ? length : @buf.size
-        array.push @buf[0, consume]
-        @buf = @buf[consume, @buf.size - consume]
+        consume = (length <= @buf.bytesize) ? length : @buf.bytesize
+        array.push IO._bufread(@buf, consume)
         length -= consume
         break if length == 0
       else
@@ -226,12 +211,12 @@ class IO
     end
   end
 
-  def readline(arg = $/, limit = nil)
+  def readline(arg = "\n", limit = nil)
     case arg
     when String
       rs = arg
-    when Fixnum
-      rs = $/
+    when Integer
+      rs = "\n"
       limit = arg
     else
       raise ArgumentError
@@ -242,11 +227,11 @@ class IO
     end
 
     if rs == ""
-      rs = $/ + $/
+      rs = "\n\n"
     end
 
     array = []
-    while 1
+    while true
       begin
         _read_buf
       rescue EOFError
@@ -256,12 +241,12 @@ class IO
 
       if limit && limit <= @buf.size
         array.push @buf[0, limit]
-        @buf = @buf[limit, @buf.size - limit]
+        @buf[0, limit] = ""
         break
       elsif idx = @buf.index(rs)
         len = idx + rs.size
         array.push @buf[0, len]
-        @buf = @buf[len, @buf.size - len]
+        @buf[0, len] = ""
         break
       else
         array.push @buf
@@ -284,9 +269,7 @@ class IO
 
   def readchar
     _read_buf
-    c = @buf[0]
-    @buf = @buf[1, @buf.size]
-    c
+    _readchar(@buf)
   end
 
   def getc
@@ -297,8 +280,21 @@ class IO
     end
   end
 
+  def readbyte
+    _read_buf
+    IO._bufread(@buf, 1).getbyte(0)
+  end
+
+  def getbyte
+    readbyte
+  rescue EOFError
+    nil
+  end
+
   # 15.2.20.5.3
   def each(&block)
+    return to_enum unless block
+
     while line = self.gets
       block.call(line)
     end
@@ -307,8 +303,10 @@ class IO
 
   # 15.2.20.5.4
   def each_byte(&block)
-    while char = self.getc
-      block.call(char)
+    return to_enum(:each_byte) unless block
+
+    while byte = self.getbyte
+      block.call(byte)
     end
     self
   end
@@ -316,7 +314,14 @@ class IO
   # 15.2.20.5.5
   alias each_line each
 
-  alias each_char each_byte
+  def each_char(&block)
+    return to_enum(:each_char) unless block
+
+    while char = self.getc
+      block.call(char)
+    end
+    self
+  end
 
   def readlines
     ary = []
@@ -330,9 +335,14 @@ class IO
     i = 0
     len = args.size
     while i < len
-      s = args[i].to_s
-      write s
-      write "\n" if (s[-1] != "\n")
+      s = args[i]
+      if s.kind_of?(Array)
+        puts(*s)
+      else
+        s = s.to_s
+        write s
+        write "\n" if (s[-1] != "\n")
+      end
       i += 1
     end
     write "\n" if len == 0
@@ -364,25 +374,3 @@ STDERR = IO.open(2, "w")
 $stdin  = STDIN
 $stdout = STDOUT
 $stderr = STDERR
-
-module Kernel
-  def print(*args)
-    $stdout.print(*args)
-  end
-
-  def puts(*args)
-    $stdout.puts(*args)
-  end
-
-  def printf(*args)
-    $stdout.printf(*args)
-  end
-
-  def gets(*args)
-    $stdin.gets(*args)
-  end
-
-  def getc(*args)
-    $stdin.getc(*args)
-  end
-end

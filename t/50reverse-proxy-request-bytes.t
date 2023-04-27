@@ -39,7 +39,7 @@ EOT
 
 sub doit {
     my ($streaming) = @_;
-    my $expected_body_size = $streaming ? 23 : 10;
+    my $expected_body_size = $streaming ? 25 : 10;
     my $expected_header_size = $streaming ? 174 : 166;
 
     my $req = join("\r\n", (

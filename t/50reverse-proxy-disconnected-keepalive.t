@@ -23,7 +23,7 @@ subtest "unix-socket" => sub {
 
     (undef, my $sockfn) = tempfile(UNLINK => 0);
     unlink $sockfn;
-    my $guard = Scope::Guard->new(sub {
+    my $guard = make_guard(sub {
         unlink $sockfn;
     });
 

@@ -1,0 +1,151 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use Fcntl qw(:flock F_SETFD F_GETFD FD_CLOEXEC);
+use File::Temp qw(tempdir);
+use Getopt::Long qw(:config posix_default no_ignore_case gnu_compat);
+use POSIX qw(:sys_wait_h);
+use Term::ANSIColor;
+use Time::HiRes qw(time);
+
+my $jobs = $ENV{TEST_JOBS} || 1;
+
+GetOptions(
+   "jobs|j=i" => \$jobs,
+) or die "error in command line arguments\n";
+
+my @scripts = @ARGV;
+my %pids;
+my @failures;
+
+my $tempdir = tempdir(CLEANUP => 1);
+
+while (@scripts or %pids) {
+    # spawn
+    while (@scripts and keys %pids < $jobs) {
+        my $script = shift @scripts;
+        $pids{spawn_script($script)} = $script;
+    }
+
+    # wait for tasks to exit
+    my $kid = do {
+        local $SIG{ALRM} = sub { die };
+        alarm(600);
+        my $kid = eval { wait };
+        alarm(0);
+        $kid;
+    };
+    if ($@) {
+        for my $kid (keys %pids) {
+            my $script = delete $pids{$kid};
+            commit_test($script, 0, 'timeout');
+        }
+    } elsif ($pids{$kid}) {
+        my $script = delete $pids{$kid};
+        commit_test($script, WIFEXITED($?) && (WEXITSTATUS($?) == 0));
+    }
+}
+
+print "--------------------------------------------------------\n";
+if (@failures) {
+    print colorize(join('', "# Result: Fail\n", map { "# \t$_\n" } @failures), 'red');
+    exit 1;
+} else {
+    print colorize(join('', "# Result: Success\n", map { "# \t$_\n" } @failures), 'green');
+    exit 0;
+}
+
+sub spawn_script {
+    my $script = shift;
+
+    my $logfn = get_logfn($script);
+    open my $logfh, ">", $logfn
+        or die "failed to create log file:$logfn:$!";
+    autoflush $logfh 1;
+
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+
+    # return the spawned PID if in parent process
+    return $pid if $pid != 0;
+
+    # obtain shared lock for lockfile
+    open my $lockfh, ">>", "$tempdir/lock"
+        or die "failed to open $tempdir/lock:$!";
+    fcntl($lockfh, F_SETFD, fcntl($lockfh, F_GETFD, 0) & ~FD_CLOEXEC)
+        or die "failed to clear FD_CLOEXEC:$!";
+    flock($lockfh, LOCK_SH)
+        or die "failed to obtain shared lock fo $tempdir/lock:$!";
+    $ENV{LOCKFD} = fileno $lockfh;
+
+    # child process, redirect STDOUT, STDERR to tempfile and exec
+    $logfh = log_add_timestamp($logfh);
+    open STDOUT, ">&", $logfh
+        or die "failed to redirect STDOUT:$!";
+    autoflush STDOUT 1;
+    open STDERR, ">&", $logfh
+        or die "failed to redirect STDERR:$!";
+    autoflush STDERR 1;
+    $ENV{PERL5LIB} = join ":", ".", split ":", $ENV{PERL5LIB} || "";
+    exec "time", $^X, $script;
+    die "failed to exec $^X $script:$!";
+}
+
+sub get_logfn {
+    my $script = shift;
+    $script =~ s{/}{__}g;
+    "$tempdir/$script.out";
+}
+
+sub commit_test {
+    my ($script, $success, $extra_msg) = @_;
+    $extra_msg = $extra_msg ? " ($extra_msg)" : '';
+
+    print colorize("# $script --------------------------------\n", 'cyan');
+
+    # print the output of the perl script being run
+    my $logfn = get_logfn($script);
+    open my $logfh, "<", $logfn
+        or die "failed to open script:$logfn:$!";
+    unlink $logfn;
+    print do { local $/; <$logfh> };
+
+    # add to the failed list, if necessary
+    if ($success) {
+        print colorize("# $script succeeded$extra_msg\n", 'bright_green');
+    } else {
+        print colorize("# $script failed$extra_msg\n", 'bright_red');
+        push @failures, $script;
+    }
+}
+
+sub colorize {
+    my ($msg, $color) = @_;
+    return -t STDOUT ? colored($msg, $color) : $msg;
+}
+
+sub log_add_timestamp {
+    my $logfh = shift;
+
+    my ($readfh, $writefh);
+    pipe $readfh, $writefh
+        or die "pipe failed:$!";
+
+    my $pid = fork;
+    die "fork failed:$!"
+        unless defined $pid;
+
+    if ($pid == 0) {
+        # child process
+        close $writefh;
+        my $start_at = time;
+        while (<$readfh>) {
+            printf $logfh '%10.06f %s', time - $start_at, $_;
+        }
+        exit 0;
+    }
+
+    close $readfh;
+    $writefh;
+}

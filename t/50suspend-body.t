@@ -14,6 +14,8 @@ sub nc_get {
 }
 
 sub nghttp_get {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
     my ($server, $path) = @_; 
     my $out = `nghttp -vn -t 1 'https://127.0.0.1:$server->{tls_port}$path'`;
     my $headers_size = 0;
@@ -74,6 +76,9 @@ EOT
 };
 
 subtest 'mruby-http-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -89,6 +94,9 @@ EOT
 };
 
 subtest 'mruby-callback-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -112,6 +120,9 @@ EOT
 };
 
 subtest 'mruby-middleware-chunked' => sub {
+    plan skip_all => "mruby support is off"
+        unless server_features()->{mruby};
+
     my $upstream = create_upstream(qw(-s Starlet --max-workers 0));
     my $server = spawn_h2o(<< "EOT");
 hosts:

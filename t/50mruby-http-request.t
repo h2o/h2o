@@ -542,6 +542,7 @@ EOT
 };
 
 subtest 'timeout' => sub {
+    my $blackhole = find_blackhole_ip(443);
     subtest 'connect timeout' => sub {
         my $server = spawn_h2o(<< "EOT");
 proxy.timeout.connect: 100
@@ -552,7 +553,7 @@ hosts:
       /:
         mruby.handler: |
           proc {|env|
-            resp = http_request("http://192.0.2.0/").join
+            resp = http_request("http://$blackhole/").join
             if warn = resp[1].delete('client-warning')
               [504, resp[1], ["client warning: #{warn}"]]
             else
@@ -588,7 +589,7 @@ EOT
 
         my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         like $headers, qr{HTTP/[^ ]+ 504\s}is;
-        is $body, 'client warning: I/O timeout';
+        is $body, 'client warning: first byte timeout';
     };
 };
 

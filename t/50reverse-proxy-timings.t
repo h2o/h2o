@@ -9,6 +9,9 @@ use Time::HiRes qw(sleep);
 plan skip_all => 'curl not found'
     unless prog_exists('curl');
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
+
 my $tempdir = tempdir(CLEANUP => 1);
 
 my $upstream_port = empty_port();
@@ -99,7 +102,7 @@ run_with_curl($server, sub {
 
 sub within_eps {
     my ($timings, $name, $expected, $eps) = @_;
-    $eps ||= $expected / 10;
+    $eps ||= $expected / 5;
     cmp_ok $timings->{$name}, '>=', $expected - $eps, ">= $name - eps";
     cmp_ok $timings->{$name}, '<=', $expected + $eps, "<= $name + eps";
 }

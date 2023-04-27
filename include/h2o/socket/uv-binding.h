@@ -38,7 +38,7 @@ h2o_socket_t *h2o_uv__poll_create(h2o_loop_t *loop, int fd, uv_close_cb close_cb
 typedef struct st_h2o_timer_t h2o_timer_t;
 typedef void (*h2o_timer_cb)(h2o_timer_t *timer);
 struct st_h2o_timer_t {
-    uv_timer_t uv_timer;
+    uv_timer_t *uv_timer;
     int is_linked;
     h2o_timer_cb cb;
 };

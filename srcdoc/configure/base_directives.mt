@@ -164,13 +164,31 @@ The <code style="font-weight: bold;">ssl</code> attribute must be defined as a m
 </p>
 <dl>
 <dt id="certificate-file">certificate-file:</dt>
-<dd>path of the SSL certificate file (mandatory)</dd>
+<dd>
+Path of the SSL certificate file (mandatory).
+This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
+</dd>
 <dt id="key-file">key-file:</dt>
-<dd>path of the SSL private key file (mandatory)</dd>
+<dd>Path of the SSL private key file (mandatory).</dd>
+<dt>identity:</dt>
+<dd>List of certificate / key pairs.
+This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
+When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
+The last pair acts as the fallback.
+<?= $ctx->{example}->('Using RSA and ECDSA certificates', <<'EOT')
+ssl:
+  identity:
+  - key-file: /path/to/rsa.key
+    certificate-file: /path/to/rsa.crt
+  - key-file: /path/to/ecdsa.key
+    certificate-file: /path/to/ecdsa.crt
+EOT
+?>
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
-minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>.
-Default is <code>TLSv1</code>
+minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
+Default is <code>TLSv1</code>.
 </dd>
 <dt id="min-version">min-version:</dt>
 <dd>
@@ -208,6 +226,41 @@ Default is <code>14400</code> (4 hours).
 <dd>
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
+</dd>
+<dt id="ech">ech:</dt>
+<dd>
+This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
+The attribute takes a sequence of mappings, each of them defining one ECH configuration.
+<?= $ctx->{example}->('Encrypted Clint hello', <<'EOT')
+ssl:
+  key-file: /path/to/rsa.key
+  certificate-file: /path/to/rsa.crt
+  ech:
+  - key-file: /path/to/ech.key
+    config-id: 11
+    public-name: public-name.example.net
+    cipher-suite: [ HKDF-SHA256/AES-128-GCM ]
+EOT
+?>
+<p>
+The example above defines one ECH configuration that uses <code>/path/to/ech.key</code> as the semi-static ECDH key with a config-id of 11, with the public-name being <code>public-name.example.net</code>, and the HPKE SymmetricCipherSuite being <code>HKDF-SHA256/AES-128-GCM</code>.
+</p>
+<p>
+In addition to these four attributes, following attributes may be specified.
+</p>
+<p>
+<code>max-name-length</code> specifies the maximum-name-length field of an ECH confguration (default: 64).
+</p>
+<p>
+<code>advertise</code> takes either <code>YES</code> (default) or <code>NO</code> as the argument.
+This argument indicates if given ECH configuration should be advertised as part of <code>retry_configs</code> (draft-ietf-tls-esni-15; section 5).
+</p>
+<p>
+When removing a stale ECH configuration, its <code>advertise</code> attribute should be set at first to <code>NO</code> so that the stale configuration would not be advertised.
+Then, after waiting for the expiry of caches containing the stale configuration, the stale ECH configuration can be removed.
+This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
+</p>
+The <code>ech</code> attribute must be set only in the first <code>ssl</code> attribute that binds to a particular address.
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
@@ -255,6 +308,11 @@ listen:
   permission: 600
 EOT
 ?>
+<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
+<p>
+If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
+This is an experimental feature introduced in v2.3.0-beta3.
+</p>
 ? })
 
 <?
@@ -407,13 +465,16 @@ $ctx->{directive}->(
     name     => "send-server-name",
     levels   => [ qw(global) ],
     since    => '2.0',
-    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent.},
+    desc     => q{Sets whether if the <code>server</code> response header should be sent or forwarded from backend.},
     default  => q{send-server-name: ON},
     see_also => render_mt(<<'EOT'),
 <a href="configure/base_directives.html#server-name"><code>server-name</code></a>
 EOT
 )->(sub {
 ?>
+<p>
+By setting the value to (<code>ON</code> or <code>OFF</code>) indicating whether if the <code>server</code> response header should be sent. And by setting the value to <code>preserve</code>, it forwards the value received from the backend when proxying.
+</p>
 ? })
 
 <?

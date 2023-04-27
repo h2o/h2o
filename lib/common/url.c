@@ -29,6 +29,7 @@
 
 const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80, 0};
 const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443, 1};
+const h2o_url_scheme_t H2O_URL_SCHEME_MASQUE = {{H2O_STRLIT("masque")}, 65535, 0 /* ??? masque might or might not be over TLS */};
 const h2o_url_scheme_t H2O_URL_SCHEME_FASTCGI = {{H2O_STRLIT("fastcgi")}, 65535, 0};
 
 static int decode_hex(int ch)
@@ -118,7 +119,6 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
 
 h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes)
 {
-    const char *p = path, *end = path + len;
     h2o_iovec_t ret;
 
     *query_at = SIZE_MAX;
@@ -128,6 +128,8 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
         ret = h2o_iovec_init("/", 1);
         return ret;
     }
+
+    const char *p = path, *end = path + len;
 
     if (path[0] != '/')
         goto Rewrite;
@@ -178,6 +180,9 @@ static const char *parse_scheme(const char *s, const char *end, const h2o_url_sc
     } else if (end - s >= 6 && memcmp(s, "https:", 6) == 0) {
         *scheme = &H2O_URL_SCHEME_HTTPS;
         return s + 6;
+    } else if (end - s >= 7 && memcmp(s, "masque:", 7) == 0) {
+        *scheme = &H2O_URL_SCHEME_MASQUE;
+        return s + 7;
     }
     return NULL;
 }

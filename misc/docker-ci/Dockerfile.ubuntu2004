@@ -1,0 +1,84 @@
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get --yes update
+RUN apt-get install --yes \
+	apache2-utils \
+	bison \
+	clang \
+	cmake \
+	cmake-data \
+	dnsutils \
+	flex \
+	git \
+	libbrotli-dev \
+	libc-ares-dev \
+	libcap-dev \
+	libedit-dev \
+	libelf-dev \
+	libev-dev \
+	libssl-dev \
+	libuv1-dev \
+	zlib1g-dev \
+	libbpfcc-dev \
+	memcached \
+	net-tools \
+	netcat-openbsd \
+	nghttp2-client \
+	php-cgi \
+	pkgconf \
+	python3 \
+	python3-distutils \
+	redis-server \
+	rsync \
+	ruby-dev \
+	sudo \
+	systemtap-sdt-dev \
+	time \
+	wget
+
+# curl with http2 support
+RUN apt-get install --yes libnghttp2-dev \
+	&& wget --no-verbose -O - https://curl.haxx.se/download/curl-7.81.0.tar.gz | tar xzf - \
+	&& (cd curl-7.81.0 && ./configure --prefix=/usr/local --with-openssl --without-brotli --with-nghttp2 --disable-shared && make && make install)
+
+# perl
+RUN apt-get install --yes \
+	cpanminus \
+	libfcgi-perl \
+	libfcgi-procmanager-perl \
+	libipc-signal-perl \
+	libjson-perl \
+	liblist-moreutils-perl \
+	libplack-perl \
+	libscope-guard-perl \
+	libtest-exception-perl \
+	libwww-perl \
+	libio-socket-ssl-perl
+ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+
+# h2spec
+RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+
+# use dumb-init
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
+ && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
+
+# liburing
+RUN git clone --depth=1 https://github.com/axboe/liburing.git && \
+	cd liburing && \
+	make install && \
+	make clean
+
+# create user
+RUN useradd --create-home ci
+RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+WORKDIR /home/ci
+USER ci
+
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--rewrite", "1:0"]

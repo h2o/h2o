@@ -537,10 +537,11 @@ size_t h2o_stringify_protocol_version(char *dst, int version)
 #undef PREFIX
         *p++ = '0' + (version & 0xff);
     } else {
-#define PROTO "HTTP/2"
-        memcpy(p, PROTO, sizeof(PROTO) - 1);
-        p += sizeof(PROTO) - 1;
-#undef PROTO
+#define PREFIX "HTTP/"
+        memcpy(p, PREFIX, sizeof(PREFIX) - 1);
+        p += sizeof(PREFIX) - 1;
+#undef PREFIX
+        *p++ = (version >> 8) + '0';
     }
 
     *p = '\0';
@@ -649,7 +650,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
 
     /* extract URL values from Link: </pushed.css>; rel=preload */
     do {
-        if ((token = h2o_next_token(&iter, ';', &token_len, NULL)) == NULL)
+        if ((token = h2o_next_token(&iter, ';', ',', &token_len, NULL)) == NULL)
             break;
         /* first element should be <URL> */
         if (!(token_len >= 2 && token[0] == '<' && token[token_len - 1] == '>'))
@@ -657,7 +658,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
         h2o_iovec_t url_with_brackets = h2o_iovec_init(token, token_len);
         /* find rel=preload */
         int preload = 0, nopush = 0, push_only = 0, critical = 0;
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
+        while ((token = h2o_next_token(&iter, ';', ',', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("rel")) &&
                 h2o_lcstris(token_value.base, token_value.len, H2O_STRLIT("preload"))) {
@@ -712,7 +713,7 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
             h2o_iovec_t iter = h2o_iovec_init(header->value.base, header->value.len);
             const char *token = NULL;
             size_t token_len = 0;
-            while ((token = h2o_next_token(&iter, ',', &token_len, NULL)) != NULL) {
+            while ((token = h2o_next_token(&iter, ',', ',', &token_len, NULL)) != NULL) {
                 if (h2o_lcstris(token, token_len, H2O_STRLIT("gzip")))
                     compressible_types |= H2O_COMPRESSIBLE_GZIP;
                 else if (h2o_lcstris(token, token_len, H2O_STRLIT("br")))
@@ -938,9 +939,29 @@ const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
 
 uint64_t h2o_connection_id = 0;
 
-void h2o_cleanup_thread(void)
+uint32_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
 {
-    h2o_mem_clear_recycle(&h2o_mem_pool_allocator);
-    h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
-    h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
+    /* File descriptor cache is cleared fully per event loop and it is sufficient to do so, because:
+     * * if the file handler opens one file only once per event loop, then calling open (2) is relatively lightweight compared to
+     *   other stuff such as connection establishment, and
+     * * if a file is large enough that it is not served in one event loop, the file descriptor remains open within the cache. */
+    if (ctx_optional != NULL)
+        h2o_filecache_clear(ctx_optional->filecache);
+
+    /* recycle either fully, or partially if at least 1 second has elasped since previous gc */
+    static __thread uint64_t next_gc_at;
+    if (now >= next_gc_at) {
+        int full = now == 0;
+        h2o_buffer_clear_recycle(full);
+        h2o_socket_clear_recycle(full);
+        h2o_mem_clear_recycle(&h2o_mem_pool_allocator, full);
+        next_gc_at = now + 1000;
+    }
+
+    /* if all the recyclers are empty, we can sleep forever; otherwise request to be invoked again within no more than one second */
+    if (h2o_buffer_recycle_is_empty() && h2o_socket_recycle_is_empty() && h2o_mem_recycle_is_empty(&h2o_mem_pool_allocator)) {
+        return INT32_MAX;
+    } else {
+        return 1000;
+    }
 }

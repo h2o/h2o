@@ -154,6 +154,8 @@ builder {
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
             sleep 1;
             $writer->write('x');
+            sleep 1
+                if $env->{QUERY_STRING} =~ /delay-fin/;
             $writer->close;
         };
     };
@@ -161,10 +163,11 @@ builder {
         my $env = shift;
         my $query = Plack::Request->new($env)->query_parameters;
         my $sleep = $query->{sleep} // 0.1;
+        my $count = $query->{count} // 30;
         return sub {
             my $responder = shift;
             my $writer = $responder->([ 200, [ 'content-type' => 'text/plain' ] ]);
-            for my $i (1..30) {
+            for my $i (1..$count) {
                 sleep $sleep;
                 $writer->write($i);
             }
@@ -339,5 +342,12 @@ builder {
             "hello world",
         );
         return sub {};
+    };
+    mount "/425" => sub {
+        my $env = shift;
+        if ($env->{HTTP_EARLY_DATA}) {
+            return [425, [], []];
+        }
+        return [200, ["content-type" => 'text/plain; charset=utf-8'], ["hello\n"]];
     };
 };

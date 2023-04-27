@@ -36,9 +36,9 @@ my $doit = sub {
     my ($proto, $opt, $port) = @_;
 
     my $before = time();
-    `nghttp -t 10 $opt -nv -d $huge_file $proto://127.0.0.1:$port/echo`;
+    `nghttp -t 5 $opt -nv -d $huge_file $proto://127.0.0.1:$port/echo`;
     my $after = time();
-    cmp_ok $after - $before, ">=", 10, "Timeout was triggered by nghttp";
+    cmp_ok $after - $before, ">=", 4, "Timeout was triggered by nghttp";
 };
 
 subtest 'http (upgrade)' => sub {

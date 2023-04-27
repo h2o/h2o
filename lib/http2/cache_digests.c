@@ -111,9 +111,9 @@ void h2o_cache_digests_load_header(h2o_cache_digests_t **digests, const char *va
         int reset = 0, validators = 0, complete = 0, skip = 0;
         h2o_iovec_t token_value;
 
-        if ((gcs_base64 = h2o_next_token(&iter, ';', &gcs_base64_len, NULL)) == NULL)
+        if ((gcs_base64 = h2o_next_token(&iter, ';', ',', &gcs_base64_len, NULL)) == NULL)
             return;
-        while ((token = h2o_next_token(&iter, ';', &token_len, &token_value)) != NULL &&
+        while ((token = h2o_next_token(&iter, ';', ',', &token_len, &token_value)) != NULL &&
                !h2o_memis(token, token_len, H2O_STRLIT(","))) {
             if (h2o_lcstris(token, token_len, H2O_STRLIT("reset"))) {
                 reset = 1;

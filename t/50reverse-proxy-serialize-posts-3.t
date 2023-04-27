@@ -34,7 +34,8 @@ EOT
 my $output = run_with_h2get($server, <<"EOR");
     to_process = []
     h2g = H2.new
-    host = ARGV[0]
+    authority = ARGV[0]
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()
@@ -79,7 +80,7 @@ ok($chunked_header_found == 1, "TE:chunked header found");
 my @chunks = split /\r\n/, $body;
 
 my $chunk_len = 0;
-for (my $i = 0; $i < scalar(@chunks); $i+=3) {
+for (my $i = 0; $i < scalar(@chunks); $i+=2) {
     $chunk_len += hex($chunks[$i]);
 }
 

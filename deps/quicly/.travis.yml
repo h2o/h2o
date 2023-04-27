@@ -1,0 +1,43 @@
+language: c
+cache: ccache
+
+env:
+  global:
+    - MAKEFLAGS="-j 2"
+
+matrix:
+  include:
+    - os: linux
+      dist: bionic
+      sudo: required
+      env:
+        - label=linux/x86-64
+      before_install:
+        - sudo apt-get install libjson-perl libscope-guard-perl libtest-tcp-perl
+      script:
+        - cmake -DWITH_DTRACE=OFF .
+        - make && make check
+    - os: osx
+      osx_image: xcode6.4
+      env:
+        - label=osx10.10/x86-64-dtrace
+      before_install: &bs_osx
+        - curl -L https://cpanmin.us | perl - --self-upgrade --sudo
+        - cpanm --sudo --installdeps --notest .
+      script:
+        - cmake -DOPENSSL_ROOT_DIR=/usr/local/opt/openssl .
+        - make && make check
+    - os: osx
+      env:
+        - label=osx10.13/i386
+      before_install: *bs_osx
+      script:
+        - curl -O https://www.openssl.org/source/old/1.1.0/openssl-1.1.0i.tar.gz
+        - tar -xf openssl-1.1.0i.tar.gz
+        - cd openssl-1.1.0i
+        - KERNEL_BITS=32 ./config --prefix=$HOME/openssl-build
+        - make
+        - make install
+        - cd ..
+        - cmake -DCMAKE_C_FLAGS=-m32 -DOPENSSL_ROOT_DIR=$HOME/openssl-build -DWITH_DTRACE=OFF -DWITH_FUSION=OFF .
+        - make && make check

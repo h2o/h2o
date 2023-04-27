@@ -552,13 +552,39 @@ The ssl attribute must be defined as a mapping, and recognizes the following att
 
 
 certificate-file:
-path of the SSL certificate file (mandatory)
+
+Path of the SSL certificate file (mandatory).
+This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+When the latter form is being used, RFC 7250 handshake will be used.
+
 key-file:
-path of the SSL private key file (mandatory)
+Path of the SSL private key file (mandatory).
+identity:
+List of certificate / key pairs.
+This attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
+When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
+The last pair acts as the fallback.
+.PP
+.BR Example:\ 
+Using RSA and ECDSA certificates
+.PP
+.nf
+.RS
+ssl:
+  identity:
+  - key-file: /path/to/rsa.key
+    certificate-file: /path/to/rsa.crt
+  - key-file: /path/to/ecdsa.key
+    certificate-file: /path/to/ecdsa.crt
+
+.RE
+.fi
+.PP
+
 minimum-version:
 
-minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2.
-Default is TLSv1
+minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3.
+Default is TLSv1.
 
 min-version:
 
@@ -596,6 +622,49 @@ ocsp-max-failures:
 
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
+
+ech:
+
+This experimental attribute controls the use of TLS Encrypted Client Hello extension (draft-15).
+The attribute takes a sequence of mappings, each of them defining one ECH configuration.
+.PP
+.BR Example:\ 
+Encrypted Clint hello
+.PP
+.nf
+.RS
+ssl:
+  key-file: /path/to/rsa.key
+  certificate-file: /path/to/rsa.crt
+  ech:
+  - key-file: /path/to/ech.key
+    config-id: 11
+    public-name: public-name.example.net
+    cipher-suite: [ HKDF-SHA256/AES-128-GCM ]
+
+.RE
+.fi
+.PP
+
+
+The example above defines one ECH configuration that uses /path/to/ech.key as the semi-static ECDH key with a config-id of 11, with the public-name being public-name.example.net, and the HPKE SymmetricCipherSuite being HKDF-SHA256/AES-128-GCM.
+
+
+In addition to these four attributes, following attributes may be specified.
+
+
+max-name-length specifies the maximum-name-length field of an ECH confguration (default: 64).
+
+
+advertise takes either YES (default) or NO as the argument.
+This argument indicates if given ECH configuration should be advertised as part of retry_configs (draft-ietf-tls-esni-15; section 5).
+
+
+When removing a stale ECH configuration, its advertise attribute should be set at first to NO so that the stale configuration would not be advertised.
+Then, after waiting for the expiry of caches containing the stale configuration, the stale ECH configuration can be removed.
+This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
+
+The ech attribute must be set only in the first ssl attribute that binds to a particular address.
 
 neverbleed:
 
@@ -650,6 +719,11 @@ listen:
 .RE
 .fi
 .PP
+
+Listening to HTTP/3 (QUIC)
+
+If the type attribute is set to quic, the port attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
+This is an experimental feature introduced in v2.3.0-beta3.
 
 
 .RE
@@ -817,9 +891,12 @@ On other platforms the default value is 0 (disabled).
 
 .SS send-server-name
 (since v2.0)
-A boolean flag (ON or OFF) indicating whether if the server response header should be sent.
+Sets whether if the server response header should be sent or forwarded from backend.
 
 .PP
+
+
+By setting the value to (ON or OFF) indicating whether if the server response header should be sent. And by setting the value to preserve, it forwards the value received from the backend when proxying.
 
 
 .PP
@@ -1369,6 +1446,13 @@ Timeout for incoming requests in seconds.
 
 .RE
 .RE
+.SS http1-request-io-timeout
+Timeout for incoming request I/O in seconds.
+
+.PP
+
+.RE
+.RE
 .SS http1-upgrade-to-http2
 Boolean flag (ON or OFF) indicating whether or not to allow upgrade to HTTP/2.
 
@@ -1656,6 +1740,19 @@ The value cannot exceed 256.
 .RE
 .RE
 
+.SS http2-max-concurrent-streaming-requests-per-connection
+Maximum number of streaming requests to be handled concurrently within a single HTTP/2 connection.
+
+
+.PP
+
+
+The value cannot exceed 256.
+
+
+.RE
+.RE
+
 .SS http2-latency-optimization-min-rtt
 (since v2.1)
 Minimum RTT (in milliseconds) to enable latency optimization.
@@ -1913,6 +2010,9 @@ NameDescription
 proxy.request-bytesnumber of bytes used by the proxy handler for sending the request (above TLS layer)
 proxy.request-bytes-headernumber of bytes used by the proxy handler for sending the request header (above TLS layer)
 proxy.request-bytes-bodynumber of bytes used by the proxy handler for sending the request body (above TLS layer)
+proxy.response-bytesnumber of bytes used by the proxy handler for receiving the response (above TLS layer)
+proxy.response-bytes-headernumber of bytes used by the proxy handler for receiving the response header (above TLS layer)
+proxy.response-bytes-bodynumber of bytes used by the proxy handler for receiving the response body (above TLS layer)
 
 
 Connection (since v2.0)
@@ -1923,6 +2023,15 @@ ssl.session-reused1 if the SSL session was reused, or 0 if not [1]
 ssl.session-idbase64-encoded value of the session id used for resuming the session (since v2.2)
 ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
 ssl.cipher-bitsstrength of the cipher suite in bits
+ssl.server-namehostname provided in Server Name Indication (SNI) extension, if any
+
+
+Upstream Proxy Connection (since v2.3)
+NameDescription
+proxy.ssl.protocol-versionSSL protocol version obtained from SSL_get_version
+proxy.ssl.session-reused1 if the SSL session was reused, or 0 if not
+proxy.ssl.ciphername of the cipher suite being used, obtained from SSL_CIPHER_get_name
+proxy.ssl.cipher-bitsstrength of the cipher suite in bits
 
 
 HTTP/2 (since v2.0)
@@ -3155,25 +3264,30 @@ The value should be set to something smaller than that being set at the upstream
 .RE
 .RE
 
-.SS proxy.websocket
-A boolean flag (ON or OFF) indicating whether or not to allow upgrading the proxied connection to the WebSocket protocol.
+.SS proxy.tunnel
+A boolean flag (ON or OFF) indicating whether or not to allow tunnelling to the backend server.
 
 .PP
 
 
-When set to ON, the proxied connection will be upgraded to a bi-directional tunnel stream if upgrading to WebSocket connection is permitted by the backend server (i.e. if the backend server responds to a WebSocket handshake with 101 status code).
+When set to ON, CONNECT requests and WebSocket handshakes are forwarded to the backend server.
+Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 
 
-Support for WebSocket is considered experimental for the time being and therefore is not yet turned on by default.
+Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
 
 
 .RE
 .RE
 
-.SS proxy.websocket.timeout
-Sets idle timeout of a WebSocket connection being proxied.
+.SS proxy.tunnel.timeout
+Sets the idle timeout of a tunnel.
 
 .PP
+
+.PP
+.BR See\ also:
+proxy.tunnel
 
 .RE
 .RE
@@ -4235,6 +4349,107 @@ paths:
 
 This library currently supports only IPv4 addresses. TrieAddr#match? returns false when it receives an invalid IPv4 address (including an IPv6 address) as an argument..
 
+
+
+
+
+.SH USING H2OLOG FOR TRACING
+
+
+h2olog is an experimental BPF (kernel doc) backed tracing tool for the H2O server.
+It can be used for tracing quicly and h2o USDT probes.
+
+Since h2olog is an experimental program, its command-line interface might change without notice.
+
+Installing from Source
+
+See requirements for build prerequisites.
+If dependencies are satisfied, h2olog is built automatically. It is possible to manually turn on / off the build of h2olog by using the -DWITH_H2OLOG option. This option takes either ON> or OFF as the argument.
+If you have BCC installed to a non-standard path, use pkg-config for cmake.
+
+.PP
+.nf
+.RS
+$ PKG_CONFIG_PATH=/path/to/bcc/lib/pkgconfig cmake [options]
+
+.RE
+.fi
+.PP
+
+Requirements
+
+For building h2olog
+
+C++11 compiler
+CMake for generating the build files
+pkg-config for detecting dependencies
+Python 3 for the code generator
+BCC (BPF compiler collection, a.k.a. bpfcc; >= 0.11.0) installed on your system
+
+For Ubuntu 20.04 or later, you can install dependencies with:
+.PP
+.nf
+.RS
+$ sudo apt install clang cmake python3 libbpfcc-dev linux-headers-$(uname -r)
+
+.RE
+.fi
+.PP
+For running h2olog
+
+Root privilege to execute h2olog
+Linux kernel (>= 4.10)
+
+
+Quickstart
+h2olog -H -p $H2O_PID shows varnishlog-like tracing.
+
+.PP
+.nf
+.RS
+$ sudo h2olog -H -p $(pgrep -o h2o)
+
+11 0 RxProtocol HTTP/3.0
+11 0 RxHeader   :authority torumk.com
+11 0 RxHeader   :method GET
+11 0 RxHeader   :path /
+11 0 RxHeader   :scheme https
+11 0 TxStatus   200
+11 0 TxHeader   content-length 123
+11 0 TxHeader   content-type text/html
+... and more ...
+
+.RE
+.fi
+.PP
+
+Tracing USDT events
+Server-side QUIC events can be traced using the quic subcommand.
+Events are rendered in JSON Lines format.
+
+.PP
+.nf
+.RS
+$ sudo h2olog -p $(pgrep -o h2o)
+
+.RE
+.fi
+.PP
+
+Here’s an example trace.
+
+.PP
+.nf
+.RS
+{"time":1584380825832,"type":"accept","conn":1,"dcid":"f8aa2066e9c3b3cf"}
+{"time":1584380825835,"type":"crypto-decrypt","conn":1,"pn":0,"len":1236}
+{"time":1584380825832,"type":"quictrace-recv","conn":1,"pn":0}
+{"time":1584380825836,"type":"crypto-handshake","conn":1,"ret":0}
+... and more ...
+
+.RE
+.fi
+.PP
 
 
 

@@ -33,12 +33,7 @@ sub test {
     my ($server, $client_opts, $expected) = @_;
     $expected = [ $expected ] unless ref $expected eq 'ARRAY';
     for my $exp (@$expected) {
-        my $lines = do {
-            open my $fh, "-|", "openssl s_client -no_ticket $client_opts -connect 127.0.0.1:$server->{tls_port} 2>&1 < /dev/null"
-                or die "failed to open pipe:$!";
-            local $/;
-            <$fh>;
-        };
+        my $lines = run_openssl_client({ host => "127.0.0.1", port => $server->{tls_port}, opts => "-no_ticket $client_opts" });
         if (ok $lines !~ qr/ssl handshake failure/, 'ssl handshake failure') {
             $lines =~ m{---\n(New|Reused),}s
                 or die "failed to parse the output of s_client:{{{$lines}}}";
@@ -64,8 +59,8 @@ hosts:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    test(spawn_h2o($conf), "-sess_out $tempdir/session", "New");
-    test(spawn_h2o($conf), "-sess_in $tempdir/session", ["New", "Reused"]); # At the first request, redis connection hasn't been established
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_out $tempdir/session", "New");
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_in $tempdir/session", ["New", "Reused"]); # At the first request, redis connection hasn't been established
 };
 
 subtest "non-reachable redis server" => sub {
@@ -87,15 +82,15 @@ hosts:
       /:
         file.dir: @{[ DOC_ROOT ]}
 EOT
-    test(spawn_h2o($conf), "-sess_out $tempdir/session", "New");
-    test(spawn_h2o($conf), "-sess_in $tempdir/session", ["New", "New"]);
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_out $tempdir/session", "New");
+    test(spawn_h2o({conf => $conf, max_ssl_version => 'TLSv1.2'}), "-sess_in $tempdir/session", ["New", "New"]);
 };
 
 subtest 'load test' => sub {
     my $CONCURRENCY = 10;
 
     my $redis = spawn_redis();
-    my $server = spawn_h2o(<< "EOT");
+    my $server = spawn_h2o({conf => << "EOT", max_ssl_version => 'TLSv1.2'});
 ssl-session-resumption:
   lifetime: 3
   mode: cache

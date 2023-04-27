@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "apilist.h"
+#include "apistring.h"
 #include <mruby/compile.h>
 
 typedef struct help_msg {
@@ -82,6 +83,12 @@ static help_msg help_msg_list[] = {
     "Arguments are breakpoint numbers with spaces in between.\n"
   },
   {
+    "i[nfo]", "l[ocals]", "Print name of local variables",
+    "Usage: info locals\n"
+    "\n"
+    "Print name of local variables.\n"
+  },
+  {
     "l[ist]", NULL, "List specified line",
     "Usage: list\n"
     "       list first[,last]\n"
@@ -134,7 +141,8 @@ static listcmd_parser_state*
 listcmd_parser_state_new(mrb_state *mrb)
 {
   listcmd_parser_state *st = (listcmd_parser_state*)mrb_malloc(mrb, sizeof(listcmd_parser_state));
-  memset(st, 0, sizeof(listcmd_parser_state));
+  static const listcmd_parser_state st_zero = {0};
+  *st = st_zero;
   return st;
 }
 
@@ -226,10 +234,7 @@ parse_filename(mrb_state *mrb, char **sp, listcmd_parser_state *st)
     len = strlen(*sp);
   }
 
-  if (len > 0) {
-    st->filename = (char*)mrb_malloc(mrb, len + 1);
-    strncpy(st->filename, *sp, len);
-    st->filename[len] = '\0';
+  if (len > 0 && (st->filename = mrdb_strndup(mrb, *sp, len)) != NULL) {
     *sp += len;
     return TRUE;
   }
@@ -496,7 +501,7 @@ dbgcmd_quit(mrb_state *mrb, mrdb_state *mrdb)
   if (mrdb->dbg->xm == DBG_QUIT) {
     struct RClass *exc;
     exc = mrb_define_class(mrb, "DebuggerExit", mrb->eException_class);
-    mrb_raise(mrb, exc, "Exit mrdb.");
+    mrb_raise(mrb, exc, "Exit mrdb");
   }
   return DBGST_PROMPT;
 }

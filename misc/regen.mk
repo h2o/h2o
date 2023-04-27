@@ -5,7 +5,9 @@ exec $${H2O_PERL:-perl} -x $$0 "$$@"
 endef
 export FATPACK_SHEBANG
 
-all: tokens lib/handler/mruby/embedded.c.h lib/http2/hpack_huffman_table.h lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt
+GEN_RAW_TRACER_TMPFILE := $(shell mktemp -t gen_raw_tracer.XXXXXXXX)
+
+all: tokens lib/handler/mruby/embedded.c.h lib/http2/hpack_huffman_table.h lib/handler/file/templates.c.h clang-format-all share/h2o/start_server share/h2o/fastcgi-cgi share/h2o/ca-bundle.crt src/h2olog/generated_raw_tracer.cc
 
 tokens:
 	misc/tokens.pl
@@ -26,6 +28,13 @@ lib/http2/hpack_huffman_table.h: misc/mkhufftbl.py
 lib/handler/file/templates.c.h: misc/picotemplate-conf.pl lib/handler/file/_templates.c.h
 	misc/picotemplate/picotemplate.pl --conf misc/picotemplate-conf.pl lib/handler/file/_templates.c.h || exit 1
 	clang-format -i $@
+
+H2O_PROBES_D=h2o-probes.d
+QUICLY_PROBES_D=deps/quicly/quicly-probes.d
+
+src/h2olog/generated_raw_tracer.cc: FORCE
+	src/h2olog/misc/gen_raw_tracer.py $(GEN_RAW_TRACER_TMPFILE) $(QUICLY_PROBES_D) $(H2O_PROBES_D)
+	rsync --checksum $(GEN_RAW_TRACER_TMPFILE) $@
 
 clang-format-all:
 	misc/clang-format-all.sh

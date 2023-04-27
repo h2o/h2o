@@ -258,6 +258,21 @@ The value cannot exceed 256.
 
 <?
 $ctx->{directive}->(
+    name    => "http2-max-concurrent-streaming-requests-per-connection",
+    levels  => [ qw(global) ],
+    default => 'http2-max-concurrent-streaming-requests-per-connection: 1',
+    desc    => <<'EOT',
+Maximum number of streaming requests to be handled concurrently within a single HTTP/2 connection.
+EOT
+)->(sub {
+?>
+<p>
+The value cannot exceed 256.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "http2-latency-optimization-min-rtt",
     levels  => [ qw(global) ],
     since   => '2.1',

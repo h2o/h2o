@@ -4,13 +4,21 @@ use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
 use t::Util;
 use File::Temp qw(tempfile);
+use IO::Socket::INET;
 
 my ($ignored, $fn) = tempfile(UNLINK => 1);
 
 plan skip_all => 'curl not found'
     unless prog_exists('curl') and curl_supports_http2();
 
-my $upstream_port = empty_port();
+# create a socket to keep an empty port in use
+my $upstream = IO::Socket::INET->new(
+    LocalAddr => '127.0.0.1',
+    LocalPort => 0,
+    Proto     => 'tcp',
+);
+
+my $upstream_port = $upstream->sockport();
 my $server = spawn_h2o(<< "EOT");
 error-log: $fn
 hosts:
@@ -35,9 +43,9 @@ my $i = 0;
 while(<FH>) {
     if (/lib\/core\/proxy\.c/) {
         if ($i == 0) {
-            like $_, qr{\[lib/core/proxy\.c\] in request:/%s:connection failure}, "Error logged has % properly escaped";
+            like $_, qr{\[lib/core/proxy\.c\] in request:127\.0\.0\.1:\d+/%s:connection refused}, "Error logged has % properly escaped";
         } else {
-            like $_, qr{\[lib/core/proxy\.c\] in request:/%s01234567890123456789012345\.\.\.:connection failure}, "Error logged has % properly escaped, and is truncated";
+            like $_, qr{\[lib/core/proxy\.c\] in request:127\.0\.0\.1:\d+/%s01234567890123456789012345\.\.\.:connection refused}, "Error logged has % properly escaped, and is truncated";
         }
         $i++;
     }

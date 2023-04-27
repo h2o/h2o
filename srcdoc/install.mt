@@ -12,7 +12,7 @@ Therefore you may try to at first install the software using your favorite packa
 At the time being, following packages are known to be actively maintained<?= $ctx->{note}->(q{Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.}) ?>:
 <ul>
 <li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
-<li><a href="http://brewformulas.org/H2o">Homebrew (OS X)</a></li>
+<li><a href="https://formulae.brew.sh/formula/h2o">Homebrew (macOS)</a></li>
 <li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
 <li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
 </ul>
@@ -21,11 +21,16 @@ At the time being, following packages are known to be actively maintained<?= $ct
 <h3 id="from-source">Installing from Source</h3>
 
 <p>
-Download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a> or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>, and build it using <a href="http://www.cmake.org/">CMake</a><?= $ctx->{note}->("CMake is a popular build tool that can be found as a binary package on most operating systems.") ?>.
+First, either download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a>, or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>. When cloning, submodules should also be fetched, e.g., by running <code>git clone --recurse-submodules</code>.
+</p>
+<p>
+Then, build the obtained source using <a href="http://www.cmake.org/">CMake</a><?= $ctx->{note}->("CMake is a popular build tool that can be found as a binary package on most operating systems.") ?>.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake .
+% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 EOT
@@ -41,6 +46,15 @@ Start the installed server using the example configuration to confirm that it ac
 
 <?= $ctx->{code}->(<< 'EOT')
 % /usr/local/bin/h2o -c examples/h2o/h2o.conf
+EOT
+?>
+
+<p>
+Or if you'd like to start H2O without installing it, you can use the <code>H2O_ROOT</code> environment variable.
+</p>
+
+<?= $ctx->{code}->(<< 'EOT')
+% H2O_ROOT=$PWD build/h2o -c examples/h2o/h2o.conf
 EOT
 ?>
 
@@ -67,6 +81,28 @@ This option specifies the directory to which H2O will be installed (default: <co
 This option instructs whether or not to build the standalone server with support for <a href="configure/mruby.html">scripting using mruby</a>.
 It is turned on by default if the prerequisites (<a href="https://www.gnu.org/software/bison/">bison</a>, <a href="https://www.ruby-lang.org/">ruby</a> and the development files<?= $ctx->{note}->(q{<code>mkmf</code> - a program for building ruby extensions is required.  In many distributions, the program is packaged as part of <code>ruby-dev<code> or <code>ruby-devel</code> package.}) ?>) are found.
 </dl>
+<dt><code>-DWITH_DTRACE=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable DTrace support.
+It is turned on by default if the prerequisites (<a href="https://sourceware.org/systemtap/">SystemTap</a> on Linux, or DTrace on macOS) are found.
+See also <a href="https://github.com/h2o/h2o/wiki/macOS">wiki/macOS</a> to use DTrace on macOS.
+</dl>
+<dt><code>-DWITH_H2OLOG=<i>on</i>|<i>off</i></code></dt>
+<dd>
+This option instructs whether or not to enable <code>h2olog(1)</code>> support.
+It is turned on by default if the prerequisites are found.
+See also <a href="./configure/h2olog.html">h2olog</a> for details.
+</dl>
+<dt><code>-DCMAKE_C_FLAGS=...</code></dt>
+<dd>
+This option can be used to add or override the compile options being passed to the C compiler.
+As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressSanitizer (ASan)</a> can be enabled when using recent versions of GCC or Clang, by passing <code>-DCMAKE_C_FLAGS="-fsanitize=address -fno-stack-protector -fno-omit-frame-pointer"</code>.
+</dd>
+<dt><code>-DCMAKE_BUILD_TYPE=Release|Debug</code></dt>
+<dd>
+This option specifies the build type, <code>Release</code> or <code>Debug</code>.
+The default is <code>Release</code>.
+</dd>
 </p>
 
 <h3>Installing from Source, using OpenSSL</h3>
@@ -85,7 +121,9 @@ CMake will search for OpenSSL by looking at the default search paths.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% cmake .
+% mkdir -p build
+% cd build
+% cmake ..
 % make
 % sudo make install
 EOT
@@ -97,7 +135,9 @@ The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment va
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake .
+% mkdir -p build
+% cd build
+% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake ..
 % make
 % sudo make install
 EOT
@@ -108,7 +148,9 @@ In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> d
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
-% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake .
+% mkdir -p build
+% cd build
+% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake ..
 % make
 % sudo make install
 EOT

@@ -1,11 +1,11 @@
-INCLUDES = yaml.h
+AM_CPPFLAGS = yaml.h
 DOXYGEN_CFG = $(top_srcdir)/doc/doxygen.cfg
 
-nobase_include_HEADERS = $(INCLUDES)
+nobase_include_HEADERS = $(AM_CPPFLAGS)
 
 if DOXYGEN
 
-html: $(INCLUDES) $(DOXYGEN_CFG)
+html: $(AM_CPPFLAGS) $(DOXYGEN_CFG)
 	PACKAGE=$(PACKAGE) VERSION=$(VERSION) top_srcdir=$(top_srcdir) top_builddir=$(top_builddir) doxygen $(DOXYGEN_CFG)
 
 endif

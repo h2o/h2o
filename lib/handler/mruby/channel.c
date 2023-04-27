@@ -87,7 +87,7 @@ static mrb_value wait_callback(h2o_mruby_context_t *mctx, mrb_value input, mrb_v
     struct st_h2o_mruby_channel_context_t *ctx;
 
     if ((ctx = mrb_data_check_get_ptr(mrb, mrb_ary_entry(args, 0), &channel_type)) == NULL)
-        return mrb_exc_new_str_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
+        return mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "Channel#shift wrong self");
 
     mrb_ary_push(mrb, ctx->receivers, *receiver);
 

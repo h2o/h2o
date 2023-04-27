@@ -57,6 +57,8 @@ enum {
     H2O_MRUBY_LIT_SERVER_SOFTWARE_VALUE,
     H2O_MRUBY_LIT_H2O_REMAINING_DELEGATIONS,
     H2O_MRUBY_LIT_H2O_REMAINING_REPROCESSES,
+    H2O_MRUBY_LIT_H2O_GET_RTT,
+    H2O_MRUBY_LIT_H2O_IS_ECH,
     H2O_MRUBY_PROC_EACH_TO_ARRAY,
     H2O_MRUBY_PROC_APP_TO_FIBER,
 
@@ -161,7 +163,7 @@ typedef struct st_h2o_mruby_error_stream_t {
     h2o_mruby_generator_t *generator;
 } h2o_mruby_error_stream_t;
 
-typedef struct st_h2o_mruby_generator_t {
+struct st_h2o_mruby_generator_t {
     h2o_generator_t super;
     h2o_req_t *req; /* becomes NULL once the underlying connection gets terminated */
     h2o_mruby_context_t *ctx;
@@ -172,7 +174,7 @@ typedef struct st_h2o_mruby_generator_t {
         mrb_value generator;
         mrb_value error_stream;
     } refs;
-} h2o_mruby_generator_t;
+};
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
     do {                                                                                                                           \
@@ -243,7 +245,7 @@ h2o_mruby_sender_t *h2o_mruby_sender_create(h2o_mruby_generator_t *generator, mr
 /**
  * a wrapper of h2o_send with counting and checking content-length
  */
-void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
 /**
  * utility function used by sender implementations that needs buffering
  */

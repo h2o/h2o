@@ -87,6 +87,9 @@ static int secp256r1_create_key_exchange(ptls_key_exchange_algorithm_t *algo, pt
         return PTLS_ERROR_NO_MEMORY;
     ctx->super = (ptls_key_exchange_context_t){algo, ptls_iovec_init(ctx->pub, sizeof(ctx->pub)), secp256r1_on_exchange};
     ctx->pub[0] = TYPE_UNCOMPRESSED_PUBLIC_KEY;
+
+    /* RNG function must be set before calling uECC_make_key() */
+    assert(uECC_get_rng() != NULL);
     uECC_make_key(ctx->pub + 1, ctx->priv, uECC_secp256r1());
 
     *_ctx = &ctx->super;
@@ -131,8 +134,8 @@ Exit:
     return ret;
 }
 
-static int secp256r1sha256_sign(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *outbuf,
-                                ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+static int secp256r1sha256_sign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                                ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_minicrypto_secp256r1sha256_sign_certificate_t *self = (ptls_minicrypto_secp256r1sha256_sign_certificate_t *)_self;
     uint8_t hash[32], sig[64];
@@ -186,6 +189,8 @@ int ptls_minicrypto_init_secp256r1sha256_sign_certificate(ptls_minicrypto_secp25
     return 0;
 }
 
-ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1 = {PTLS_GROUP_SECP256R1, secp256r1_create_key_exchange,
-                                                           secp256r1_key_exchange};
+ptls_key_exchange_algorithm_t ptls_minicrypto_secp256r1 = {.id = PTLS_GROUP_SECP256R1,
+                                                           .name = PTLS_GROUP_NAME_SECP256R1,
+                                                           .create = secp256r1_create_key_exchange,
+                                                           .exchange = secp256r1_key_exchange};
 ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[] = {&ptls_minicrypto_secp256r1, NULL};

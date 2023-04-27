@@ -1,0 +1,82 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    name: "${{ matrix.name }}"
+    runs-on: [ubuntu-20.04]
+
+    # We want to run on external PRs, but not on our own internal PRs as they'll be run
+    # by the push to the branch.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: OpenSSL 1.1.0 + Fuzz
+            command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: OpenSSL 1.1.1
+            command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: OpenSSL 3.0 (Ubuntu 22.04 / DTrace)
+            command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: boringssl
+            command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: ASan (Ubuntu 20.04)
+            command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          - name: Coverage
+            command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      continue-on-error: true
+
+    - name: Run with Docker
+      shell: 'script -q -e -c "bash -xe {0}"'
+      run: |
+        chmod -R ugo+w .
+        # restart docker with ipv6 support
+        cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null; sudo systemctl restart docker; sleep 10
+        ${{ matrix.command }}
+        # if there's a summary markdown in the container, show it.
+        container_id=$(docker container ls -al --format '{{ .ID }}')
+        docker cp $container_id:/home/ci/summary.md $GITHUB_STEP_SUMMARY || true
+
+  # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
+  ossfuzz:
+    name: OSS Fuzz
+    runs-on: ubuntu-latest
+
+    # see above
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+
+    timeout-minutes: 60
+    steps:
+    - name: Build Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/build_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'h2o'
+        dry-run: false
+    - name: Run Fuzzers
+      uses: google/oss-fuzz/infra/cifuzz/actions/run_fuzzers@master
+      with:
+        oss-fuzz-project-name: 'h2o'
+        fuzz-seconds: 600
+        dry-run: false
+    - name: Upload Crash
+      uses: actions/upload-artifact@v1
+      if: failure()
+      with:
+        name: artifacts
+        path: ./out/artifacts

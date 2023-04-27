@@ -25,8 +25,8 @@ hosts:
     paths:
       /:
         proxy.reverse.url:
-          - http://127.0.0.1.xip.io:$upstream_port/
-          - http://127.0.0.1.xip.io:$upstream_port/subdir/
+          - http://localhost.examp1e.net:$upstream_port/
+          - http://localhost.examp1e.net:$upstream_port/subdir/
 EOT
 
 my $expected1 = do {

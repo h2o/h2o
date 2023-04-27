@@ -2,13 +2,12 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port empty_port);
 use Test::More;
-use File::Temp qw(tempfile);
-use IO::Socket::SSL;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
-use Protocol::HTTP2::Connection;
-use Scope::Guard;
+use IO::Socket::INET;
+use Time::HiRes;
 use t::Util;
+use JSON;
 $|=1;
 
 plan skip_all => 'curl not found'
@@ -16,7 +15,7 @@ plan skip_all => 'curl not found'
 
 subtest 'basic' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [ ':status' => 200 ], 1);
@@ -31,7 +30,7 @@ subtest 'basic' => sub {
 
 subtest 'no :status header' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, ['x-foo' => 'bar'], 1);
@@ -41,13 +40,13 @@ subtest 'no :status header' => sub {
     my $server = create_h2o($upstream_port);
     my ($headers, $body) = run_prog("curl -s --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}");
     like $headers, qr{^HTTP/[0-9.]+ 502}is;
-    like $body, qr/upstream error \(connection level\)/;
+    like $body, qr/protocol violation/;
     ok check_port($server->{port}), 'live check';
 };
 
 subtest 'content-length' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [
@@ -68,7 +67,7 @@ subtest 'content-length' => sub {
 
 subtest 'invalid content-length' => sub {
     my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
-    my $upstream = create_upstream($upstream_port, +{
+    my $upstream = spawn_h2_server($upstream_port, +{
         &HALF_CLOSED => sub {
             my ($conn, $stream_id) = @_;
             $conn->send_headers($stream_id, [
@@ -84,10 +83,240 @@ subtest 'invalid content-length' => sub {
     like $headers, qr{^HTTP/[0-9.]+ 502}is;
     ok check_port($server->{port}), 'live check';
 
+    Time::HiRes::sleep(0.1);
     $upstream->{kill}->();
-    my $log = $upstream->{read_all}->();
-    like $log, qr{Receive reset stream with error code CANCEL};
+    my $log = join('', readline($upstream->{stdout}));
+    like $log, qr{Receive reset stream with error code PROTOCOL_ERROR};
 };
+
+subtest 'multiple content-length' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => '7',
+                'content-length' => '11',
+            ], 0);
+            $conn->send_data($stream_id, 'hello world', 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my ($headers, $body) = run_prog("curl -s --dump-header /dev/stderr http://127.0.0.1:@{[$server->{port}]}");
+    like $headers, qr{^HTTP/[0-9.]+ 502}is;
+    ok check_port($server->{port}), 'live check';
+
+    Time::HiRes::sleep(0.1);
+    $upstream->{kill}->();
+    my $log = join('', readline($upstream->{stdout}));
+    like $log, qr{Receive reset stream with error code PROTOCOL_ERROR};
+};
+
+subtest 'wrong content-length (too much data)' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => '10'
+            ], 0);
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 200}is, 'status';
+    like $headers, qr{^content-length: 10\r$}im, 'content-length';
+
+    # The http 2 client implementation in h2o raises a protocol error when it
+    # receives a data frame that would exceed the remaining content length.
+    #
+    # The http 2 server in this test sends the response body in two data
+    # frames, the first one fits, the second one does not.  The client will
+    # receive the content of the first data frame followed by a premature
+    # connection closure.
+    my $body = read_exactly($conn, 5);
+    is $body, "hello", 'body';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest 'wrong content-length (not enough data)' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => '12'
+            ], 0);
+            $conn->send_data($stream_id, 'hello world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 200}is, 'status';
+    like $headers, qr{^content-length: 12\r$}im, 'content-length';
+    my $body = read_exactly($conn, 11);
+    is $body, "hello world", 'body';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest 'HEAD request with response body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+                'content-length' => '11'
+            ], 0);
+            # It is wrong to send a body in response to a HEAD request.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "HEAD / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 200}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest '204 response with body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 204
+            ], 0);
+            # It is wrong to send a body in a status 204 response.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 204}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest '304 response with body' => sub {
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 304
+            ], 0);
+            # It is wrong to send a body in a status 304 response.
+            $conn->send_data($stream_id, 'hello', 0);
+            $conn->send_data($stream_id, ' world', 1);
+        },
+    });
+    my $server = create_h2o($upstream_port);
+    my $conn = IO::Socket::INET->new(
+        PeerHost => '127.0.0.1',
+        PeerPort => $server->{port},
+        Proto    => 'tcp',
+    ) or die "failed to connect to 127.0.0.1:$server->{port}:$!";
+    print $conn "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+    my $headers = read_header($conn);
+    like $headers, qr{^HTTP/[0-9.]+ 304}is, 'status';
+    expect_eof($conn);
+    close $conn;
+};
+
+subtest 'request body streaming' => sub {
+    plan skip_all => "h2get not found"
+        unless h2get_exists();
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [
+                ':status' => 200,
+            ], 0);
+            $conn->send_data($stream_id, 'hello world', 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my $streaming_request_count = 3;
+    for (my $i=0; $i < $streaming_request_count; $i++) {
+        my $output = run_with_h2get_simple($server, <<"        EOR");
+            req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/" }
+            h2g.send_headers(req, 1, END_HEADERS)
+            h2g.send_data(1, 0, "a")
+            sleep 1
+            h2g.send_data(1, END_STREAM, "a" * 1024)
+            h2g.read_loop(100)
+        EOR
+    }
+    $upstream->{kill}->();
+    my $log = join('', readline($upstream->{stdout}));
+    like $log, qr{TYPE = DATA\(0\), FLAGS = 00000000, STREAM_ID = 1, LENGTH = 1};
+    like $log, qr{TYPE = DATA\(0\), FLAGS = 00000001, STREAM_ID = 1, LENGTH = 1024};
+    my $http2_streaming_requests_str = 'http2.streaming-requests';
+    my $resp = `curl --silent http://127.0.0.1:$server->{port}/s/json`;
+    my $jresp = decode_json("$resp");
+    my $http2_streaming_requests = $jresp->{$http2_streaming_requests_str};
+    ok $http2_streaming_requests == $streaming_request_count,
+            "Check $http2_streaming_requests_str, " .
+            "$http2_streaming_requests == $streaming_request_count"
+};
+
+my $test = sub {
+    my $opts = shift;
+
+    my $upstream_port = $ENV{UPSTREAM_PORT} || empty_port({ host => '0.0.0.0' });
+    my $upstream = spawn_h2_server($upstream_port, +{
+        &HALF_CLOSED => sub {
+            my ($conn, $stream_id) = @_;
+            $conn->send_headers($stream_id, [ ':status' => 200 ], 1);
+        },
+    });
+
+    my $server = create_h2o($upstream_port);
+    my ($headers, $body) = run_prog("curl --max-time 3 -s --dump-header /dev/stderr $opts http://127.0.0.1:@{[$server->{port}]}");
+    like $headers, qr{^HTTP/[0-9.]+ 200}is;
+    ok check_port($server->{port}), 'live check';
+};
+
+subtest 'POST request with no body, no C-L', sub { $test->('-X POST') };
+subtest 'POST request with no body, with C-L:0', sub { $test->("-X POST -d ''") };
+subtest 'POST request with body', sub { $test->("-X POST -d a=b") };
 
 sub create_h2o {
     my ($upstream_port) = @_;
@@ -101,97 +330,44 @@ hosts:
       /:
         proxy.reverse.url: https://127.0.0.1:$upstream_port
         proxy.ssl.verify-peer: OFF
+      /s:
+        status: ON
 EOT
     return $server;
 }
 
-sub create_upstream {
-    my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
-
-    my ($cout, $pin);
-    pipe($pin, $cout);
-
-    my $pid = fork;
-    if ($pid) {
-        close $cout;
-        my $upstream; $upstream = +{
-            pid => $pid,
-            kill => sub {
-                return unless defined $pid;
-                kill 'KILL', $pid;
-                undef $pid;
-            },
-            guard => Scope::Guard->new(sub {
-                $upstream->{kill}->()
-            }),
-            read => sub {
-                my $line = <$pin>;
-                return $line;
-            },
-            read_all => sub {
-                join('', <$pin>);
-            },
-        };
-        return $upstream;
+sub read_header {
+    my $sock = shift;
+    my $hdr = '';
+    for (;;) {
+        my $line = <$sock>;
+        if (!defined($line)) {
+            fail "error reading header: $!";
+            last;
+        }
+        last if $line =~ m/^\r?\n$/;
+        $hdr .= $line;
     }
-    close $pin;
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    my $conn; $conn = Protocol::HTTP2::Connection->new(SERVER,
-        on_new_peer_stream => sub {
-            my $stream_id = shift;
-            for my $state (keys %{ $stream_state_cbs || +{} }) {
-                my $cb = $stream_state_cbs->{$state};
-                $conn->stream_cb($stream_id, $state, sub {
-                    $cb->($conn, $stream_id);
-                });
-            }
-            for my $type (keys %{ $stream_frame_cbs || +{} }) {
-                my $cb = $stream_frame_cbs->{$type};
-                $conn->stream_frame_cb($stream_id, $type, sub {
-                    $cb->($conn, $stream_id, shift);
-                });
-            }
-        },
-    );
-    my $upstream = IO::Socket::SSL->new(
-        LocalAddr => '127.0.0.1',
-        LocalPort => $upstream_port,
-        Listen => 1,
-        ReuseAddr => 1,
-        SSL_cert_file => 'examples/h2o/server.crt',
-        SSL_key_file => 'examples/h2o/server.key',
-        SSL_alpn_protocols => ['h2'],
-    ) or die "cannot create socket: $!";
-    my $sock = $upstream->accept;
+    return $hdr;
+}
 
-    my $input = '';
+sub read_exactly {
+    my $sock = shift;
+    my $toread = shift;
+    my $res;
+    my $nread = read $sock, $res, $toread;
 
-    while (1) {
-        my $offset = 0;
-        my $buf;
-        next unless $sock->read($buf, 1);
-        $input .= $buf;
+    ok defined($nread), "check for read error";
+    is $nread, $toread, "check for partial read";
+    return $res;
+}
 
-        unless ($conn->preface) {
-            my $len = $conn->preface_decode(\$input, 0);
-            unless (defined($len)) {
-                die 'invalid preface';
-            }
-            next unless $len;
-            $conn->preface(1);
-            $offset += $len;
-        }
-
-        while (my $len = $conn->frame_decode(\$input, $offset)) {
-            $offset += $len;
-        }
-        substr($input, 0, $offset) = '' if $offset;
-
-        while (my $frame = $conn->dequeue) {
-            $sock->write($frame);
-        }
-    }
-    exit;
+sub expect_eof {
+    my $sock = shift;
+    my $res = '';
+    my $nread = read $sock, $res, 1;
+    $nread = 0 unless defined $nread;
+    is $nread, 0, "expect end of file (nread=$nread, res='$res')";
 }
 
 done_testing();

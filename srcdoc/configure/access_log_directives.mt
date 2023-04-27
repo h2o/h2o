@@ -120,6 +120,9 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr id="proxy.request-bytes"><td><code>proxy.request-bytes</code><td>number of bytes used by the proxy handler for sending the request (above TLS layer)
 <tr id="proxy.request-bytes-header"><td><code>proxy.request-bytes-header</code><td>number of bytes used by the proxy handler for sending the request header (above TLS layer)
 <tr id="proxy.request-bytes-body"><td><code>proxy.request-bytes-body</code><td>number of bytes used by the proxy handler for sending the request body (above TLS layer)
+<tr id="proxy.response-bytes"><td><code>proxy.response-bytes</code><td>number of bytes used by the proxy handler for receiving the response (above TLS layer)
+<tr id="proxy.response-bytes-header"><td><code>proxy.response-bytes-header</code><td>number of bytes used by the proxy handler for receiving the response header (above TLS layer)
+<tr id="proxy.response-bytes-body"><td><code>proxy.response-bytes-body</code><td>number of bytes used by the proxy handler for receiving the response body (above TLS layer)
 </table>
 <table>
 <caption>Connection (since v2.0)</caption>
@@ -130,6 +133,15 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr><td><code>ssl.session-id</code><td>base64-encoded value of the session id used for resuming the session (since v2.2)
 <tr><td><code>ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
 <tr><td><code>ssl.cipher-bits</code><td>strength of the cipher suite in bits
+<tr><td><code>ssl.server-name</code><td>hostname provided in Server Name Indication (SNI) extension, if any
+</table>
+<table>
+<caption>Upstream Proxy Connection (since v2.3)</caption>
+<tr><th>Name<th>Description
+<tr><td><code>proxy.ssl.protocol-version</code><td>SSL protocol version obtained from <a href="https://www.openssl.og/docs/manmaster/ssl/SSL_get_version.html"><code>SSL_get_version</code></a>
+<tr><td><code>proxy.ssl.session-reused</code><td><code>1</code> if the <a href="configure/base_directives.html#ssl-session-resumption">SSL session was reused</a>, or <code>0</code> if not
+<tr><td><code>proxy.ssl.cipher</code><td>name of the <a href="https://tools.ietf.org/html/rfc5246#appendix-A.5">cipher suite</a> being used, obtained from <a href="https://www.openssl.org/docs/manmaster/ssl/SSL_CIPHER_get_name.html">SSL_CIPHER_get_name</a>
+<tr><td><code>proxy.ssl.cipher-bits</code><td>strength of the cipher suite in bits
 </table>
 <table>
 <caption>HTTP/2 (since v2.0)</caption>

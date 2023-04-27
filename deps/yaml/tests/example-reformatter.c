@@ -120,12 +120,12 @@ parser_error:
 
         case YAML_READER_ERROR:
             if (parser.problem_value != -1) {
-                fprintf(stderr, "Reader error: %s: #%X at %d\n", parser.problem,
-                        parser.problem_value, parser.problem_offset);
+                fprintf(stderr, "Reader error: %s: #%X at %ld\n", parser.problem,
+                        parser.problem_value, (long)parser.problem_offset);
             }
             else {
-                fprintf(stderr, "Reader error: %s at %d\n", parser.problem,
-                        parser.problem_offset);
+                fprintf(stderr, "Reader error: %s at %ld\n", parser.problem,
+                        (long)parser.problem_offset);
             }
             break;
 
@@ -133,14 +133,14 @@ parser_error:
             if (parser.context) {
                 fprintf(stderr, "Scanner error: %s at line %d, column %d\n"
                         "%s at line %d, column %d\n", parser.context,
-                        parser.context_mark.line+1, parser.context_mark.column+1,
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        (int)parser.context_mark.line+1, (int)parser.context_mark.column+1,
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             else {
                 fprintf(stderr, "Scanner error: %s at line %d, column %d\n",
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             break;
 
@@ -148,14 +148,14 @@ parser_error:
             if (parser.context) {
                 fprintf(stderr, "Parser error: %s at line %d, column %d\n"
                         "%s at line %d, column %d\n", parser.context,
-                        parser.context_mark.line+1, parser.context_mark.column+1,
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        (int)parser.context_mark.line+1, (int)parser.context_mark.column+1,
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             else {
                 fprintf(stderr, "Parser error: %s at line %d, column %d\n",
-                        parser.problem, parser.problem_mark.line+1,
-                        parser.problem_mark.column+1);
+                        parser.problem, (int)parser.problem_mark.line+1,
+                        (int)parser.problem_mark.column+1);
             }
             break;
 

@@ -2,7 +2,6 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(check_port empty_port);
-use Scope::Guard qw(scope_guard);
 use Test::Requires qw(Plack::Runner Starlet);
 use Test::More;
 use Time::HiRes qw(sleep);
@@ -14,12 +13,12 @@ my $upstream_port = empty_port();
 subtest "http/1" => sub {
     my $fetch = sub {
         my ($server, $path, $send_count) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
         open my $fh, "|-", $cmd
             or die "failed to invoke command:$cmd:$!";
         autoflush $fh 1;
         for (my $i = 0; $i < $send_count; ++$i) {
-            sleep 0.1
+            sleep 0.5
                 if $i != 0;
             print $fh <<"EOT";
 GET $path HTTP/1.1\r
@@ -47,10 +46,10 @@ EOT
 subtest "http/2" => sub {
     my $fetch = sub {
         my ($server, $path) = @_;
-        my $cmd = "exec @{[bindir]}/picotls/cli -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
-        my $pid = open my $fh, "|-", $cmd
+        my $cmd = "exec @{[bindir]}/picotls/cli -I -s $tempdir/session -e 127.0.0.1 $server->{tls_port} > $tempdir/resp.txt";
+        my $pid = open my $child_in, "|-", $cmd
             or die "failed to invoke command:$cmd:$!";
-        autoflush $fh 1;
+        autoflush $child_in 1;
         # send request
         my $hpack_str = sub { chr(length $_[0]) . $_[0] };
         my $hpack_hdr = sub { "\x10" . $hpack_str->($_[0]) . $hpack_str->($_[1]) };
@@ -60,15 +59,15 @@ subtest "http/2" => sub {
             $hpack_hdr->(":authority", "127.0.0.1"),
             $hpack_hdr->(":path", $path),
         );
-        syswrite $fh, join '', (
+        syswrite $child_in, join '', (
             "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n",                             # preface
             "\x00\x00\x00\x04\x00\x00\x00\x00\x00",                         # SETTINGS
             "\x00\x00@{[chr length $hpack]}\x01\x05\x00\x00\x00\x01$hpack", # HEADERS
         );
-        # do not wait for idle-timeout
-        sleep 3;
-        kill 'KILL', $pid;
-        open $fh, "<", "$tempdir/resp.txt"
+
+        while (waitpid($pid, 0) != $pid) {}
+
+        open my $fh, "<", "$tempdir/resp.txt"
             or die "failed to open file:$tempdir/resp.txt:$!";
         do { local $/; <$fh> };
     };
@@ -84,8 +83,9 @@ subtest "http/2" => sub {
 
 sub run_tests {
     my $do_test = shift;
-# spawn server
+    # spawn server
     my $server = spawn_h2o(<< "EOT");
+http2-idle-timeout: 1
 num-threads: 1
 hosts:
   default:
@@ -108,6 +108,8 @@ hosts:
 EOT2
 ]}
 EOT
+    # give some time to h2o to setup the session ticket encryption key
+    sleep 1;
     # run tests
     subtest "proxy" => sub {
         for my $sleep (0, 1) {
@@ -162,7 +164,7 @@ sub spawn_plack_server {
     while (!check_port($port)) {
         sleep 0.1;
     }
-    scope_guard(sub {
+    make_guard(sub {
         kill 'TERM', $upstream_pid;
         while (waitpid($upstream_pid, 0) != $upstream_pid) {}
     });

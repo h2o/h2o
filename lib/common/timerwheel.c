@@ -58,7 +58,7 @@ struct st_h2o_timerwheel_t {
      * number of wheels and the wheel
      */
     size_t num_wheels;
-    h2o_linklist_t wheels[1][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
+    h2o_linklist_t wheels[][H2O_TIMERWHEEL_SLOTS_PER_WHEEL];
 };
 
 void h2o_timerwheel_dump(h2o_timerwheel_t *ctx)
@@ -159,10 +159,6 @@ int h2o_timerwheel_validate(h2o_timerwheel_t *ctx)
 
 uint64_t h2o_timerwheel_get_wake_at(h2o_timerwheel_t *ctx)
 {
-#if H2O_TIMER_VALIDATE
-    assert(h2o_timer_validate_wheel(w));
-#endif
-
     size_t wheel, slot;
     uint64_t at = ctx->last_run;
 
@@ -305,10 +301,6 @@ void h2o_timerwheel_get_expired(h2o_timerwheel_t *ctx, uint64_t now, h2o_linklis
 {
     size_t wheel = 0, slot, slot_start;
 
-#if H2O_TIMER_VALIDATE
-    assert(h2o_timer_validate_wheel(w));
-#endif
-
     /* time might rewind if the clock is reset */
     if (now < ctx->last_run) {
         h2o_error_printf("%s:detected rewind; last_run=%" PRIu64 ", now=%" PRIu64 "\n", __FUNCTION__, ctx->last_run, now);
@@ -351,9 +343,6 @@ Redo:
 
 Exit:
     assert(ctx->last_run == now);
-#if H2O_TIMER_VALIDATE
-    assert(h2o_timer_validate_wheel(w));
-#endif
 }
 
 size_t h2o_timerwheel_run(h2o_timerwheel_t *ctx, uint64_t now)

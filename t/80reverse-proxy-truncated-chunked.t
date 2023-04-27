@@ -57,7 +57,7 @@ sub doone {
     $client_socket->send($upstream_response);
     close($client_socket);
     my $curl_output = do { local $/; <$reader> };
-    like $curl_output, qr{$expected}, $test_description; 
+    like $curl_output, qr{$expected}, $test_description;
     close($reader);
     wait();
 }
@@ -68,7 +68,9 @@ sub doit {
     my $resp_preface = "HTTP/1.1 200 Ok\r\nTransfer-encoding:chunked\r\n\r\n";
     my $err_string = "Illegal or missing hexadecimal sequence in chunked-encoding";
     if ($proto == "2") {
-        $err_string = "was not closed cleanly";
+        # curl-7.57.0 includes "was not closed cleanly"
+        # curl-7.68.0 includes "left intact"
+        $err_string = qr{(?:left intact|was not closed cleanly)};
     }
 
     doone($cmd, $resp_preface."1\r\na", "left intact", "HTTP/$proto curl reports a clean connection on missing \\r\\n0\\r\\n");

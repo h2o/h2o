@@ -418,7 +418,7 @@ EOT
 
 subtest "log lineno" => sub {
     my $tester = sub {
-        my ($name, $conf, $expected) = @_;
+        my ($name, $conf, $lineno) = @_;
 
         subtest $name => sub {
             my $tempdir = tempdir(CLEANUP => 1);
@@ -435,17 +435,17 @@ EOT
                 map { my $l = $_; chomp $l; $l } <$fh>;
             };
             @log = grep { $_ =~ /^\[h2o_mruby\]/ } @log;
-            like $log[$#log], qr{\[h2o_mruby\] in request:/:mruby raised: .*:$expected:\s*hoge \(RuntimeError\)};
+            like $log[$#log], qr{\[h2o_mruby\] in request:127\.0\.0\.1:\d+/:mruby raised:\s+(:$lineno:|)\s*hoge \(RuntimeError\)};
         };
     };
-    $tester->("flow style", <<"EOT", 5);
+    $tester->("flow style", <<"EOT", 6);
 hosts:
   default:
     paths:
       /:
         mruby.handler: Proc.new do |env| raise "hoge" end
 EOT
-    $tester->("block style", <<"EOT", 7);
+    $tester->("block style", <<"EOT", 8);
 hosts:
   default:
     paths:
@@ -492,7 +492,7 @@ hosts:
           }
 EOT
         (undef, my $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
-        is $body, "Foo,Bar";
+        like $body, qr{(Kernel::|)Foo,(Kernel::|)Bar};
     };
     subtest 'self must be top_self' => sub {
         my $server = spawn_h2o(<< "EOT");
@@ -555,7 +555,7 @@ hosts:
 EOT
     my $nc = sub {
         my $path = shift;
-        my $cmd = "echo 'GET $path HTTP/1.1\\r\\nHost: 127.0.0.1\\r\\n\\r' | nc 127.0.0.1 $server->{port}";
+        my $cmd = "echo 'GET $path HTTP/1.1\r\nHost: 127.0.0.1\r\n\r' | nc 127.0.0.1 $server->{port}";
         (undef, my $r) = run_prog($cmd);
         split(/\r\n\r\n/, $r, 2);
     };

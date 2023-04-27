@@ -14,24 +14,24 @@
 #define __attribute__(X)
 #endif
 
-#ifdef  __cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
-	struct timezone {
-		int tz_minuteswest;     /* minutes west of Greenwich */
-		int tz_dsttime;         /* type of DST correction */
-	};
+struct timezone {
+    int tz_minuteswest; /* minutes west of Greenwich */
+    int tz_dsttime;     /* type of DST correction */
+};
 
-    int wintimeofday(struct timeval* tv, struct timezone* tz);
+int wintimeofday(struct timeval *tv, struct timezone *tz);
 
-#ifdef  __cplusplus
+#ifndef strcasecmp
+#define strcasecmp _stricmp
+#endif
+
+#ifdef __cplusplus
 } /* extern "C" */
 #endif
 
-
-
-
 #endif
-
 
 #endif /* WINCOMPAT_H */

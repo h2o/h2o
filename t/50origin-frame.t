@@ -17,7 +17,7 @@ listen:
     certificate-file: examples/h2o/wildcard.crt
     $origin_conf
 hosts:
-  "*.127.0.0.1.xip.io:$tls_port":
+  "*.localhost.examp1e.net:$tls_port":
     paths:
       /:
         file.dir: examples/doc_root
@@ -26,7 +26,8 @@ EOT
 
     my $output = run_with_h2get($server, <<"EOR");
     h2g = H2.new
-    host = ARGV[0]
+    authority = ARGV[0]
+    host = "https://#{authority}"
     h2g.connect(host)
     h2g.send_prefix()
     h2g.send_settings()
@@ -53,6 +54,6 @@ EOR
 
 test_origin_frame('', '');
 test_origin_frame('http2-origin-frame: [ ]', "0\n\"\"");
-test_origin_frame('http2-origin-frame: [ "https://a.127.0.0.1.xip.io" ]', "28\n\"\\000\\032https://a.127.0.0.1.xip.io\"");
-test_origin_frame('http2-origin-frame: [ "https://a.127.0.0.1.xip.io", "https://b.127.0.0.1.xip.io" ]', "56\n\"\\000\\032https://a.127.0.0.1.xip.io\\000\\032https://b.127.0.0.1.xip.io\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net" ]', "33\n\"\\x00\\x1fhttps://a.localhost.examp1e.net\"");
+test_origin_frame('http2-origin-frame: [ "https://a.localhost.examp1e.net", "https://b.localhost.examp1e.net" ]', "66\n\"\\x00\\x1fhttps://a.localhost.examp1e.net\\x00\\x1fhttps://b.localhost.examp1e.net\"");
 done_testing();

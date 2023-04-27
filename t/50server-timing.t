@@ -5,6 +5,8 @@ use Test::More;
 use Time::HiRes;
 use t::Util;
 
+plan skip_all => 'mruby support is off'
+    unless server_features()->{mruby};
 
 subtest 'basic' => sub {
     my $server = spawn_h2o(<< "EOT");
@@ -21,6 +23,16 @@ hosts:
                   yield 'hello'
                   sleep 1
                   yield 'world!'
+                end
+              end.new]
+            }
+      /zero:
+        - server-timing: on
+        - mruby.handler: |
+            proc {|env|
+              [200, {}, Class.new do
+                def each
+                  sleep 1
                 end
               end.new]
             }
@@ -53,6 +65,13 @@ EOT
         ok defined($sts->[0]->{connect});
         ok defined($sts->[1]->{total});
         $check->(@$sts);
+    };
+
+    subtest 'http2 cl:0' => sub {
+        my ($sts) = nghttp_get($server, '/zero');
+        is scalar(@$sts), 2, 'header and trailer';
+        ok defined($sts->[0]->{connect});
+        ok defined($sts->[1]->{total});
     };
 };
 
@@ -134,6 +153,8 @@ sub nc_get {
 }
 
 sub nghttp_get {
+    plan skip_all => 'nghttp not found'
+        unless prog_exists('nghttp');
     my ($server, $path) = @_; 
     my $out = `nghttp -vn 'https://127.0.0.1:$server->{tls_port}$path'`;
     ([map { parse_server_timing($_) } ($out =~ /recv \(stream_id=\d+\) server-timing: (.+)$/mg)], $out);

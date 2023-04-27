@@ -6,6 +6,7 @@
 static inline void
 value_move(mrb_value *s1, const mrb_value *s2, size_t n)
 {
+  if (n == 0) return;
   if (s1 > s2 && s1 < s2 + n)
   {
     s1 += n;

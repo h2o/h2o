@@ -34,7 +34,7 @@ struct st_h2o_mruby_callback_sender_t {
     unsigned has_error : 1;
 };
 
-void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state)
+void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
 {
     h2o_mruby_sender_t *sender = generator->sender;
     assert(!sender->final_sent);
@@ -59,7 +59,7 @@ void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_iovec_t *buf
     if (!h2o_send_state_is_in_progress(state))
         sender->final_sent = 1;
 
-    h2o_send(generator->req, bufs, bufcnt, state);
+    h2o_sendvec(generator->req, bufs, bufcnt, state);
 }
 
 void h2o_mruby_sender_do_send_buffer(h2o_mruby_generator_t *generator, h2o_doublebuffer_t *db, h2o_buffer_t **input, int is_final)
@@ -80,7 +80,9 @@ void h2o_mruby_sender_do_send_buffer(h2o_mruby_generator_t *generator, h2o_doubl
         send_state = H2O_SEND_STATE_IN_PROGRESS;
     }
 
-    h2o_mruby_sender_do_send(generator, &buf, bufcnt, send_state);
+    h2o_sendvec_t vec;
+    h2o_sendvec_init_raw(&vec, buf.base, buf.len);
+    h2o_mruby_sender_do_send(generator, &vec, bufcnt, send_state);
 }
 
 void h2o_mruby_sender_close_body(h2o_mruby_generator_t *generator)
@@ -197,9 +199,9 @@ Found:
 static mrb_value check_precond(mrb_state *mrb, h2o_mruby_generator_t *generator)
 {
     if (generator == NULL || generator->req == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "downstream HTTP closed");
     if (generator->req->_generator == NULL)
-        return mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "cannot send chunk before sending headers");
     return mrb_nil_value();
 }
 
@@ -227,7 +229,7 @@ static mrb_value send_chunk_method(mrb_state *mrb, mrb_value self)
             len = sender->super.bytes_left; /* trim data too long */
         if (len != 0) {
             if ((h2o_buffer_try_reserve(&sender->receiving, len)).base == NULL) {
-                mrb_value exc = mrb_exc_new_str_lit(mrb, E_RUNTIME_ERROR, "failed to allocate memory");
+                mrb_value exc = mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "failed to allocate memory");
                 mrb_exc_raise(mrb, exc);
             }
             memcpy(sender->receiving->bytes + sender->receiving->size, s, len);

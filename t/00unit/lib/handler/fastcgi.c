@@ -84,7 +84,7 @@ static void test_build_request(void)
     conn->req.query_at = SIZE_MAX;
     conn->req.version = 0x101;
     conn->req.hostconf = *ctx.globalconf->hosts;
-    conn->req.pathconf = conn->req.hostconf->paths.entries;
+    conn->req.pathconf = conn->req.hostconf->paths.entries[0];
     h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("foo=bar"));
     h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_USER_AGENT, NULL,
                    H2O_STRLIT("Mozilla/5.0 (X11; Linux) KHTML/4.9.1 (like Gecko) Konqueror/4.9"));
