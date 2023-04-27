@@ -46,6 +46,7 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <h3 id="news">News</h3>
 
 <ul>
+<li>Due to a security vulnerability, users using h2o as a reverse proxy are advised to update immediately <a href="https://github.com/h2o/h2o/security/advisories/GHSA-p5hj-phwj-hrvx">CVE-2023-30847</a> (Apr 27 2023)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.2.6">2.2.6</a>, <a href="https://github.com/h2o/h2o/releases/tag/v2.3.0-beta1">2.3.0-beta1</a> has been released with a vulnerability fix <a href="https://github.com/h2o/h2o/issues/2090">#2090</a> (Aug 13 2019)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.3.0-beta1">2.3.0-beta1</a> has been released (Jun 2 2018)</li>
 <li>Version <a href="https://github.com/h2o/h2o/releases/tag/v2.2.5">2.2.5</a> has been released with a vulnerability fix <a href="https://github.com/h2o/h2o/issues/1775">#1775</a> (Jun 1 2018)</li>
