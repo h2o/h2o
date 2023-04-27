@@ -188,6 +188,8 @@ static void on_handler_dispose(h2o_handler_t *_self)
 
 void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_socketpool_t *sockpool)
 {
+    assert(config->max_buffer_size != 0);
+
     struct rp_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
 
     self->super.on_context_init = on_context_init;

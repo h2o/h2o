@@ -153,7 +153,7 @@ static void *append(h2o_mem_pool_t *pool, iovec_vector_t *blocks, const void *s,
 
 static char *encode_length_of_pair(char *p, size_t len)
 {
-    if (len < 127) {
+    if (len < 0x80) {
         *p++ = (char)len;
     } else {
         *p++ = (unsigned char)(len >> 24) | 0x80;
