@@ -17,3 +17,5 @@ Once the report has been acknowledged by the h2o maintainer team, the timeline w
    Example: The 90 day due date falls on a holiday for the h2o maintainers. The h2o maintainers can negotiate with the reporter to move the disclosure to 4 days after the 90 day due date.
 
 * The exact time (in UTC) and date of public disclosure will be agreed upon by the h2o maintainers and the reporter.
+
+
