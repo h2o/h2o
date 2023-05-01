@@ -72,6 +72,7 @@ $ctx->{directive}->(
 Sets a header line when and only when a header with the same name does not already exist.
 EOT
 )->(sub {});
+?>
 
 <?
 $ctx->{directive}->(
@@ -82,6 +83,21 @@ $ctx->{directive}->(
 ?>
 <?= $ctx->{example}->('Removing the <code>X-Powered-By</code> header', <<'EOT')
 header.unset: "X-Powered-By"
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "header.unsetunless",
+    levels => [ qw(global host path extension) ],
+    desc   => q{Remove all headers but those listed.},
+)->(sub {
+?>
+<?= $ctx->{example}->('Remove all headers but <code>If-Match</code> and <code>If-Modified-Since</code>', <<'EOT')
+header.unsetunless:
+- "If-Match"
+- "If-Modified-Since"
 EOT
 ?>
 ? })

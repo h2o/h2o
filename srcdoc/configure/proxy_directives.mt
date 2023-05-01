@@ -156,21 +156,43 @@ $ctx->{directive}->(
 ?>
 
 <?
-for my $action (qw(add append merge set setifempty unset)) {
+for my $action (qw(add append merge set setifempty unset unsetunless)) {
     $ctx->{directive}->(
         name    => "proxy.header.$action",
-        levels  => [ qw(global host path extensions) ],
+        levels  => [ qw(global host path extension) ],
         since   => "2.2",
         desc    => "Modifies the request headers sent to the application server.",
     )->(sub {
 ?>
 <p>
-The behavior is identical to <a href="configure/headers_directives.html#header.<?= $action ?>"><code>header.<?= $action ?></code></a> except for the fact that it affects the request sent to the application server.
+The behavior is identical to <a href="configure/headers_directives.html#header.<?= $action ?>"><code>header.<?= $action ?></code></a> except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the <a href="configure/headers_directives.html">headers handler</a> to see how the directives can be used to mangle the headers.
 </p>
 <?
     });
 }
+?>
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.header.cookie.unset",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{Removes cookies in the requests with given name.},
+    see_also => render_mt(<<EOT),
+<a href="configure/headers_directives.html#header.unset"><code>header.unset</code>/a>
+EOT
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.header.cookie.unsetunless",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{Removes all cookies in the requests but those with given names.},
+    see_also => render_mt(<<EOT),
+<a href="configure/headers_directives.html#header.unsetunless"><code>header.unsetunless</code>/a>
+EOT
+)->(sub {});
 ?>
 
 <?
