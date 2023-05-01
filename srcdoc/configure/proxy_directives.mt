@@ -230,17 +230,6 @@ If set to <code>ON</code>, the HTTP client implementation of H2O verifies the pe
 
 <?
 $ctx->{directive}->(
-    name    => "proxy.timeout.io",
-    levels  => [ qw(global host path extension) ],
-    default => q{proxy.timeout.io: 30000},
-    desc    => q{Sets the upstream I/O timeout in milliseconds.},
-)->(sub {
-?>
-<p>This value will be used for <code>proxy.timeout.connect</code> and <code>proxy.timeout.first_byte</code> as well, unless these parameters are explicitely set.</p>
-? })
-
-<?
-$ctx->{directive}->(
     name    => "proxy.timeout.connect",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.connect: 30000},
@@ -268,9 +257,12 @@ $ctx->{directive}->(
     name    => "proxy.timeout.io",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.timeout.io: 30000},
-    since   => "2.3",
     desc    => q{Sets the upstream I/O timeout in milliseconds.},
-)->(sub {});
+)->(sub {
+?>
+<p>This value will be used for <code>proxy.timeout.connect</code> and <code>proxy.timeout.first_byte</code> as well, unless these parameters are explicitely set.</p>
+<?
+});
 ?>
 
 <?
