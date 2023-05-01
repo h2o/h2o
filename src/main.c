@@ -4547,9 +4547,14 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'}, {"mode", required_argument, NULL, 'm'},
-                                           {"test", no_argument, NULL, 't'},       {"version", no_argument, NULL, 'v'},
-                                           {"help", no_argument, NULL, 'h'},       {NULL}};
+        static const int OPT_LIST_DIRECTIVES = 256;
+        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
+                                           {"mode", required_argument, NULL, 'm'},
+                                           {"test", no_argument, NULL, 't'},
+                                           {"version", no_argument, NULL, 'v'},
+                                           {"help", no_argument, NULL, 'h'},
+                                           {"list-directives", no_argument, NULL, OPT_LIST_DIRECTIVES},
+                                           {NULL}};
         while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
@@ -4641,6 +4646,13 @@ int main(int argc, char **argv)
             case ':':
             case '?':
                 exit(EX_CONFIG);
+            case OPT_LIST_DIRECTIVES: {
+                for (h2o_linklist_t *l = conf.globalconf.configurators.next; l != &conf.globalconf.configurators; l = l->next) {
+                    h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, l);
+                    for (size_t i = 0; i != c->commands.size; ++i)
+                        printf("%s\n", c->commands.entries[i].name);
+                }
+            } exit(0);
             default:
                 assert(0);
                 break;
