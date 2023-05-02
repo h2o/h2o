@@ -5,7 +5,10 @@ use Test::More;
 use t::Util;
 
 # commands that are meant to exist without any documentation are listed here
-my @private_commands = qw(mruby.handler_path);
+my @private_commands = (
+    "mruby.handler_path", # deprecated
+    qw(header.cookie.unset header.cookie.unsetunless), # removing "cookie" headers in response?
+);
 
 my $tempdir = tempdir(CLEANUP => 1);
 

@@ -76,6 +76,48 @@ Path to the unix socket should be surrounded by square brackets, and prefixed wi
 
 <?
 $ctx->{directive}->(
+    name         => "proxy.connect",
+    levels       => [ qw(path) ],
+    desc         => q{Setup a CONNECT proxy, taking an access control list as the argument.},
+    experimental => 1,
+)->(sub {
+?>
+<p>
+Each element of the access control list starts with either <code>+</code> or <code>-</code> followed by an wildcard (<code>*</code>) or an IP address with an optional netmask and an optional port number.
+</p>
+<p>
+When a CONNECT request is received and the name resolution of the connect target is complete, the access control list is searched from top to bottom.
+If the first entry that contains a matching address (and optionally the port number) starts with a <code>+</code>, the request is accepted and a tunnel is established.
+If the entry starts with a <code>-</code>, the request is rejected.
+</p>
+<p>
+If none of the entries match, the request is also rejected.
+</p>
+<?= $ctx->{example}->(q{Simple HTTPS proxy}, <<'EOT')
+proxy.connect:
+- "-192.168.0.0/24"  # reject any attempts to local network
+- "+*:443"           # accept attempts to port 443 of any host
+EOT
+?>
+<p>
+Note: The precise syntax of the access control list element is <code>address:port/netmask</code>. This is because the URL parser is reused.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.connect.emit-proxy-status",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating if a proxy-status response header should be sent.},
+    default  => "proxy.connect.emit-proxy-status: OFF",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.proxy-status.identity"><code>proxy.proxy-status.identity</code></a>
+EOT
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
     name    => "proxy.preserve-host",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.preserve-host: OFF},
@@ -151,9 +193,50 @@ $ctx->{directive}->(
     levels  => [ qw(global) ],
     since   => "2.3",
     default => q{proxy.emit-missing-date-header: ON},
-    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</date> header to the response, if that header is missing from the upstream response.",
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</code> header to the response, if that header is missing from the upstream response.",
 )->(sub {})
 ?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.forward.close-connection",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.forward.close-connection: OFF},
+    desc    => "A boolean flag indicating if closure of the backend connection should trigger the closure of the frontend HTTP/1.1 connection.",
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.happy-eyeballs.connection-attempt-delay",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.happy-eyeballs.connection-attempt-delay: 250},
+    desc    => "<code>Connection Attempt Delay</code> parameter of Happy Eyeballs v2.",
+)->(sub {
+?>
+<p>
+When trying to establish a connection to the CONNECT target, H2O uses <a href="https://www.rfc-editor.org/rfc/rfc8305" target=_blank>Happy Eyeballs v2 (RFC 8305)</a>.
+This parameter controls the <code>Connection Attempt Delay</code> parameter of Happy Eyeballs v2 in the unit of milliseconds.
+</p>
+<p>
+At the moment, Happy Eyeballs is used only when acting as a CONNECT proxy.
+It is not used when running as an HTTP reverse proxy.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.happy-eyeballs.name-resolution-delay",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.happy-eyeballs.name-resolution-delay: 50},
+    desc    => "<code>Name Resolution Delay</code> parameter of Happy Eyeballs v2.",
+)->(sub {
+?>
+<p>
+For detail, see <a href="configure/proxy_directives.html#proxy.happy-eyeballs.connection-attempt-delay">proxy.happy-eyeballs.connection-attempt-delay</a>.
+</p>
+? })
+
 
 <?
 for my $action (qw(add append merge set setifempty unset unsetunless)) {
@@ -190,7 +273,96 @@ $ctx->{directive}->(
     levels   => [ qw(global host path extension) ],
     desc     => q{Removes all cookies in the requests but those with given names.},
     see_also => render_mt(<<EOT),
-<a href="configure/headers_directives.html#header.unsetunless"><code>header.unsetunless</code>/a>
+<a href="configure/headers_directives.html#header.unsetunless"><code>header.unsetunless</code></a>
+EOT
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.http2.force-cleartext",
+    levels  => [ qw(global host path extension) ],
+    desc    => q{See <a href="configure/proxy_directives.html#proxy.http2.ratio"><code>proxy.http2.ratio</code></a>.},
+    default => "proxy.http2.force-cleartext: OFF",
+)->(sub {
+?>
+? });
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.http2.max-concurrent-streams",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{Maxium number of concurrent requests issuable on one HTTP/2 connection to the backend server.},
+    default  => "proxy.http2.max-concurrent-streams: 100",
+    see_also => render_mt(<<EOT),
+<a href="configure/proxy_directives.html#proxy.http2.ratio"><code>proxy.http2.ratio</code></a>
+EOT
+)->(sub {
+?>
+<p>
+Actual number of maximum requests inflight will be capped to the minimum of this setting and the value advertised in the HTTP/2 SETTINGS frame of the bakend server.
+</p>
+? });
+
+<?
+$ctx->{directive}->(
+    name         => "proxy.http2.ratio",
+    levels       => [ qw(global host path extension) ],
+    desc         => q{Ratio of forwarded HTTP requests with which use of HTTP/2 should be attempted.},
+    default      => "proxy.http2.ratio: 0",
+    experimental => 1,
+)->(sub {
+?>
+<p>
+When the backend protocol is HTTPS, for given ratio of HTTP requests, h2o will either attempt to create or reuse an existing HTTP/2 connection.
+Connection attempts to use HTTP/2 will be indicated to the server via ALPN, with fallback to HTTP/1.1.
+</p>
+<p>
+When the backend protocol is cleartext HTTP, this directive has impact only when the ratio is set to <code>100</code> with <a href="configure/proxy_directives.html#proxy.http2.force-cleartext"><code>proxy.http2.force-cleartext</code></a> set to <code>ON</code>. In such case, all backend connection will use HTTP/2 without negotiation.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name         => "proxy.http3.ratio",
+    levels       => [ qw(global host path extension) ],
+    desc         => q{Ratio of forwarded HTTP requests with which use of HTTP/3 should be attempted.},
+    default      => "proxy.http3.ratio: 0",
+    experimental => 1,
+)->(sub {
+?>
+<p>
+When the backend protocol is HTTPS, for given ratio of HTTP requests, h2o will either attempt to create or reuse an existing HTTP/3 connection.
+</p>
+<p>
+When the backend protocol is cleartext HTTP, this directive has no impact.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.max-buffer-size",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{This setting specifies the maximum amount of userspace memory / disk space used for buffering each HTTP response being forwarded, in the unit of bytes.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#temp-buffer-threshold"><code>temp-buffer-threshold</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, h2o buffers unlimited amount of data being sent from backend servers.
+The intention behind this approach is to free up backend connections as soon as possible, under the assumption that the backend server might have lower concurrency limits than h2o.
+But if the backend server has enough concurrency, <code>proxy.max-buffer-size</code> can be used to restrict the memory / disk pressure caused by h2o at the cost of having more connections to the backend server.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.proxy-status.identity",
+    levels  => [ qw(global host path extension) ],
+    desc    => "Specifies the name of the server to be emitted as part of the <code>proxy-status</code> header field.",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.connect.proxy-status"><code>proxy.connect.proxy-status</code></a>
 EOT
 )->(sub {});
 ?>
@@ -316,6 +488,38 @@ Then, if the backend server accepts those requests, H2O forwards the HTTP respon
 </p>
 <p>
 Timeouts are governed by properties <code>proxy.timeout.connect</code> and <code>proxy.timeout.io</code>.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name         => "proxy.zerocopy",
+    levels       => [ qw(global) ],
+    default      => q{proxy.zerocopy: OFF},
+    desc         => q{Sets the use of zerocopy operations for forwarding the response body.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#ssl-offload"><code>ssl-offload</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, this flag is set to <code>OFF</code>, in which case the response bytes are read from the upstream socket to an internal buffer as they arrive, then shipped to the client.
+Maximum size of this buffer is controlled by <code>proxy.max-buffer-size</code>.
+The drawback of this approach is that it causes pressure on memory bandwidth.
+</p>
+<p>
+This knob provides two alternative modes to remedy the pressure:
+</p>
+<p>
+When set to <code>enabled</code>, if zerocopy operation in supported by the downstream connection (i.e., downstream connection being cleoartext or encrypted using kernel TLS), h2o uses a pipe as an internal buffer instead of using userspace memory.
+Data is moved to the pipe using the <code>splice</code> system call, then shipped to the downstream connection by another call to <code>splice</code>.
+Pressure to memory bandwidth is eliminated, as the <code>splice</code> system call merely moves the references to kernel memory between file descriptors.
+</p>
+<p>
+When set to <code>always</code>, data from upstream is spliced into a pipe regardless of downstream connection providing support for zerocopy.
+When the downstream connection does not support zerocopy, data is intially moved into the pipe, then gets read and written to the socket (as well as being encrypted, if necessary) as late as it becomes possible to send the data.
+This approach does not reduce the total amount of bytes flowing through the CPU, but reduces the amount of userspace memory used by h2o by delaying the reads, thereby reducing cache spills.
 </p>
 ? })
 
