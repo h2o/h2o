@@ -851,7 +851,7 @@ process.</p>
 <?
 $ctx->{directive}->(
     name   => "stash",
-    levels => [ qw(global host path extensions) ],
+    levels => [ qw(global host path extension) ],
     desc   => q{Directive being used to store reusable YAML variables.},
     since    => "2.3",
 )->(sub {
