@@ -11,12 +11,12 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $keep_alive_upstream_port = empty_port();
-my $close_conn_upstream_port = empty_port();
 my $curl = 'curl --silent --dump-header /dev/stderr';
 
 subtest 'basic' => sub {
     my $doit = sub {
+    my $keep_alive_upstream_port = empty_port();
+    my $close_conn_upstream_port = empty_port();
         my ($toggle) = @_;
         my $server = spawn_h2o(<< "EOT");
 proxy.forward.close-connection: $toggle
