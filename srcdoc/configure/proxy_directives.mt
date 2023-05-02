@@ -303,10 +303,11 @@ The value should be set to something smaller than that being set at the upstream
 
 <?
 $ctx->{directive}->(
-    name    => "proxy.tunnel",
-    levels  => [ qw(global host path extension) ],
-    default => q{proxy.tunnel: OFF},
-    desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow tunnelling to the backend server.},
+    name         => "proxy.tunnel",
+    levels       => [ qw(global host path extension) ],
+    default      => q{proxy.tunnel: OFF},
+    desc         => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether or not to allow tunnelling to the backend server.},
+    experimental => 1,
 )->(sub {
 ?>
 <p>
@@ -314,21 +315,9 @@ When set to <code>ON</code>, CONNECT requests and <a href="https://tools.ietf.or
 Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 </p>
 <p>
-Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
+Timeouts are governed by properties <code>proxy.timeout.connect</code> and <code>proxy.timeout.io</code>.
 </p>
 ? })
-
-<?
-$ctx->{directive}->(
-    name    => "proxy.tunnel.timeout",
-    levels  => [ qw(global host path extension) ],
-    default => q{proxy.websocket.timeout: 300000},
-    desc    => q{Sets the idle timeout of a tunnel.},
-    see_also => render_mt(<<'EOT'),
-<a href="configure/proxy_directives.html#proxy.tunnel"><code>proxy.tunnel</code></a>
-EOT
-)->(sub {})
-?>
 
 ? })
 
