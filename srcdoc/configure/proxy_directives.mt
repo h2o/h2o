@@ -118,47 +118,6 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name    => "proxy.preserve-host",
-    levels  => [ qw(global host path extension) ],
-    default => q{proxy.preserve-host: OFF},
-    desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.},
-)->(sub {});
-?>
-
-<?
-$ctx->{directive}->(
-    name    => "proxy.preserve-x-forwarded-proto",
-    levels  => [ qw(global) ],
-    since   => "2.0",
-    default => q{proxy.preserve-x-forwarded-proto: OFF},
-    desc    => "A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server preserve the received <code>x-forwarded-proto</code> request header.",
-)->(sub {
-?>
-<p>
-By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
-However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
-</p>
-? })
-
-<?
-$ctx->{directive}->(
-    name     => "proxy.proxy-protocol",
-    levels   => [ qw(global host path extension) ],
-    since    => "2.1",
-    see_also => render_mt(<<'EOT'),
-<a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a>
-EOT
-    default  => q{proxy.proxy-protocol: OFF},
-    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt" target="_blank">PROXY protocol</a> should be used when connecting to the application server.},
-)->(sub {
-?>
-<p>
-When using the PROXY protocol, connections to the application server cannot be persistent (i.e. <a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a> must be set to zero).
-</p>
-? })
-
-<?
-$ctx->{directive}->(
     name    => "proxy.emit-x-forwarded-headers",
     levels  => [ qw(global) ],
     since   => "2.1",
@@ -353,6 +312,47 @@ EOT
 By default, h2o buffers unlimited amount of data being sent from backend servers.
 The intention behind this approach is to free up backend connections as soon as possible, under the assumption that the backend server might have lower concurrency limits than h2o.
 But if the backend server has enough concurrency, <code>proxy.max-buffer-size</code> can be used to restrict the memory / disk pressure caused by h2o at the cost of having more connections to the backend server.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.preserve-host",
+    levels  => [ qw(global host path extension) ],
+    default => q{proxy.preserve-host: OFF},
+    desc    => q{A boolean flag (<code>ON</code> or <code>OFF</code>) designating whether or not to pass <code>Host</code> header from incoming request to upstream.},
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.preserve-x-forwarded-proto",
+    levels  => [ qw(global) ],
+    since   => "2.0",
+    default => q{proxy.preserve-x-forwarded-proto: OFF},
+    desc    => "A boolean flag(<code>ON</code> or <code>OFF</code>) indicating if the server preserve the received <code>x-forwarded-proto</code> request header.",
+)->(sub {
+?>
+<p>
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received <code>x-forwarded-proto</code> request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name     => "proxy.proxy-protocol",
+    levels   => [ qw(global host path extension) ],
+    since    => "2.1",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a>
+EOT
+    default  => q{proxy.proxy-protocol: OFF},
+    desc     => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt" target="_blank">PROXY protocol</a> should be used when connecting to the application server.},
+)->(sub {
+?>
+<p>
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. <a href="configure/proxy_directives.html#proxy.timeout.keepalive"><code>proxy.timeout.keepalive</code></a> must be set to zero).
 </p>
 ? })
 
