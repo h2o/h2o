@@ -2,10 +2,14 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "Proxy Directives")->(sub {
 
 <p>
-Proxy module is the reverse proxy implementation for H2O - it implements a HTTP client that forwards a HTTP request to an upstream server.
+Proxy module is the proxy implementation for H2O - it implements a reverse HTTP proxy and a CONNECT proxy.
 </p>
 <p>
-When forwarding the requests, the module sets following request headers:
+A reverse HTTP proxy is setup using the <a href="configure/proxy_directives.html#proxy.reverse.url"><code>proxy.reverse.url</code></a> directive.
+A CONNECT proxy is setup using the <a href="configure/proxy_directives.html#proxy.reverse.url"><code>proxy.connect</code></a> directive.
+</p>
+<p>
+When acting as a reverse HTTP proxy, following request headers are added and forwarded to the backend server:
 <ul>
 <li><a href="https://tools.ietf.org/html/rfc7230#section-5.7.1">via</a></li>
 <li><a href="http://docs.aws.amazon.com/ElasticLoadBalancing/latest/DeveloperGuide/x-forwarded-headers.html#x-forwarded-for">x-forwarded-for</a></li>
@@ -13,8 +17,8 @@ When forwarding the requests, the module sets following request headers:
 </ul>
 </p>
 <p>
-The HTTP client only supports HTTP/1.
-Support for HTTPS has been introduced in version 2.0.
+By default, all requests to the backend server are sent using HTTP/1.1.
+Use of HTTP/2 and HTTP/3 to backend servers is considered experimental; their use can be controlled via directives <a href="configure/proxy_directives.html#proxy.http2.ratio"><code>proxy.http2.ratio</code></a> and <a href="configure/proxy_directives.html#proxy.http3.ratio"><code>proxy.http3.ratio</code></a>.
 </p>
 <p>
 Following sections describe the configuration directives defined for the module.
