@@ -485,7 +485,17 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+By default, the number of worker threads spawned by h2o is the number of the CPU cores connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+</p>
+<p>
+This directive is used to override the behavior.
+</p>
+<p>
+If the argument is a YAML scalar, it specifies in integer the number of worker threads to spawn.
+</p>
+<p>
+If the argument is a YAML sequence, it specifies a list of CPU IDs on each of which one worker thread will be spawned and pinned.
+This mode can be used oly on systems that have <code>pthread_setaffinity_np</code>.
 </p>
 ? })
 
