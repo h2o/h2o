@@ -26,9 +26,19 @@ Otherwise, the entry will match the requests targetting the specified port.
 Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
 If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
 For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
-Note that an exact match is preferred over host definitions using wildcard characters.
 </p>
 
+<p>
+For each HTTP request to be processed, the matching host entry is determined by the steps below:
+<ol>
+<li>Among the host elements that do not use wildcards, find the first element that matches the host and port being specified by the URI.</li>
+<li>If none is found in the previous step, find a matching element among the entries that use wildcards.</li>
+<li>If none is found in the previous steps, use the first host element without a <a href="configure/base_directives.html#strict-match"><code>strict-match</code></a> flag.
+</ol>
+</p>
+<p>
+When the hostname of the HTTP request is unknown (i.e., processing an HTTP/1.0 request without a host header field), only the last step is being used.
+</p>
 
 <?= $ctx->{example}->('A host redirecting all HTTP requests to HTTPS', <<'EOT');
 hosts:
@@ -264,7 +274,7 @@ The <code>ech</code> attribute must be set only in the first <code>ssl</code> at
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
-unless set to <code>OFF</code>, H2O isolates RSA private key operations to an isolated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+unless set to <code>OFF</code>, H2O isolates SSL private key operations to a different process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
 Default is <code>ON</code>.
 </dl>
 <p>
@@ -312,6 +322,20 @@ EOT
 <p>
 If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
 This is an experimental feature introduced in v2.3.0-beta3.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "capabilities",
+    levels => [ qw(global) ],
+    desc   => "Set capabilities to be added to the process before dropping root privileges.",
+)->(sub {
+?>
+<p>
+This directive can be used only on Linux.
+The argument is a YAML sequence of capabilites, where each capability is a name that is accepted by <code>cap_from_name</code>.
+See <code>man 7 capabilities</code> for details.
 </p>
 ? })
 
@@ -382,18 +406,49 @@ Default is 1073741824 (1GB).
 
 <?
 $ctx->{directive}->(
-    name    => "max-connections",
-    levels  => [ qw(global) ],
-    default => 'max-connections: 1024',
-    desc    => q{Number of connections to handle at once at maximum.},
+    name     => "max-connections",
+    levels   => [ qw(global) ],
+    default  => 'max-connections: 1024',
+    desc     => q{Number of connections to handle at once at maximum.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>
+EOT
 )->(sub {});
 
 $ctx->{directive}->(
     name    => "max-delegations",
     levels  => [ qw(global) ],
     default => 'max-delegations: 5',
-    desc    => q{Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).},
+    desc    => q{Limits the number of delegations (i.e. fetching the response body from an alternate source as specified by the <code>X-Reproxy-URL</code> header).},
 )->(sub {});
+
+$ctx->{directive}->(
+    name    => "max-reprocesses",
+    levels  => [ qw(global) ],
+    default => 'max-reprocesses: 5',
+    desc    => q{Limits the number of internal redirects.},
+)->(sub {});
+
+$ctx->{directive}->(
+    name         => "neverbleed-offload",
+    levels       => [ qw(global) ],
+    default      => "neverbleed-offload: OFF",
+    experimental => 1,
+    desc         => "Sets an offload engine to be used with neverbleed.",
+)->(sub {
+?>
+<p>
+When <a href="configure/base_directives.html#neverbleed">neverbleed</a> is in use, RSA private key operations can be offload to accelerators using the <a href="https://www.intel.com/content/www/us/en/architecture-and-technology/intel-quick-assist-technology-overview.html" target=_blank>Intel QuickAssist technology</a>.
+</p>
+<p>This directive takes one of the three values that changes how the accelerators are used:
+<ul>
+<li>OFF - the accelerator is not used</li>
+<li>QAT - use of QAT is enforced; startup will fail if the acclerator is unavailable</li>
+<li>QAT-AUTO - QAT is used if available</li>
+</ul>
+</p>
+<?
+});
 
 $ctx->{directive}->(
     name    => "num-name-resolution-threads",
@@ -553,12 +608,11 @@ $ctx->{directive}->(
     levels   => [ qw(global) ],
     default => 'except-h1',
     since    => '2.3',
-    desc     => 'Specify the client protocols to which H2O can send 1xx informational responses.',
+    desc     => 'Specifies the client protocols to which H2O can send 1xx informational responses.',
 )->(sub {
 ?>
 <p>
 This directive can be used to forward 1xx informational responses generated by the upstream or <a href="configure/headers_directives.html">headers</a> directive to the clients.
-
 </p>
 <p>
 If the value is <code>all</code>, H2O always sends informational responses to the client whenever possible (i.e. unless the procotol is HTTP/1.0).
@@ -569,8 +623,64 @@ If the value is <code>none</code>, H2O never sends informational responses to th
 <p>
 If the value is <code>except-h1</code>, H2O sends informational if the protocol is not HTTP/1.x.
 </p>
+? })
 
+<?
+$ctx->{directive}->(
+    name     => "soft-connection-limit",
+    levels   => [ qw(global) ],
+    desc     => "Number of connections above which idle connections are closed agressively.",
+)->(sub {
 ?>
+<p>
+H2O accepts up to <a href="configure/base_directives.html#max-connections"><code>max-connections</code></a> TCP connections and <a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a> QUIC connections.
+Once the number of connections reach these maximums, new connection attempts are ignored until existing connections close.
+</p>
+<p>
+To reduce the possibility of the number of connections reaching the maximum and new connection attempts getting ignored, <code>soft-connection-limit</code> can be used to introduce another threshold.
+When <code>soft-connection-limit</code> is set, connections that have been idle at least for <a href="configure/base_directives.html#soft-connection-limit.min-age"><code>soft-connection-limit.min-age</code></a> seconds will start to get closed until the number of connections becomes no greater than <code>soft-connection-limit</code>.
+</p>
+<p>
+As the intention of this directive is to close connections more agressively under high load than usual, <code>soft-connection-limit.min-age</code> should be set to a smaller value than the other idle timeouts; e.g., <a href="configure/http1_directives.html#http1-request-timeout"><code>http1-request-timeout</code></a>, <a href="configure/http2_directives.html#http2-idle-timeout"><code>http2-idle-timeout</code></a>.
+</p>
+<?
+});
+
+$ctx->{directive}->(
+    name   => "soft-connection-limit.min-age",
+    levels => [ qw(global) ],
+    desc   => "Minimum amount of idle time to be guaranteed for HTTP connections even when the connections are closed agressively due to the number of connections exceeding <code>soft-connection-limit</code>.",
+    default => "soft-connection-limit.min-age: 30",
+)->(sub {
+?>
+<p>
+See <a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>.
+</p>
+? });
+
+<?
+$ctx->{directive}->(
+    name   => "ssl-offload",
+    levels => [ qw(global) ],
+    desc   => "Knob for changing how TLS encryption is handled.",
+    default => "ssl-offload: OFF",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+EOT
+)->(sub {
+?>
+<p>
+This directive takes one of the following values:
+<ul>
+<li><code>OFF</code> - TLS encryption is handled in userspace and the encrypted bytes are sent to the kernel using a write (2) system call.</li>
+<li><code>kernel</code> - TLS encryption is offloaded to the kernel. When the network interface card supports TLS offloading, actual encryption might get offloaded to the interface, depending on the kernel configuration.</li>
+<li><code>zerocopy</code> - TLS encryption is handled in userspace, but if the encryption logic is capable of writing directly to main memory without polluting the cache, the encrypted data is passed to the kernel without copying (i.e., sendmsg (2) with  <code>MSG_ZEROCOPY</code> socket option is used). Otherwise, this option is identical to <code>OFF</code>. This option minimizes cache pollution next to hardware offload.</li>
+</ul>
+</p>
+<p>
+<code>Kernel</code> option can be used only on Linux.
+<code>Zerocopy</code> is only available on Linux running on CPUs that support the necessary features.
+</p>
 ? })
 
 <?
@@ -750,6 +860,26 @@ By default, the memcached client uses the <a href="https://github.com/memcached/
 Users can opt-in to using the legacy <a href="https://github.com/memcached/memcached/blob/master/doc/protocol.txt">ASCII protocol</a> by adding a <code>protocol</code> attribute set to <code>ASCII</code>.
 </dd>
 ? })
+
+<?
+$ctx->{directive}->(
+    name     => "strict-match",
+    levels   => [ qw(host) ],
+    desc     => q{A boolean flag designating if the current host element should not be considered as the fallback element.},
+    default  => q{strict-match: OFF},
+)->(sub {
+?>
+See <a href="configure/base_directives.html#hosts"><code>hosts</code></a>.
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "tcp-reuseport",
+    levels  => [ qw(global) ],
+    desc    => "A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.",
+    default => "tcp-reuseport: OFF",
+)->(sub {});
+?>
 
 <?
 $ctx->{directive}->(
