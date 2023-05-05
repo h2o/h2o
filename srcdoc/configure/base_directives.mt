@@ -305,6 +305,11 @@ Also following attributes are recognized.
 username of the owner of the socket file.
 If omitted, the socket file will be owned by the launching user.
 </dd>
+<dt>group</dt>
+<dd>
+name of the group of the socket file.
+If omitted, group ID associated to the socket file will be the group ID of the owner.
+</dd>
 <dt>permission</dt>
 <dd>
 an octal number specifying the permission of the socket file.
