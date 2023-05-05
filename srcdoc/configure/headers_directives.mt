@@ -6,6 +6,7 @@ Headers directives can be used to manipulate response headers.
 </p>
 <p>
 This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
+All the directives accept one header field (specified by a YAML scalar), or multiple header fields (specified by a YAML sequence).
 </p>
 
 ? $ctx->{directive_list}->()->(sub {
