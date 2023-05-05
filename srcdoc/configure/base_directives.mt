@@ -282,6 +282,24 @@ Default is <code>ON</code>.
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
 </p>
+<h4 id="listen-cc">The CC Attribute</h4>
+<p>
+The <code>CC</code> attribute specifies the congestion controller to be used for incoming HTTP connections.
+</p>
+<p>
+For TCP connections, the congestion controller is set using the <code>TCP_CONGESTION</code> socket option on platforms that have support for that socket option.
+To find out the default and the list of supported congestion controllers, please refer to <code>man 7 tcp</code>.
+If the platform does not have support for that socket option, the attribute has no effect.
+</p>
+<p>
+For QUIC connections, the congestion controller is one of <code>Reno</code>, <code>Cubic</code>, <code>Pico</code>.
+The default is <code>Reno</code>.
+</p>
+<h4 id="listen-initcwnd">The Initcwnd Attribute</h4>
+<p>
+The <code>initcwnd</code> attribute specifies the initial congestion window of each incoming HTTP connection in the unit of packets.
+At the moment, this option only applies to QUIC. It has no effect for TCP connections.
+</p>
 <h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
 The <code>proxy-protocol</code> attribute (i.e. the value of the attribute must be either <code>ON</code> or <code>OFF</code>) specifies if the server should recognize the information passed via <a href="http://www.haproxy.org/download/1.5/doc/proxy-protocol.txt">"the PROXY protocol</a> in the incoming connections.
@@ -293,6 +311,14 @@ If the first octets do not accord with the specification, it is considered as th
 </p>
 <p>
 Default is <code>OFF</code>.
+</p>
+<h4 id="listen-sndbuf">The Sndbuf and Rcvbuf Attributes</h4>
+<p>
+The <code>sndbuf</code> and <code>rcvbuf</code> attributes specify the send and receive buffer size for each TCP or UNIX socket used for accepting incoming HTTP connections.
+If set, the values of these attributes are applied to the sockets using <code>SO_SNDBUF</code> and <code>SO_RCVBUF</code> socket options.
+</p>
+<p>
+These attributes have no effect for QUIC connections.
 </p>
 <h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
 <p>
