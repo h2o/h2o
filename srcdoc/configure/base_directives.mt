@@ -216,6 +216,8 @@ synonym of <code>maximum-version</code>.
 </dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
+<dt id="cipher-suite-tls1.3">cipher-suite-tls1.3:</dt>
+<dd>list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the <a href="https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4" target=_blank>IANA TLS Cipher Suite Registry</a>; e.g., <code>TLS_AES_128_GCM_SHA256</code>, <code>TLS_CHACHA20_POLY1305_SHA256</code>.
 <dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
