@@ -64,6 +64,7 @@ Headers directives can be used to manipulate response headers.
 </p>
 <p>
 This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
+All the directives accept one header field (specified by a YAML scalar), or multiple header fields (specified by a YAML sequence).
 </p>
 
 <ul>
@@ -84,6 +85,9 @@ This document describes the following configuration directives as well as <a hre
 </a></li>
 <li><a href="configure/headers_directives.html#header.unset">
 <code>header.unset</code>
+</a></li>
+<li><a href="configure/headers_directives.html#header.unsetunless">
+<code>header.unsetunless</code>
 </a></li>
 </ul>
 
@@ -193,6 +197,8 @@ Sets a header line when and only when a header with the same name does not alrea
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host, path, extension</dd>
 </dl>
+
+
 <div id="header.unset" class="directive-head">
 <h3><a href="configure/headers_directives.html#header.unset"><code>"header.unset"</code></a></h3>
 </div>
@@ -207,6 +213,31 @@ Removes headers with given name.
 <div class="example">
 <div class="caption">Example. Removing the <code>X-Powered-By</code> header</div>
 <pre><code>header.unset: &quot;X-Powered-By&quot;
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+</dl>
+
+<div id="header.unsetunless" class="directive-head">
+<h3><a href="configure/headers_directives.html#header.unsetunless"><code>"header.unsetunless"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Remove all headers but those listed.
+</p>
+
+<div class="example">
+<div class="caption">Example. Remove all headers but <code>If-Match</code> and <code>If-Modified-Since</code></div>
+<pre><code>header.unsetunless:
+- &quot;If-Match&quot;
+- &quot;If-Modified-Since&quot;
 </code></pre>
 </div>
 
