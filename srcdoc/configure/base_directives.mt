@@ -106,7 +106,7 @@ $ctx->{directive}->(
 ?>
 </p>
 <p>
-In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
+In addition to specifying the port number, it is also possible to designate the bind address or the SSL and HTTP/3 (QUIC) configuration.
 </p>
 <?= $ctx->{example}->('Various ways of using the Listen Directive', <<'EOT')
 # accept HTTP on port 80 on default address (both IPv4 and IPv6)
@@ -133,6 +133,9 @@ listen:
   proxy-protocol: ON
 EOT
 ?>
+<p>
+To configure HTTP/3 (QUIC), see <a href="configure/http3_directives.html">HTTP/3</a>.
+</p>
 <h4 id="listen-configuration-levels">Configuration Levels</h4>
 <p>
 The directive can be used either at global-level or at host-level.
@@ -351,11 +354,6 @@ listen:
   permission: 600
 EOT
 ?>
-<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
-<p>
-If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
-This is an experimental feature introduced in v2.3.0-beta3.
-</p>
 ? })
 
 <?
@@ -442,12 +440,36 @@ $ctx->{directive}->(
     name     => "max-connections",
     levels   => [ qw(global) ],
     default  => 'max-connections: 1024',
-    desc     => q{Number of connections to handle at once at maximum.},
+    desc     => q{Maximum number of incoming connections to handle at once.},
     see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
 <a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>
 EOT
-)->(sub {});
+)->(sub {
+?>
+This includes TCP and QUIC connections.
+? })
 
+<?
+$ctx->{directive}->(
+    name         => "max-quic-connections",
+    levels       => [ qw(global) ],
+    desc         => q{Maximum number of incoming QUIC connections to handle at once.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#num-quic-threads"><code>num-quic-threads</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, maximum number of incoming connections is governed by <code>max-connections</code> regardless of the transport protocol (i.e., TCP or QUIC) being used.
+</p>
+<p>
+This directive introduces an additional cap for incoming QUIC connections. By setting <code>max-quic-connections</code> to a value smaller than <code>max-connections</code>, it would be possible to serve incoming requests that arrive on top of TCP (i.e., HTTP/1 and HTTP/2) even when there are issues with handling QUIC connections.
+</p>
+? })
+
+<?
 $ctx->{directive}->(
     name    => "max-delegations",
     levels  => [ qw(global) ],
@@ -529,6 +551,25 @@ If the argument is a YAML scalar, it specifies in integer the number of worker t
 <p>
 If the argument is a YAML sequence, it specifies a list of CPU IDs on each of which one worker thread will be spawned and pinned.
 This mode can be used oly on systems that have <code>pthread_setaffinity_np</code>.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name         => "num-quic-threads",
+    levels       => [ qw(global) ],
+    desc         => q{Restricts the number of worker threads that handle incoming QUIC connections.},
+    experimental => 1,
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, all worker threads handle incoming QUIC connections as well as TCP connections.
+</p>
+<p>
+If <a href="configure/base_directives.html#num-threads"><code>num-threads</code></a> was given a YAML sequence specifying the CPU IDs on which each worker thread will run, the threads pinned to first <code>num-quic-threads</code> threads will handle incoming QUIC connections.
 </p>
 ? })
 

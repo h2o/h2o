@@ -726,6 +726,7 @@
 		086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-eyeballs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086850BF27535D7800F8CAD1 /* injectaddr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = injectaddr.c; sourceTree = "<group>"; };
 		086A681028361A0500233AB6 /* fusion.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = fusion.c; path = deps/picotls/lib/fusion.c; sourceTree = SOURCE_ROOT; };
+		08781EAB2A06376A005B411F /* http3_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http3_directives.mt; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -1782,6 +1783,7 @@
 				10583BFC1AE88782004A3AD6 /* base_directives.mt */,
 				10583C011AEF86E6004A3AD6 /* http1_directives.mt */,
 				10583C021AEF8C7D004A3AD6 /* http2_directives.mt */,
+				08781EAB2A06376A005B411F /* http3_directives.mt */,
 				10583C031AF1D7D5004A3AD6 /* access_log_directives.mt */,
 				106C23041C1132E000405689 /* errordoc_directives.mt */,
 				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
