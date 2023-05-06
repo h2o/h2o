@@ -38,6 +38,6 @@ close $outfh;
 # compare the commands
 diag "If there is mismatch; add necessary documentation to files under srcdoc and run `make doc`.";
 my $result = `cd $tempdir && exec diff -u in_exec.txt in_doc.txt`;
-is $result, 0, "all commands are documented";
+is $result, '', "all commands are documented";
 
 done_testing();
