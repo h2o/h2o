@@ -4547,7 +4547,7 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static const int OPT_LIST_DIRECTIVES = 256;
+        enum { OPT_LIST_DIRECTIVES = 256 };
         static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
                                            {"mode", required_argument, NULL, 'm'},
                                            {"test", no_argument, NULL, 't'},
