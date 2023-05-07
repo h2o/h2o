@@ -3,6 +3,8 @@
 <div id="<?= $args->{name} ?>" class="directive-head">
 ? if ($args->{since}) {
 <div class="directive-since">since v<?= $args->{since} ?></div>
+? } elsif ($args->{experimental}) {
+<div class="directive-since">experimental</div>
 ? }
 <h3><a href="<?= $ctx->{filename} ?>#<?= $args->{name} ?>"><code>"<?= $args->{name} ?>"</code></a></h3>
 </div>
