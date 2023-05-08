@@ -84,6 +84,7 @@ static struct st_h2o_accept_data_t *create_default_accept_data(h2o_accept_ctx_t 
     return data;
 }
 
+#ifdef H2O_HAS_HIREDIS
 static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_redis_resumption_accept_data_t *data = (struct st_h2o_redis_resumption_accept_data_t *)create_accept_data(
@@ -91,7 +92,9 @@ static struct st_h2o_accept_data_t *create_redis_accept_data(h2o_accept_ctx_t *c
     data->get_command = NULL;
     return &data->super;
 }
+#endif
 
+#ifdef H2O_HAS_LIBYRMCDS
 static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock,
                                                                  struct timeval connected_at)
 {
@@ -100,6 +103,7 @@ static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_
     data->get_req = NULL;
     return &data->super;
 }
+#endif
 
 static void destroy_accept_data(struct st_h2o_accept_data_t *data)
 {
@@ -112,13 +116,16 @@ static void destroy_default_accept_data(struct st_h2o_accept_data_t *_accept_dat
     destroy_accept_data(_accept_data);
 }
 
+#ifdef H2O_HAS_HIREDIS
 static void destroy_redis_accept_data(struct st_h2o_accept_data_t *_accept_data)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = (struct st_h2o_redis_resumption_accept_data_t *)_accept_data;
     assert(accept_data->get_command == NULL);
     destroy_accept_data(&accept_data->super);
 }
+#endif
 
+#ifdef H2O_HAS_LIBYRMCDS
 static void destroy_memcached_accept_data(struct st_h2o_accept_data_t *_accept_data)
 {
     struct st_h2o_memcached_resumption_accept_data_t *accept_data =
@@ -126,6 +133,7 @@ static void destroy_memcached_accept_data(struct st_h2o_accept_data_t *_accept_d
     assert(accept_data->get_req == NULL);
     destroy_accept_data(&accept_data->super);
 }
+#endif
 
 static struct {
     struct st_h2o_accept_data_t *(*create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
@@ -318,6 +326,7 @@ static void on_accept_timeout(h2o_timer_t *entry)
     accept_timeout(data);
 }
 
+#ifdef H2O_HAS_HIREDIS
 static void on_redis_accept_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_redis_resumption_accept_data_t *data =
@@ -328,7 +337,9 @@ static void on_redis_accept_timeout(h2o_timer_t *entry)
     }
     accept_timeout(&data->super);
 }
+#endif
 
+#ifdef H2O_HAS_LIBYRMCDS
 static void on_memcached_accept_timeout(h2o_timer_t *entry)
 {
     struct st_h2o_memcached_resumption_accept_data_t *data =
@@ -339,6 +350,7 @@ static void on_memcached_accept_timeout(h2o_timer_t *entry)
     }
     accept_timeout(&data->super);
 }
+#endif
 
 static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 {
