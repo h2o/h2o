@@ -2,7 +2,7 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/3")->(sub {
 
 <p>
-HTTP/3 uses QUIC as the transport protocol.
+<a href="https://tools.ietf.org/html/rfc9114" target=_blank>HTTP/3</a> uses <a href="https://tools.ietf.org/html/rfc9000" target=_blank>QUIC</a> as the transport protocol.
 A <a href="configure/base_directives.html#listen"><code>listen</code></a> directive with a <code>type</code> attribute set to <code>quic</code> instructs the standalone server to bind to a UDP port on which QUIC packets will be sent and received.
 The binding must have an <a href="configure/base_directives.html#listen-ssl"><code>ssl</code></a> attribute, as QUIC uses TLS/1.3 as the handshake protocol.
 </p>

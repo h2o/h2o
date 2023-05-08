@@ -2,13 +2,13 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/2 Directives")->(sub {
 
 <p>
-H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+H2O provides one of the world's most sophisticated <a href="https://tools.ietf.org/html/rfc9113">HTTP/2 protocol</a> implementation, including following features.
 </p>
 
 <h3 id="prioritization">Prioritization</h3>
 
 <p>
-H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540">HTTP/2 specification</a>.
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540" taget=_blank>HTTP/2 specification</a>.
 The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
 </p>
 <p>
