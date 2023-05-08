@@ -436,6 +436,10 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
 
 static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
+    if (errstr != NULL) {
+        on_error(client->ctx, client->pool, errstr);
+        return;
+    }
     if (*filler_remaining_bytes(client) > 0)
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
 }

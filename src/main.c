@@ -416,7 +416,7 @@ struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
-    int reponseless;
+    int responseless;
     void (*on_read_complete)(struct async_nb_transaction_t *transaction);
 };
 
@@ -471,7 +471,7 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     /* add to the read queue the entry for which we have written the request, and start reading from the socket */
     struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.write_queue);
-    if (!transaction->reponseless) {
+    if (!transaction->responseless) {
         async_nb_push(&async_nb.read_queue, transaction);
         if (!h2o_socket_is_reading(async_nb.sock))
             h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
@@ -633,7 +633,7 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
         *transaction = (struct async_nb_transaction_t){
             .buf = h2o_mem_alloc(sizeof(*transaction->buf)),
             .link = (h2o_linklist_t){},
-            .reponseless = 1,
+            .responseless = 1,
         };
 
         /* transfer ownership of stack `buf` to heap allocated `transaction->buf` */
@@ -652,8 +652,11 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
 
         async_nb_run_sync(buf, neverbleed_transaction_write);
 
-        if (!reponseless)
+        if (!reponseless) {
             async_nb_run_sync(buf, neverbleed_transaction_read);
+        } else {
+            neverbleed_iobuf_dispose(buf);
+        }
     }
 }
 
