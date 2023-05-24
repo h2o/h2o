@@ -125,6 +125,25 @@ static int should_use_h2(int8_t ratio, int8_t *counter)
     return use_h2;
 }
 
+
+static struct st_h2o_httpclient__h2_conn_t *find_h2conn(h2o_httpclient_connection_pool_t *pool, h2o_url_t *target)
+{
+    int should_check_target = /* h2o_socketpool_is_global(pool->socketpool) */pool->socketpool->balancer == NULL;
+
+    for (h2o_linklist_t *l = pool->http2.conns.next; l != &pool->http2.conns; l = l->next) {
+        struct st_h2o_httpclient__h2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h2_conn_t, link, l);
+        if (should_check_target && !(conn->origin_url.scheme == target->scheme &&
+                                     h2o_memis(conn->origin_url.authority.base, conn->origin_url.authority.len,
+                                               target->authority.base, target->authority.len)))
+            continue;
+        if (conn->num_streams >= h2o_httpclient__h2_get_max_concurrent_streams(conn))
+            continue;
+        return conn;
+    }
+
+    return NULL;
+}
+
 void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *origin, h2o_httpclient_connect_cb cb)
 {
@@ -144,9 +163,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     h2o_httpclient__h2_conn_t *http2_conn = NULL;
     if (!h2o_linklist_is_empty(&connpool->http2.conns)) {
-        http2_conn = H2O_STRUCT_FROM_MEMBER(h2o_httpclient__h2_conn_t, link, connpool->http2.conns.next);
-        if (http2_conn->num_streams >= h2o_httpclient__h2_get_max_concurrent_streams(http2_conn))
-            http2_conn = NULL;
+        http2_conn = find_h2conn(connpool, origin);
     }
 
     if (ctx->http2.ratio < 0) {
