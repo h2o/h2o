@@ -165,8 +165,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
 
     /* url */
-    if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
-        h2o_fatal("h2o_url_init failed");
+    h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
 
     if (props->connection_header != NULL) {
         if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
@@ -862,10 +861,8 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (!overrides->proxy_preserve_host)
             target = NULL;
     }
-    if (target == &target_buf && h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/"))) != 0) {
-        h2o_send_error_400(req, "Invalid Request", "Invalid Request", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
-        return;
-    }
+    if (target == &target_buf)
+        h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
 
     const char *upgrade_to = NULL;
     if (req->is_tunnel_req) {

@@ -855,6 +855,7 @@ sub run_openssl_client {
     diag("run_openssl_client: $cmd");
 
     my $cpid = open3(my $chld_in, my $chld_out, my $chld_err = gensym, $cmd);
+    sleep $timeout;
     $chld_in->autoflush(1);
 
     {
