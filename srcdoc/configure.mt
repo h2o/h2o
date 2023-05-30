@@ -13,6 +13,7 @@
 <li><a href="configure/base_directives.html">Base</a>
 <li><a href="configure/http1_directives.html">HTTP/1</a>
 <li><a href="configure/http2_directives.html">HTTP/2</a>
+<li><a href="configure/http3_directives.html">HTTP/3</a>
 <li><a href="configure/access_log_directives.html">Access Log</a>
 <li><a href="configure/compress_directives.html">Compress</a>
 <li><a href="configure/errordoc_directives.html">Errordoc</a>
