@@ -205,6 +205,7 @@ uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t
 extern const size_t h2o_httpclient__h2_size;
 
 int h2o_httpclient_close_h2conn(h2o_linklist_t *l);
+void h2o_httpclient_h2_cleanup_thread(void);
 
 #ifdef __cplusplus
 }

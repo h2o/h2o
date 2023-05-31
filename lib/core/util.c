@@ -958,6 +958,7 @@ void h2o_cleanup_thread(void)
     h2o_mem_clear_recycle(&h2o_mem_pool_allocator);
     h2o_mem_clear_recycle(&h2o_http2_wbuf_buffer_prototype.allocator);
     h2o_mem_clear_recycle(&h2o_socket_buffer_prototype.allocator);
+    h2o_httpclient_h2_cleanup_thread();
 }
 
 #ifdef H2O_THREAD_LOCAL_UNINITIALIZED

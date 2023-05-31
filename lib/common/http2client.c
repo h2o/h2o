@@ -1327,3 +1327,8 @@ int h2o_httpclient_close_h2conn(h2o_linklist_t *l)
     struct st_h2o_httpclient__h2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h2_conn_t, link, l);
     return __h2o_httpclient_close_h2conn(conn);
 }
+
+void h2o_httpclient_h2_cleanup_thread(void)
+{
+    h2o_mem_clear_recycle(&wbuf_buffer_prototype.allocator);
+}
