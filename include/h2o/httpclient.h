@@ -204,6 +204,8 @@ void h2o_httpclient__h2_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock,
 uint32_t h2o_httpclient__h2_get_max_concurrent_streams(h2o_httpclient__h2_conn_t *conn);
 extern const size_t h2o_httpclient__h2_size;
 
+int h2o_httpclient_close_h2conn(h2o_linklist_t *l);
+
 #ifdef __cplusplus
 }
 #endif

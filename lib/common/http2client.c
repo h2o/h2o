@@ -1313,3 +1313,17 @@ void h2o_httpclient__h2_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock
 }
 
 const size_t h2o_httpclient__h2_size = sizeof(struct st_h2o_http2client_stream_t);
+
+static int __h2o_httpclient_close_h2conn(struct st_h2o_httpclient__h2_conn_t *_conn)
+{
+    struct st_h2o_http2client_conn_t *conn = (void *)_conn;
+    if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
+        return 0;
+    return close_connection(conn);
+}
+
+int h2o_httpclient_close_h2conn(h2o_linklist_t *l)
+{
+    struct st_h2o_httpclient__h2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_httpclient__h2_conn_t, link, l);
+    return __h2o_httpclient_close_h2conn(conn);
+}
