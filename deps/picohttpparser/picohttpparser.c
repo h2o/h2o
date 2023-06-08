@@ -138,11 +138,11 @@ static const char *get_token_to_eol(const char *buf, const char *buf_end, const 
     const char *token_start = buf;
 
 #ifdef __SSE4_2__
-    static const char ranges1[] = "\0\010"
-                                  /* allow HT */
-                                  "\012\037"
-                                  /* allow SP and up to but not including DEL */
-                                  "\177\177"
+    static const char ALIGNED(16) ranges1[16] = "\0\010"
+                                                /* allow HT */
+                                                "\012\037"
+                                                /* allow SP and up to but not including DEL */
+                                                "\177\177"
         /* allow chars w. MSB set */
         ;
     int found;
