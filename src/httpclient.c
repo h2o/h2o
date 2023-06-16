@@ -327,7 +327,17 @@ static void on_next_request(h2o_timer_t *entry)
     start_request(ctx);
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static void print_headers(h2o_header_t *headers, size_t num_headers)
+{
+    for (size_t i = 0; i != num_headers; ++i) {
+        const char *name = headers[i].orig_name;
+        if (name == NULL)
+            name = headers[i].name->base;
+        fprintf(stderr, "%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
+    }
+}
+
+static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     if (errstr != NULL) {
         if (udp_sock != NULL)
@@ -353,6 +363,12 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
         }
     }
 
+    if (num_trailers != 0) {
+        print_headers(trailers, num_trailers);
+        fprintf(stderr, "\n");
+        fflush(stderr);
+    }
+
     return 0;
 }
 
@@ -373,24 +389,13 @@ static void print_status_line(int version, int status, h2o_iovec_t msg)
     }
 }
 
-static void print_response_headers(int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
-{
-    print_status_line(version, status, msg);
-
-    for (size_t i = 0; i != num_headers; ++i) {
-        const char *name = headers[i].orig_name;
-        if (name == NULL)
-            name = headers[i].name->base;
-        fprintf(stderr, "%.*s: %.*s\n", (int)headers[i].name->len, name, (int)headers[i].value.len, headers[i].value.base);
-    }
-    fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
 static int on_informational(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
                             size_t num_headers)
 {
-    print_response_headers(version, status, msg, headers, num_headers);
+    print_status_line(version, status, msg);
+    print_headers(headers, num_headers);
+    fprintf(stderr, "\n");
+    fflush(stderr);
     return 0;
 }
 
@@ -401,7 +406,10 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
         return NULL;
     }
 
-    print_response_headers(args->version, args->status, args->msg, args->headers, args->num_headers);
+    print_status_line(args->version, args->status, args->msg);
+    print_headers(args->headers, args->num_headers);
+    fprintf(stderr, "\n");
+    fflush(stderr);
 
     if (errstr == h2o_httpclient_error_is_eos) {
         on_error(client->ctx, client->pool, "no body");
