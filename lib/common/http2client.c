@@ -968,7 +968,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, stream->stream_id, conn->peer_settings.max_frame_size,
-                              method, &url, headers, num_headers, body.base == NULL);
+                              method, &url, headers, num_headers, body.base == NULL && stream->streaming.proceed_req == NULL);
     transition_state(stream, H2O_HTTP2CLIENT_STREAM_STATE_SEND_BODY);
 
     if (body.base != NULL) {
