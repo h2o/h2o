@@ -643,6 +643,35 @@ static void test_dynamic_table_size_update(void)
     h2o_buffer_dispose(&buf);
 }
 
+static void test_empty_header_name(void)
+{
+    const uint8_t literal_huff[] = {0x80}, literal_nohuff[] = {0x00}, *src, *end;
+    h2o_mem_pool_t pool;
+    unsigned soft_errors;
+    const char *err_desc;
+    h2o_iovec_t *result;
+
+    h2o_mem_init_pool(&pool);
+
+    src = literal_huff;
+    end = literal_huff + sizeof(literal_huff);
+    soft_errors = 0;
+    result = decode_string(&pool, &soft_errors, &src, end, 1, &err_desc);
+    ok(result != NULL);
+    ok(result->len == 0);
+    ok(soft_errors == H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME);
+
+    src = literal_nohuff;
+    end = literal_nohuff + sizeof(literal_nohuff);
+    soft_errors = 0;
+    result = decode_string(&pool, &soft_errors, &src, end, 1, &err_desc);
+    ok(result != NULL);
+    ok(result->len == 0);
+    ok(soft_errors == H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME);
+
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -651,4 +680,5 @@ void test_lib__http2__hpack(void)
     subtest("token-wo-hpack-id", test_token_wo_hpack_id);
     subtest("inherit-invalid", test_inherit_invalid);
     subtest("dynamic-table-size-update", test_dynamic_table_size_update);
+    subtest("empty-header-name", test_empty_header_name);
 }
