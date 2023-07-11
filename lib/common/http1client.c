@@ -610,8 +610,11 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     }
 
     /* TODO no need to set the timeout if all data has been written into TCP sendbuf */
+    uint64_t body_eto = 0;
+    if (body.base != NULL)
+        body_eto = 1000ul * body.len / (1024 * 1024);
     client->super._timeout.cb = on_send_timeout;
-    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+    h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout + body_eto, &client->super._timeout);
 
     client->super.timings.request_begin_at = h2o_gettimeofday(client->super.ctx->loop);
 }
