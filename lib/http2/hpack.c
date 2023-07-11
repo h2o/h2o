@@ -179,10 +179,20 @@ int h2o_hpack_validate_header_name(unsigned *soft_errors, const char *s, size_t 
     return 1;
 }
 
-/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
+static int header_value_valid_as_whole(const char *s, size_t len)
+{
+    if (len != 0 && (s[0] == 0x20 || s[0] == 0x09 || s[len - 1] == 0x20 || s[len - 1] == 0x09))
+        return 0;
+    return 1;
+}
+
 void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_t len)
 {
-    /* all printable chars + horizontal tab */
+    /* surrounding whitespace RFC 9113 8.2.1 */
+    if (!header_value_valid_as_whole(s, len))
+        goto Invalid;
+
+    /* all printable chars + horizontal tab (RFC 7230 3.2) */
     static const char valid_h2_field_value_char[] = {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   32-63 */
@@ -196,11 +206,13 @@ void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_
 
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_field_value_char[ch]) {
-            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
-            break;
-        }
+        if (!valid_h2_field_value_char[ch])
+            goto Invalid;
     }
+    return;
+
+Invalid:
+    *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
 }
 
 static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src, const uint8_t *src_end,
@@ -224,6 +236,8 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, c
         if ((ret->len = h2o_hpack_decode_huffman(ret->base, soft_errors, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
         ret->base[ret->len] = '\0';
+        if (!header_value_valid_as_whole(ret->base, ret->len))
+            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
     } else {
         if (len > src_end - *src)
             return NULL;
