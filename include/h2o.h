@@ -1277,9 +1277,13 @@ struct st_h2o_req_t {
      */
     h2o_res_t res;
     /**
-     * number of bytes sent by the generator (excluding headers)
+     * number of body bytes sent by the generator (excluding headers)
      */
     uint64_t bytes_sent;
+    /**
+     * number of header bytes sent by the generator
+     */
+    uint64_t header_bytes_sent;
     /**
      * the number of times the request can be reprocessed (excluding delegation)
      */

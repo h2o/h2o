@@ -1035,6 +1035,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
         h2o_sendvec_init_raw(bufs + bufcnt, h2o_mem_alloc_pool(&conn->req.pool, char, headers_est_size), 0);
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].raw, &conn->req, connection);
+        conn->req.header_bytes_sent = bufs[bufcnt].len;
         ++bufcnt;
         h2o_probe_log_response(&conn->req, conn->_req_index);
         conn->_ostr_final.state = OSTREAM_STATE_BODY;

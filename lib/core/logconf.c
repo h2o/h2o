@@ -28,6 +28,7 @@ enum {
     ELEMENT_TYPE_EMPTY,                         /* empty element (with suffix only) */
     ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
     ELEMENT_TYPE_BYTES_SENT,                    /* %b */
+    ELEMENT_TYPE_HEADER_BYTES_SENT,             /* %{header-bytes}x */
     ELEMENT_TYPE_PROTOCOL,                      /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
     ELEMENT_TYPE_LOGNAME,                       /* %l */
@@ -266,6 +267,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
+                    MAP_EXT_TO_TYPE("header-bytes", ELEMENT_TYPE_HEADER_BYTES_SENT);
                     MAP_EXT_TO_TYPE("proxy.idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy.connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
                     MAP_EXT_TO_TYPE("proxy.request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
@@ -591,6 +593,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_BYTES_SENT: /* %b */
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->bytes_sent);
+            break;
+        case ELEMENT_TYPE_HEADER_BYTES_SENT: /* %{header_bytes} */
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->header_bytes_sent);
             break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             if (req->version == 0)

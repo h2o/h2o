@@ -1418,6 +1418,7 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
         stream->req.res.content_length, datagram_flow_id);
+    stream->req.header_bytes_sent += frame.len;
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;

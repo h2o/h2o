@@ -92,9 +92,15 @@ subtest "custom-log" => sub {
         sub {
             my $server = shift;
             system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/ > /dev/null");
+            system("curl --http1.1 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+            system("curl --http2 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/ > /dev/null");
+            system("$client_prog -3 100 -Huser-agent:curl/not-really -Hreferer:http://example.com/ -k https://127.0.0.1:$server->{quic_port} > /dev/null 2>&1");
         },
-        '%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"',
-        [ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"$} ],
+        '%h %l %u %t "%r" %s %b %{header-bytes}x "%{Referer}i" "%{User-agent}i"',
+        [ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 24\d "http://example.com/" "curl/.*"$},
+          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 24\d "http://example.com/" "curl/.*"$},
+          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/2" 200 6 1\d\d "http://example.com/" "curl/.*"$} ,
+          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/3" 200 6 \d\d "http://example.com/" "curl/.*"$} ],
     );
 };
 
