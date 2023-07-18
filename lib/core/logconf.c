@@ -267,7 +267,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
-                    MAP_EXT_TO_TYPE("header-bytes", ELEMENT_TYPE_HEADER_BYTES_SENT);
+                    MAP_EXT_TO_TYPE("response-header-bytes", ELEMENT_TYPE_HEADER_BYTES_SENT);
                     MAP_EXT_TO_TYPE("proxy.idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy.connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
                     MAP_EXT_TO_TYPE("proxy.request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
