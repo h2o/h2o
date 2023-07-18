@@ -3,6 +3,7 @@ use warnings;
 use File::Temp qw(tempdir);
 use IO::Socket::IP;
 use Test::More;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -25,15 +26,19 @@ open my $logfh, "<", "$tempdir/access_log"
 
 subtest "empty-header-name" => sub {
     submit("GET / HTTP/1.0\r\n\r\n");
+    sleep 0.1;
     is get_status(), 200;
     submit("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00=\x01\x05\x00\x00\x00\x01\x00\n:authority\tlocalhost\x00\x05:path\x01/\x00\x07:method\x03GET\x00\x07:scheme\x04http\x00\x00\x00");
+    sleep 0.1;
     is get_status(), 400;
 };
 
 subtest "header-values-with-surronding-space" => sub {
     submit("GET / HTTP/1.0\r\n\r\n");
+    sleep 0.1;
     is get_status(), 200;
     submit("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00E\x01\x05\x00\x00\x00\x01\x00\n:authority\tlocalhost\x00\x05:path\x01/\x00\x07:method\x03GET\x00\x07:scheme\x04http\x00\x05test1\x03\ta\t");
+    sleep 0.1;
     is get_status(), 400;
 };
 
