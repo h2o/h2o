@@ -236,7 +236,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, c
         if ((ret->len = h2o_hpack_decode_huffman(ret->base, soft_errors, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
         ret->base[ret->len] = '\0';
-        if (!header_value_valid_as_whole(ret->base, ret->len))
+        if (!is_header_name && !header_value_valid_as_whole(ret->base, ret->len))
             *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
     } else {
         if (len > src_end - *src)
