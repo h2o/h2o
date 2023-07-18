@@ -28,7 +28,7 @@ enum {
     ELEMENT_TYPE_EMPTY,                         /* empty element (with suffix only) */
     ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
     ELEMENT_TYPE_BYTES_SENT,                    /* %b */
-    ELEMENT_TYPE_HEADER_BYTES_SENT,             /* %{header-bytes}x */
+    ELEMENT_TYPE_HEADER_BYTES_SENT,             /* %{response-header-bytes}x */
     ELEMENT_TYPE_PROTOCOL,                      /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
     ELEMENT_TYPE_LOGNAME,                       /* %l */
