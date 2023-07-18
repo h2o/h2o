@@ -679,6 +679,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		080590262A5E463A00B2B10E /* 40http2-header-softerror.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http2-header-softerror.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		080B3CC227E1AF6C004AC8E6 /* config.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
 		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		0810E6A7286DACB600333FA4 /* 50reverse-proxy-null-host-header.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-null-host-header.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2231,6 +2232,7 @@
 				E9D49A4F25FB561A00F4A80D /* 40http1-streaming-framing.t */,
 				E9414F9724ED1D7500273C59 /* 40http2-h2spec-client.t */,
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
+				080590262A5E463A00B2B10E /* 40http2-header-softerror.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
 				086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */,
