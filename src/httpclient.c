@@ -43,7 +43,7 @@
 #include "h2o/httpclient.h"
 #include "h2o/serverutil.h"
 
-#define IO_TIMEOUT 5000
+#define DEFAULT_IO_TIMEOUT 5000
 
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
@@ -69,6 +69,7 @@ static struct {
     int closed;
 } std_in;
 static int io_interval = 0, req_interval = 0;
+static uint64_t io_timeout = DEFAULT_IO_TIMEOUT;
 static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
@@ -290,7 +291,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
         h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
-        h2o_socketpool_set_timeout(sockpool, IO_TIMEOUT);
+        h2o_socketpool_set_timeout(sockpool, io_timeout);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
         h2o_httpclient_connection_pool_init(connpool, sockpool);
 
@@ -520,6 +521,8 @@ static void usage(const char *progname)
             "  --max-udp-payload-size <bytes>\n"
             "               specifies the max_udp_payload_size transport parameter to send\n"
             "               (default: %" PRIu64 ")\n"
+            " --io-timeout <milliseconds>\n"
+            "               specifies the timeout for I/O operations (default: 5000ms)\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
@@ -573,10 +576,6 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
         .getaddr_receiver = &getaddr_receiver,
-        .io_timeout = IO_TIMEOUT,
-        .connect_timeout = IO_TIMEOUT,
-        .first_byte_timeout = IO_TIMEOUT,
-        .keepalive_timeout = IO_TIMEOUT,
         .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
         .http2 = {.max_concurrent_streams = 100},
         .http3 = &h3ctx,
@@ -642,11 +641,13 @@ int main(int argc, char **argv)
         OPT_MAX_UDP_PAYLOAD_SIZE,
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
+        OPT_IO_TIMEOUT,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
+                                {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -816,6 +817,12 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.ack_frequency = (uint16_t)(f * 1024);
         } break;
+        case OPT_IO_TIMEOUT:
+            if (sscanf(optarg, "%" SCNu64, &io_timeout) != 1) {
+                fprintf(stderr, "failed to parse --io-timeout\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
         default:
             exit(EXIT_FAILURE);
             break;
@@ -823,6 +830,11 @@ int main(int argc, char **argv)
     }
     argc -= optind;
     argv += optind;
+
+    ctx.io_timeout = io_timeout;
+    ctx.connect_timeout = io_timeout;
+    ctx.first_byte_timeout = io_timeout;
+    ctx.keepalive_timeout = io_timeout;
 
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
