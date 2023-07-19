@@ -122,15 +122,17 @@ size_t h2o_hpack_decode_huffman(char *_dst, unsigned *soft_errors, const uint8_t
 
     /* validate */
     if (is_name) {
-        if (dst == _dst)
-            return SIZE_MAX;
-        /* pseudo-headers are checked later in `decode_header` */
-        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME) != 0 && _dst[0] != ':') {
-            if ((seen_char_types & NGHTTP2_HUFF_UPPER_CASE_CHAR) != 0) {
-                *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
-                return SIZE_MAX;
-            } else {
-                *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+        if (dst == _dst) {
+            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+        } else {
+            /* pseudo-headers are checked later in `decode_header` */
+            if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME) != 0 && _dst[0] != ':') {
+                if ((seen_char_types & NGHTTP2_HUFF_UPPER_CASE_CHAR) != 0) {
+                    *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
+                    return SIZE_MAX;
+                } else {
+                    *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+                }
             }
         }
     } else {
@@ -160,23 +162,37 @@ int h2o_hpack_validate_header_name(unsigned *soft_errors, const char *s, size_t 
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 224-255 */
     };
 
-    for (; len != 0; ++s, --len) {
-        unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_header_name_char[ch]) {
-            if (ch - 'A' < 26U) {
-                *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
-                return 0;
+    if (len == 0) {
+        *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
+    } else {
+        for (; len != 0; ++s, --len) {
+            unsigned char ch = (unsigned char)*s;
+            if (!valid_h2_header_name_char[ch]) {
+                if (ch - 'A' < 26U) {
+                    *err_desc = h2o_hpack_err_found_upper_case_in_header_name;
+                    return 0;
+                }
+                *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
             }
-            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
         }
     }
     return 1;
 }
 
-/* validate a header value against https://tools.ietf.org/html/rfc7230#section-3.2 */
+static int header_value_valid_as_whole(const char *s, size_t len)
+{
+    if (len != 0 && (s[0] == 0x20 || s[0] == 0x09 || s[len - 1] == 0x20 || s[len - 1] == 0x09))
+        return 0;
+    return 1;
+}
+
 void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_t len)
 {
-    /* all printable chars + horizontal tab */
+    /* surrounding whitespace RFC 9113 8.2.1 */
+    if (!header_value_valid_as_whole(s, len))
+        goto Invalid;
+
+    /* all printable chars + horizontal tab (RFC 7230 3.2) */
     static const char valid_h2_field_value_char[] = {
         0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
         1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   32-63 */
@@ -190,11 +206,13 @@ void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_
 
     for (; len != 0; ++s, --len) {
         unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_field_value_char[ch]) {
-            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
-            break;
-        }
+        if (!valid_h2_field_value_char[ch])
+            goto Invalid;
     }
+    return;
+
+Invalid:
+    *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
 }
 
 static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src, const uint8_t *src_end,
@@ -218,12 +236,15 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, c
         if ((ret->len = h2o_hpack_decode_huffman(ret->base, soft_errors, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
         ret->base[ret->len] = '\0';
+        if (!is_header_name && !header_value_valid_as_whole(ret->base, ret->len))
+            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
     } else {
         if (len > src_end - *src)
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
-            if (**src != (uint8_t)':' && !h2o_hpack_validate_header_name(soft_errors, (char *)*src, len, err_desc))
+            if ((len == 0 || **src != (uint8_t)':') &&
+                !h2o_hpack_validate_header_name(soft_errors, (char *)*src, len, err_desc))
                 return NULL;
         } else {
             h2o_hpack_validate_header_value(soft_errors, (char *)*src, len);
