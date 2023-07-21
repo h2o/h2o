@@ -86,7 +86,7 @@ _do_check:
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
-		env $(TEST_ENV) make check
+		env SKIP_PROG_EXISTS=1 $(TEST_ENV) make check
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
