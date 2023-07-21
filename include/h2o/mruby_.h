@@ -19,8 +19,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifndef H20_MRUBY_H
-#define H20_MRUBY_H
+#ifndef H2O_MRUBY_H
+#define H2O_MRUBY_H
 
 #include "h2o.h"
 #include <mruby.h>

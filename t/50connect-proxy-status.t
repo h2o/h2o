@@ -15,7 +15,7 @@ my $origin = spawn_server(
 );
 
 my $server = spawn_h2o(<< "EOT");
-proxy-status.identity: "h2o/test"
+proxy.proxy-status.identity: "h2o/test"
 hosts:
   default:
     paths:
@@ -23,7 +23,7 @@ hosts:
         proxy.connect:
           - "+127.0.0.1:$origin_port"
           - "+127.0.0.1:1"
-        proxy.connect.proxy-status: ON
+        proxy.connect.emit-proxy-status: ON
 EOT
 
 my $ok_resp = qr{HTTP/[^ ]+ 200\s}m;

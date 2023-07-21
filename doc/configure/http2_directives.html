@@ -14,7 +14,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>HTTP/2 Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>HTTP/2 Directives - Configure - H2O - the optimized HTTP server</title>
 </head>
 <body>
 <div id="body">
@@ -23,7 +23,7 @@
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -60,13 +60,13 @@ HTTP/2 Directives
 
 
 <p>
-H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+H2O provides one of the world's most sophisticated <a href="https://tools.ietf.org/html/rfc9113">HTTP/2 protocol</a> implementation, including following features.
 </p>
 
 <h3 id="prioritization">Prioritization</h3>
 
 <p>
-H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540">HTTP/2 specification</a>.
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540" taget=_blank>HTTP/2 specification</a>.
 The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
 </p>
 <p>
@@ -422,7 +422,7 @@ The value cannot exceed 256.
 <dt>Default:</dt>
 <dd><code><pre>http2-max-concurrent-streaming-requests-per-connection: 1</pre></code>
 </dl>
-    
+
 <div id="http2-latency-optimization-min-rtt" class="directive-head">
 <div class="directive-since">since v2.1</div>
 <h3><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>"http2-latency-optimization-min-rtt"</code></a></h3>
@@ -614,7 +614,7 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the s
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

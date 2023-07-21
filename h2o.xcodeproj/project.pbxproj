@@ -726,6 +726,7 @@
 		086850BE2752E20100F8CAD1 /* 50connect-eyeballs.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-eyeballs.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086850BF27535D7800F8CAD1 /* injectaddr.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = injectaddr.c; sourceTree = "<group>"; };
 		086A681028361A0500233AB6 /* fusion.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; name = fusion.c; path = deps/picotls/lib/fusion.c; sourceTree = SOURCE_ROOT; };
+		08781EAB2A06376A005B411F /* http3_directives.mt */ = {isa = PBXFileReference; lastKnownFileType = text; path = http3_directives.mt; sourceTree = "<group>"; };
 		08790DD91D80153600A04BC1 /* net.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = net.c; sourceTree = "<group>"; };
 		08790DDB1D80154C00A04BC1 /* sds.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = sds.c; sourceTree = "<group>"; };
 		08790DDD1D8015A400A04BC1 /* net.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = net.h; sourceTree = "<group>"; };
@@ -746,6 +747,7 @@
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08B5983229FF8BF0008268F8 /* 60find-doc.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "60find-doc.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08C7C365262AB30F009C944C /* 40mtls.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40mtls.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http3-header-linefeed.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08CEA9D026643C4700B4BB6B /* 50timeout-on-max-concurrent-requests.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50timeout-on-max-concurrent-requests.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1781,6 +1783,7 @@
 				10583BFC1AE88782004A3AD6 /* base_directives.mt */,
 				10583C011AEF86E6004A3AD6 /* http1_directives.mt */,
 				10583C021AEF8C7D004A3AD6 /* http2_directives.mt */,
+				08781EAB2A06376A005B411F /* http3_directives.mt */,
 				10583C031AF1D7D5004A3AD6 /* access_log_directives.mt */,
 				106C23041C1132E000405689 /* errordoc_directives.mt */,
 				10583C041AF1F315004A3AD6 /* expires_directives.mt */,
@@ -2363,6 +2366,7 @@
 				E9AFBF1C212A9814000F5DB8 /* 50unexpected-upstream-body.t */,
 				E9AFBF27212A985D000F5DB8 /* 50zero-sized-streaming-body.t */,
 				E9F677D32004CCCA006476D3 /* 50zero-sized-timeout.t */,
+				08B5983229FF8BF0008268F8 /* 60find-doc.t */,
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,

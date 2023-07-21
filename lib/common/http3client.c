@@ -757,8 +757,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         emit_data(req, body);
     if (req->proceed_req.cb != NULL) {
         req->super.write_req = do_write_req;
-        if (body.len != 0)
-            req->proceed_req.bytes_inflight = body.len;
+        req->proceed_req.bytes_inflight = body.len;
     }
     if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
