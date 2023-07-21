@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>HTTP/3 - Configure - H2O - the optimized HTTP server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+</h1>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected"><a href="configure.html">Configure</a></td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+HTTP/3
+</h2>
+
+
+<p>
+<a href="https://tools.ietf.org/html/rfc9114" target=_blank>HTTP/3</a> uses <a href="https://tools.ietf.org/html/rfc9000" target=_blank>QUIC</a> as the transport protocol.
+A <a href="configure/base_directives.html#listen"><code>listen</code></a> directive with a <code>type</code> attribute set to <code>quic</code> instructs the standalone server to bind to a UDP port on which QUIC packets will be sent and received.
+The binding must have an <a href="configure/base_directives.html#listen-ssl"><code>ssl</code></a> attribute, as QUIC uses TLS/1.3 as the handshake protocol.
+</p>
+<p>
+The example below setups a server that listens to both TCP port 443 and UDP port 443 using the same certificate and private key.
+</p>
+<p>
+First <code>listen</code> directive binds the server to TCP port 443 with specified credentials, marking that directive as an <a href="configure/syntax_and_structure.html#yaml_alias">YAML alias</a> called <code>&listen_ssl</code>.
+Then, it reuses (<a href="configure/syntax_and_structure.html#yaml_merge">YAML merge</a>) the first listen directive, adding <code>type: quic</code> to create a UDP port 443 binding for accepting QUIC connections.
+</p>
+<div class="example">
+<div class="caption">Example. Serving HTTP/1,2 and 3 on port 443</div>
+<pre><code>listen: &amp;listen_ssl
+  port: 443
+  ssl:
+    certificate-file: /path/to-ssl-certificate-file
+    key-file: /path/to/ssl-key-file
+listen:
+  &lt;&lt;: *listen_ssl
+  type: quic
+</code></pre>
+</div>
+
+
+<h4 id="quic-attributes">Fine-tuning QUIC Behavior</h4>
+<p>
+To fine tune the behavior of QUIC, the <code>quic</code> attribute should be used in place of the <code>type</code> attribute specifying <code>quic</code>.
+The <code>quic</code> attribute accepts following parameters.
+</p>
+<dl>
+<dt>amp-limit</dt>
+<dd>Amount of data that can be sent to the client before the client address is validated; see <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-address-validation" target=_blank>section 8.1 of RFC 9000</a>. Default is 3.</dd>
+<dt>handshake-timeout-rtt-multiplier</dt>
+<dd>Handshake timeout in the unit of round-trip time. Default is 400.</dd>
+<dt>max-initial-handshake-packets</dt>
+<dd>Maximum number of Initial packets to be sent before the handshake is deemed to have failed. Default is 1,000.</dd>
+<dt>max-streams-bidi</dt>
+<dd>Maximum number of client-initated bi-directional streams. This parameter controls the HTTP request concurrency of a HTTP/3 connection. Default is 100.</dd>
+<dt>max-udp-payload-size</dt>
+<dd>See <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-transport-parameter-definit">Section 18.2 of RFC 9000</a>. Default is 1,472.</dd>
+<dt>qpack-encoder-table-capacity</dt>
+<dd>Size of the QPACK encoder table. Default is 4,096.</dd>
+<dt>retry</dt>
+<dd>A boolean flag (<code>OFF</code> or <code>ON</code>) indicating if a Retry packet should be used for validating the client address. Use of Retry packets mitigate denial-of-service attacks at the cost of incurring one additional round-trip for processing the handshake.</dd>
+<dt>sndbuf, rcvbuf</dt>
+<dd>Size of send and receive buffers, in the unit of bytes. Unlike the TCP counterparts that are per-connection, these buffers are associated to the listening port and applies to all the connections bound to that port.</dd>
+</dl>
+<p>
+The example below reuses a previous binding but sets the <code>retry</code> parameter to <code>ON</code>.
+</p>
+<div class="example">
+<div class="caption">Example. HTTP/3 endpoint using Retry packets</div>
+<pre><code>listen:
+  &lt;&lt;: *listen_ssl
+  quic:
+    retry: ON
+</code></pre>
+</div>
+
+<p>
+Also, properties such as <a href="configure/base_directives.html#listen-cc">congestion controller</a> and <a href="configure/base_directives.html#listen-initcwnd">initial congestion window</a> can be tuned using the top-level attribute of <code>listen</code>.
+</p>
+
+<h4 id="http3-directives">HTTP/3 Directives</h4>
+<p>
+Aside from QUIC-level properties, configuration directives listed below are provided for tuning HTTP/3 behavior.
+</p>
+
+<ul>
+<li><a href="configure/http3_directives.html#http3-graceful-shutdown-timeout">
+<code>http3-graceful-shutdown-timeout</code>
+</a></li>
+<li><a href="configure/http3_directives.html#http3-gso">
+<code>http3-gso</code>
+</a></li>
+<li><a href="configure/http3_directives.html#http3-idle-timeout">
+<code>http3-idle-timeout</code>
+</a></li>
+<li><a href="configure/http3_directives.html#http3-input-window-size">
+<code>http3-input-window-size</code>
+</a></li>
+</ul>
+
+
+<div id="http3-graceful-shutdown-timeout" class="directive-head">
+<h3><a href="configure/http3_directives.html#http3-graceful-shutdown-timeout"><code>"http3-graceful-shutdown-timeout"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum duration to retain HTTP/3 connections in half-closed state, in seconds.
+</p>
+
+<p>
+When a graceful shutdown of h2o is initiated, h2o at first sends a GOAWAY frame indicating the clients that it is initiating shutdown, then after one second, starts rejecting new HTTP requests (a.k.a. half-closed state).
+</p>
+<p>
+This directive controls how long h2o should wait for the peer to close the QUIC connection in this half-closed state, before exitting.
+</p>
+<p>
+If set to zero, this timeout is disabled.
+h2o will not shut down until all QUIC connections are closed by the clients or times out.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http3-graceful-shutdown-timeout: 0</pre></code>
+</dl>
+
+<div id="http3-gso" class="directive-head">
+<h3><a href="configure/http3_directives.html#http3-gso"><code>"http3-gso"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+If Generic Segmentation Offload should be used when sending QUIC packets.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http3-gso: ON</pre></code>
+</dl>
+
+
+<div id="http3-idle-timeout" class="directive-head">
+<h3><a href="configure/http3_directives.html#http3-idle-timeout"><code>"http3-idle-timeout"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Idle timeout in the unit of seconds.
+</p>
+
+<p>
+Unlike idle timeout of HTTP/1 and HTTP/2, this value should be small because it is faster to re-establish a new connection using 0-RTT than migrating to a different port due to NAT rebinding.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http3-idle-timeout: 30</pre></code>
+</dl>
+
+<div id="http3-input-window-size" class="directive-head">
+<h3><a href="configure/http3_directives.html#http3-input-window-size"><code>"http3-input-window-size"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Default window size for HTTP request body.
+</p>
+
+<p>
+See <a href="configure/http2_directives.html#http2-input-window-size"><code>http2-input-window-size</code></a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http3-input-window-size: 16777216</pre></code>
+</dl>
+
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>

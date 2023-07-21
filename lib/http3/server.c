@@ -1066,7 +1066,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
     assert(stream->req_body != NULL);
-    assert(!h2o_linklist_is_linked(&stream->link));
+    assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
     if (errstr != NULL || (quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0 &&
