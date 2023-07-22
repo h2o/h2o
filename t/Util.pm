@@ -332,11 +332,11 @@ sub empty_port_using_file {
         or die "failed to seek file:$fn:$!";
     $port = <$fh>
         unless $port;
-    $port ||= 65536; # if failed to read, start with an invalid number (see below)
+    $port ||= 65535; # if failed to read, start with an invalid number (see below)
     # find the next available port
     for (my $fail_cnt = 0;; ++$fail_cnt) {
-        ++$port;
-        $port = 32768 if $port > 49152;
+        $port += 2;
+        $port = 32769 if $port > 49152;
         last if Net::EmptyPort::can_bind($host, $port, $proto);
         die "empty port not found"
             if $fail_cnt >= 100;
