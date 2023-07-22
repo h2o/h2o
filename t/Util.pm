@@ -359,11 +359,22 @@ sub empty_port {
         unless defined $host;
     $proto = $proto ? lc($proto) : 'tcp';
 
-    if ($ENV{NET_EMPTYPORT_SRCFILE}) {
-        empty_port_using_file($host, $port, $proto);
-    } else {
-        Net::EmptyPort::empty_port({host => $host, port => $port, proto => $proto});
+    my $found;
+
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        if ($ENV{NET_EMPTYPORT_SRCFILE}) {
+            $found = empty_port_using_file($host, $port, $proto);
+        } else {
+            $found = Net::EmptyPort::empty_port({host => $host, port => $port, proto => $proto});
+        }
+        # finally check that $cand can be bound on addresses 0.0.0.0 and 127.0.0.1, as there are rules to prefer one over another
+        # and we do not want that rule to kick in
+        last unless grep { $_ ne $host && !Net::EmptyPort::can_bind($_, $found, $proto) } qw(0.0.0.0 127.0.0.1);
+        die "empty port not found"
+            if $fail_cnt >= 100;
     }
+
+    $found;
 }
 
 sub empty_ports {
