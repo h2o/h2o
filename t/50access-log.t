@@ -32,6 +32,7 @@ sub doit {
 
     my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
     my $server = spawn_h2o({conf => <<"EOT", max_ssl_version => $max_ssl_version});
+send-informational: all
 num-threads: 1
 listen:
   type: quic
@@ -88,19 +89,48 @@ EOT
 }
 
 subtest "custom-log" => sub {
+    sub evaluate {
+        my $log = shift;
+        my $version = shift;
+        my $min = shift;
+        my $max = shift;
+        my $path = shift;
+        my $size = shift;
+        if ($log =~ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET $path HTTP/$version" 200 $size (\d+) "http://example.com/" "curl/.*"$}) {
+            pass("matched regex");
+            if ($1 >= $min && $1 <= $max) {
+                pass("header bytes value ($1) in expected range ($min..$max)");
+            } else {
+                fail("header bytes value ($1) in expected range ($min..$max)");
+            }
+        } else {
+            fail("matched regex $log");
+            return 0;
+        }
+    }
     doit(
         sub {
             my $server = shift;
-            system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/ > /dev/null");
-            system("curl --http1.1 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/ > /dev/null");
-            system("curl --http2 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/ > /dev/null");
-            system("$client_prog -3 100 -Huser-agent:curl/not-really -Hreferer:http://example.com/ -k https://127.0.0.1:$server->{quic_port} > /dev/null 2>&1");
+            foreach my $n (0..1) {
+                my $path = "";
+                if ($n == 1) {
+                    $path = "proxy/early-hints";
+                }
+                system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/$path > /dev/null");
+                system("curl --http1.1 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/$path > /dev/null");
+                system("curl --http2 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/$path > /dev/null");
+                system("$client_prog -3 100 -Huser-agent:curl/not-really -Hreferer:http://example.com/ -k https://127.0.0.1:$server->{quic_port}/$path > /dev/null 2>&1");
+            }
         },
         '%h %l %u %t "%r" %s %b %{response-header-bytes}x "%{Referer}i" "%{User-agent}i"',
-        [ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 24\d "http://example.com/" "curl/.*"$},
-          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 24\d "http://example.com/" "curl/.*"$},
-          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/2" 200 6 1\d\d "http://example.com/" "curl/.*"$} ,
-          qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/3" 200 6 \d\d "http://example.com/" "curl/.*"$} ],
+        [ sub { ok(evaluate(shift,"1.1", 220, 250, "/", 6), "http v1.1"); },
+          sub { ok(evaluate(shift,"1.1", 220, 250, "/", 6), "https v1.1"); },
+          sub { ok(evaluate(shift,"2", 75, 105, "/", 6), "h2"); },
+          sub { ok(evaluate(shift,"3", 65, 95, "/", 6), "h3"); },
+          sub { ok(evaluate(shift,"1.1", 185, 215, "/proxy/early-hints", 11), "http v1.1"); },
+          sub { ok(evaluate(shift,"1.1", 185, 215, "/proxy/early-hints", 11), "https v1.1"); },
+          sub { ok(evaluate(shift,"2", 60, 90, "/proxy/early-hints", 11), "h2"); },
+          sub { ok(evaluate(shift,"3", 75, 105, "/proxy/early-hints", 11), "h3"); }, ]
     );
 };
 
