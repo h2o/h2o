@@ -370,6 +370,7 @@ sub empty_port {
         # finally check that $cand can be bound on addresses 0.0.0.0 and 127.0.0.1, as there are rules to prefer one over another
         # and we do not want that rule to kick in
         last unless grep { $_ ne $host && !Net::EmptyPort::can_bind($_, $found, $proto) } qw(0.0.0.0 127.0.0.1);
+        $port = $found; # set $port to indicate the last port we failed on
         die "empty port not found"
             if $fail_cnt >= 100;
     }
