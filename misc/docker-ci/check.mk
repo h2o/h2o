@@ -13,6 +13,7 @@ DOCKER_RUN_OPTS=--privileged \
 	-v /usr/src:/usr/src:ro \
 	--add-host=localhost.examp1e.net:127.0.0.1 \
 	-it
+TMP_SIZE=1G
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
@@ -77,7 +78,7 @@ _check: _mount _do_check
 
 _mount:
 	uname -a
-	sudo mount -t tmpfs tmpfs -o size=1G /tmp
+	sudo mount -t tmpfs tmpfs -o size=$(TMP_SIZE) /tmp
 	sudo mkdir -p /sys/fs/bpf
 	sudo mount -t bpf bpf -o mode=700 /sys/fs/bpf
 
