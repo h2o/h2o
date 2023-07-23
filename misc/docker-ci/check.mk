@@ -19,7 +19,8 @@ ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
@@ -27,14 +28,16 @@ ossl1.1.0+fuzz:
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
@@ -42,21 +45,24 @@ ossl3.0:
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 boringssl:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
@@ -64,7 +70,8 @@ coverage:
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
+		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 _coverage_report:
 	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
