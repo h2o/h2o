@@ -41,14 +41,14 @@ ossl3.0:
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='SKIP_PROG_EXISTS=1 $(TEST_ENV)'
 
 boringssl:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='SKIP_PROG_EXISTS=1 $(TEST_ENV)'
 
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
@@ -63,7 +63,7 @@ coverage:
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
+		TEST_ENV='SKIP_PROG_EXISTS=1 LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
 
 _coverage_report:
 	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
@@ -86,7 +86,7 @@ _do_check:
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
-		env SKIP_PROG_EXISTS=1 $(TEST_ENV) make check
+		env $(TEST_ENV) make check
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash
