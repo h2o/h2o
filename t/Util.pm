@@ -524,18 +524,17 @@ sub spawn_forked {
     if ($pid) {
         close $cout;
         close $cerr;
-        my $upstream; $upstream = +{
+        my $guard = make_guard(sub {
+            return unless defined $pid;
+            kill 'TERM', $pid;
+            while (waitpid($pid, 0) != $pid) {}
+        });
+        return +{
             pid => $pid,
-            kill => sub {
-                return unless defined $pid;
-                kill 'KILL', $pid;
-                undef $pid;
-            },
-            guard => make_guard(sub { $upstream->{kill}->() }),
+            kill => sub { undef $guard; },
             stdout => $pin,
             stderr => $pin2,
         };
-        return $upstream;
     }
     close $pin;
     close $pin2;
