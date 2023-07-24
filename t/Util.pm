@@ -414,6 +414,9 @@ sub etag_file {
 
 sub prog_exists {
     my $prog = shift;
+    # if SKIP_PROG_EXISTS environment variable is set (e.g., in case of running on CI image), all programs are assumed to exist
+    return 1
+        if $ENV{SKIP_PROG_EXISTS};
     system("which $prog > /dev/null 2>&1") == 0;
 }
 
