@@ -32,4 +32,6 @@ subtest "dns_resp" => sub {
     ok(($after - $before) >= 2);
 };
 
+undef $mock_dns;
+
 done_testing;
