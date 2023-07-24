@@ -526,7 +526,7 @@ sub spawn_forked {
         close $cerr;
         my $guard = make_guard(sub {
             return unless defined $pid;
-            kill 'KILL', $pid;
+            kill 'TERM', $pid;
             while (waitpid($pid, 0) != $pid) {}
         });
         return +{
