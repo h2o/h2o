@@ -784,6 +784,10 @@ h2o_evloop_t *create_evloop(size_t sz)
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
 
+#if H2O_USE_IO_URING
+    h2o_async_io_setup(loop);
+#endif
+
     return loop;
 }
 
