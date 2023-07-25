@@ -3,7 +3,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempfile);
 use Getopt::Long;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use URI::Escape;
 use t::Util;

@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use IO::Socket::INET;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;

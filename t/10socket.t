@@ -3,7 +3,6 @@ use warnings;
 use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL;
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use t::Util;
 
