@@ -608,10 +608,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
         const char well_known_masque_udp_str[] = "/.well-known/masque/udp/"; // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
         size_t well_known_masque_udp_str_len = sizeof(well_known_masque_udp_str)-1;
 
-        //To avoid changing a whole bunch of other code besides this function, we assign the target host and port to the authority variable
-        // since that is how h2o expects it currently, and we also set the method, scheme and path variables to what it would have been
-        // if the draft was still being used since that is how the rest of the code expects it. TODO: make more extensive changes to
-        // other parts of the code to work wth the authority, scheme, method and path as it appears in the RFC
         if ((path->len > well_known_masque_udp_str_len) &&
             (h2o_memis(path->base, well_known_masque_udp_str_len, well_known_masque_udp_str, well_known_masque_udp_str_len))) {
             int slashcount = 0;
