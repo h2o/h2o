@@ -553,7 +553,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
                                         .status = status,
                                         .headers = headers.entries,
                                         .num_headers = headers.size};
-    if (h2o_httpclient__tunnel_is_ready(&req->super, status) && datagram_flow_id.base != NULL) {
+    if (h2o_httpclient__tunnel_is_ready(&req->super, status)) {
         on_head.forward_datagram.write_ = write_datagrams;
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
