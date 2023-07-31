@@ -608,45 +608,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
         const char well_known_masque_udp_str[] = "/.well-known/masque/udp/"; // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
         size_t well_known_masque_udp_str_len = sizeof(well_known_masque_udp_str)-1;
 
-
-/*
-Below are examples of RFC based requests and ones that are based on the draft (I think h2o is based on draft-04) to see the differences
-
---- RFC ---
-https://www.rfc-editor.org/rfc/rfc9298.html
-
-From the above RFC they give the following example:
-
-:method = CONNECT
-:protocol = connect-udp
-:scheme = https
-:path = /.well-known/masque/udp/192.0.2.6/443/
-:authority = example.org
-capsule-protocol = ?1
-
-See the following RFC section for explanation of the capsule-protocol header field: https://www.rfc-editor.org/rfc/rfc9297.html#section-3.4
-
-For this PR we dont yet add the capsule-protocol handling - for sending UDP Packets over a H3 reliable stream i.e. over a connect, not a connect-udp.
-Possibly a subsequent PR can add this.
-
-
---- draft-04 ---
-https://datatracker.ietf.org/doc/draft-ietf-masque-connect-udp/04/
-
-From the above draft, they describe the headers as such:
-The ":method" pseudo-header field is set to "CONNECT-UDP".
-The ":scheme" pseudo-header field is set to "masque".
-The ":path" pseudo-header field is set to "/".
-The ":authority" pseudo-header field contains the host and port to connect to (similar to the authority-form of the request-target of CONNECT requests; see [RFC7230], Section 5.3).
-
-This is an example of a request conforming to the draft standard that would be accepted by current h2o (draft version of RFC-9298):
-:method = CONNECT-UDP
-:scheme = masque
-:authority = 192.0.2.6:443
-:path = /
-datagram-flow-id = 0
-*/
-
         //To avoid changing a whole bunch of other code besides this function, we assign the target host and port to the authority variable
         // since that is how h2o expects it currently, and we also set the method, scheme and path variables to what it would have been
         // if the draft was still being used since that is how the rest of the code expects it. TODO: make more extensive changes to
