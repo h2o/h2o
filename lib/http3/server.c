@@ -1350,6 +1350,12 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
 
+    // For RFC compliant CONNECT-UDP requests we wont get the datagram_flow_id as part of the request, so use the stream_id as per RFC
+    if (!datagram_flow_id.base) {
+        datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+        datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id);
+    }
+
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
@@ -1417,7 +1423,9 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
     h2o_iovec_t frame = h2o_qpack_flatten_response(
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
-        stream->req.res.content_length, datagram_flow_id);
+        //We send an empty iovec buffer to avoid h2o from sending the flow id in the response since that is not
+        // part of RFC-9298 (was part of a draft)
+        stream->req.res.content_length, h2o_iovec_init(NULL, 0));
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;

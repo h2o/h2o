@@ -1351,8 +1351,10 @@ void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_i
 {
     for (size_t i = 0; i < num_datagrams; ++i) {
         h2o_iovec_t *src = datagrams + i;
-        uint8_t buf[quicly_encodev_capacity(flow_id) + src->len], *p = buf;
+        uint8_t buf[quicly_encodev_capacity(flow_id) + 1 + src->len], *p = buf; // The '+ 1' is for Context-ID (see below)
+        flow_id = flow_id >> 2; // H3 quarter stream id (https://www.rfc-editor.org/rfc/rfc9297#section-2.1)
         p = quicly_encodev(p, flow_id);
+        p[0] = 0; p++; // H3 Context-ID for UDP frames is 0 (https://www.rfc-editor.org/rfc/rfc9298#section-5)
         memcpy(p, src->base, src->len);
         p += src->len;
         ptls_iovec_t payload = ptls_iovec_init(buf, p - buf);
@@ -1368,6 +1370,18 @@ uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, si
     uint64_t flow_id;
 
     if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
+    {
+        //After the quarter stream id you get the context-id which for UDP should be 0 and we point the payload to the byte after that
+        // (see comments to RFCs in the h2o_http3_send_h3_datagrams function above)
+        if (*src == 0) {
+            src++;
+        } else {
+            // H3 Context-ID not 0
+            return UINT64_MAX;
+        }
         *payload = h2o_iovec_init(src, end - src);
+    }
+    // convert from quarter stream id
+    flow_id = flow_id << 2;
     return flow_id;
 }

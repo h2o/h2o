@@ -503,6 +503,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                             h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
+    h2o_iovec_t protocol = h2o_iovec_init(NULL, 0);
 
     *content_length = SIZE_MAX;
 
@@ -534,6 +535,11 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     *method = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
+                } else if (name == &H2O_TOKEN_PROTOCOL->buf) {
+                    if (protocol.base != NULL)
+                        return H2O_HTTP2_ERROR_PROTOCOL;
+                    protocol = value;
+                    *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
                 } else if (name == &H2O_TOKEN_PATH->buf) {
                     if (path->base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
@@ -593,6 +599,79 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             }
         }
     Next:;
+    }
+
+    if (protocol.len > 0 &&
+                h2o_memis(method->base, method->len, H2O_STRLIT("CONNECT")) &&
+                (h2o_memis(protocol.base, protocol.len, H2O_STRLIT("connect-udp")) || h2o_memis(protocol.base, protocol.len, H2O_STRLIT("CONNECT-UDP"))) &&
+                (*scheme == &H2O_URL_SCHEME_HTTPS)) {
+        const char well_known_masque_udp_str[] = "/.well-known/masque/udp/"; // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
+        size_t well_known_masque_udp_str_len = sizeof(well_known_masque_udp_str)-1;
+
+
+/*
+Below are examples of RFC based requests and ones that are based on the draft (I think h2o is based on draft-04) to see the differences
+
+--- RFC ---
+https://www.rfc-editor.org/rfc/rfc9298.html
+
+From the above RFC they give the following example:
+
+:method = CONNECT
+:protocol = connect-udp
+:scheme = https
+:path = /.well-known/masque/udp/192.0.2.6/443/
+:authority = example.org
+capsule-protocol = ?1
+
+See the following RFC section for explanation of the capsule-protocol header field: https://www.rfc-editor.org/rfc/rfc9297.html#section-3.4
+
+For this PR we dont yet add the capsule-protocol handling - for sending UDP Packets over a H3 reliable stream i.e. over a connect, not a connect-udp.
+Possibly a subsequent PR can add this.
+
+
+--- draft-04 ---
+https://datatracker.ietf.org/doc/draft-ietf-masque-connect-udp/04/
+
+From the above draft, they describe the headers as such:
+The ":method" pseudo-header field is set to "CONNECT-UDP".
+The ":scheme" pseudo-header field is set to "masque".
+The ":path" pseudo-header field is set to "/".
+The ":authority" pseudo-header field contains the host and port to connect to (similar to the authority-form of the request-target of CONNECT requests; see [RFC7230], Section 5.3).
+
+This is an example of a request conforming to the draft standard that would be accepted by current h2o (draft version of RFC-9298):
+:method = CONNECT-UDP
+:scheme = masque
+:authority = 192.0.2.6:443
+:path = /
+datagram-flow-id = 0
+*/
+
+        //To avoid changing a whole bunch of other code besides this function, we assign the target host and port to the authority variable
+        // since that is how h2o expects it currently, and we also set the method, scheme and path variables to what it would have been
+        // if the draft was still being used since that is how the rest of the code expects it. TODO: make more extensive changes to
+        // other parts of the code to work wth the authority, scheme, method and path as it appears in the RFC
+        if ((path->len > well_known_masque_udp_str_len) &&
+            (h2o_memis(path->base, well_known_masque_udp_str_len, well_known_masque_udp_str, well_known_masque_udp_str_len))) {
+            int slashcount = 0;
+            for (int i=well_known_masque_udp_str_len; i<path->len; i++) {
+                if (path->base[i] == '/') {
+                    if (slashcount == 0) {
+                        path->base[i] = ':';
+                    } else if (slashcount == 1) {
+                        *authority = h2o_iovec_init(&path->base[well_known_masque_udp_str_len], i-well_known_masque_udp_str_len);
+                        *scheme = &H2O_URL_SCHEME_MASQUE;
+                        *method = h2o_iovec_init(H2O_STRLIT("CONNECT-UDP"));
+                        *path = h2o_iovec_init(H2O_STRLIT("/"));
+                        break;
+                    }
+                    slashcount++;
+                }
+            }
+            if (slashcount != 1) {
+                return H2O_HTTP2_ERROR_PROTOCOL;
+            }
+        }
     }
 
     if (*err_desc != NULL)

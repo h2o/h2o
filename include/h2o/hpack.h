@@ -69,6 +69,7 @@ void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+#define H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS 16
 
 /**
  * Decodes a header field. This function must indicate soft errors using error codes, setting `*err_desc` to appropciate values.
