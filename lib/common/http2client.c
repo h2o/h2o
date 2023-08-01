@@ -49,6 +49,8 @@ enum enum_h2o_http2client_conn_state {
 struct st_h2o_http2client_stream_t;
 KHASH_MAP_INIT_INT64(stream, struct st_h2o_http2client_stream_t *)
 
+#define NR_RECENTLY_RST_STREAMS 10
+
 struct st_h2o_http2client_conn_t {
     h2o_httpclient__h2_conn_t super;
     enum enum_h2o_http2client_conn_state state;
@@ -57,6 +59,11 @@ struct st_h2o_http2client_conn_t {
     uint32_t max_open_stream_id;
     h2o_timer_t io_timeout;
     h2o_timer_t keepalive_timeout;
+    struct {
+        uint32_t id[NR_RECENTLY_RST_STREAMS];
+        size_t idx;
+        h2o_mem_pool_t pool;
+    } recently_rst_streams;
 
     struct {
         h2o_hpack_header_table_t header_table;
@@ -132,6 +139,7 @@ static void stream_send_error(struct st_h2o_http2client_conn_t *conn, uint32_t s
     assert(conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
 
     h2o_http2_encode_rst_stream_frame(&conn->output.buf, stream_id, -errnum);
+    conn->recently_rst_streams.id[conn->recently_rst_streams.idx++] = stream_id;
     request_write(conn);
 }
 
@@ -527,6 +535,22 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     return 0;
 }
 
+static int handle_recently_rst_stream(struct st_h2o_http2client_conn_t *conn, uint32_t stream_id, const uint8_t *src, size_t len)
+{
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(conn->recently_rst_streams.id); i++) {
+        if (conn->recently_rst_streams.id[i] == stream_id) {
+            int dummy_status;
+            h2o_headers_t dummy_headers = {};
+            const char *err = NULL;
+            int ret = h2o_hpack_parse_response(&conn->recently_rst_streams.pool, h2o_hpack_decode_header, &conn->input.header_table, &dummy_status, &dummy_headers, NULL, src, len, &err);
+            free(dummy_headers.entries);
+            h2o_mem_clear_pool(&conn->recently_rst_streams.pool);
+            return ret;
+        }
+    }
+    return H2O_HTTP2_ERROR_STREAM_CLOSED;
+}
+
 static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc)
 {
     h2o_http2_headers_payload_t payload;
@@ -547,8 +571,11 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     }
 
     if ((stream = get_stream(conn, frame->stream_id)) == NULL) {
-        *err_desc = "invalid stream id in HEADERS frame";
-        return H2O_HTTP2_ERROR_STREAM_CLOSED;
+        ret = handle_recently_rst_stream(conn, frame->stream_id, payload.headers, payload.headers_len);
+        if (ret < 0)
+            *err_desc = "invalid stream id in HEADERS frame";
+
+        return ret;
     }
 
     h2o_timer_unlink(&stream->super._timeout);
@@ -878,6 +905,7 @@ static void close_connection_now(struct st_h2o_http2client_conn_t *conn)
     if (conn->input.headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->input.headers_unparsed);
 
+    h2o_mem_clear_pool(&conn->recently_rst_streams.pool);
     free(conn);
 }
 
@@ -1216,7 +1244,10 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
                                                            h2o_httpclient_connection_pool_t *connpool)
 {
     struct st_h2o_http2client_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
-    memset(conn, 0, sizeof(*conn));
+
+    memset(conn, 0, offsetof(struct st_h2o_http2client_conn_t, recently_rst_streams.pool));
+    h2o_mem_init_pool(&conn->recently_rst_streams.pool);
+
     conn->super.ctx = ctx;
     conn->super.sock = sock;
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_OPEN;
