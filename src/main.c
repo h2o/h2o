@@ -2962,7 +2962,7 @@ static void capabilities_set_keepcaps(void)
 #endif
 }
 
-static void capabilities_drop(void)
+static int capabilities_drop(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
@@ -2974,13 +2974,17 @@ static void capabilities_drop(void)
             h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         if (cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
             h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        if (cap_set_proc(cap) != 0)
-            h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+
+        if (cap_set_proc(cap) != 0) {
+            h2o_error_printf("failed to setup capabilities: cap_set_proc: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
+            return 0;
+        }
         cap_free(cap);
         if (prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0) != 0)
             h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #endif
+    return 1;
 }
 
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -4844,14 +4848,13 @@ int main(int argc, char **argv)
     /* call `bind()` before setuid(), different uids can't bind the same address */
     create_per_thread_listeners();
 
+    capabilities_set_keepcaps();
     /* setuid */
     if (conf.globalconf.user != NULL) {
-        capabilities_set_keepcaps();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
-        capabilities_drop();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
@@ -4863,6 +4866,8 @@ int main(int argc, char **argv)
             return EX_CONFIG;
         }
     }
+    if (!capabilities_drop())
+        return EX_OSERR;
 
     /* pid file must be written after setuid, since we need to remove it  */
     if (conf.pid_file != NULL) {
