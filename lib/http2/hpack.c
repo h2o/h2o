@@ -1064,10 +1064,12 @@ size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *
     if (content_length != SIZE_MAX)
         dst = encode_content_length(dst, content_length);
     (*buf)->size = (char *)dst - (*buf)->bytes;
+    size_t headers_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
 
     /* setup the frame headers */
     fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
-    return (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
+
+    return header_size;
 }
 
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
