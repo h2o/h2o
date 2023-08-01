@@ -1069,7 +1069,7 @@ size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *
     /* setup the frame headers */
     fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
 
-    return header_size;
+    return headers_size;
 }
 
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
