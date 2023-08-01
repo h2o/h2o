@@ -1277,10 +1277,11 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
         start_off -= p - buf;
     }
 
-    /* prepend frame header */
-    size_t len_len = quicly_encodev_capacity(ctx->headers_buf.size - start_off);
     if (serialized_header_len != NULL)
         *serialized_header_len = ctx->headers_buf.size - start_off;
+
+    /* prepend frame header */
+    size_t len_len = quicly_encodev_capacity(ctx->headers_buf.size - start_off);
     quicly_encodev(ctx->headers_buf.entries + start_off - len_len, ctx->headers_buf.size - start_off);
     start_off -= len_len;
     ctx->headers_buf.entries[--start_off] = H2O_HTTP3_FRAME_TYPE_HEADERS;
