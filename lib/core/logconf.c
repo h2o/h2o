@@ -594,7 +594,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->bytes_sent);
             break;
-        case ELEMENT_TYPE_HEADER_BYTES_SENT: /* %{header_bytes} */
+        case ELEMENT_TYPE_HEADER_BYTES_SENT: /* %{response-header-bytes}x */
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->header_bytes_sent);
             break;
