@@ -446,7 +446,6 @@ static int handle_recently_rst_stream(struct st_h2o_http2client_conn_t *conn, ui
                 h2o_headers_t dummy_headers = {};
                 const char *err = NULL;
                 int ret = h2o_hpack_parse_response(&conn->recently_rst_streams.pool, h2o_hpack_decode_header, &conn->input.header_table, &dummy_status, &dummy_headers, NULL, src, len, &err);
-                free(dummy_headers.entries);
                 h2o_mem_clear_pool(&conn->recently_rst_streams.pool);
                 return ret;
             } else {
