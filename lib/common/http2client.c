@@ -49,7 +49,7 @@ enum enum_h2o_http2client_conn_state {
 struct st_h2o_http2client_stream_t;
 KHASH_MAP_INIT_INT64(stream, struct st_h2o_http2client_stream_t *)
 
-#define NR_RECENTLY_RST_STREAMS 10
+#define NR_RECENTLY_RST_STREAMS 100
 
 struct st_h2o_http2client_conn_t {
     h2o_httpclient__h2_conn_t super;
@@ -140,8 +140,6 @@ static void stream_send_error(struct st_h2o_http2client_conn_t *conn, uint32_t s
     assert(conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
 
     h2o_http2_encode_rst_stream_frame(&conn->output.buf, stream_id, -errnum);
-    uint64_t payload = stream_id;
-    h2o_http2_encode_ping_frame(&conn->output.buf, 0, (void *)&payload);
     conn->recently_rst_streams.id[conn->recently_rst_streams.idx++ % PTLS_ELEMENTSOF(conn->recently_rst_streams.id)] = stream_id;
     request_write(conn);
 }
@@ -451,9 +449,10 @@ static int handle_recently_rst_stream(struct st_h2o_http2client_conn_t *conn, ui
             } else {
                 /* DATA frame */
                 h2o_http2_window_consume_window(&conn->input.window, len);
+                enqueue_window_update(stream->conn, 0, &stream->conn->input.window, H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE);
                 return 0;
             }
-            /* when we see an END_STREAM flag, the peer must have close the stream as well */
+            /* when we see an END_STREAM flag, the peer must have closed the stream as well */
             if (flags & H2O_HTTP2_FRAME_FLAG_END_STREAM)
                 conn->recently_rst_streams.id[i] = 0;
         }
@@ -749,15 +748,6 @@ static int handle_ping_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_ACK) == 0) {
         h2o_http2_encode_ping_frame(&conn->output.buf, 1, payload.data);
         request_write(conn);
-    } else {
-        uint64_t ping_data;
-        _Static_assert(sizeof(ping_data) == sizeof(payload.data), "");
-        memcpy(&ping_data, payload.data, sizeof(ping_data));
-
-        for (size_t i = 0; i < PTLS_ELEMENTSOF(conn->recently_rst_streams.id); i++) {
-            if (ping_data == conn->recently_rst_streams.id[i])
-                conn->recently_rst_streams.id[i] = 0;
-        }
     }
 
     return 0;
