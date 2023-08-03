@@ -75,6 +75,13 @@ RUN git clone --depth=1 https://github.com/axboe/liburing.git && \
 	make install && \
 	make clean
 
+# libaegis
+RUN git clone --depth=1 https://github.com/jedisct1/libaegis.git && \
+	cd libaegis && \
+	cmake . && \
+	make install && \
+	make clean
+
 # create user
 RUN useradd --create-home ci
 RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
