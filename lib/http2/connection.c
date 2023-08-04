@@ -607,7 +607,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
+                                       &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &stream->cache_digests, NULL, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
@@ -621,6 +621,16 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     h2o_probe_log_request(&stream->req, stream->stream_id);
 
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
+    int is_connect_udp = 0;
+    if (is_connect) {
+        if (stream->req.input.protocol.len && h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
+            is_connect_udp = 1;
+            stream->req.datagram_format = H2O_DATAGRAM_FORMAT_RFC;
+        }
+    } else if (stream->req.input.protocol.len == 0) {
+        is_connect_udp = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"));
+        stream->req.datagram_format = H2O_DATAGRAM_FORMAT_DRAFT03;
+    }
 
     /* check existence of pseudo-headers */
     int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
@@ -644,7 +654,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     }
 
     /* special handling of CONNECT method */
-    if (is_connect) {
+    if (is_connect || is_connect_udp) {
         /* reject the request if content-length is specified or if the stream has been closed */
         if (stream->req.content_length != SIZE_MAX || stream->req_body.buf == NULL)
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
@@ -680,7 +690,8 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, NULL, src,
+                                       &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, NULL,
+                                       &dummy_content_length, NULL, NULL, src,
                                        len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);

@@ -1147,7 +1147,10 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
     ptls_buffer_push_block(&buf, -1, {
         quicly_context_t *qctx = quicly_get_context(conn->super.quic);
         if (qctx->transport_params.max_datagram_frame_size != 0) {
+            // advertise that we are prepared to receive both RFC and draft-03 datagram formats
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
+            ptls_buffer_push_quicint(&buf, 1);
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
     });
@@ -1284,12 +1287,26 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
                 const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
                 if (remote_tp->max_datagram_frame_size == 0)
                     goto Malformed;
-                conn->peer_settings.h3_datagram = 1;
+                conn->peer_settings.h3_datagram_rfc = 1;
             } break;
             default:
                 goto Malformed;
             }
             break;
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03:
+            switch (value) {
+            case 0:
+                break;
+            case 1: {
+                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
+                if (remote_tp->max_datagram_frame_size == 0)
+                    goto Malformed;
+                conn->peer_settings.h3_datagram_draft03 = 1;
+             } break;
+             default:
+                 goto Malformed;
+             }
+             break;
         default:
             break;
         }

@@ -498,12 +498,12 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path,
+                            h2o_iovec_t *protocol, h2o_headers_t *headers,
                             int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
                             h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
-    h2o_iovec_t protocol = h2o_iovec_init(NULL, 0);
 
     *content_length = SIZE_MAX;
 
@@ -536,9 +536,9 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                     *method = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
                 } else if (name == &H2O_TOKEN_PROTOCOL->buf) {
-                    if (protocol.base != NULL)
+                    if (protocol->base != NULL)
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    protocol = value;
+                    *protocol = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
                 } else if (name == &H2O_TOKEN_PATH->buf) {
                     if (path->base != NULL)
@@ -599,36 +599,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             }
         }
     Next:;
-    }
-
-    if (protocol.len > 0 &&
-                h2o_memis(method->base, method->len, H2O_STRLIT("CONNECT")) &&
-                (h2o_memis(protocol.base, protocol.len, H2O_STRLIT("connect-udp")) || h2o_memis(protocol.base, protocol.len, H2O_STRLIT("CONNECT-UDP"))) &&
-                (*scheme == &H2O_URL_SCHEME_HTTPS)) {
-        const char well_known_masque_udp_str[] = "/.well-known/masque/udp/"; // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
-        size_t well_known_masque_udp_str_len = sizeof(well_known_masque_udp_str)-1;
-
-        if ((path->len > well_known_masque_udp_str_len) &&
-            (h2o_memis(path->base, well_known_masque_udp_str_len, well_known_masque_udp_str, well_known_masque_udp_str_len))) {
-            int slashcount = 0;
-            for (int i=well_known_masque_udp_str_len; i<path->len; i++) {
-                if (path->base[i] == '/') {
-                    if (slashcount == 0) {
-                        path->base[i] = ':';
-                    } else if (slashcount == 1) {
-                        *authority = h2o_iovec_init(&path->base[well_known_masque_udp_str_len], i-well_known_masque_udp_str_len);
-                        *scheme = &H2O_URL_SCHEME_MASQUE;
-                        *method = h2o_iovec_init(H2O_STRLIT("CONNECT-UDP"));
-                        *path = h2o_iovec_init(H2O_STRLIT("/"));
-                        break;
-                    }
-                    slashcount++;
-                }
-            }
-            if (slashcount != 1) {
-                return H2O_HTTP2_ERROR_PROTOCOL;
-            }
-        }
     }
 
     if (*err_desc != NULL)

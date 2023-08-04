@@ -1339,7 +1339,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     /* parse the headers, and ack */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
+                                       &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, NULL /* TODO cache-digests */, &datagram_flow_id, header_ack,
                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
@@ -1350,16 +1350,24 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
 
-    // For RFC compliant CONNECT-UDP requests we wont get the datagram_flow_id as part of the request, so use the stream_id as per RFC
-    if (!datagram_flow_id.base) {
-        datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-        datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id);
-    }
-
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
+    int is_connect_udp = 0;
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
-    int is_connect_udp = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"));
+    if (is_connect) {
+        if (stream->req.input.protocol.len != 0) {
+            if ((conn->h3.peer_settings.h3_datagram_rfc) &&
+                h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
+                is_connect_udp = 1;
+                is_connect = 0;
+                stream->req.datagram_format = H2O_DATAGRAM_FORMAT_RFC;
+            }
+        }
+    } else if ((conn->h3.peer_settings.h3_datagram_draft03) &&
+               h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        is_connect_udp = 1;
+        stream->req.datagram_format = H2O_DATAGRAM_FORMAT_DRAFT03;
+    }
 
     /* check if existence and non-existence of pseudo headers are correct */
     int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
@@ -1408,8 +1416,12 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     /* special handling of CONNECT method */
     if (is_connect) {
         return handle_input_expect_headers_process_connect(stream, NULL, err_desc);
-    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
+    } else if (is_connect_udp) {
+        if (!datagram_flow_id.base && (stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC)) {
+            datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+            datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id);
+        }
+         return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
     }
 
     /* change state */
@@ -1486,6 +1498,7 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
         kh_val(conn->datagram_flows, iter) = stream;
     }
 
+    // TODO: is this still valid for RFC and Draft03
     /* If the client sent a `datagram-flow-id` request header field and:
      *  a) if the peer is willing to accept datagrams as well, use the same flow ID for sending datagrams from us,
      *  b) if the peer did not send H3_DATAGRAM Settings, use the stream, or
@@ -1498,7 +1511,7 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
             h2o_linklist_insert(&conn->streams_resp_settings_blocked, &stream->link_resp_settings_blocked);
             return 0;
         }
-        if (conn->h3.peer_settings.h3_datagram) {
+        if (conn->h3.peer_settings.h3_datagram_rfc || conn->h3.peer_settings.h3_datagram_draft03) {
             /* register the route that would be used by the CONNECT handler for forwarding datagrams */
             stream->req.forward_datagram.read_ = tunnel_on_udp_read;
             /* build and return the value of datagram-flow-id header field */

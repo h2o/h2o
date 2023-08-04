@@ -1123,6 +1123,10 @@ typedef void (*h2o_forward_datagram_cb)(h2o_req_t *req, h2o_iovec_t *datagrams, 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
 
+#define H2O_DATAGRAM_FORMAT_NONE     0
+#define H2O_DATAGRAM_FORMAT_DRAFT03  1
+#define H2O_DATAGRAM_FORMAT_RFC      2
+
 /**
  * a HTTP request
  */
@@ -1151,6 +1155,10 @@ struct st_h2o_req_t {
          * abs-path of the request (unmodified)
          */
         h2o_iovec_t path;
+        /**
+         * protocol ('connect-udp' for RFC-based datagram support)
+         */
+        h2o_iovec_t protocol;
         /**
          * offset of '?' within path, or SIZE_MAX if not found
          */
@@ -1378,6 +1386,11 @@ struct st_h2o_req_t {
     struct {
         h2o_forward_datagram_cb write_, read_;
     } forward_datagram;
+
+    /**
+     * When datagrams (connect-udp) are received from the client, datagram_format records whether RFC or draft-03 format is being used
+     */
+    int datagram_format;
 
     /* internal structure */
     h2o_generator_t *_generator;
