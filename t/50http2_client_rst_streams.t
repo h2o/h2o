@@ -7,6 +7,8 @@ use File::Temp qw(tempfile tempdir);
 use Net::EmptyPort qw(check_port);
 use JSON;
 
+plan skip_all => "ss not found"
+    unless prog_exists("ss");
 
 sub dotest {
     my $code = shift;
