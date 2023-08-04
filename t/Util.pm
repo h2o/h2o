@@ -53,6 +53,7 @@ our @EXPORT = qw(
     spawn_h2get_backend
     one_shot_http_upstream
     wait_debugger
+    wait_tcp_listen_port
     make_guard
     spawn_forked
     spawn_h2_server
@@ -565,6 +566,17 @@ sub wait_debugger {
         sleep 1;
     }
     print STDERR "no debugger attached\n";
+    undef;
+}
+
+sub wait_tcp_listen_port {
+    my ($port, $timeout) = @_;
+    while ($timeout-- != 0) {
+        my $out = `ss -tlnp | grep ":$port" 2>&1`;
+        return 1 if (scalar(split(/\n/, $out)) == 1);
+        sleep 1;
+    }
+    print STDERR "Failed to wait for TCP port $port\n";
     undef;
 }
 

@@ -8,15 +8,6 @@ use Net::EmptyPort qw(check_port);
 use JSON;
 
 
-sub h2backend_test_headers {
-    my ($err, $out) = @_;
-    ok !$err, "no error from h2 backend";
-    if ($err) {
-        diag $err;
-    }
-    is $out, "HEADERS\nSETTINGS\nRST_STREAM\n", "no GOAWAY frame seen";
-}
-
 sub dotest {
     my $code = shift;
     my $testfn = shift;
@@ -34,6 +25,8 @@ hosts:
         proxy.http2.force-cleartext: OFF
         proxy.timeout.keepalive: 100000
 EOT
+
+    wait_tcp_listen_port($h2g->{tls_port}, 10);
 
     my ($stdout, $stderr) = run_with_h2get_simple($server, <<"EOR");
     req = {
