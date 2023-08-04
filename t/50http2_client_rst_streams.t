@@ -57,6 +57,9 @@ EOC
     , sub {
         my ($err, $out) = @_;
         ok !$err, "no error from h2 backend";
+        if ($err) {
+            diag($err);
+        }
         is $out, "HEADERS\nSETTINGS\nRST_STREAM\n", "no GOAWAY frame seen";
     });
 };
@@ -70,6 +73,9 @@ EOC
     , sub {
         my ($err, $out) = @_;
         ok !$err, "no error from h2 backend";
+        if ($err) {
+            diag($err);
+        }
         is $out, "HEADERS\nSETTINGS\nRST_STREAM\nWINDOW_UPDATE\n", "no GOAWAY frame seen, WINDOW_UPDATE seen";
     });
 };

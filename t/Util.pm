@@ -734,13 +734,12 @@ sub spawn_h2get_backend {
     my $h2_snippet = shift;
     my $testfn = shift;
     my ($backend_port) = empty_ports(1, { host => '0.0.0.0' });
-    my $bd = bindir();
     my $backend = spawn_forked(sub {
         my $code = <<"EOC";
 STDOUT.sync = true
 h2g = H2.server({
-    'cert_path' => '$bd/examples/h2o/server.crt',
-    'key_path' => '$bd/examples/h2o/server.key',
+    'cert_path' => 'examples/h2o/server.crt',
+    'key_path' => 'examples/h2o/server.key',
 });
 h2g.listen("https://127.0.0.1:$backend_port", 10000)
 
