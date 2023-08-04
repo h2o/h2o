@@ -1080,7 +1080,8 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
-        call_stream_callbacks_with_error(conn, h2o_httpclient_error_io);
+        if (conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
+            call_stream_callbacks_with_error(conn, h2o_httpclient_error_io);
         close_connection_now(conn);
         return;
     }
