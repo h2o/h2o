@@ -25,7 +25,7 @@ h2o_token_t h2o__tokens[] = {
     { { H2O_STRLIT(":authority") }, { 1, 0, 0, 0, 0, 0, 0, 1 } },
     { { H2O_STRLIT(":method") }, { 2, 0, 0, 0, 0, 0, 0, 0 } },
     { { H2O_STRLIT(":path") }, { 4, 0, 0, 0, 0, 0, 0, 0 } },
-    { { H2O_STRLIT(":protocol") }, { 62, 0, 0, 0, 0, 0, 0, 0 } },
+    { { H2O_STRLIT(":protocol") }, { 0, 0, 0, 0, 0, 0, 0, 1 } },
     { { H2O_STRLIT(":scheme") }, { 6, 0, 0, 0, 0, 0, 0, 0 } },
     { { H2O_STRLIT(":status") }, { 8, 0, 0, 0, 0, 0, 0, 0 } },
     { { H2O_STRLIT("accept") }, { 19, 0, 0, 0, 0, 1, 0, 1 } },
@@ -110,7 +110,7 @@ h2o_token_t h2o__tokens[] = {
 };
 size_t h2o__num_tokens = 85;
 
-const h2o_hpack_static_table_entry_t h2o_hpack_static_table[62] = {
+const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {
     { H2O_TOKEN_AUTHORITY, { H2O_STRLIT("") } },
     { H2O_TOKEN_METHOD, { H2O_STRLIT("GET") } },
     { H2O_TOKEN_METHOD, { H2O_STRLIT("POST") } },
@@ -171,8 +171,7 @@ const h2o_hpack_static_table_entry_t h2o_hpack_static_table[62] = {
     { H2O_TOKEN_USER_AGENT, { H2O_STRLIT("") } },
     { H2O_TOKEN_VARY, { H2O_STRLIT("") } },
     { H2O_TOKEN_VIA, { H2O_STRLIT("") } },
-    { H2O_TOKEN_WWW_AUTHENTICATE, { H2O_STRLIT("") } },
-    { H2O_TOKEN_PROTOCOL, { H2O_STRLIT("") } }
+    { H2O_TOKEN_WWW_AUTHENTICATE, { H2O_STRLIT("") } }
 };
 
 const h2o_qpack_static_table_entry_t h2o_qpack_static_table[99] = {
