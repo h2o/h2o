@@ -741,7 +741,7 @@ h2g = H2.server({
     'cert_path' => 'examples/h2o/server.crt',
     'key_path' => 'examples/h2o/server.key',
 });
-h2g.listen("https://127.0.0.1:$backend_port", 10000)
+h2g.listen("https://127.0.0.1:$backend_port")
 
 connpool = {}
 
