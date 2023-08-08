@@ -59,6 +59,7 @@ RUN apt-get install --yes \
 	libscope-guard-perl \
 	libtest-exception-perl \
 	libwww-perl \
+	libio-socket-inet6-perl \
 	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN cpanm -n Test::More Starlet Protocol::HTTP2 Test::TCP

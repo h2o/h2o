@@ -35,24 +35,36 @@ RUN (cd openssl-${OPENSSL_VERSION} && \
 	make -j $(nproc) && make -j install_sw install_ssldirs)
 
 # nghttp2 and h2load
-ARG NGHTTP2_VERSION="1.30.0"
-ARG NGHTTP2_SHA256="089afb4c22a53f72384b71ea06194be255a8a73b50b1412589105d0e683c52ac"
+ARG NGHTTP2_VERSION="1.34.0"
 RUN apt-get install --yes autoconf automake autotools-dev libtool pkg-config
 RUN wget https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.xz
-RUN (echo "${NGHTTP2_SHA256} nghttp2-${NGHTTP2_VERSION}.tar.xz" | sha256sum -c -)
 RUN tar xf nghttp2-${NGHTTP2_VERSION}.tar.xz
 RUN cd nghttp2-${NGHTTP2_VERSION} && autoreconf -i && automake && autoconf && ./configure --enable-app --prefix=/usr/local && make && make install
 ENV LD_LIBRARY_PATH="/usr/local/lib"
 
 # curl with http2 support
-RUN wget --no-verbose -O - https://curl.haxx.se/download/curl-7.81.0.tar.gz | tar xzf -
-RUN (cd curl-7.81.0 && ./configure --prefix=/usr/local --with-openssl --without-brotli --with-nghttp2 --disable-shared && make && make install)
+# NOTE: curl 7.88.0 seems to have a regression that http2 trailers are not handled correctly.
+ARG CURL_VERSION="7.87.0"
+RUN wget --no-verbose -O - https://curl.haxx.se/download/curl-${CURL_VERSION}.tar.gz | tar xzf -
+RUN (cd curl-${CURL_VERSION} && ./configure --prefix=/usr/local --with-openssl --without-brotli --with-nghttp2 --disable-shared --disable-manual && make && make install)
 
-# cpan modules
-RUN apt-get install --yes cpanminus
-RUN apt-get install --yes libfcgi-perl libfcgi-procmanager-perl libipc-signal-perl libjson-perl liblist-moreutils-perl libplack-perl libscope-guard-perl libtest-exception-perl libwww-perl libio-socket-ssl-perl
+# perl
+RUN apt-get install --yes \
+	cpanminus \
+	libfcgi-perl \
+	libfcgi-procmanager-perl \
+	libipc-signal-perl \
+	libjson-perl \
+	liblist-moreutils-perl \
+	libplack-perl \
+	libscope-guard-perl \
+	libtest-exception-perl \
+	libwww-perl \
+	libio-socket-inet6-perl \
+	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Test::TCP
+RUN cpanm -n NLNETLABS/Net-DNS-1.36.tar.gz # Net-DNS 1.39 has issues around use of alarm, fork, etc.
 
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin

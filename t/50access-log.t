@@ -342,7 +342,7 @@ subtest 'escape' => sub {
             doit(
                 sub {
                     my $server = shift;
-                    system("curl --silent http://127.0.0.1:$server->{port}/\xe3\x81\x82 > /dev/null");
+                    system(qq{$client_prog 'http://127.0.0.1:$server->{port}/\xe3\x81\x82' > /dev/null});
                 },
                 $escape eq 'default' ? '%U' : { format => '%U', escape => $escape },
                 [ $expected ],

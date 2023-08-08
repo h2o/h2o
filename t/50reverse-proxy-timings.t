@@ -11,6 +11,7 @@ plan skip_all => 'curl not found'
 
 plan skip_all => 'mruby support is off'
     unless server_features()->{mruby};
+diag(`curl --version`) if $ENV{TEST_DEBUG};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -68,6 +69,7 @@ run_with_curl($server, sub {
 
     do_upstream($upstream);
     my $resp = join('', <CURL>);
+    diag($resp) if $ENV{TEST_DEBUG};
 
     subtest 'access-log' => sub {
         my @log = do {
@@ -95,16 +97,17 @@ run_with_curl($server, sub {
         within_eps($st, 'proxy.connect', 0, 10);
         within_eps($st, 'proxy.request', 0);
         within_eps($st, 'proxy.process', 100);
-        within_eps($st, 'proxy.response', 100);
-        within_eps($st, 'proxy.total', 200);
+        within_eps($st, 'proxy.response', 100, undef, 'delivered via trailers');
+        within_eps($st, 'proxy.total', 200, undef, 'delivered via trailers');
     };
 });
 
 sub within_eps {
-    my ($timings, $name, $expected, $eps) = @_;
+    my ($timings, $name, $expected, $eps, $extra_comment) = @_;
     $eps ||= $expected / 5;
-    cmp_ok $timings->{$name}, '>=', $expected - $eps, ">= $name - eps";
-    cmp_ok $timings->{$name}, '<=', $expected + $eps, "<= $name + eps";
+    $extra_comment = defined($extra_comment) ? " ($extra_comment)" : "";
+    cmp_ok $timings->{$name}, '>=', $expected - $eps, ">= $name - eps$extra_comment";
+    cmp_ok $timings->{$name}, '<=', $expected + $eps, "<= $name + eps$extra_comment";
 }
 
 done_testing();
