@@ -4,7 +4,7 @@ use Test::More;
 use Test::Exception;
 use t::Util;
 use File::Temp qw(tempfile tempdir);
-use Net::EmptyPort qw(check_port);
+use Net::EmptyPort qw(check_port wait_port);
 use JSON;
 
 plan skip_all => "ss not found"
@@ -28,7 +28,7 @@ hosts:
         proxy.timeout.keepalive: 100000
 EOT
 
-    wait_tcp_listen_port($h2g->{tls_port}, 10);
+    wait_port($h2g->{tls_port});
 
     my ($stdout, $stderr) = run_with_h2get_simple($server, <<"EOR");
     req = {
