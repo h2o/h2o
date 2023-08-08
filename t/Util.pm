@@ -65,6 +65,7 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
+    read_with_timeout
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -602,7 +603,7 @@ sub read_with_timeout {
 }
 
 sub spawn_forked {
-    my ($code, $opts) = @_;
+    my ($code) = @_;
 
     my ($cout, $pin);
     pipe($pin, $cout);
@@ -613,22 +614,14 @@ sub spawn_forked {
     if ($pid) {
         close $cout;
         close $cerr;
-        my $kill = sub {
+        my $guard = make_guard(sub {
             return unless defined $pid;
-            if ($opts->{on_exit}) {
-                my ($out, $err);
-                $out = read_with_timeout($pin, 0.1);
-                $err = read_with_timeout($pin2, 0.1);
-                $opts->{on_exit}->($out, $err);
-            }
             kill 'TERM', $pid;
             while (waitpid($pid, 0) != $pid) {}
-            undef $pid;
-        };
+        });
         return +{
             pid => $pid,
-            kill => $kill,
-            guard => make_guard(sub { $kill->() }),
+            kill => sub { undef $guard; },
             stdout => $pin,
             stderr => $pin2,
         };
@@ -775,10 +768,7 @@ EOC
         print $scriptfh $code;
         close($scriptfh);
         exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
-    }, +{ on_exit => sub {
-        my ($out, $err) = @_;
-        $testfn->($err, $out);
-    } });
+    });
 
     $backend->{tls_port} = $backend_port;
     return $backend;

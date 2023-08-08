@@ -13,7 +13,7 @@ plan skip_all => "ss not found"
 sub dotest {
     my $code = shift;
     my $testfn = shift;
-    my $h2g = spawn_h2get_backend($code, $testfn);
+    my $h2g = spawn_h2get_backend($code);
 
     my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 20
@@ -48,7 +48,10 @@ EOR
     is $stderr, "h2get client exiting\n", "h2 client finished as expected";
 
     sleep 2;
-    undef $h2g;
+    $h2g->{kill}->();
+    my $out = read_with_timeout($h2g->{stdout}, 0.1);
+    my $err = read_with_timeout($h2g->{stderr}, 0.1);
+    $testfn->($err, $out);
 }
 
 subtest "late headers frame", sub {
