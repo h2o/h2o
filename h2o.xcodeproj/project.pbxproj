@@ -757,7 +757,7 @@
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
-		08E8FBF32A84DB5B00CF8FF3 /* 50h2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50h2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08E8FBF32A84DB5B00CF8FF3 /* 50http2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50http2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
@@ -2296,7 +2296,7 @@
 				1058C87F1AA42568008D6180 /* 50headers.t */,
 				E9D49A5125FB562800F4A80D /* 50http1-proxy-full-uri.t */,
 				109EEFDB1D77B336001F11D1 /* 50http2_debug_state.t */,
-				08E8FBF32A84DB5B00CF8FF3 /* 50h2-trailers.t */,
+				08E8FBF32A84DB5B00CF8FF3 /* 50http2-trailers.t */,
 				E9AFBF22212A982D000F5DB8 /* 50internal-redirect.t */,
 				105534F71A460F2E00627ECB /* 50mimemap.t */,
 				086001C62730B8290043886F /* 50mruby */,
