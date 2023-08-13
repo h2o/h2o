@@ -33,6 +33,7 @@ RUN apt-get install --yes \
 	net-tools \
 	netcat-openbsd \
 	nghttp2-client \
+	nghttp2-server \
 	nodejs \
 	php-cgi \
 	pkgconf \
