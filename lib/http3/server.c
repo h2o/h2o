@@ -1915,7 +1915,7 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     h2o_iovec_t payload;
 
     /* decode */
-    if ((flow_id = h2o_http3_decode_h3_datagram(&payload, datagram.base, datagram.len)) == UINT64_MAX) {
+    if ((flow_id = h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len)) == UINT64_MAX) {
         h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
     }

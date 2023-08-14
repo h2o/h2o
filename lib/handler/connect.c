@@ -923,8 +923,8 @@ static void on_generator_dispose(void *_self)
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_connect_handler_t *handler = (void *)_handler;
-    h2o_iovec_t host;
-    uint16_t port;
+    h2o_iovec_t host = {};
+    uint16_t port = 0;
     int is_tcp;
 
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
@@ -948,25 +948,21 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         }
     } else {
         // extract the host and port from the path
-        const char well_known_masque_udp_str[] = "/.well-known/masque/udp/"; // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
-        size_t well_known_masque_udp_str_len = sizeof(well_known_masque_udp_str)-1;
-
-        if ((req->input.path.len > well_known_masque_udp_str_len) &&
-            (h2o_memis(req->input.path.base, well_known_masque_udp_str_len, well_known_masque_udp_str, well_known_masque_udp_str_len))) {
-            int slashcount = 0;
-            int portstart = 0;
-            for (int i=well_known_masque_udp_str_len; i<req->input.path.len; i++) {
-                if (req->input.path.base[i] == '/') {
-                    if (slashcount == 0) {
-                        host = h2o_iovec_init(&req->input.path.base[well_known_masque_udp_str_len], i - well_known_masque_udp_str_len);
-                        portstart = i+1;
-                    } else if ((slashcount == 1) && (i > portstart)) {
-                        size_t p;
-                        if ((p = h2o_strtosize(&req->input.path.base[portstart], i - portstart)) < 65535) {
-                            port = (uint16_t)p;
-                        }
-                    }
-                    slashcount++;
+        // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
+        const h2o_iovec_t well_known_masque_udp = h2o_iovec_init(H2O_STRLIT("/.well-known/masque/udp/"));
+        if ((req->input.path.len > well_known_masque_udp.len) &&
+                (h2o_memis(req->input.path.base, well_known_masque_udp.len, well_known_masque_udp.base, well_known_masque_udp.len))) {
+            h2o_iovec_t iter =
+                h2o_iovec_init(req->input.path.base + well_known_masque_udp.len, req->input.path.len - well_known_masque_udp.len);
+            size_t token_len = 0, p;
+            const char *token = NULL;
+            token = h2o_next_token(&iter, '/', '/', &token_len, NULL);
+            if (token) {
+                host = h2o_iovec_init(token, token_len);
+                token = h2o_next_token(&iter, '/', '/', &token_len, NULL);
+                if (token) {
+                    if ((p = h2o_strtosize(token, token_len)) < 65535)
+                        port = (uint16_t)p;
                 }
             }
         }

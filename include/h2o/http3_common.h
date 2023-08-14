@@ -536,7 +536,7 @@ void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_i
 /**
  * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
  */
-uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len);
+uint64_t h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len);
 
 /* inline definitions */
 
