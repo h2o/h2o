@@ -50,6 +50,7 @@ our @EXPORT = qw(
     h2get_exists
     run_with_h2get
     run_with_h2get_simple
+    spawn_h2get_backend
     one_shot_http_upstream
     wait_debugger
     make_guard
@@ -64,6 +65,7 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
+    read_with_timeout
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -575,6 +577,31 @@ sub make_guard {
     });
 }
 
+sub read_with_timeout {
+  my($fh, $timeout_sec, $is_done_cb) = @_;
+  $is_done_cb //= sub { 0 };
+
+  my $select = IO::Select->new($fh);
+
+  my $out = '';
+  my $t = Time::HiRes::time();
+  while ($select->can_read($timeout_sec)) {
+    my $now = Time::HiRes::time();
+    $timeout_sec -= $now - $t;
+    $t = $now;
+    last if $timeout_sec <= 0;
+
+    my $ret = $fh->sysread($out, 4096, length $out);
+    if (not defined $ret) {
+      diag "Warning: cannot read from $fh: $!";
+      last;
+    }
+    last if $is_done_cb->($out);
+  }
+
+  return $out;
+}
+
 sub spawn_forked {
     my ($code) = @_;
 
@@ -684,6 +711,68 @@ sub spawn_h2_server {
     return $server;
 }
 
+sub spawn_h2get_backend {
+    my $h2_snippet = shift;
+    my $testfn = shift;
+    my ($backend_port) = empty_ports(1, { host => '0.0.0.0' });
+    my $backend = spawn_forked(sub {
+        my $code = <<"EOC";
+STDOUT.sync = true
+h2g = H2.server({
+    'cert_path' => 'examples/h2o/server.crt',
+    'key_path' => 'examples/h2o/server.key',
+});
+h2g.listen("https://127.0.0.1:$backend_port")
+
+connpool = {}
+
+loop do
+  begin
+    conn = h2g.accept(100)
+  rescue => e
+  end
+  if conn
+    connpool[conn] = true;
+    conn.expect_prefix
+    conn.send_settings([])
+
+    loop do
+      f = conn.read(-1)
+      if f.type == 'SETTINGS'
+        unless f.flags == ACK then
+          conn.send_settings_ack()
+          break
+        end
+      else
+        raise 'oops'
+      end
+    end
+  end
+  connpool.keys.each do |conn|
+    loop do
+      begin
+        f = conn.read(1000)
+      rescue => e
+        # passive close
+        conn.close
+        connpool.delete(conn)
+        break
+      end
+      break if f.nil? # timeout
+      $h2_snippet
+    end
+  end
+end
+EOC
+        my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
+        print $scriptfh $code;
+        close($scriptfh);
+        exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
+    });
+
+    $backend->{tls_port} = $backend_port;
+    return $backend;
+}
 # usage: see t/90h2olog.t
 package H2ologTracer {
     use POSIX ":sys_wait_h";

@@ -57,7 +57,8 @@ RUN apt-get install --yes \
 	libwww-perl \
 	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Test::TCP
+RUN cpanm -n NLNETLABS/Net-DNS-1.36.tar.gz # Net-DNS 1.39 has issues around use of alarm, fork, etc.
 
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
@@ -72,6 +73,13 @@ RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komak
 # liburing
 RUN git clone --depth=1 https://github.com/axboe/liburing.git && \
 	cd liburing && \
+	make install && \
+	make clean
+
+# libaegis
+RUN git clone --depth=1 https://github.com/jedisct1/libaegis.git && \
+	cd libaegis && \
+	cmake . && \
 	make install && \
 	make clean
 

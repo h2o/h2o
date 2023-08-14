@@ -74,6 +74,7 @@ struct st_h2o_http2client_conn_t {
         ssize_t (*read_frame)(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
         h2o_buffer_t *headers_unparsed;
     } input;
+    h2o_mem_pool_t rst_streams_pool;
 };
 
 struct st_h2o_http2client_stream_t {
@@ -311,15 +312,33 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
                    size_t len, const char **err_desc, int is_end_stream)
 {
     int ret;
+    h2o_mem_pool_t *pool;
+    int *status;
+    h2o_headers_t *headers;
+    int dummy_status;
+    h2o_headers_t dummy_headers = {0};
 
-    if ((ret = h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table,
-                                        &stream->input.status, &stream->input.headers, NULL, src, len, err_desc)) != 0) {
+    if (stream != NULL) {
+        pool = stream->super.pool;
+        status = &stream->input.status;
+        headers = &stream->input.headers;
+    } else {
+        pool = &conn->rst_streams_pool;
+        status = &dummy_status;
+        headers = &dummy_headers;
+    }
+
+    if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table,
+                                        status, headers, NULL, src, len, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }
         return ret;
     }
+
+    if (stream == NULL)
+        return 0;
 
     if (100 <= stream->input.status && stream->input.status <= 199) {
         if (stream->input.status == 101) {
@@ -429,7 +448,8 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if ((stream = get_stream(conn, frame.stream_id)) == NULL || stream->state.res == STREAM_STATE_CLOSED) {
+    stream = get_stream(conn, frame.stream_id);
+    if (stream != NULL && stream->state.res == STREAM_STATE_CLOSED) {
         *err_desc = "unexpected stream id in CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
@@ -442,7 +462,7 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
         int is_end_stream = (frame.flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
         conn->input.read_frame = expect_default;
 
-        if (stream->state.res == STREAM_STATE_BODY) {
+        if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
             hret = on_trailers(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes, conn->input.headers_unparsed->size,
                               err_desc);
         } else {
@@ -472,7 +492,8 @@ static int handle_data_frame(struct st_h2o_http2client_conn_t *conn, h2o_http2_f
     /* save the input in the request body buffer, or send error (and close the stream) */
     if ((stream = get_stream(conn, frame->stream_id)) == NULL) {
         if (frame->stream_id <= conn->max_open_stream_id) {
-            stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            h2o_http2_window_consume_window(&conn->input.window, payload.length);
+            enqueue_window_update(conn, 0, &conn->input.window, H2O_HTTP2_SETTINGS_CLIENT_CONNECTION_WINDOW_SIZE);
             return 0;
         } else {
             *err_desc = "invalid DATA frame";
@@ -580,17 +601,21 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     }
 
     if ((stream = get_stream(conn, frame->stream_id)) == NULL) {
-        *err_desc = "invalid stream id in HEADERS frame";
-        return H2O_HTTP2_ERROR_STREAM_CLOSED;
+        if (frame->stream_id > conn->max_open_stream_id) {
+            *err_desc = "invalid stream id in HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
     }
-
-    h2o_timer_unlink(&stream->super._timeout);
 
     int is_end_stream = (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
 
-    if (stream->state.res == STREAM_STATE_BODY && !is_end_stream) {
-        *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
-        return H2O_HTTP2_ERROR_PROTOCOL;
+    if (stream != NULL) {
+        h2o_timer_unlink(&stream->super._timeout);
+
+        if (stream->state.res == STREAM_STATE_BODY && !is_end_stream) {
+            *err_desc = "trailing HEADERS frame MUST have END_STREAM flag set";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
     }
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0) {
@@ -604,7 +629,7 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     }
 
     /* response header is complete, handle it */
-    if (stream->state.res == STREAM_STATE_BODY) {
+    if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
         return on_trailers(conn, stream, payload.headers, payload.headers_len, err_desc);
     } else {
         return on_head(conn, stream, payload.headers, payload.headers_len, err_desc, is_end_stream);
@@ -907,6 +932,7 @@ static void close_connection_now(struct st_h2o_http2client_conn_t *conn)
     if (conn->input.headers_unparsed != NULL)
         h2o_buffer_dispose(&conn->input.headers_unparsed);
 
+    h2o_mem_clear_pool(&conn->rst_streams_pool);
     free(conn);
 }
 
@@ -1246,7 +1272,10 @@ static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t 
                                                            h2o_httpclient_connection_pool_t *connpool)
 {
     struct st_h2o_http2client_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
-    memset(conn, 0, sizeof(*conn));
+
+    memset(conn, 0, offsetof(struct st_h2o_http2client_conn_t, rst_streams_pool));
+    h2o_mem_init_pool(&conn->rst_streams_pool);
+
     conn->super.ctx = ctx;
     conn->super.sock = sock;
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_OPEN;
