@@ -610,8 +610,10 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
     const uint8_t *src_end = src + len;
 
     /* the response MUST contain a :status header as the first element */
-    if (status != NULL && src == src_end)
+    if (status != NULL && src == src_end) {
+        *err_desc = ":status must be first element";
         return H2O_HTTP2_ERROR_PROTOCOL;
+    }
 
     do {
         h2o_iovec_t *name, value;
@@ -629,20 +631,30 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             }
         }
         if (name->base[0] == ':') {
-            if (status == NULL)
+            if (status == NULL) {
+                *err_desc = "trailers cannot include pseudo-header fields";
                 return H2O_HTTP2_ERROR_PROTOCOL; /* Trailers MUST NOT include pseudo-header fields */
-            if (name != &H2O_TOKEN_STATUS->buf)
+            }
+            if (name != &H2O_TOKEN_STATUS->buf) {
+                *err_desc = "response pseudo header must be :status";
                 return H2O_HTTP2_ERROR_PROTOCOL;
-            if (*status != 0)
+            }
+            if (*status != 0) {
+                *err_desc = ":status can only be set once";
                 return H2O_HTTP2_ERROR_PROTOCOL;
+            }
             /* parse status */
-            if (value.len != 3)
+            if (value.len != 3) {
+                *err_desc = ":status length must be 3";
                 return H2O_HTTP2_ERROR_PROTOCOL;
+            }
             char *c = value.base;
 #define PARSE_DIGIT(mul, min_digit)                                                                                                \
     do {                                                                                                                           \
-        if (*c < '0' + (min_digit) || '9' < *c)                                                                                    \
+        if (*c < '0' + (min_digit) || '9' < *c) {                                                                                  \
+            *err_desc = ":status must only contain digits";                                                                        \
             return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
+        }                                                                                                                          \
         *status += (*c - '0') * mul;                                                                                               \
         ++c;                                                                                                                       \
     } while (0)
@@ -651,8 +663,10 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             PARSE_DIGIT(1, 0);
 #undef PARSE_DIGIT
         } else {
-            if (status != NULL && *status == 0)
+            if (status != NULL && *status == 0) {
+                *err_desc = ":status not first header in response";
                 return H2O_HTTP2_ERROR_PROTOCOL;
+            }
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 /* reject headers as defined in draft-16 8.1.2.2 */
@@ -664,6 +678,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                             *datagram_flow_id = value;
                         goto Next;
                     } else {
+                        *err_desc = "unexpected connection-specific header";
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
