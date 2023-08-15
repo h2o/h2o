@@ -604,12 +604,13 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                              h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
                              const char **err_desc)
 {
-    *status = 0;
+    if (status != NULL)
+        *status = 0;
 
     const uint8_t *src_end = src + len;
 
     /* the response MUST contain a :status header as the first element */
-    if (src == src_end)
+    if (status != NULL && src == src_end)
         return H2O_HTTP2_ERROR_PROTOCOL;
 
     do {
@@ -628,6 +629,8 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             }
         }
         if (name->base[0] == ':') {
+            if (status == NULL)
+                return H2O_HTTP2_ERROR_PROTOCOL; /* Trailers MUST NOT include pseudo-header fields */
             if (name != &H2O_TOKEN_STATUS->buf)
                 return H2O_HTTP2_ERROR_PROTOCOL;
             if (*status != 0)
@@ -648,7 +651,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             PARSE_DIGIT(1, 0);
 #undef PARSE_DIGIT
         } else {
-            if (*status == 0)
+            if (status != NULL && *status == 0)
                 return H2O_HTTP2_ERROR_PROTOCOL;
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
