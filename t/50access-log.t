@@ -391,7 +391,7 @@ subtest 'compressed-body-size' => sub {
 
 subtest 'header-bytes' => sub {
     my @expected;
-    my $push_expected= sub {
+    my $push_expected = sub {
         my ($proto, $path, $http_ver, $body_size, $header_size) = @_;
         $http_ver = $http_ver == 257 ? "1.1" : $http_ver / 256; # convert $http_ver to textual notation
         push @expected, sub {
@@ -432,8 +432,8 @@ subtest 'header-bytes' => sub {
             subtest "proxy-early-hints" => sub {
                 $run_clients->("/proxy/early-hints", 11, +{
                     257 => [185, 215], # http/1.1
-                    512 => [60, 90],  # http/2
-                    768 => [75, 105],   # http/3
+                    512 => [60, 90],   # http/2
+                    768 => [75, 105],  # http/3
                 });
             };
         },
