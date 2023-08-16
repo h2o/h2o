@@ -859,6 +859,10 @@ typedef struct st_h2o_res_t {
      */
     h2o_headers_t headers;
     /**
+     * list of response trailers
+     */
+    h2o_headers_t trailers;
+    /**
      * mime-related attributes (may be NULL)
      */
     h2o_mime_attributes_t *mime_attr;

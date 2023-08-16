@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port check_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Test::Exception;
 use t::Util;

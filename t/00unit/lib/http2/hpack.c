@@ -643,6 +643,42 @@ static void test_dynamic_table_size_update(void)
     h2o_buffer_dispose(&buf);
 }
 
+static void do_test_more_soft_error(const uint8_t *src, size_t len, int is_header_name, h2o_iovec_t expected_result)
+{
+    h2o_mem_pool_t pool;
+    unsigned soft_errors = 0;
+    const char *err_desc = NULL;
+    h2o_iovec_t *result;
+
+    h2o_mem_init_pool(&pool);
+
+    result = decode_string(&pool, &soft_errors, &src, src + len, is_header_name, &err_desc);
+    ok(result != NULL);
+    ok(h2o_memis(result->base, result->len, expected_result.base, expected_result.len));
+    ok(soft_errors == (is_header_name ? H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME : H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE));
+    ok(err_desc == NULL);
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_more_soft_errors(void)
+{
+    note("empty header name, huffman");
+    do_test_more_soft_error((const uint8_t[]){0x80}, 1, 1, h2o_iovec_init(H2O_STRLIT("")));
+    note("empty header name, no huffman");
+    do_test_more_soft_error((const uint8_t[]){0x00}, 1, 1, h2o_iovec_init(H2O_STRLIT("")));
+
+    /* whitespace around header values; see RFC 9113 8.2.1 */
+    note("header value w. preceding whitespace, huffman");
+    do_test_more_soft_error((const uint8_t[]){0x83, 0x50, 0x71, 0xff}, 4, 0, h2o_iovec_init(H2O_STRLIT(" ab")));
+    do_test_more_soft_error((const uint8_t[]){0x85, 0xff, 0xff, 0xea, 0x1c, 0x7f}, 6, 0, h2o_iovec_init(H2O_STRLIT("\tab")));
+    do_test_more_soft_error((const uint8_t[]){0x83, 0x1c, 0x6a, 0x7f}, 4, 0, h2o_iovec_init(H2O_STRLIT("ab ")));
+    note("header value w. preceding whitespace, no huffman");
+    do_test_more_soft_error((const uint8_t[]){0x03, 0x20, 'a', 'b'}, 4, 0, h2o_iovec_init(H2O_STRLIT(" ab")));
+    do_test_more_soft_error((const uint8_t[]){0x03, 0x09, 'a', 'b'}, 4, 0, h2o_iovec_init(H2O_STRLIT("\tab")));
+    do_test_more_soft_error((const uint8_t[]){0x03, 'a', 'b', 0x20}, 4, 0, h2o_iovec_init(H2O_STRLIT("ab ")));
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -651,4 +687,5 @@ void test_lib__http2__hpack(void)
     subtest("token-wo-hpack-id", test_token_wo_hpack_id);
     subtest("inherit-invalid", test_inherit_invalid);
     subtest("dynamic-table-size-update", test_dynamic_table_size_update);
+    subtest("empty-header-name", test_more_soft_errors);
 }
