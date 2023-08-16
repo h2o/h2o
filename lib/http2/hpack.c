@@ -671,7 +671,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 /* reject headers as defined in draft-16 8.1.2.2 */
                 if (token->flags.is_hpack_special) {
-                    if (token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_CACHE_DIGEST) {
+                    if (token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_CACHE_DIGEST || token == H2O_TOKEN_HOST) {
                         /* pass them through when found in response headers (TODO reconsider?) */
                     } else if (token == H2O_TOKEN_DATAGRAM_FLOW_ID) {
                         if (datagram_flow_id != NULL)
