@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port);
 use JSON qw(decode_json);
 use Test::More;
@@ -342,7 +343,13 @@ subtest 'escape' => sub {
             doit(
                 sub {
                     my $server = shift;
-                    system("curl --silent http://127.0.0.1:$server->{port}/\xe3\x81\x82 > /dev/null");
+                    my $sock = IO::Socket::INET->new(
+                        PeerAddr => '127.0.0.1',
+                        PeerPort => $server->{port},
+                        Proto    => 'tcp',
+                    ) or die "failed to connect to host 127.0.0.1:@{[$server->{port}]}:$!";
+                    syswrite $sock, "GET /\xe3\x81\x82 HTTP/1.0\r\n\r\n";
+                    while (sysread($sock, my $buf, 1000) > 0) {}
                 },
                 $escape eq 'default' ? '%U' : { format => '%U', escape => $escape },
                 [ $expected ],
