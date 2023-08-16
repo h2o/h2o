@@ -89,48 +89,13 @@ EOT
 }
 
 subtest "custom-log" => sub {
-    sub evaluate {
-        my $log = shift;
-        my $version = shift;
-        my $min = shift;
-        my $max = shift;
-        my $path = shift;
-        my $size = shift;
-        if ($log =~ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET $path HTTP/$version" 200 $size (\d+) "http://example.com/" "curl/.*"$}) {
-            pass("matched regex");
-            if ($1 >= $min && $1 <= $max) {
-                pass("header bytes value ($1) in expected range ($min..$max)");
-            } else {
-                fail("header bytes value ($1) in expected range ($min..$max)");
-            }
-        } else {
-            fail("matched regex $log");
-            return 0;
-        }
-    }
     doit(
         sub {
             my $server = shift;
-            foreach my $n (0..1) {
-                my $path = "";
-                if ($n == 1) {
-                    $path = "proxy/early-hints";
-                }
-                system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/$path > /dev/null");
-                system("curl --http1.1 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/$path > /dev/null");
-                system("curl --http2 -k --silent --referer http://example.com/ https://127.0.0.1:$server->{tls_port}/$path > /dev/null");
-                system("$client_prog -3 100 -Huser-agent:curl/not-really -Hreferer:http://example.com/ -k https://127.0.0.1:$server->{quic_port}/$path > /dev/null 2>&1");
-            }
+            system("curl --silent --referer http://example.com/ http://127.0.0.1:$server->{port}/ > /dev/null");
         },
-        '%h %l %u %t "%r" %s %b %{response-header-bytes}x "%{Referer}i" "%{User-agent}i"',
-        [ sub { ok(evaluate(shift,"1.1", 220, 250, "/", 6), "http v1.1"); },
-          sub { ok(evaluate(shift,"1.1", 220, 250, "/", 6), "https v1.1"); },
-          sub { ok(evaluate(shift,"2", 75, 105, "/", 6), "h2"); },
-          sub { ok(evaluate(shift,"3", 65, 95, "/", 6), "h3"); },
-          sub { ok(evaluate(shift,"1.1", 185, 215, "/proxy/early-hints", 11), "http v1.1"); },
-          sub { ok(evaluate(shift,"1.1", 185, 215, "/proxy/early-hints", 11), "https v1.1"); },
-          sub { ok(evaluate(shift,"2", 60, 90, "/proxy/early-hints", 11), "h2"); },
-          sub { ok(evaluate(shift,"3", 75, 105, "/proxy/early-hints", 11), "h3"); }, ]
+        '%h %l %u %t "%r" %s %b "%{Referer}i" "%{User-agent}i"',
+        [ qr{^127\.0\.0\.1 - - \[[0-9]{2}/[A-Z][a-z]{2}/20[0-9]{2}:[0-9]{2}:[0-9]{2}:[0-9]{2} [+\-][0-9]{4}\] "GET / HTTP/1\.1" 200 6 "http://example.com/" "curl/.*"$} ],
     );
 };
 
@@ -422,6 +387,59 @@ subtest 'compressed-body-size' => sub {
         $doit->("--http2", 1661);
         $doit->("--http2 -H 'Accept-Encoding: gzip'", 908);
     };
+};
+
+subtest 'header-bytes' => sub {
+    my @expected;
+    my $push_expected= sub {
+        my ($proto, $path, $http_ver, $body_size, $header_size) = @_;
+        $http_ver = $http_ver == 257 ? "1.1" : $http_ver / 256; # convert $http_ver to textual notation
+        push @expected, sub {
+            my $log = shift;
+            subtest "$path-$proto-$http_ver" => sub {
+                my @cols = split / +/, $log;
+                is $cols[0], $path, "path";
+                is $cols[1], "HTTP/$http_ver", "http version";
+                is $cols[2], 200, "status";
+                is $cols[3], $body_size, "body size";
+                cmp_ok $cols[4], '>=', $header_size->[0], "header size (lower bound)";
+                cmp_ok $cols[4], '<=', $header_size->[1], "header size (upper bound)";
+            };
+        };
+    };
+    doit(
+        sub {
+            my $server = shift;
+            my $run_clients = sub {
+                my ($path, $body_size, $header_size) = @_;
+                run_with_curl($server, sub {
+                    my ($proto, $port, $cmd, $http_ver) = @_;
+                    is system("$cmd --silent --referer http://example.com/ $proto://127.0.0.1:${port}$path > /dev/null"), 0, "run curl";
+                    $push_expected->($proto, $path, $http_ver, $body_size, $header_size->{$http_ver});
+                });
+                subtest "http/3" => sub {
+                    is system("$client_prog -3 100 -k https://127.0.0.1:$server->{quic_port}$path > /dev/null"), 0, "run h2o-httpclient";
+                    $push_expected->("https", $path, 768, $body_size, $header_size->{768});
+                };
+            };
+            subtest "/" => sub {
+                $run_clients->("/", 6, +{
+                    257 => [220, 250], # http/1.1
+                    512 => [75, 105],  # http/2
+                    768 => [65, 95],   # http/3
+                });
+            };
+            subtest "proxy-early-hints" => sub {
+                $run_clients->("/proxy/early-hints", 11, +{
+                    257 => [185, 215], # http/1.1
+                    512 => [60, 90],  # http/2
+                    768 => [75, 105],   # http/3
+                });
+            };
+        },
+        '%U %H %s %b %{response-header-bytes}x',
+        \@expected,
+    );
 };
 
 done_testing;
