@@ -847,7 +847,7 @@ static void on_connection_ready(struct st_h2o_http1client_t *client)
     h2o_iovec_t body;
 
     client->super._cb.on_head = client->super._cb.on_connect(&client->super, NULL, &method, &url, (const h2o_header_t **)&headers,
-                                                             &num_headers, &body, &client->proceed_req, &props, client->_origin);
+                                                             &num_headers, &body, &client->proceed_req, NULL, NULL, &props, client->_origin);
     client->_app_prefers_pipe_reader = props.prefer_pipe_reader;
 
     if (client->super._cb.on_head == NULL) {

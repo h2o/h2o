@@ -221,7 +221,7 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
         struct st_h2o_http3client_req_t *req =
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, link, conn->pending_requests.next);
         h2o_linklist_unlink(&req->link);
-        req->super._cb.on_connect(&req->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        req->super._cb.on_connect(&req->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         destroy_request(req);
     }
     assert(h2o_linklist_is_empty(&conn->pending_requests));
@@ -729,7 +729,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     assert(!h2o_linklist_is_linked(&req->link));
 
     if ((req->super._cb.on_head = req->super._cb.on_connect(&req->super, NULL, &method, &url, &headers, &num_headers, &body,
-                                                            &req->proceed_req.cb, &props, &req->conn->server.origin_url)) == NULL) {
+                                                            &req->proceed_req.cb, NULL, NULL, &props, &req->conn->server.origin_url)) == NULL) {
         destroy_request(req);
         return;
     }
