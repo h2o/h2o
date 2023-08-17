@@ -32,9 +32,9 @@
 
 extern const char h2o_hpack_err_missing_mandatory_pseudo_header[];
 extern const char h2o_hpack_err_invalid_pseudo_header[];
-extern const char h2o_hpack_err_invalid_status_pseudo_header[];
 extern const char h2o_hpack_err_found_upper_case_in_header_name[];
 extern const char h2o_hpack_err_unexpected_connection_specific_header[];
+extern const char h2o_hpack_err_invalid_content_length_header[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
 

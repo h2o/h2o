@@ -100,9 +100,9 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
 
 const char h2o_hpack_err_missing_mandatory_pseudo_header[] = "missing mandatory pseudo header";
 const char h2o_hpack_err_invalid_pseudo_header[] = "invalid pseudo header";
-const char h2o_hpack_err_invalid_status_pseudo_header[] = "invalid value in :status pseudo header";
 const char h2o_hpack_err_found_upper_case_in_header_name[] = "found an upper-case letter in header name";
 const char h2o_hpack_err_unexpected_connection_specific_header[] = "found an unexpected connection-specific header";
+const char h2o_hpack_err_invalid_content_length_header[] = "invalid content-length header";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
 
@@ -529,25 +529,35 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             if (pseudo_header_exists_map != NULL) {
                 /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (name == &H2O_TOKEN_AUTHORITY->buf) {
-                    if (authority->base != NULL)
+                    if (authority->base != NULL) {
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
                     *authority = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
                 } else if (name == &H2O_TOKEN_METHOD->buf) {
-                    if (method->base != NULL)
+                    if (method->base != NULL) {
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
                     *method = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
                 } else if (name == &H2O_TOKEN_PATH->buf) {
-                    if (path->base != NULL)
+                    if (path->base != NULL) {
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
-                    if (value.len == 0)
+                    }
+                    if (value.len == 0) {
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
                     *path = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
                 } else if (name == &H2O_TOKEN_SCHEME->buf) {
-                    if (*scheme != NULL)
+                    if (*scheme != NULL) {
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
+                    }
                     if (h2o_memis(value.base, value.len, H2O_STRLIT("https"))) {
                         *scheme = &H2O_URL_SCHEME_HTTPS;
                     } else if (h2o_memis(value.base, value.len, H2O_STRLIT("masque"))) {
@@ -561,6 +571,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                     return H2O_HTTP2_ERROR_PROTOCOL;
                 }
             } else {
+                *err_desc = h2o_hpack_err_invalid_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
         } else {
@@ -569,8 +580,10 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 if (token->flags.is_hpack_special) {
                     if (token == H2O_TOKEN_CONTENT_LENGTH) {
-                        if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX)
+                        if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX) {
+                            *err_desc = h2o_hpack_err_invalid_content_length_header;
                             return H2O_HTTP2_ERROR_PROTOCOL;
+                        }
                         goto Next;
                     } else if (token == H2O_TOKEN_HOST) {
                         /* HTTP2 allows the use of host header (in place of :authority) */
@@ -588,6 +601,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         goto Next;
                     } else {
                         /* rest of the header fields that are marked as special are rejected */
+                        *err_desc = h2o_hpack_err_unexpected_connection_specific_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
@@ -649,14 +663,14 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             }
             /* parse status */
             if (value.len != 3) {
-                *err_desc = h2o_hpack_err_invalid_status_pseudo_header;
+                *err_desc = h2o_hpack_err_invalid_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
             char *c = value.base;
 #define PARSE_DIGIT(mul, min_digit)                                                                                                \
     do {                                                                                                                           \
         if (*c < '0' + (min_digit) || '9' < *c) {                                                                                  \
-            *err_desc = h2o_hpack_err_invalid_status_pseudo_header;                                                                \
+            *err_desc = h2o_hpack_err_invalid_pseudo_header;                                                                       \
             return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
         }                                                                                                                          \
         *status += (*c - '0') * mul;                                                                                               \
