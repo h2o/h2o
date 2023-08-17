@@ -664,11 +664,11 @@ static void req_body_send(struct st_h2o_http1client_t *client)
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers, int is_end_stream)
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers)
 {
     struct st_h2o_http1client_t *client = (struct st_h2o_http1client_t *)_client;
 
-    assert(chunk.len != 0 || is_end_stream);
+    assert(chunk.len != 0 || trailers != NULL);
     assert(!h2o_socket_is_writing(client->sock));
     assert(client->body_buf.buf->size == 0);
 
@@ -677,7 +677,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_header
         if (!h2o_buffer_try_append(&client->body_buf.buf, chunk.base, chunk.len))
             return -1;
     }
-    client->body_buf.is_end_stream = is_end_stream;
+    client->body_buf.is_end_stream = trailers != NULL;
 
     /* check if the connection has to be closed for correct framing */
     if (client->state.res == STREAM_STATE_CLOSED)

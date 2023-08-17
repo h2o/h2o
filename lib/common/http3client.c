@@ -118,7 +118,7 @@ struct st_h2o_http3client_req_t {
 static int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                           int err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers, int is_end_stream);
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers);
 
 static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)
 {
@@ -800,7 +800,7 @@ static void do_update_window(h2o_httpclient_t *_client)
      */
 }
 
-int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers, int is_end_stream)
+int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers)
 {
     struct st_h2o_http3client_req_t *req = (void *)_client;
 
@@ -819,7 +819,7 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *tr
     emit_data(req, chunk);
 
     /* shutdown if we've written all request body */
-    if (is_end_stream) {
+    if (trailers != NULL) {
         assert(quicly_sendstate_is_open(&req->quic->sendstate));
         quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.acked.ranges[0].end + req->sendbuf->size);
     } else {

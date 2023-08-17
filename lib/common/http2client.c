@@ -1370,16 +1370,11 @@ static void do_update_window(h2o_httpclient_t *_client)
     enqueue_window_update(stream->conn, stream->stream_id, &stream->input.window, max - bufsize);
 }
 
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers, int is_end_stream)
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers)
 {
-    assert(trailers == NULL || is_end_stream);
-
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
     assert(stream->output.proceed_req != NULL);
     assert(!h2o_linklist_is_linked(&stream->output.sending_link));
-
-    if (is_end_stream)
-        stream->output.proceed_req = NULL;
 
     if (stream->output.buf == NULL)
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
@@ -1388,10 +1383,15 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_header
         h2o_buffer_append(&stream->output.buf, chunk.base, chunk.len);
 
     if (trailers != NULL) {
-        size_t trailers_sz = sizeof(*trailers->entries) * trailers->size;
-        stream->output.trailers.entries = h2o_mem_alloc(trailers_sz);
-        stream->output.trailers.size = trailers->size;
-        h2o_memcpy(stream->output.trailers.entries, trailers->entries, trailers_sz);
+        // end stream
+        stream->output.proceed_req = NULL;
+
+        if (trailers->size != 0) {
+            size_t trailers_sz = sizeof(*trailers->entries) * trailers->size;
+            stream->output.trailers.entries = h2o_mem_alloc(trailers_sz);
+            stream->output.trailers.size = trailers->size;
+            h2o_memcpy(stream->output.trailers.entries, trailers->entries, trailers_sz);
+        }
     }
 
     h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
