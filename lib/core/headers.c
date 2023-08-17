@@ -186,6 +186,6 @@ void h2o_dispose_header(h2o_header_t *header)
     if (! h2o_iovec_is_token(header->name)) {
         free(header->name);
     }
-    free(header->orig_name);
+    free((void *)header->orig_name);
     free(header->value.base);
 }
