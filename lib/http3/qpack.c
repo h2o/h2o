@@ -1239,7 +1239,7 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->headers_buf.size = PREFIX_CAPACITY;
 }
 
-static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
+static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, size_t *serialized_header_len)
 {
     if (ctx->largest_ref == 0) {
         ctx->base_index = 0;
@@ -1277,6 +1277,9 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
         memcpy(ctx->headers_buf.entries + start_off - (p - buf), buf, p - buf);
         start_off -= p - buf;
     }
+
+    if (serialized_header_len != NULL)
+        *serialized_header_len = ctx->headers_buf.size - start_off;
 
     /* prepend frame header */
     size_t len_len = quicly_encodev_capacity(ctx->headers_buf.size - start_off);
@@ -1321,12 +1324,13 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
 
-    return finalize_flatten(&ctx);
+    return finalize_flatten(&ctx, NULL);
 }
 
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
-                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id)
+                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
+                                       size_t *serialized_header_len)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1387,5 +1391,5 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
 
-    return finalize_flatten(&ctx);
+    return finalize_flatten(&ctx, serialized_header_len);
 }

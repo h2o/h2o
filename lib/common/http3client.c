@@ -386,7 +386,7 @@ static void notify_response_error(struct st_h2o_http3client_req_t *req, const ch
         req->super._cb.on_head(&req->super, errstr, NULL);
         break;
     case H2O_HTTP3CLIENT_RESPONSE_STATE_BODY:
-        req->super._cb.on_body(&req->super, errstr);
+        req->super._cb.on_body(&req->super, errstr, NULL, 0);
         break;
     default:
         break;
@@ -398,7 +398,7 @@ static int call_on_body(struct st_h2o_http3client_req_t *req, const char *errstr
 {
     assert(req->response_state == H2O_HTTP3CLIENT_RESPONSE_STATE_BODY);
 
-    int ret = req->super._cb.on_body(&req->super, errstr);
+    int ret = req->super._cb.on_body(&req->super, errstr, NULL, 0);
     if (errstr != NULL)
         req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_CLOSED;
 

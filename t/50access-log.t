@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port);
 use JSON qw(decode_json);
 use Test::More;
@@ -32,6 +33,7 @@ sub doit {
 
     my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
     my $server = spawn_h2o({conf => <<"EOT", max_ssl_version => $max_ssl_version});
+send-informational: all
 num-threads: 1
 listen:
   type: quic
@@ -342,7 +344,13 @@ subtest 'escape' => sub {
             doit(
                 sub {
                     my $server = shift;
-                    system("curl --silent http://127.0.0.1:$server->{port}/\xe3\x81\x82 > /dev/null");
+                    my $sock = IO::Socket::INET->new(
+                        PeerAddr => '127.0.0.1',
+                        PeerPort => $server->{port},
+                        Proto    => 'tcp',
+                    ) or die "failed to connect to host 127.0.0.1:@{[$server->{port}]}:$!";
+                    syswrite $sock, "GET /\xe3\x81\x82 HTTP/1.0\r\n\r\n";
+                    while (sysread($sock, my $buf, 1000) > 0) {}
                 },
                 $escape eq 'default' ? '%U' : { format => '%U', escape => $escape },
                 [ $expected ],
@@ -386,6 +394,59 @@ subtest 'compressed-body-size' => sub {
         $doit->("--http2", 1661);
         $doit->("--http2 -H 'Accept-Encoding: gzip'", 908);
     };
+};
+
+subtest 'header-bytes' => sub {
+    my @expected;
+    my $push_expected = sub {
+        my ($proto, $path, $http_ver, $body_size, $header_size) = @_;
+        $http_ver = $http_ver == 257 ? "1.1" : $http_ver / 256; # convert $http_ver to textual notation
+        push @expected, sub {
+            my $log = shift;
+            subtest "$path-$proto-$http_ver" => sub {
+                my @cols = split / +/, $log;
+                is $cols[0], $path, "path";
+                is $cols[1], "HTTP/$http_ver", "http version";
+                is $cols[2], 200, "status";
+                is $cols[3], $body_size, "body size";
+                cmp_ok $cols[4], '>=', $header_size->[0], "header size (lower bound)";
+                cmp_ok $cols[4], '<=', $header_size->[1], "header size (upper bound)";
+            };
+        };
+    };
+    doit(
+        sub {
+            my $server = shift;
+            my $run_clients = sub {
+                my ($path, $body_size, $header_size) = @_;
+                run_with_curl($server, sub {
+                    my ($proto, $port, $cmd, $http_ver) = @_;
+                    is system("$cmd --silent --referer http://example.com/ $proto://127.0.0.1:${port}$path > /dev/null"), 0, "run curl";
+                    $push_expected->($proto, $path, $http_ver, $body_size, $header_size->{$http_ver});
+                });
+                subtest "http/3" => sub {
+                    is system("$client_prog -3 100 -k https://127.0.0.1:$server->{quic_port}$path > /dev/null"), 0, "run h2o-httpclient";
+                    $push_expected->("https", $path, 768, $body_size, $header_size->{768});
+                };
+            };
+            subtest "/" => sub {
+                $run_clients->("/", 6, +{
+                    257 => [220, 250], # http/1.1
+                    512 => [75, 105],  # http/2
+                    768 => [65, 95],   # http/3
+                });
+            };
+            subtest "proxy-early-hints" => sub {
+                $run_clients->("/proxy/early-hints", 11, +{
+                    257 => [185, 215], # http/1.1
+                    512 => [60, 90],   # http/2
+                    768 => [75, 105],  # http/3
+                });
+            };
+        },
+        '%U %H %s %b %{response-header-bytes}x',
+        \@expected,
+    );
 };
 
 done_testing;
