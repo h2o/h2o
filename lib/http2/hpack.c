@@ -98,7 +98,11 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
     return dst;
 }
 
+const char h2o_hpack_err_missing_mandatory_pseudo_header[] = "missing mandatory pseudo header";
+const char h2o_hpack_err_invalid_pseudo_header[] = "invalid pseudo header";
+const char h2o_hpack_err_invalid_status_pseudo_header[] = "invalid value in :status pseudo header";
 const char h2o_hpack_err_found_upper_case_in_header_name[] = "found an upper-case letter in header name";
+const char h2o_hpack_err_unexpected_connection_specific_header[] = "found an unexpected connection-specific header";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
 
@@ -611,7 +615,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
 
     /* the response MUST contain a :status header as the first element */
     if (status != NULL && src == src_end) {
-        *err_desc = ":status must be first element";
+        *err_desc = h2o_hpack_err_missing_mandatory_pseudo_header;
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
@@ -632,27 +636,27 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         }
         if (name->base[0] == ':') {
             if (status == NULL) {
-                *err_desc = "trailers cannot include pseudo-header fields";
+                *err_desc = h2o_hpack_err_invalid_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL; /* Trailers MUST NOT include pseudo-header fields */
             }
             if (name != &H2O_TOKEN_STATUS->buf) {
-                *err_desc = "response pseudo header must be :status";
+                *err_desc = h2o_hpack_err_invalid_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
             if (*status != 0) {
-                *err_desc = ":status can only be set once";
+                *err_desc = h2o_hpack_err_invalid_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
             /* parse status */
             if (value.len != 3) {
-                *err_desc = ":status length must be 3";
+                *err_desc = h2o_hpack_err_invalid_status_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
             char *c = value.base;
 #define PARSE_DIGIT(mul, min_digit)                                                                                                \
     do {                                                                                                                           \
         if (*c < '0' + (min_digit) || '9' < *c) {                                                                                  \
-            *err_desc = ":status must only contain digits";                                                                        \
+            *err_desc = h2o_hpack_err_invalid_status_pseudo_header;                                                                \
             return H2O_HTTP2_ERROR_PROTOCOL;                                                                                       \
         }                                                                                                                          \
         *status += (*c - '0') * mul;                                                                                               \
@@ -664,7 +668,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
 #undef PARSE_DIGIT
         } else {
             if (status != NULL && *status == 0) {
-                *err_desc = ":status not first header in response";
+                *err_desc = h2o_hpack_err_missing_mandatory_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
             if (h2o_iovec_is_token(name)) {
@@ -678,7 +682,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                             *datagram_flow_id = value;
                         goto Next;
                     } else {
-                        *err_desc = "unexpected connection-specific header";
+                        *err_desc = h2o_hpack_err_unexpected_connection_specific_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
