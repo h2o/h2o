@@ -39,9 +39,13 @@ static ssize_t add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iove
     return headers->size - 1;
 }
 
+#define do_alloc(pool, type, cnt) \
+    ( pool == NULL ? h2o_mem_alloc(sizeof(type) * cnt) \
+                   : h2o_mem_alloc_pool(pool, type, cnt))
+
 static inline h2o_iovec_t *alloc_and_init_iovec(h2o_mem_pool_t *pool, const char *base, size_t len)
 {
-    h2o_iovec_t *iov = h2o_mem_alloc_pool(pool, *iov, 1);
+    h2o_iovec_t *iov = do_alloc(pool, h2o_iovec_t, 1);
     iov->base = (char *)base;
     iov->len = len;
     return iov;
@@ -154,4 +158,34 @@ ssize_t h2o_delete_header(h2o_headers_t *headers, ssize_t cursor)
     memmove(headers->entries + cursor, headers->entries + cursor + 1, sizeof(h2o_header_t) * (headers->size - cursor));
 
     return cursor;
+}
+
+static inline void copy_iovec(h2o_mem_pool_t *pool, h2o_iovec_t *dst, h2o_iovec_t *src)
+{
+    dst->base = do_alloc(pool, char, src->len);
+    h2o_memcpy(dst->base, src->base, src->len);
+    dst->len = src->len;
+}
+
+void h2o_copy_header(h2o_mem_pool_t *pool, h2o_header_t *dst, h2o_header_t *src)
+{
+    if (h2o_iovec_is_token(src->name)) {
+        dst->name = src->name;
+    } else {
+        dst->name = do_alloc(pool, h2o_iovec_t, 1);
+        copy_iovec(pool, dst->name, src->name);
+    }
+    dst->orig_name = src->orig_name ? h2o_strdup(pool, src->orig_name, SIZE_MAX).base : NULL;
+    copy_iovec(pool, &dst->value, &src->value);
+
+    dst->flags = src->flags;
+}
+
+void h2o_dispose_header(h2o_header_t *header)
+{
+    if (! h2o_iovec_is_token(header->name)) {
+        free(header->name);
+    }
+    free(header->orig_name);
+    free(header->value.base);
 }
