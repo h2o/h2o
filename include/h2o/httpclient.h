@@ -89,7 +89,7 @@ typedef struct st_h2o_httpclient_on_head_t {
 } h2o_httpclient_on_head_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
+typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr,
                                                          h2o_httpclient_on_head_t *args);
 /**

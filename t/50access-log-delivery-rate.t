@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use File::Temp qw(tempdir);
 use JSON;
 use Time::HiRes qw(sleep);

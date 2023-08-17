@@ -481,13 +481,18 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
     }
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL) {
         /* Call `on_body_on_close`. This function might dispose `self`, in which case `generator_disposed` would be set to true. */
@@ -502,12 +507,17 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static int on_body_piped(h2o_httpclient_t *client, const char *errstr)
+static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL)
         on_body_on_close(self, errstr);

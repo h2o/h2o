@@ -11,7 +11,7 @@ use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -36,6 +36,7 @@ our @EXPORT = qw(
     spawn_server
     spawn_h2o
     spawn_h2o_raw
+    empty_port
     empty_ports
     create_data_file
     md5_file
@@ -49,6 +50,7 @@ our @EXPORT = qw(
     h2get_exists
     run_with_h2get
     run_with_h2get_simple
+    spawn_h2get_backend
     one_shot_http_upstream
     wait_debugger
     make_guard
@@ -63,6 +65,7 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
+    read_with_timeout
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -318,6 +321,65 @@ sub spawn_h2o_raw {
     };
 }
 
+sub empty_port_using_file {
+    my ($host, $port, $proto) = @_;
+    my $fn = $ENV{NET_EMPTYPORT_SRCFILE};
+
+    # lock-open the source file, and read the last port number
+    open my $fh, '+>>', $fn
+        or die "failed to open file:$fn:$!";
+    flock $fh, LOCK_EX
+        or die "failed to lock file:$fn:$!";
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    $port = <$fh>
+        unless $port;
+    $port ||= 65535; # if failed to read, start with an invalid number (see below)
+    # find the next available port
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        $port += 2;
+        $port = 32769 if $port > 49152;
+        last if Net::EmptyPort::can_bind($host, $port, $proto);
+        die "empty port not found"
+            if $fail_cnt >= 100;
+    }
+    # write the last port number to file
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    truncate $fh, 0
+        or die "failed to trancate file:$fn:$!";
+    print $fh $port;
+    # close file (and unlock implicitly)
+    close $fh;
+
+    $port;
+}
+
+sub empty_port {
+    my ($host, $port, $proto) = @_ && ref $_[0] eq 'HASH' ? ($_[0]->{host}, $_[0]->{port}, $_[0]->{proto}) : (undef, @_);
+    $host = '127.0.0.1'
+        unless defined $host;
+    $proto = $proto ? lc($proto) : 'tcp';
+
+    my $found;
+
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        if ($ENV{NET_EMPTYPORT_SRCFILE}) {
+            $found = empty_port_using_file($host, $port, $proto);
+        } else {
+            $found = Net::EmptyPort::empty_port({host => $host, port => $port, proto => $proto});
+        }
+        # finally check that $cand can be bound on addresses 0.0.0.0 and 127.0.0.1, as there are rules to prefer one over another
+        # and we do not want that rule to kick in
+        last unless grep { $_ ne $host && !Net::EmptyPort::can_bind($_, $found, $proto) } qw(0.0.0.0 127.0.0.1);
+        $port = $found; # set $port to indicate the last port we failed on
+        die "empty port not found"
+            if $fail_cnt >= 100;
+    }
+
+    $found;
+}
+
 sub empty_ports {
     my ($n, @ep_args) = @_;
     my @ports;
@@ -354,6 +416,9 @@ sub etag_file {
 
 sub prog_exists {
     my $prog = shift;
+    # if SKIP_PROG_EXISTS environment variable is set (e.g., in case of running on CI image), all programs are assumed to exist
+    return 1
+        if $ENV{SKIP_PROG_EXISTS};
     system("which $prog > /dev/null 2>&1") == 0;
 }
 
@@ -512,6 +577,31 @@ sub make_guard {
     });
 }
 
+sub read_with_timeout {
+  my($fh, $timeout_sec, $is_done_cb) = @_;
+  $is_done_cb //= sub { 0 };
+
+  my $select = IO::Select->new($fh);
+
+  my $out = '';
+  my $t = Time::HiRes::time();
+  while ($select->can_read($timeout_sec)) {
+    my $now = Time::HiRes::time();
+    $timeout_sec -= $now - $t;
+    $t = $now;
+    last if $timeout_sec <= 0;
+
+    my $ret = $fh->sysread($out, 4096, length $out);
+    if (not defined $ret) {
+      diag "Warning: cannot read from $fh: $!";
+      last;
+    }
+    last if $is_done_cb->($out);
+  }
+
+  return $out;
+}
+
 sub spawn_forked {
     my ($code) = @_;
 
@@ -524,18 +614,17 @@ sub spawn_forked {
     if ($pid) {
         close $cout;
         close $cerr;
-        my $upstream; $upstream = +{
+        my $guard = make_guard(sub {
+            return unless defined $pid;
+            kill 'TERM', $pid;
+            while (waitpid($pid, 0) != $pid) {}
+        });
+        return +{
             pid => $pid,
-            kill => sub {
-                return unless defined $pid;
-                kill 'KILL', $pid;
-                undef $pid;
-            },
-            guard => make_guard(sub { $upstream->{kill}->() }),
+            kill => sub { undef $guard; },
             stdout => $pin,
             stderr => $pin2,
         };
-        return $upstream;
     }
     close $pin;
     close $pin2;
@@ -622,6 +711,68 @@ sub spawn_h2_server {
     return $server;
 }
 
+sub spawn_h2get_backend {
+    my $h2_snippet = shift;
+    my $testfn = shift;
+    my ($backend_port) = empty_ports(1, { host => '0.0.0.0' });
+    my $backend = spawn_forked(sub {
+        my $code = <<"EOC";
+STDOUT.sync = true
+h2g = H2.server({
+    'cert_path' => 'examples/h2o/server.crt',
+    'key_path' => 'examples/h2o/server.key',
+});
+h2g.listen("https://127.0.0.1:$backend_port")
+
+connpool = {}
+
+loop do
+  begin
+    conn = h2g.accept(100)
+  rescue => e
+  end
+  if conn
+    connpool[conn] = true;
+    conn.expect_prefix
+    conn.send_settings([])
+
+    loop do
+      f = conn.read(-1)
+      if f.type == 'SETTINGS'
+        unless f.flags == ACK then
+          conn.send_settings_ack()
+          break
+        end
+      else
+        raise 'oops'
+      end
+    end
+  end
+  connpool.keys.each do |conn|
+    loop do
+      begin
+        f = conn.read(1000)
+      rescue => e
+        # passive close
+        conn.close
+        connpool.delete(conn)
+        break
+      end
+      break if f.nil? # timeout
+      $h2_snippet
+    end
+  end
+end
+EOC
+        my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
+        print $scriptfh $code;
+        close($scriptfh);
+        exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
+    });
+
+    $backend->{tls_port} = $backend_port;
+    return $backend;
+}
 # usage: see t/90h2olog.t
 package H2ologTracer {
     use POSIX ":sys_wait_h";

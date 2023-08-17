@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use POSIX ":sys_wait_h";
 use Test::More;
 use t::Util;
