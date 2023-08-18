@@ -30,7 +30,11 @@ EOT
                          "nghttp -vn -H ':method: POST' --data '-' --trailer 'x-client-trailer: foo' " .
                          "'https://127.0.0.1:$server->{tls_port}/index.txt'";
     my $client_log = `$client_command`;
-    like $client_log, qr/x-backend-trailer: bar/;
+    like $client_log, qr/recv DATA frame.+x-backend-trailer: bar/s;
+
+    my ($stdout) = $backend->{kill}->();
+    my $backend_log = join('', readline($stdout));
+    like $backend_log, qr/recv DATA frame.+x-client-trailer: foo/s;
 };
 
 done_testing;

@@ -603,17 +603,23 @@ sub read_with_timeout {
 }
 
 sub spawn_forked {
-    my ($code) = @_;
+    my ($code, $opts) = @_;
+    $opts = +{
+        stdout => 1,
+        stderr => 0,
+        %{ $opts || +{} }
+    };
 
-    my ($cout, $pin);
-    pipe($pin, $cout);
-    my ($cerr, $pin2);
-    pipe($pin2, $cerr);
+    my ($outfh, $errfh);
+    if ($opts->{stdout}) {
+        ($outfh, undef) = tempfile(UNLINK => 1);
+    }
+    if ($opts->{stderr}) {
+        ($errfh, undef) = tempfile(UNLINK => 1);
+    }
 
     my $pid = fork;
     if ($pid) {
-        close $cout;
-        close $cerr;
         my $guard = make_guard(sub {
             return unless defined $pid;
             kill 'TERM', $pid;
@@ -621,15 +627,20 @@ sub spawn_forked {
         });
         return +{
             pid => $pid,
-            kill => sub { undef $guard; },
-            stdout => $pin,
-            stderr => $pin2,
+            kill => sub {
+                seek $outfh, 0, 0 if $outfh;
+                seek $errfh, 0, 0 if $errfh;
+                undef $guard;
+                ($outfh, $errfh)
+            },
         };
     }
-    close $pin;
-    close $pin2;
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    open(STDERR, '>&=', fileno($cerr)) or die $!;
+    if ($outfh) {
+        open(STDOUT, '>&=', $outfh) or die $!;
+    }
+    if ($errfh) {
+        open(STDERR, '>&=', $errfh) or die $!;
+    }
 
     $code->();
     exit;
@@ -768,7 +779,7 @@ EOC
         print $scriptfh $code;
         close($scriptfh);
         exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
-    });
+    }, +{ stderr => 1 });
 
     $backend->{tls_port} = $backend_port;
     return $backend;
