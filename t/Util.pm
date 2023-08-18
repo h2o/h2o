@@ -628,10 +628,19 @@ sub spawn_forked {
         return +{
             pid => $pid,
             kill => sub {
-                seek $outfh, 0, 0 if $outfh;
-                seek $errfh, 0, 0 if $errfh;
                 undef $guard;
-                ($outfh, $errfh)
+                my ($out, $err);
+                if ($outfh) {
+                    seek $outfh, 0, 0;
+                    $out = join('', readline($outfh));
+                    close($outfh);
+                }
+                if ($errfh) {
+                    seek $errfh, 0, 0;
+                    $err = join('', readline($errfh));
+                    close($errfh);
+                }
+                ($out, $err)
             },
         };
     }

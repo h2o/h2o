@@ -123,8 +123,7 @@ EOS
                 # (otherwise framing error happens)
                 `curl -ks https://127.0.0.1:$server->{tls_port}`;
 
-                my ($stdout) = $upstream->{kill}->();
-                my $log = join('', readline($stdout));
+                my ($log) = $upstream->{kill}->();
                 like $log, qr/received @{[1 + 1024 * 2]} bytes/;
                 like $log, qr/accepted request 2/;
             }
