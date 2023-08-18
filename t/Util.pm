@@ -610,13 +610,7 @@ sub spawn_forked {
         %{ $opts || +{} }
     };
 
-    my ($outfh, $errfh);
-    if ($opts->{stdout}) {
-        ($outfh, undef) = tempfile(UNLINK => 1);
-    }
-    if ($opts->{stderr}) {
-        ($errfh, undef) = tempfile(UNLINK => 1);
-    }
+    my $tempdir = File::Temp::tempdir(CLEANUP => 1) if $opts->{stdout} || $opts->{stderr};
 
     my $pid = fork;
     if ($pid) {
@@ -629,26 +623,17 @@ sub spawn_forked {
             pid => $pid,
             kill => sub {
                 undef $guard;
-                my ($out, $err);
-                if ($outfh) {
-                    seek $outfh, 0, 0;
-                    $out = join('', readline($outfh));
-                    close($outfh);
-                }
-                if ($errfh) {
-                    seek $errfh, 0, 0;
-                    $err = join('', readline($errfh));
-                    close($errfh);
-                }
+                my $out = path("$tempdir/out")->slurp if $opts->{stdout};
+                my $err = path("$tempdir/err")->slurp if $opts->{stderr};
                 ($out, $err)
             },
         };
     }
-    if ($outfh) {
-        open(STDOUT, '>&=', $outfh) or die $!;
+    if ($opts->{stdout}) {
+        open(STDOUT, '>', "$tempdir/out") or die $!;
     }
-    if ($errfh) {
-        open(STDERR, '>&=', $errfh) or die $!;
+    if ($opts->{stderr}) {
+        open(STDERR, '>', "$tempdir/err") or die $!;
     }
 
     $code->();
