@@ -12,12 +12,11 @@ subtest 'nghttp2 client and backend' => sub {
         unless prog_exists('nghttpd');
 
     my ($backend_port) = empty_ports(1, { host => '0.0.0.0' });
-    my $backend = spawn_server(
-        argv => ['nghttpd', '--htdocs', DOC_ROOT,
-                 '--trailer', 'x-backend-trailer: bar',
-                 $backend_port, 'examples/h2o/server.key', 'examples/h2o/server.crt'],
-        is_ready => sub { check_port($backend_port) },
-    );
+    my $backend = spawn_forked(sub {
+        exec('nghttpd', '-v', '--htdocs', DOC_ROOT,
+             '--trailer', 'x-backend-trailer: bar',
+             $backend_port, 'examples/h2o/server.key', 'examples/h2o/server.crt');
+    });
     my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
