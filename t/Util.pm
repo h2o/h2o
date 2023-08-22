@@ -65,7 +65,6 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
-    read_with_timeout
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -577,43 +576,18 @@ sub make_guard {
     });
 }
 
-sub read_with_timeout {
-  my($fh, $timeout_sec, $is_done_cb) = @_;
-  $is_done_cb //= sub { 0 };
-
-  my $select = IO::Select->new($fh);
-
-  my $out = '';
-  my $t = Time::HiRes::time();
-  while ($select->can_read($timeout_sec)) {
-    my $now = Time::HiRes::time();
-    $timeout_sec -= $now - $t;
-    $t = $now;
-    last if $timeout_sec <= 0;
-
-    my $ret = $fh->sysread($out, 4096, length $out);
-    if (not defined $ret) {
-      diag "Warning: cannot read from $fh: $!";
-      last;
-    }
-    last if $is_done_cb->($out);
-  }
-
-  return $out;
-}
-
 sub spawn_forked {
-    my ($code) = @_;
+    my ($code, $opts) = @_;
+    $opts = +{
+        stdout => 1,
+        stderr => 0,
+        %{ $opts || +{} }
+    };
 
-    my ($cout, $pin);
-    pipe($pin, $cout);
-    my ($cerr, $pin2);
-    pipe($pin2, $cerr);
+    my $tempdir = File::Temp::tempdir(CLEANUP => 1) if $opts->{stdout} || $opts->{stderr};
 
     my $pid = fork;
     if ($pid) {
-        close $cout;
-        close $cerr;
         my $guard = make_guard(sub {
             return unless defined $pid;
             kill 'TERM', $pid;
@@ -621,15 +595,20 @@ sub spawn_forked {
         });
         return +{
             pid => $pid,
-            kill => sub { undef $guard; },
-            stdout => $pin,
-            stderr => $pin2,
+            kill => sub {
+                undef $guard;
+                my $out = path("$tempdir/out")->slurp if $opts->{stdout};
+                my $err = path("$tempdir/err")->slurp if $opts->{stderr};
+                ($out, $err)
+            },
         };
     }
-    close $pin;
-    close $pin2;
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    open(STDERR, '>&=', fileno($cerr)) or die $!;
+    if ($opts->{stdout}) {
+        open(STDOUT, '>', "$tempdir/out") or die $!;
+    }
+    if ($opts->{stderr}) {
+        open(STDERR, '>', "$tempdir/err") or die $!;
+    }
 
     $code->();
     exit;
@@ -768,7 +747,7 @@ EOC
         print $scriptfh $code;
         close($scriptfh);
         exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
-    });
+    }, +{ stderr => 1 });
 
     $backend->{tls_port} = $backend_port;
     return $backend;

@@ -48,9 +48,7 @@ EOR
     is $stderr, "h2get client exiting\n", "h2 client finished as expected";
 
     sleep 2;
-    $h2g->{kill}->();
-    my $out = read_with_timeout($h2g->{stdout}, 0.1);
-    my $err = read_with_timeout($h2g->{stderr}, 0.1);
+    my ($out, $err) = $h2g->{kill}->();
     $testfn->($err, $out);
 }
 
