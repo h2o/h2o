@@ -16,6 +16,7 @@ subtest 'nghttp2 client and backend' => sub {
         exec('nghttpd', '-v', '--htdocs', DOC_ROOT,
              '--trailer', 'x-backend-trailer: bar',
              $backend_port, 'examples/h2o/server.key', 'examples/h2o/server.crt');
+        die "failed to exec nghttpd: $?";
     });
     my $server = spawn_h2o(<< "EOT");
 hosts:
