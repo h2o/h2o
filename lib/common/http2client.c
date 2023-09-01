@@ -250,9 +250,6 @@ static void close_stream(struct st_h2o_http2client_stream_t *stream)
     h2o_buffer_dispose(&stream->input.body);
 
     if (stream->output.trailers.entries != NULL) {
-        for (size_t i = 0; i != stream->output.trailers.size; ++i) {
-            h2o_dispose_header(&stream->output.trailers.entries[i]);
-        }
         free(stream->output.trailers.entries);
     }
 
@@ -1128,11 +1125,10 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     /* trailers */
     if (trailers != NULL) {
-        stream->output.trailers.entries = h2o_mem_alloc(sizeof(*stream->output.trailers.entries) * num_trailers);
+        size_t trailer_sz = sizeof(*stream->output.trailers.entries) * num_trailers;
+        stream->output.trailers.entries = h2o_mem_alloc(trailer_sz);
         stream->output.trailers.size = num_trailers;
-        for (size_t i = 0; i != num_trailers; ++i) {
-            h2o_copy_header(NULL, &stream->output.trailers.entries[i], &trailers[i]);
-        }
+        h2o_memcpy(stream->output.trailers.entries, trailers, trailers_sz);
     }
 
     request_write(conn);
@@ -1405,11 +1401,10 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_header
         stream->output.proceed_req = NULL;
 
         if (trailers->size != 0) {
-            stream->output.trailers.entries = h2o_mem_alloc(sizeof(*trailers->entries) * trailers->size);
+            size_t trailers_sz = sizeof(*trailers->entries) * trailers->size;
+            stream->output.trailers.entries = h2o_mem_alloc(trailers_sz);
             stream->output.trailers.size = trailers->size;
-            for (size_t i = 0; i != trailers->size; ++i) {
-                h2o_copy_header(NULL, &stream->output.trailers.entries[i], &trailers->entries[i]);
-            }
+            h2o_memcpy(stream->output.trailers.entries, trailers->entries, trailers_sz);
         }
     }
 
