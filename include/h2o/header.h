@@ -119,16 +119,6 @@ inline int h2o_header_name_is_equal(const h2o_header_t *x, const h2o_header_t *y
     }
 }
 
-/**
- * copy a header
- */
-void h2o_copy_header(h2o_mem_pool_t *pool, h2o_header_t *dst, h2o_header_t *src);
-
-/**
- * dispose a header
- */
-void h2o_dispose_header(h2o_header_t *header);
-
 #ifdef __cplusplus
 }
 #endif
