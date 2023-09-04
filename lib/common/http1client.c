@@ -664,7 +664,7 @@ static void req_body_send(struct st_h2o_http1client_t *client)
     h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
 }
 
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_headers_t *trailers)
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_header_t *trailers, size_t num_trailers)
 {
     struct st_h2o_http1client_t *client = (struct st_h2o_http1client_t *)_client;
 

@@ -737,7 +737,11 @@ static int write_req(void *ctx, int is_end_stream)
             detach_client(self);
     }
 
-    return client->write_req(client, chunk, is_end_stream ? &self->src_req->trailers : NULL);
+    if (is_end_stream) {
+        return client->write_req(client, chunk, self->src_req->trailers.entries, self->src_req->trailers.size);
+    } else {
+        return client->write_req(client, chunk, NULL, 0);
+    }
 }
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,

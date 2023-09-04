@@ -293,7 +293,7 @@ struct st_h2o_httpclient_t {
      * Function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
      * given data is sent to the server. Regarding the usage, refer to the doc-comment of `h2o_write_req_cb`.
      */
-    int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, h2o_headers_t *trailers);
+    int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, h2o_header_t *trailers, size_t num_trailers);
 
     h2o_timer_t _timeout;
     h2o_socketpool_connect_request_t *_connect_req;
