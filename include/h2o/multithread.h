@@ -113,8 +113,8 @@ h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *);
 #define H2O_MULTITHREAD_ONCE(block)                                                                                                \
     do {                                                                                                                           \
         static volatile int lock = 0;                                                                                              \
-        int lock_loaded = lock;                                                                                                    \
-        __sync_synchronize();                                                                                                      \
+        int lock_loaded;                                                                                                           \
+        __atomic_load(&lock, &lock_loaded, __ATOMIC_ACQUIRE);                                                                      \
         if (!lock_loaded) {                                                                                                        \
             static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;                                                              \
             pthread_mutex_lock(&mutex);                                                                                            \
@@ -122,8 +122,7 @@ h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *);
                 do {                                                                                                               \
                     block                                                                                                          \
                 } while (0);                                                                                                       \
-                __sync_synchronize();                                                                                              \
-                lock = 1;                                                                                                          \
+                __atomic_store_n(&lock, 1, __ATOMIC_RELEASE);                                                                        \
             }                                                                                                                      \
             pthread_mutex_unlock(&mutex);                                                                                          \
         }                                                                                                                          \
