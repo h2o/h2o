@@ -1121,6 +1121,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     /* trailers */
     if (trailers != NULL && num_trailers != 0) {
+        assert(stream->output.proceed_req == NULL);
         stream->output.trailers.entries = h2o_mem_alloc_pool(stream->super.pool, h2o_header_t, num_trailers);
         stream->output.trailers.size = num_trailers;
         h2o_memcpy(stream->output.trailers.entries, trailers, sizeof(*trailers) * num_trailers);
