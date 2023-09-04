@@ -1235,7 +1235,7 @@ struct st_h2o_req_t {
      */
     h2o_headers_t headers;
     /**
-     * list of request trailers
+     * list of request trailers; `trailers.entries` is non-NULL only when the list is non-empty
      */
     h2o_headers_t trailers;
     /**
