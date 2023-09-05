@@ -50,6 +50,7 @@
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
+#define H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03 0x276
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x33
 
@@ -534,9 +535,9 @@ static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
  */
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams);
 /**
- * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
+ * Decodes an H3 datagram. Returns Flow id (UINT64_MAX is not a valid value) and context id (currently only valid value is 0)
  */
-uint64_t h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len);
+void h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len, uint64_t *flow_id, uint8_t *context_id);
 
 /* inline definitions */
 

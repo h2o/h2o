@@ -38,7 +38,8 @@ static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\
 #define LIT_FRAME_HEADER(size, type, flags, stream_id) LIT24(size), (type), (flags), LIT32(stream_id)
 static const uint8_t SERVER_PREFACE_BIN[] = {
     /* settings frame */
-    LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
+    LIT_FRAME_HEADER(10, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
+    LIT16(H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL), LIT16(1),
     /* window_update frame */
     LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
     LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
@@ -625,6 +626,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (is_connect) {
         if (stream->req.input.protocol.len && h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
             is_connect_udp = 1;
+            is_connect = 0;
             stream->req.datagram_format = H2O_DATAGRAM_FORMAT_RFC;
         }
     } else if (stream->req.input.protocol.len == 0) {

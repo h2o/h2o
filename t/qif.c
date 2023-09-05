@@ -96,7 +96,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
             h2o_qpack_flatten_response(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, &headers_buf,              \
-                                       message.status, message.headers.entries, message.headers.size, NULL,                        \
+                                       message.status, message.headers.entries, message.headers.size, NULL, NULL,                  \
                                        message.content_length);                                                                    \
         }                                                                                                                          \
         if (encoder_buf.size != 0) {                                                                                               \

@@ -34,6 +34,7 @@
 #define H2O_HTTP2_SETTINGS_INITIAL_WINDOW_SIZE 4
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
+#define H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0

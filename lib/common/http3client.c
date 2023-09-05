@@ -910,11 +910,15 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
     uint64_t flow_id;
     h2o_iovec_t payload;
     quicly_stream_t *qs;
+    uint8_t context_id;
 
     /* decode, validate, get stream */
-    if ((flow_id = h2o_http3_decode_h3_datagram(&conn->super, &payload, datagram.base, datagram.len)) == UINT64_MAX ||
-        !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
+    h2o_http3_decode_h3_datagram(&conn->super, &payload, datagram.base, datagram.len, &flow_id, &context_id);
+    if ((flow_id  == UINT64_MAX) || !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
         h2o_quic_close_connection(&conn->super.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
+        return;
+    } else if (context_id != 0) {
+        // per https://datatracker.ietf.org/doc/html/rfc9298#section-5 we drop non-zero context ids (will always be 0 for draft based  datagrams)
         return;
     }
     if ((qs = quicly_get_stream(conn->super.super.quic, flow_id)) == NULL)

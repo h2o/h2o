@@ -936,8 +936,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
         is_tcp = 0;
     } else {
-        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-        return 0;
+        return -1;
     }
 
     if (is_tcp || (req->datagram_format == H2O_DATAGRAM_FORMAT_DRAFT03)) {
@@ -949,11 +948,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     } else {
         // extract the host and port from the path
         // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
+        h2o_iovec_t path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
         const h2o_iovec_t well_known_masque_udp = h2o_iovec_init(H2O_STRLIT("/.well-known/masque/udp/"));
-        if ((req->input.path.len > well_known_masque_udp.len) &&
-                (h2o_memis(req->input.path.base, well_known_masque_udp.len, well_known_masque_udp.base, well_known_masque_udp.len))) {
+        if ((path_normalized.len > well_known_masque_udp.len) &&
+                (h2o_memis(path_normalized.base, well_known_masque_udp.len, well_known_masque_udp.base, well_known_masque_udp.len))) {
             h2o_iovec_t iter =
-                h2o_iovec_init(req->input.path.base + well_known_masque_udp.len, req->input.path.len - well_known_masque_udp.len);
+                h2o_iovec_init(path_normalized.base + well_known_masque_udp.len, path_normalized.len - well_known_masque_udp.len);
             size_t token_len = 0, p;
             const char *token = NULL;
             token = h2o_next_token(&iter, '/', '/', &token_len, NULL);

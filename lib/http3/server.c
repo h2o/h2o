@@ -1417,9 +1417,10 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (is_connect) {
         return handle_input_expect_headers_process_connect(stream, NULL, err_desc);
     } else if (is_connect_udp) {
-        if (!datagram_flow_id.base && (stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC)) {
+        if (stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
             datagram_flow_id.base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-            datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id);
+            // datagram_flow_id is the H3 quarter stream id (https://www.rfc-editor.org/rfc/rfc9297#section-2.1);
+            datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id >> 2);
         }
          return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
     }
@@ -1437,7 +1438,9 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
         stream->req.res.content_length,
-        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(NULL, 0) : datagram_flow_id, &serialized_header_len);
+        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(NULL, 0) : datagram_flow_id, 
+        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(H2O_STRLIT("?1")) : h2o_iovec_init(NULL, 0), 
+        &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
@@ -1499,7 +1502,6 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
         kh_val(conn->datagram_flows, iter) = stream;
     }
 
-    // TODO: is this still valid for RFC and Draft03
     /* If the client sent a `datagram-flow-id` request header field and:
      *  a) if the peer is willing to accept datagrams as well, use the same flow ID for sending datagrams from us,
      *  b) if the peer did not send H3_DATAGRAM Settings, use the stream, or
@@ -1915,11 +1917,15 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(quic));
     uint64_t flow_id;
     h2o_iovec_t payload;
+    uint8_t context_id;
 
     /* decode */
-    if ((flow_id = h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len)) == UINT64_MAX) {
+    h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len, &flow_id, &context_id);
+    if (flow_id == UINT64_MAX) {
         h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
+    } else if (context_id != 0) {
+        return; // per https://datatracker.ietf.org/doc/html/rfc9298#section-5 we drop non-zero context ids (will always be 0 for draft based  datagrams)
     }
 
     /* find stream */

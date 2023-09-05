@@ -1153,7 +1153,10 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
+        ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
+        ptls_buffer_push_quicint(&buf, 1);
     });
+
 
     assert(!buf.is_allocated);
     return buf.off;
@@ -1366,9 +1369,6 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
 
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    if (conn->peer_settings.h3_datagram_rfc) {
-        flow_id = flow_id >> 2; // H3 quarter stream id (https://www.rfc-editor.org/rfc/rfc9297#section-2.1);
-    }
     for (size_t i = 0; i < num_datagrams; ++i) {
         h2o_iovec_t *src = datagrams + i;
         uint8_t buf[quicly_encodev_capacity(flow_id) + 1 + src->len], *p = buf; // The '+ 1' is for Context-ID in case of RFC format
@@ -1386,28 +1386,19 @@ void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_i
     h2o_quic_schedule_timer(&conn->super);
 }
 
-uint64_t h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len)
+void h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len, 
+                                 uint64_t *flow_id, uint8_t *context_id)
 {
     const uint8_t *src = _src, *end = src + len;
-    uint64_t flow_id;
+    *context_id = 0; // for non-RFC return context ID of 0 (caller will ignore context id if not an RFC datagram
 
-    if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX) {
+    if ((*flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX) {
         if (conn->peer_settings.h3_datagram_rfc) {
             // After the quarter stream id you get the context-id which for UDP should be 0 and we point the payload to the byte
             // after that see comments to RFCs in the h2o_http3_send_h3_datagrams function above)
-            if (*src == 0) {
-                src++;
-            } else {
-                // H3 Context-ID not 0
-                return UINT64_MAX;
-            }
+            *context_id = *src;
+            src++;
         }
         *payload = h2o_iovec_init(src, end - src);
     }
-    if (conn->peer_settings.h3_datagram_rfc) {
-        // convert from quarter stream id
-        flow_id = flow_id << 2;
-    }
-
-    return flow_id;
 }
