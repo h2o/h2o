@@ -1585,7 +1585,8 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         assert(ret == 1);
     }
 
-    { /* set session resumption context so that resumption will succeed only against the same certificate */
+    /* set session resumption context so that resumption will succeed only against the same certificate */
+    if (raw_pubkey_count == 0) {
         uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
         unsigned session_ctx_len;
         H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
