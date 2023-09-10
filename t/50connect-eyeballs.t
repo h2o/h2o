@@ -34,7 +34,7 @@ my ($v6_guard, $v6_port) = create_listener("::1")
 my ($v4_guard, $v4_port) = create_listener("127.0.0.1")
     or die "failed to create IPv4 listener:$!";
 my $blackhole_ip_v4 = find_blackhole_ip();
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

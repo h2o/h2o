@@ -61,8 +61,7 @@ sub run_tests {
 }
 
 subtest "both-tcp", sub {
-    my $upstream_port1 = empty_port();
-    my $upstream_port2 = empty_port();
+    my ($upstream_port1, $upstream_port2) = empty_ports(2);
 
     my $guard1 = spawn_server(
         argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port1, ASSETS_DIR . "/upstream.psgi" ],
@@ -121,7 +120,7 @@ EOT
 };
 
 subtest "tcp-unix", sub {
-    my $upstream_port = empty_port();
+    my $upstream_port = empty_ports(1);
     my $upstream_file = "$tempdir/sock3";
 
     my $guard1 = spawn_server(

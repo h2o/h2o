@@ -10,8 +10,7 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $keep_alive_upstream_port = empty_port();
-my $close_conn_upstream_port = empty_port();
+my ($keep_alive_upstream_port, $close_conn_upstream_port) = empty_ports(2);
 my $curl = 'curl --silent --dump-header /dev/stderr';
 
 subtest 'basic' => sub {

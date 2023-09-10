@@ -24,7 +24,7 @@ unless ($ENV{DTRACE_TESTS})  {
       unless server_features()->{dtrace};
 }
 
-my $quic_port = empty_port({
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

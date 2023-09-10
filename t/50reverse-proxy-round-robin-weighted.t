@@ -11,8 +11,7 @@ plan skip_all => 'plackup not found'
 plan skip_all => 'Starlet not found'
     unless system('perl -MStarlet /dev/null > /dev/null 2>&1') == 0;
 
-my $upstream_port1 = empty_port();
-my $upstream_port2 = empty_port();
+my ($upstream_port1, $upstream_port2) = empty_ports(2);
 
 my $guard1 = spawn_server(
     argv     => [ qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen), $upstream_port1, ASSETS_DIR . "/upstream.psgi" ],

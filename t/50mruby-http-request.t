@@ -22,7 +22,8 @@ my $tempdir = tempdir(CLEANUP => 1);
 
 sub create_upstream {
     my %opts = @_;
-    my $upstream_hostport = $opts{upstream_hostport} || "127.0.0.1:@{[empty_port()]}";
+    my ($upstream_port) = empty_ports(1);
+    my $upstream_hostport = $opts{upstream_hostport} || "127.0.0.1:@{[$upstream_port]}";
     my @args = (
         qw(plackup -s Starlet --keepalive-timeout 100 --access-log /dev/null --listen),
         $upstream_hostport,
@@ -43,7 +44,8 @@ sub create_upstream {
 };
 
 subtest 'basic' => sub {
-    my $upstream_hostport = "127.0.0.1:@{[empty_port()]}";
+    my ($upstream_port) = empty_ports(1);
+    my $upstream_hostport = "127.0.0.1:@{[$upstream_port]}";
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
         return << "EOT";

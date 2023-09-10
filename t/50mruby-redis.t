@@ -463,7 +463,7 @@ done_testing;
 
 sub spawn_redis {
     my ($opts) = @_;
-    my $redis_port = empty_port();
+    my ($redis_port) = empty_ports(1);
     my $redis = $opts->{no_redis} ? undef : spawn_server(
         argv     => [ qw(redis-server --loglevel warning --port), $redis_port ],
         is_ready => sub { check_port($redis_port) },
@@ -474,7 +474,7 @@ sub spawn_redis {
 sub spawn_command_timeout_mock {
     my ($wait) = @_;
     $wait ||= 3;
-    my $port = empty_port();
+    my ($port) = empty_ports(1);
 
     my $pid = fork;
     unless ($pid) {

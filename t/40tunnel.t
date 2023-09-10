@@ -15,8 +15,8 @@ plan skip_all => 'Starlet not found'
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $upstream_port = empty_port();
-my $quic_port = empty_port({
+my ($upstream_port) = empty_ports(1);
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });

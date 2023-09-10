@@ -15,8 +15,8 @@ plan skip_all => "$client_prog not found"
 plan skip_all => "nc not found"
     unless prog_exists("nc");
 
-my $up_port = empty_port();
-my $quic_port = empty_port({
+my ($up_port) = empty_ports(1);
+my ($quic_port) = empty_ports(1, {
     host  => "127.0.0.1",
     proto => "udp",
 });
