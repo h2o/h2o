@@ -1356,15 +1356,13 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
     if (is_connect) {
         if (stream->req.input.protocol.len != 0) {
-            if ((conn->h3.peer_settings.h3_datagram_rfc) &&
-                h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
+            if (h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
                 is_connect_udp = 1;
                 is_connect = 0;
                 stream->req.datagram_format = H2O_DATAGRAM_FORMAT_RFC;
             }
         }
-    } else if ((conn->h3.peer_settings.h3_datagram_draft03) &&
-               h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
         is_connect_udp = 1;
         stream->req.datagram_format = H2O_DATAGRAM_FORMAT_DRAFT03;
     }
