@@ -698,6 +698,8 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
         return h2o_iovec_init(NULL, 0);
+
+    const uint8_t *chunk_start = bytes;
     if (datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
         capsule_context_id = ptls_decode_quicint(&bytes, end);
         if (capsule_context_id == UINT64_MAX)
@@ -705,7 +707,7 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
     }
 
     /* chunk is incomplete */
-    if (end - bytes < chunk_length)
+    if (end - chunk_start < chunk_length)
         return h2o_iovec_init(NULL, 0);
 
     /*
@@ -717,9 +719,9 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
     if (datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
         *skip |= capsule_context_id != 0;
     }
-    *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
+    *to_consume = (chunk_start + chunk_length) - (const uint8_t *)start;
 
-    return h2o_iovec_init(bytes, chunk_length);
+    return h2o_iovec_init(bytes, chunk_length - (bytes - chunk_start));
 }
 
 static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
@@ -836,7 +838,11 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
         h2o_timer_unlink(&self->timeout);
         size_t off = 0;
         self->udp.ingress.buf[off++] = 0; /* chunk type = DATAGRAM (draft03) or capsule type = DATAGRAM (rfc) */
-        off = quicly_encodev(self->udp.ingress.buf + off, (uint64_t)rret) - self->udp.ingress.buf;
+        ssize_t capsule_len = (size_t)rret;
+        if (self->src_req->datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
+            capsule_len += 1; // the chunk length includes the context_id
+        }
+        off = quicly_encodev(self->udp.ingress.buf + off, capsule_len) - self->udp.ingress.buf;
         assert(off <= overhead);
         if (self->src_req->datagram_format == H2O_DATAGRAM_FORMAT_RFC)
             self->udp.ingress.buf[off++] = 0; /* capsule context-id = UDP packet*/
