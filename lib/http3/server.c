@@ -1438,8 +1438,8 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
         stream->req.res.content_length,
-        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(NULL, 0) : datagram_flow_id, 
-        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(H2O_STRLIT("?1")) : h2o_iovec_init(NULL, 0), 
+        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(NULL, 0) : datagram_flow_id,
+        stream->req.datagram_format == H2O_DATAGRAM_FORMAT_RFC ? h2o_iovec_init(H2O_STRLIT("?1")) : h2o_iovec_init(NULL, 0),
         &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
 
@@ -1926,7 +1926,7 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     if (flow_id == UINT64_MAX) {
         h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
-    } 
+    }
 
     /* find stream */
     khiter_t iter = kh_get(stream, conn->datagram_flows, flow_id);

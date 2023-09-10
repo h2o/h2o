@@ -1407,22 +1407,3 @@ uint8_t h2o_http3_datagram_get_payload_and_context_id(h2o_http3_conn_t *conn, in
      *payload = h2o_iovec_init(src, end - src);
      return context_id;
 }
-
-/*
-void h2o_http3_decode_h3_datagram(h2o_http3_conn_t *conn, h2o_iovec_t *payload, const void *_src, size_t len, 
-                                 uint64_t *flow_id, uint8_t *context_id)
-{
-    const uint8_t *src = _src, *end = src + len;
-    *context_id = 0; // for non-RFC return context ID of 0 (caller will ignore context id if not an RFC datagram
-
-    if ((*flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX) {
-        if (conn->peer_settings.h3_datagram_rfc) {
-            // After the quarter stream id you get the context-id which for UDP should be 0 and we point the payload to the byte
-            // after that see comments to RFCs in the h2o_http3_send_h3_datagrams function above)
-            *context_id = *src;
-            src++;
-        }
-        *payload = h2o_iovec_init(src, end - src);
-    }
-}
-*/

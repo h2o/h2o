@@ -1387,7 +1387,7 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
     for (i = 0; i != num_headers; ++i)
         flatten_header(&ctx, headers + i);
 
-    if (datagram_flow_id.base != NULL) 
+    if (datagram_flow_id.base != NULL)
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
 

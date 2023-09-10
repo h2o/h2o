@@ -916,7 +916,6 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
     /* find the flow_id */
     size_t offset = 0;
     flow_id = h2o_http3_h3_datagram_get_flow_id(&conn->super, datagram.base, datagram.len, &offset);
-    //h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len, &flow_id, &context_id);
     if ((flow_id  == UINT64_MAX) || !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
         h2o_quic_close_connection(&conn->super.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
