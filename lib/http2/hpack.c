@@ -501,10 +501,10 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 }
 
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path,
-                            h2o_iovec_t *protocol, h2o_headers_t *headers,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc)
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length,
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
+                            const char **err_desc)
 {
     const uint8_t *src_end = src + len;
 

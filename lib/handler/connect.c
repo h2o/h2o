@@ -36,9 +36,9 @@ struct st_connect_handler_t {
     } acl;
 };
 
-#define MAX_ADDRESSES_PER_FAMILY    4
-#define UDP_CHUNK_OVERHEAD_DRAFT03  3
-#define UDP_CHUNK_OVERHEAD_RFC      4
+#define MAX_ADDRESSES_PER_FAMILY 4
+#define UDP_CHUNK_OVERHEAD_DRAFT03 3
+#define UDP_CHUNK_OVERHEAD_RFC 4
 
 struct st_server_address_t {
     struct sockaddr *sa;
@@ -111,7 +111,8 @@ struct st_connect_generator_t {
                 h2o_timer_t delayed;
             } egress;
             struct {
-                uint8_t buf[UDP_CHUNK_OVERHEAD_RFC + 1500]; /* RFC overhead is larger than draft-03 so it will cover either's usage */
+                uint8_t
+                    buf[UDP_CHUNK_OVERHEAD_RFC + 1500]; /* RFC overhead is larger than draft-03 so it will cover either's usage */
             } ingress;
         } udp;
     };
@@ -760,7 +761,8 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     do {
         int skip = 0;
         size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip, self->src_req->datagram_format);
+        h2o_iovec_t datagram =
+            udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip, self->src_req->datagram_format);
         if (datagram.base == NULL)
             break;
         if (!skip)
@@ -822,9 +824,12 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
 
     /* read UDP packet, or return */
     ssize_t rret;
-    int overhead = (self->src_req->datagram_format == H2O_DATAGRAM_FORMAT_DRAFT03) ? UDP_CHUNK_OVERHEAD_DRAFT03 : UDP_CHUNK_OVERHEAD_RFC;
-    while ((rret = recv(h2o_socket_get_fd(self->sock), self->udp.ingress.buf + overhead,
-                        sizeof(self->udp.ingress.buf) - overhead, 0)) == -1 && errno == EINTR);
+    int overhead =
+        (self->src_req->datagram_format == H2O_DATAGRAM_FORMAT_DRAFT03) ? UDP_CHUNK_OVERHEAD_DRAFT03 : UDP_CHUNK_OVERHEAD_RFC;
+    while ((rret = recv(h2o_socket_get_fd(self->sock), self->udp.ingress.buf + overhead, sizeof(self->udp.ingress.buf) - overhead,
+                        0)) == -1 &&
+           errno == EINTR)
+        ;
     if (rret == -1)
         return;
     H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, (size_t)rret);
@@ -934,7 +939,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     int is_tcp;
 
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
-        if (req->datagram_format == H2O_DATAGRAM_FORMAT_RFC) { //method is CONNECT but parsing of headers found RFC connect-udp
+        if (req->datagram_format == H2O_DATAGRAM_FORMAT_RFC) { // method is CONNECT but parsing of headers found RFC connect-udp
             is_tcp = 0;
         } else {
             is_tcp = 1;
@@ -954,10 +959,11 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     } else {
         // extract the host and port from the path
         // see: https://www.rfc-editor.org/rfc/rfc9298.html#section-3.4
-        h2o_iovec_t path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
+        h2o_iovec_t path_normalized =
+            h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
         const h2o_iovec_t well_known_masque_udp = h2o_iovec_init(H2O_STRLIT("/.well-known/masque/udp/"));
         if ((path_normalized.len > well_known_masque_udp.len) &&
-                (h2o_memis(path_normalized.base, well_known_masque_udp.len, well_known_masque_udp.base, well_known_masque_udp.len))) {
+            (h2o_memis(path_normalized.base, well_known_masque_udp.len, well_known_masque_udp.base, well_known_masque_udp.len))) {
             h2o_iovec_t iter =
                 h2o_iovec_init(path_normalized.base + well_known_masque_udp.len, path_normalized.len - well_known_masque_udp.len);
             size_t token_len = 0, p;

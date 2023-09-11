@@ -607,10 +607,11 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
-    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &stream->cache_digests, NULL, src, len, err_desc)) != 0) {
+    if ((ret =
+             h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                     &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
+                                     &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, &header_exists_map,
+                                     &stream->req.content_length, &stream->cache_digests, NULL, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -625,7 +626,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
     int is_connect_udp = 0;
     if (is_connect) {
-        if (stream->req.input.protocol.len && h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
+        if (stream->req.input.protocol.len &&
+            h2o_memis(stream->req.input.protocol.base, stream->req.input.protocol.len, H2O_STRLIT("connect-udp"))) {
             is_connect_udp = 1;
             is_connect = 0;
             stream->req.datagram_format = H2O_DATAGRAM_FORMAT_RFC;
@@ -694,8 +696,7 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, NULL,
-                                       &dummy_content_length, NULL, NULL, src,
-                                       len, err_desc)) != 0)
+                                       &dummy_content_length, NULL, NULL, src, len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;

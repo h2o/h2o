@@ -83,9 +83,9 @@ static void do_test_simple(int use_enc_stream)
         int pseudo_header_exists_map = 0;
         h2o_headers_t headers = {NULL};
         size_t content_length = SIZE_MAX;
-        ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers, &pseudo_header_exists_map,
-                                      &content_length, NULL, NULL, header_ack, &header_ack_len, (const uint8_t *)flattened.base,
-                                      flattened.len, &err_desc);
+        ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
+                                      &pseudo_header_exists_map, &content_length, NULL, NULL, header_ack, &header_ack_len,
+                                      (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
         ok(scheme == &H2O_URL_SCHEME_HTTPS);

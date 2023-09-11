@@ -401,7 +401,8 @@ static uint32_t *get_state_counter(struct st_h2o_http3_server_conn_t *conn, enum
 static void tunnel_on_udp_read(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
-    h2o_http3_send_h3_datagrams(&get_conn(stream)->h3, stream->req.datagram_format, stream->datagram_flow_id, datagrams, num_datagrams);
+    h2o_http3_send_h3_datagrams(&get_conn(stream)->h3, stream->req.datagram_format, stream->datagram_flow_id, datagrams,
+                                num_datagrams);
 }
 
 static void request_run_delayed(struct st_h2o_http3_server_conn_t *conn)
@@ -1337,11 +1338,11 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
-    if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.input.protocol, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, &datagram_flow_id, header_ack,
-                                       &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
+    if ((ret = h2o_qpack_parse_request(
+             &stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id, &stream->req.input.method,
+             &stream->req.input.scheme, &stream->req.input.authority, &stream->req.input.path, &stream->req.input.protocol,
+             &stream->req.headers, &header_exists_map, &stream->req.content_length, NULL /* TODO cache-digests */,
+             &datagram_flow_id, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
     if (header_ack_len != 0)
@@ -1420,7 +1421,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             // datagram_flow_id is the H3 quarter stream id (https://www.rfc-editor.org/rfc/rfc9297#section-2.1);
             datagram_flow_id.len = sprintf(datagram_flow_id.base, "%" PRIu64, stream->quic->stream_id >> 2);
         }
-         return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
+        return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
     }
 
     /* change state */
@@ -1920,7 +1921,7 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     /* find the flow_id */
     size_t offset = 0;
     flow_id = h2o_http3_h3_datagram_get_flow_id(&conn->h3, datagram.base, datagram.len, &offset);
-    //h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len, &flow_id, &context_id);
+    // h2o_http3_decode_h3_datagram(&conn->h3, &payload, datagram.base, datagram.len, &flow_id, &context_id);
     if (flow_id == UINT64_MAX) {
         h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
@@ -1933,9 +1934,11 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     struct st_h2o_http3_server_stream_t *stream = kh_val(conn->datagram_flows, iter);
 
     /* get datagram and context_id */
-    context_id = h2o_http3_datagram_get_payload_and_context_id(&conn->h3, stream->req.datagram_format, &payload, datagram.base+offset, datagram.len-offset);
+    context_id = h2o_http3_datagram_get_payload_and_context_id(&conn->h3, stream->req.datagram_format, &payload,
+                                                               datagram.base + offset, datagram.len - offset);
     if (context_id != 0) {
-        return; // per https://datatracker.ietf.org/doc/html/rfc9298#section-5 we drop non-zero context ids (will always be 0 for draft based  datagrams)
+        return; // per https://datatracker.ietf.org/doc/html/rfc9298#section-5 we drop non-zero context ids (will always be 0 for
+                // draft based  datagrams)
     }
 
     assert(stream->req.forward_datagram.write_ != NULL);
