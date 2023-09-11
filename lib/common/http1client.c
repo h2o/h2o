@@ -135,8 +135,8 @@ static int call_on_body(struct st_h2o_http1client_t *client, const char *errstr)
 {
     assert(!client->_delay_free);
     client->_delay_free = 1;
-    int ret =
-        (client->reader == on_body_to_pipe ? client->pipe_reader.on_body_piped : client->super._cb.on_body)(&client->super, errstr, NULL, 0);
+    int ret = (client->reader == on_body_to_pipe ? client->pipe_reader.on_body_piped : client->super._cb.on_body)(&client->super,
+                                                                                                                  errstr, NULL, 0);
     client->_delay_free = 0;
     return ret;
 }
