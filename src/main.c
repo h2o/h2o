@@ -293,7 +293,7 @@ static struct {
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
-    } * threads;
+    } *threads;
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier_init;
     h2o_barrier_t startup_sync_barrier_post;
@@ -4439,8 +4439,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
-        h2o_configurator_define_command(c, "neverbleed-offload",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_neverbleed_offload);
     }
 
@@ -4656,7 +4655,8 @@ int main(int argc, char **argv)
                     for (size_t i = 0; i != c->commands.size; ++i)
                         printf("%s\n", c->commands.entries[i].name);
                 }
-            } exit(0);
+            }
+                exit(0);
             default:
                 assert(0);
                 break;

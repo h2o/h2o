@@ -247,8 +247,7 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, c
             return NULL;
         if (is_header_name) {
             /* pseudo-headers are checked later in `decode_header` */
-            if ((len == 0 || **src != (uint8_t)':') &&
-                !h2o_hpack_validate_header_name(soft_errors, (char *)*src, len, err_desc))
+            if ((len == 0 || **src != (uint8_t)':') && !h2o_hpack_validate_header_name(soft_errors, (char *)*src, len, err_desc))
                 return NULL;
         } else {
             h2o_hpack_validate_header_value(soft_errors, (char *)*src, len);
