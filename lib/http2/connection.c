@@ -1499,14 +1499,17 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
     } else {
         if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
             h2o_iovec_t server_timing;
-            if (stream->req.send_server_timing && (server_timing = h2o_build_server_timing_trailer(&stream->req, NULL, 0, NULL, 0)).len != 0) {
-                    static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
-                    h2o_vector_reserve(&stream->req.pool, &stream->req.res.trailers, stream->req.res.trailers.size + 1);
-                    stream->req.res.trailers.entries[stream->req.res.trailers.size++] = (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
+            if (stream->req.send_server_timing &&
+                (server_timing = h2o_build_server_timing_trailer(&stream->req, NULL, 0, NULL, 0)).len != 0) {
+                static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
+                h2o_vector_reserve(&stream->req.pool, &stream->req.res.trailers, stream->req.res.trailers.size + 1);
+                stream->req.res.trailers.entries[stream->req.res.trailers.size++] =
+                    (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
             }
             if (stream->req.res.trailers.size != 0) {
                 h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, conn->peer_settings.header_table_size,
-                                       stream->stream_id, conn->peer_settings.max_frame_size, stream->req.res.trailers.entries, stream->req.res.trailers.size);
+                                           stream->stream_id, conn->peer_settings.max_frame_size, stream->req.res.trailers.entries,
+                                           stream->req.res.trailers.size);
             }
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
