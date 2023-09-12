@@ -939,7 +939,7 @@ static int masque_decode_hostport_from_wellknown(const char *_src, size_t _len, 
     char *src = (char *)_src; /* h2o_strtosizefwd takes non-const arg, so ... */
     const char *end = src + _len;
 
-    { /* extract host, adjusting `str` and `len` */
+    { /* extract host */
         size_t host_len;
         if ((host_len = h2o_strstr(src, end - src, H2O_STRLIT("/"))) == SIZE_MAX || host_len == 0)
             return 0;
