@@ -174,6 +174,8 @@ struct st_h2o_http3_server_conn_t {
     } scheduler;
     /**
      * stream map used for datagram flows
+     * TODO: Get rid of this structure once we drop support for masque draft-03; RFC 9297 uses quater stream ID instead of
+     * dynamically mapping streams with flow IDs.
      */
     khash_t(stream) * datagram_flows;
     /**
