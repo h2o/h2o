@@ -934,39 +934,49 @@ static void on_generator_dispose(void *_self)
     dispose_generator(self);
 }
 
+static int masque_decode_hostport_from_wellknown(const char *_src, size_t _len, h2o_iovec_t *host, uint16_t *port)
+{
+    char *src = (char *)_src; /* h2o_strtosizefwd takes non-const arg, so ... */
+    const char *end = src + _len;
+
+    { /* extract host, adjusting `str` and `len` */
+        size_t host_len;
+        if ((host_len = h2o_strstr(src, end - src, H2O_STRLIT("/"))) == SIZE_MAX || host_len == 0)
+            return 0;
+        *host = h2o_iovec_init(src, host_len);
+        src += host_len + 1;
+    }
+
+    { /* parse port */
+        size_t v;
+        if ((v = h2o_strtosizefwd(&src, end - src)) >= 65535)
+            return 0;
+        if (src == end || *src != '/')
+            return 0;
+        *port = (uint16_t)v;
+    }
+
+    return 1;
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
+    static const h2o_iovec_t well_known_masque_prefix = {H2O_STRLIT("/.well-known/masque/udp/")};
     struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host = {};
     uint16_t port;
     int is_tcp, is_masque_draft03 = 0;
 
-    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
+    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
         if (req->upgrade.base == NULL) {
             is_tcp = 1;
-        } else if (h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))) {
-            /* masque (RFC 9298); extract the host and port from the path as defined in RFC 9298 section 3.4 */
-            h2o_iovec_t path_normalized =
-                h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
-            const h2o_iovec_t well_known_masque_udp = h2o_iovec_init(H2O_STRLIT("/.well-known/masque/udp/"));
-            if ((path_normalized.len > well_known_masque_udp.len) &&
-                (h2o_memis(path_normalized.base, well_known_masque_udp.len, well_known_masque_udp.base,
-                           well_known_masque_udp.len))) {
-                h2o_iovec_t iter = h2o_iovec_init(path_normalized.base + well_known_masque_udp.len,
-                                                  path_normalized.len - well_known_masque_udp.len);
-                size_t token_len = 0, p;
-                const char *token = NULL;
-                token = h2o_next_token(&iter, '/', '/', &token_len, NULL);
-                if (token) {
-                    host = h2o_iovec_init(token, token_len);
-                    token = h2o_next_token(&iter, '/', '/', &token_len, NULL);
-                    if (token) {
-                        if ((p = h2o_strtosize(token, token_len)) < 65535)
-                            port = (uint16_t)p;
-                    }
-                }
-            }
-            if ((host.len == 0) || port == 0) {
+        } else if (req->path.len > well_known_masque_prefix.len &&
+                   memcmp(req->path.base, well_known_masque_prefix.base, well_known_masque_prefix.len) == 0) {
+            /* masque (RFC 9298); check that the upgrade token is as expected then extract the host and port from the well-known URI
+             * defined in RFC 9298 section 3.4 */
+            if (!(h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp")) &&
+                  masque_decode_hostport_from_wellknown(req->path.base + well_known_masque_prefix.len,
+                                                        req->path.len - well_known_masque_prefix.len, &host, &port))) {
                 h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
                 return 0;
             }
@@ -975,7 +985,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
             /* unknown type of upgrade, therefore return */
             return -1;
         }
-    } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
         /* masque (draft 03); host and port are stored the same way as ordinary CONNECT */
         is_tcp = 0;
         is_masque_draft03 = 1;
