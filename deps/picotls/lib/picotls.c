@@ -1702,7 +1702,7 @@ static int encode_session_identifier(ptls_context_t *ctx, ptls_buffer_t *buf, ui
         ptls_buffer_push16(buf, csid);
         /* ticket_age_add */
         ptls_buffer_push32(buf, ticket_age_add);
-        /* sessin ID context */
+        /* session ID context */
         ptls_buffer_push_block(buf, 2, {
             if (ctx->ticket_context.is_set) {
                 ptls_buffer_pushv(buf, ctx->ticket_context.bytes, sizeof(ctx->ticket_context.bytes));
