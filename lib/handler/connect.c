@@ -910,8 +910,15 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
 
     record_connect_success(self);
 
-    /* build and submit 200 response */
-    self->src_req->res.status = 200;
+    /* build and submit success */
+    if (self->src_req->version < 0x200 && !self->udp.is_draft03) {
+        assert(self->src_req->upgrade.base != NULL);
+        self->src_req->res.status = 101;
+        self->src_req->res.reason = "Switching Protocols";
+        h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("connect-udp"));
+    } else {
+        self->src_req->res.status = 200;
+    }
     if (!self->udp.is_draft03)
         h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
                               H2O_STRLIT("?1"));
