@@ -937,7 +937,7 @@ static void on_generator_dispose(void *_self)
 /**
  * expects "/host/port/" as input
  */
-static int masque_decode_hostport(const char *_src, size_t _len, h2o_iovec_t *host, uint16_t *port)
+static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t _len, h2o_iovec_t *host, uint16_t *port)
 {
     char *src = (char *)_src; /* h2o_strtosizefwd takes non-const arg, so ... */
     const char *end = src + _len;
@@ -946,7 +946,8 @@ static int masque_decode_hostport(const char *_src, size_t _len, h2o_iovec_t *ho
         size_t host_len;
         if ((host_len = h2o_strstr(src, end - src, H2O_STRLIT("/"))) == SIZE_MAX || host_len == 0)
             return 0;
-        *host = h2o_iovec_init(src, host_len);
+        if ((*host = h2o_percent_decode(pool, h2o_iovec_init(src, host_len))).base == NULL)
+            return 0;
         src += host_len + 1;
     }
 
@@ -978,7 +979,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
             /* masque (RFC 9298); check that the upgrade token is as expected then extract the host and port from the well-known URI
              * defined in RFC 9298 section 3.4 */
             if (!(h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp")) &&
-                  masque_decode_hostport(req->path.base + well_known_masque_prefix.len,
+                  masque_decode_hostport(&req->pool, req->path.base + well_known_masque_prefix.len,
                                          req->path.len - well_known_masque_prefix.len, &host, &port))) {
                 h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
                 return 0;
