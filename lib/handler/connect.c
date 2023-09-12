@@ -946,7 +946,7 @@ static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t
         size_t host_len;
         if ((host_len = h2o_strstr(src, end - src, H2O_STRLIT("/"))) == SIZE_MAX || host_len == 0)
             return 0;
-        if ((*host = h2o_percent_decode(pool, h2o_iovec_init(src, host_len))).base == NULL)
+        if ((*host = h2o_uri_unescape(pool, src, host_len)).base == NULL)
             return 0;
         src += host_len + 1;
     }
