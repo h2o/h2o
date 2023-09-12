@@ -531,21 +531,14 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
  */
 static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
 /**
- * sends out H3 datagrams
+ * Sends H3 datagrams (RFC 9297).
+ * To send RFC 9298-style UDP packets, callers should set Context ID (0) as part of the payload.
  */
-void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, int datagram_format, uint64_t flow_id, h2o_iovec_t *datagrams,
-                                 size_t num_datagrams);
+void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams);
 /**
- * Get the Flow id (UINT64_MAX is not a valid value) from the H3 datagran and return the index (offset) immediately after the flow
- * id in the datagram
+ * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
  */
-uint64_t h2o_http3_h3_datagram_get_flow_id(h2o_http3_conn_t *conn, const void *_src, size_t len, size_t *offset);
-/**
- * Get the context id (currently only valid value is 0) from the H3 datagran and return the payload
- * NOTE that _src has to point to the first octet following the flow_id obtained by calling h2o_http3_h3_datagram_get_flow_id
- */
-uint8_t h2o_http3_datagram_get_payload_and_context_id(h2o_http3_conn_t *conn, int datagram_format, h2o_iovec_t *payload,
-                                                      const void *_src, size_t len);
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len);
 
 /* inline definitions */
 

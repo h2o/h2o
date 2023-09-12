@@ -174,7 +174,7 @@ static void close_stream(struct st_h2o_http3client_req_t *req, int err)
 static void write_datagrams(h2o_httpclient_t *_client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, super, _client);
-    h2o_http3_send_h3_datagrams(&req->conn->super, H2O_DATAGRAM_FORMAT_DRAFT03, req->quic->stream_id, datagrams, num_datagrams);
+    h2o_http3_send_h3_datagrams(&req->conn->super, req->quic->stream_id, datagrams, num_datagrams);
 }
 
 static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_connection_pool_t *pool, h2o_url_t *origin)
@@ -911,30 +911,17 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
     uint64_t flow_id;
     h2o_iovec_t payload;
     quicly_stream_t *qs;
-    uint8_t context_id;
 
-    /* find the flow_id */
-    size_t offset = 0;
-    flow_id = h2o_http3_h3_datagram_get_flow_id(&conn->super, datagram.base, datagram.len, &offset);
-    if ((flow_id == UINT64_MAX) || !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
+    /* decode, validate, get stream */
+    if ((flow_id = h2o_http3_decode_h3_datagram(&payload, datagram.base, datagram.len)) == UINT64_MAX ||
+        !(quicly_stream_is_client_initiated(flow_id) && !quicly_stream_is_unidirectional(flow_id))) {
         h2o_quic_close_connection(&conn->super.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid DATAGRAM frame");
         return;
     }
-
     if ((qs = quicly_get_stream(conn->super.super.quic, flow_id)) == NULL)
         return;
 
     struct st_h2o_http3client_req_t *req = qs->data;
-
-    /* get datagram and context_id (client currently uses DRAFT03 datagrams only in which case context_id will always be 0 (not
-     * used) */
-    context_id = h2o_http3_datagram_get_payload_and_context_id(&conn->super, H2O_DATAGRAM_FORMAT_DRAFT03, &payload,
-                                                               datagram.base + offset, datagram.len - offset);
-    if (context_id != 0) {
-        return; // per https://datatracker.ietf.org/doc/html/rfc9298#section-5 we drop non-zero context ids (will always be 0 for
-                // draft based  datagrams)
-    }
-
     if (req->on_read_datagrams != NULL)
         req->on_read_datagrams(&req->super, &payload, 1);
 }

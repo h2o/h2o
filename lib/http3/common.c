@@ -1367,17 +1367,12 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
     quicly_stream_sync_sendbuf(conn->_control_streams.egress.control->quic, 1);
 }
 
-void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, int datagram_format, uint64_t flow_id, h2o_iovec_t *datagrams,
-                                 size_t num_datagrams)
+void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     for (size_t i = 0; i < num_datagrams; ++i) {
         h2o_iovec_t *src = datagrams + i;
-        uint8_t buf[quicly_encodev_capacity(flow_id) + 1 + src->len], *p = buf; // The '+ 1' is for Context-ID in case of RFC format
+        uint8_t buf[quicly_encodev_capacity(flow_id) + src->len], *p = buf;
         p = quicly_encodev(p, flow_id);
-        if (datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
-            p[0] = 0; // H3 Context-ID for UDP frames is 0 (https://www.rfc-editor.org/rfc/rfc9298#section-5)
-            p++;
-        }
         memcpy(p, src->base, src->len);
         p += src->len;
         ptls_iovec_t payload = ptls_iovec_init(buf, p - buf);
@@ -1387,24 +1382,12 @@ void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, int datagram_format, ui
     h2o_quic_schedule_timer(&conn->super);
 }
 
-uint64_t h2o_http3_h3_datagram_get_flow_id(h2o_http3_conn_t *conn, const void *_src, size_t len, size_t *offset)
+uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len)
 {
     const uint8_t *src = _src, *end = src + len;
-    uint64_t flow_id = ptls_decode_quicint(&src, end);
-    *offset = (void *)src - _src;
+    uint64_t flow_id;
+
+    if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
+        *payload = h2o_iovec_init(src, end - src);
     return flow_id;
-}
-
-uint8_t h2o_http3_datagram_get_payload_and_context_id(h2o_http3_conn_t *conn, int datagram_format, h2o_iovec_t *payload,
-                                                      const void *_src, size_t len)
-{
-    const uint8_t *src = _src, *end = src + len;
-    uint8_t context_id = 0;
-
-    if (datagram_format == H2O_DATAGRAM_FORMAT_RFC) {
-        context_id = *src;
-        src++;
-    }
-    *payload = h2o_iovec_init(src, end - src);
-    return context_id;
 }

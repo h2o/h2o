@@ -80,6 +80,6 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id,
                                        h2o_byte_vector_t *encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
                                        const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
-                                       h2o_iovec_t capsule_protocol, size_t *serialized_header_len);
+                                       size_t *serialized_header_len);
 
 #endif

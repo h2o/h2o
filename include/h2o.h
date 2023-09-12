@@ -1127,10 +1127,6 @@ typedef void (*h2o_forward_datagram_cb)(h2o_req_t *req, h2o_iovec_t *datagrams, 
 #define H2O_SEND_SERVER_TIMING_BASIC 1
 #define H2O_SEND_SERVER_TIMING_PROXY 2
 
-#define H2O_DATAGRAM_FORMAT_NONE 0
-#define H2O_DATAGRAM_FORMAT_DRAFT03 1
-#define H2O_DATAGRAM_FORMAT_RFC 2
-
 /**
  * a HTTP request
  */
@@ -1159,10 +1155,6 @@ struct st_h2o_req_t {
          * abs-path of the request (unmodified)
          */
         h2o_iovec_t path;
-        /**
-         * protocol ('connect-udp' for RFC-based datagram support)
-         */
-        h2o_iovec_t protocol;
         /**
          * offset of '?' within path, or SIZE_MAX if not found
          */
@@ -1389,17 +1381,13 @@ struct st_h2o_req_t {
     h2o_proceed_req_cb proceed_req;
 
     /**
-     * Callbacks used for forwarding datagrams. Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
+     * Callbacks for forwarding HTTP/3 Datagrams (RFC 9297).
+     * As these callbacks act at the RFC 9297 layer, masque Context IDs (RFC 9298) will be part of the *payload* being exchanged.
+     * Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
      */
     struct {
         h2o_forward_datagram_cb write_, read_;
     } forward_datagram;
-
-    /**
-     * When datagrams (connect-udp) are received from the client, datagram_format records whether RFC or draft-03 format is being
-     * used
-     */
-    int datagram_format;
 
     /* internal structure */
     h2o_generator_t *_generator;

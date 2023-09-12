@@ -1329,7 +1329,7 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
                                        const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
-                                       h2o_iovec_t capsule_protocol, size_t *serialized_header_len)
+                                       size_t *serialized_header_len)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1389,11 +1389,6 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
     if (datagram_flow_id.base != NULL)
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
-
-    if (capsule_protocol.base != NULL) {
-        h2o_iovec_t capsule_protocol_header_name = h2o_iovec_init(H2O_STRLIT("capsule-protocol"));
-        do_flatten_header(&ctx, -1, 0, 0, &capsule_protocol_header_name, capsule_protocol, (h2o_header_flags_t){0});
-    }
 
     return finalize_flatten(&ctx, serialized_header_len);
 }
