@@ -1499,7 +1499,7 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
             h2o_linklist_insert(&conn->streams_resp_settings_blocked, &stream->link_resp_settings_blocked);
             return 0;
         }
-        if (conn->h3.peer_settings.h3_datagram_rfc || conn->h3.peer_settings.h3_datagram_draft03) {
+        if (conn->h3.peer_settings.h3_datagram) {
             /* register the route that would be used by the CONNECT handler for forwarding datagrams */
             stream->req.forward_datagram.read_ = tunnel_on_udp_read;
             /* if the request type is draft-03, build and return the value of datagram-flow-id header field */

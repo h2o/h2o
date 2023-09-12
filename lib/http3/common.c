@@ -1283,19 +1283,6 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             blocked_streams = value;
             break;
         case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
-            switch (value) {
-            case 0:
-                break;
-            case 1: {
-                const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
-                if (remote_tp->max_datagram_frame_size == 0)
-                    goto Malformed;
-                conn->peer_settings.h3_datagram_rfc = 1;
-            } break;
-            default:
-                goto Malformed;
-            }
-            break;
         case H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03:
             switch (value) {
             case 0:
@@ -1304,7 +1291,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
                 const quicly_transport_parameters_t *remote_tp = quicly_get_remote_transport_parameters(conn->super.quic);
                 if (remote_tp->max_datagram_frame_size == 0)
                     goto Malformed;
-                conn->peer_settings.h3_datagram_draft03 = 1;
+                conn->peer_settings.h3_datagram = 1;
             } break;
             default:
                 goto Malformed;

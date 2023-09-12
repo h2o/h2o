@@ -389,8 +389,7 @@ struct st_h2o_http3_conn_t {
      */
     struct {
         uint64_t max_field_section_size;
-        unsigned h3_datagram_rfc : 1;
-        unsigned h3_datagram_draft03 : 1;
+        unsigned h3_datagram : 1;
     } peer_settings;
     struct {
         struct {
