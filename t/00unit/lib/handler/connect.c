@@ -100,8 +100,25 @@ static void test_acl(void)
     ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
 }
 
+static void test_masque_decode_hostport(void)
+{
+    h2o_iovec_t host;
+    uint16_t port;
+
+    ok(masque_decode_hostport(H2O_STRLIT("example.com/80/"), &host, &port));
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("example.com")));
+    ok(port == 80);
+
+    /* port must exist */
+    ok(!masque_decode_hostport(H2O_STRLIT("example.com"), &host, &port));
+
+    /* slash after port must exist */
+    ok(!masque_decode_hostport(H2O_STRLIT("example.com/80"), &host, &port));
+}
+
 void test_lib__handler__connect_c()
 {
     subtest("to_bitmask", test_to_bitmask);
     subtest("acl", test_acl);
+    subtest("masque_decode_hostport", test_masque_decode_hostport);
 }
