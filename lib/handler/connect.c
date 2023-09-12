@@ -971,24 +971,26 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     uint16_t port;
     int is_tcp, is_masque_draft03 = 0;
 
-    if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
-        if (req->upgrade.base == NULL) {
-            is_tcp = 1;
-        } else if (req->path.len > well_known_masque_prefix.len &&
-                   memcmp(req->path.base, well_known_masque_prefix.base, well_known_masque_prefix.len) == 0) {
-            /* masque (RFC 9298); check that the upgrade token is as expected then extract the host and port from the well-known URI
-             * defined in RFC 9298 section 3.4 */
-            if (!(h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp")) &&
-                  masque_decode_hostport(&req->pool, req->path.base + well_known_masque_prefix.len,
-                                         req->path.len - well_known_masque_prefix.len, &host, &port))) {
-                h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-                return 0;
-            }
-            is_tcp = 0;
-        } else {
-            /* unknown type of upgrade, therefore return */
-            return -1;
+    if ((req->version < 0x200 ? h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+                              : h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) &&
+        req->upgrade.base != NULL) {
+        /* extended CONNECT */
+        if (!h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp")))
+            return -1; /* unknown protocol */
+        if (!(req->path.len > well_known_masque_prefix.len &&
+              memcmp(req->path.base, well_known_masque_prefix.base, well_known_masque_prefix.len) == 0))
+            return -1; /* unknown path */
+        /* masque (RFC 9298); check that the upgrade token is as expected then extract the host and port from the well-known URI
+         * defined in RFC 9298 section 3.4 */
+        if (!masque_decode_hostport(&req->pool, req->path.base + well_known_masque_prefix.len,
+                                    req->path.len - well_known_masque_prefix.len, &host, &port)) {
+            h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+            return 0;
         }
+        is_tcp = 0;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT")) && req->upgrade.base == NULL) {
+        /* old-style CONNECT */
+        is_tcp = 1;
     } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
         /* masque (draft 03); host and port are stored the same way as ordinary CONNECT */
         is_tcp = 0;
