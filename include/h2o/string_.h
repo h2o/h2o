@@ -123,8 +123,9 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
 /**
  * decodes a percent-encoded string (RFC 3986 Section 2.1)
  * @param pool memory pool (must not be NULL)
- * @param str source string
- * @return a decoded string allocated from pool if str contains '%', str if it does not, {NULL,0} if invalid
+ * @param s source string
+ * @param l length of source string
+ * @return a decoded string allocated from pool if the source string contains '%', {s,l} unchanged if it does not, {NULL,0} if invalid
  */
 h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *s, size_t l);
 /**
