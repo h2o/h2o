@@ -64,7 +64,12 @@
 #include <sys/prctl.h>
 #endif
 #include <openssl/crypto.h>
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#include <openssl/decoder.h>
+#include <openssl/evp.h>
+#else
 #include <openssl/dh.h>
+#endif
 #include <openssl/err.h>
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
@@ -2076,6 +2081,24 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 ERR_print_errors_cb(on_openssl_print_errors, stderr);
                 goto Error;
             }
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+            OSSL_DECODER_CTX *dctx;
+            EVP_PKEY *pkey = NULL;
+            dctx = OSSL_DECODER_CTX_new_for_pkey(&pkey, "PEM", NULL, "DH", OSSL_KEYMGMT_SELECT_KEYPAIR, NULL, NULL);
+            if (!OSSL_DECODER_from_bio(dctx, bio)) {
+                BIO_free(bio);
+                EVP_PKEY_free(pkey);
+                OSSL_DECODER_CTX_free(dctx);
+                h2o_configurator_errprintf(cmd, *dh_file, "failed to load dhparam file:%s\n", (*dh_file)->data.scalar);
+                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                goto Error;
+            }
+            BIO_free(bio);
+            SSL_CTX_set0_tmp_dh_pkey(identity->ossl, pkey);
+            SSL_CTX_set_options(identity->ossl, SSL_OP_SINGLE_DH_USE);
+            EVP_PKEY_free(pkey);
+            OSSL_DECODER_CTX_free(dctx);
+#else
             DH *dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
             BIO_free(bio);
             if (dh == NULL) {
@@ -2086,6 +2109,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             SSL_CTX_set_tmp_dh(identity->ossl, dh);
             SSL_CTX_set_options(identity->ossl, SSL_OP_SINGLE_DH_USE);
             DH_free(dh);
+#endif
         }
 #if H2O_USE_NPN
         h2o_ssl_register_npn_protocols(identity->ossl, h2o_npn_protocols);
