@@ -1351,9 +1351,8 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
         /* Handling of masque draft-03. Method is CONNECT-UDP and :protocol is not used, so we set `:protocol` to "connect-udp" to
          * make it look like an upgrade. The method is preserved and can be used to distinguish between RFC 9298 version which uses
-         * "CONNECT". */
+         * "CONNECT". The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
         if (!((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) == 0 &&
-              stream->req.input.scheme == &H2O_URL_SCHEME_MASQUE &&
               h2o_memis(stream->req.input.path.base, stream->req.input.path.len, H2O_STRLIT("/")))) {
             shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
             return 0;
