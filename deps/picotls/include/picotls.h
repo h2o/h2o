@@ -91,6 +91,18 @@ extern "C" {
 #define PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT UINT64_MAX       /* at least 2^64 */
 #define PTLS_CHACHA20POLY1305_INTEGRITY_LIMIT UINT64_C(0x1000000000) /* 2^36 */
 
+#define PTLS_AEGIS128L_KEY_SIZE 16
+#define PTLS_AEGIS128L_IV_SIZE 16
+#define PTLS_AEGIS128L_TAG_SIZE 16
+#define PTLS_AEGIS128L_CONFIDENTIALITY_LIMIT UINT64_MAX          /* at least 2^64 */
+#define PTLS_AEGIS128L_INTEGRITY_LIMIT UINT64_C(0x1000000000000) /* 2^48 */
+
+#define PTLS_AEGIS256_KEY_SIZE 32
+#define PTLS_AEGIS256_IV_SIZE 32
+#define PTLS_AEGIS256_TAG_SIZE 16
+#define PTLS_AEGIS256_CONFIDENTIALITY_LIMIT UINT64_MAX          /* at least 2^64 */
+#define PTLS_AEGIS256_INTEGRITY_LIMIT UINT64_C(0x1000000000000) /* 2^48 */
+
 #define PTLS_BLOWFISH_KEY_SIZE 16
 #define PTLS_BLOWFISH_BLOCK_SIZE 8
 
@@ -104,7 +116,7 @@ extern "C" {
 #define PTLS_SHA512_DIGEST_SIZE 64
 
 #define PTLS_MAX_SECRET_SIZE 32
-#define PTLS_MAX_IV_SIZE 16
+#define PTLS_MAX_IV_SIZE 32
 #define PTLS_MAX_DIGEST_SIZE 64
 
 /* versions */
@@ -118,6 +130,10 @@ extern "C" {
 #define PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384 "TLS_AES_256_GCM_SHA384"
 #define PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 0x1303
 #define PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256 "TLS_CHACHA20_POLY1305_SHA256"
+#define PTLS_CIPHER_SUITE_AEGIS256_SHA384 0x1306
+#define PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA384 "TLS_AEGIS_256_SHA384"
+#define PTLS_CIPHER_SUITE_AEGIS128L_SHA256 0x1307
+#define PTLS_CIPHER_SUITE_NAME_AEGIS128L_SHA256 "TLS_AEGIS_128L_SHA256"
 
 /* TLS/1.2 cipher-suites that we support (for compatibility, OpenSSL names are used) */
 #define PTLS_CIPHER_SUITE_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 0xc02b
@@ -870,6 +886,11 @@ struct st_ptls_context_t {
      */
     unsigned server_cipher_preference : 1;
     /**
+     * boolean indicating if ChaCha20-Poly1305 should be reprioritized to the top of the server cipher list if a ChaCha20-Poly1305
+     * cipher is at the top of the client cipher list
+     */
+    unsigned server_cipher_chacha_priority : 1;
+    /**
      *
      */
     ptls_encrypt_ticket_t *encrypt_ticket;
@@ -1412,6 +1433,10 @@ static ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
 int ptls_build_tls12_export_params(ptls_context_t *ctx, ptls_buffer_t *output, int is_server, int session_reused,
                                    ptls_cipher_suite_t *cipher, const void *master_secret, const void *hello_randoms,
                                    uint64_t next_send_record_iv, const char *server_name, ptls_iovec_t negotiated_protocol);
+/**
+ * store the parameters of a post-handshake TLS connection so that it can be reconstructed later
+ */
+int ptls_export(ptls_t *tls, ptls_buffer_t *output);
 /**
  * create a post-handshake TLS connection object using given parameters
  */

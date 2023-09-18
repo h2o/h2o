@@ -555,16 +555,18 @@ int main(int argc, char **argv)
     ptls_context_t openssl_ctx = {.random_bytes = ptls_openssl_random_bytes,
                                   .get_time = &ptls_get_time,
                                   .key_exchanges = ptls_openssl_key_exchanges,
-                                  .cipher_suites = ptls_openssl_cipher_suites,
+                                  .cipher_suites = ptls_openssl_cipher_suites_all,
                                   .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                                   .certificates = {&cert, 1},
                                   .ech = {.client = {.ciphers = ptls_openssl_hpke_cipher_suites, .kems = ptls_openssl_hpke_kems},
                                           .server = {.create_opener = &ech_create_opener,
                                                      .retry_configs = {(uint8_t *)ECH_CONFIG_LIST, sizeof(ECH_CONFIG_LIST) - 1}}},
                                   .sign_certificate = &openssl_sign_certificate.super};
-    assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
-    ++openssl_ctx_sha256only.cipher_suites;
+    while (openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size != 32) {
+        assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
+        ++openssl_ctx_sha256only.cipher_suites;
+    }
     assert(openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size == 32); /* sha256 */
 
     ctx = ctx_peer = &openssl_ctx;
