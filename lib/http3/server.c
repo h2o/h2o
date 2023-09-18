@@ -1334,15 +1334,17 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
-    int is_connect = 0, expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+    int is_connect, must_exist_map, may_exist_map;
     const int can_receive_datagrams =
         quicly_get_context(get_conn(stream)->h3.super.quic)->transport_params.max_datagram_frame_size != 0;
     if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
         is_connect = 1;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+        may_exist_map = 0;
         /* extended connect looks like an ordinary request plus an upgrade token (:protocol) */
         if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
-            expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS |
-                            H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
+            must_exist_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS |
+                              H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
             if (can_receive_datagrams)
                 datagram_flow_id = stream->quic->stream_id / 4;
         }
@@ -1370,14 +1372,19 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         assert(stream->req.upgrade.base == NULL); /* otherwise PROTOCOL_EXISTS will be set */
         is_connect = 1;
-        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |
+                         H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = 0;
     } else {
         /* normal request */
-        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        is_connect = 0;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |
+                         H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = 0;
     }
 
-    /* check if existence and non-existence of pseudo headers are correct */
-    if (header_exists_map != expected_map) {
+    /* check that all MUST pseudo headers exist, and that there are no other pseudo headers than MUST or MAY */
+    if (!((header_exists_map & must_exist_map) == must_exist_map && (header_exists_map & ~(must_exist_map | may_exist_map)) == 0)) {
         shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
         return 0;
     }
