@@ -681,6 +681,7 @@
 /* Begin PBXFileReference section */
 		080590262A5E463A00B2B10E /* 40http2-header-softerror.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http2-header-softerror.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		080B3CC227E1AF6C004AC8E6 /* config.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = config.c; sourceTree = "<group>"; };
+		080BDCDB2AB92C630091CE31 /* 40tls13-aegis.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls13-aegis.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		0810E6A7286DACB600333FA4 /* 50reverse-proxy-null-host-header.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-null-host-header.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		0810E6A8286DACB600333FA4 /* 50connect-proxy-status.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-proxy-status.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2263,6 +2264,7 @@
 				08B329832941B407009D6766 /* 40tls-ech.t */,
 				086001CC273BBBCF0043886F /* 40tls-multiple-certs.t */,
 				E93BB6D025E09504009C24D8 /* 40tls-raw-pubkey.t */,
+				080BDCDB2AB92C630091CE31 /* 40tls13-aegis.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				106C22FB1C0413DA00405689 /* 40tunnel.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
