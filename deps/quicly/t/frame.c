@@ -28,8 +28,9 @@ static void test_ack_decode_underflow(void)
 
     { /* ack pn=0 */
         const uint8_t pat[] = {0, 0, 0, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) == 0);
         ok(src == pat + sizeof(pat));
+        ok(decoded.multipath_cid == UINT64_MAX);
         ok(decoded.largest_acknowledged == 0);
         ok(decoded.num_gaps == 0);
         ok(decoded.ack_block_lengths[0] == 1);
@@ -37,13 +38,14 @@ static void test_ack_decode_underflow(void)
     }
     { /* underflow in first block length */
         const uint8_t pat[] = {0, 0, 0, 1}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) != 0);
     }
 
     { /* frame with gap going down to pn=0 */
         const uint8_t pat[] = {2, 0, 1, 0, 0, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) == 0);
         ok(src == pat + sizeof(pat));
+        ok(decoded.multipath_cid == UINT64_MAX);
         ok(decoded.largest_acknowledged == 2);
         ok(decoded.num_gaps == 1);
         ok(decoded.ack_block_lengths[0] == 1);
@@ -53,11 +55,11 @@ static void test_ack_decode_underflow(void)
 
     { /* additional block length going negative */
         const uint8_t pat[] = {2, 0, 1, 0, 0, 1}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) != 0);
     }
     { /* gap going negative */
         const uint8_t pat[] = {2, 0, 1, 0, 3, 0}, *src = pat;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) != 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) != 0);
     }
 }
 
@@ -66,7 +68,7 @@ static void test_ack_decode(void)
     {
         const uint8_t pat[] = {0x34, 0x00, 0x00, 0x11}, *src = pat;
         quicly_ack_frame_t decoded;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 0x34);
         ok(decoded.num_gaps == 0);
@@ -77,7 +79,7 @@ static void test_ack_decode(void)
     {
         const uint8_t pat[] = {0x34, 0x00, 0x02, 0x00, 0x01, 0x02, 0x03, 0x04}, *src = pat;
         quicly_ack_frame_t decoded;
-        ok(quicly_decode_ack_frame(&src, pat + sizeof(pat), &decoded, 0) == 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, pat + sizeof(pat), &decoded) == 0);
         ok(src == pat + sizeof(pat));
         ok(decoded.largest_acknowledged == 0x34);
         ok(decoded.num_gaps == 2);
@@ -103,7 +105,7 @@ static void test_ack_decode(void)
             end = quicly_encodev(end, i % 10); // ack-range
         }
 
-        ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
+        ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, end, &decoded) == 0);
         ok(decoded.largest_acknowledged == 0xFA00);
         ok(decoded.ack_delay == 0);
         ok(decoded.num_gaps == QUICLY_ACK_MAX_GAPS);
@@ -132,11 +134,11 @@ static void test_ack_encode(void)
     quicly_ranges_add(&ranges, 0x12, 0x14);
 
     /* encode */
-    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), SIZE_MAX, &ranges, 63);
     ok(end - buf == 5);
     /* decode */
     src = buf + 1;
-    ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
+    ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, end, &decoded) == 0);
     ok(src == end);
     ok(decoded.ack_delay == 63);
     ok(decoded.num_gaps == 0);
@@ -146,11 +148,11 @@ static void test_ack_encode(void)
     quicly_ranges_add(&ranges, 0x10, 0x11);
 
     /* encode */
-    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), SIZE_MAX, &ranges, 63);
     ok(end - buf == 7);
     /* decode */
     src = buf + 1;
-    ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
+    ok(quicly_decode_ack_frame(QUICLY_FRAME_TYPE_ACK, &src, end, &decoded) == 0);
     ok(src == end);
     ok(decoded.ack_delay == 63);
     ok(decoded.num_gaps == 1);

@@ -347,6 +347,60 @@ subtest "raw-certificates-ec" => sub {
     is $resp, "hello world\n";
 };
 
+subtest "path-migration" => sub {
+    my $doit = sub {
+        my ($client_opts, $server_opts) = @_;
+        my $guard = spawn_server(@$server_opts, "-e", "$tempdir/events");
+        # spawn client that sends one request every second, recording events to file
+        my $pid = fork;
+        die "fork failed:$!"
+        unless defined $pid;
+        if ($pid == 0) {
+            exec $cli, @$client_opts, qw(-O -i 1000 127.0.0.1), $port;
+            die "exec $cli failed:$!";
+        }
+        # send two USR1 signals, each of them causing path migration between requests
+        sleep .5;
+        kill 'USR1', $pid;
+        sleep 2;
+        kill 'USR1', $pid;
+        sleep 2;
+        # kill the peers
+        kill 9, $pid;
+        while (waitpid($pid, 0) != $pid) {}
+        undef $guard;
+        # read the log
+        my $log = slurp_file("$tempdir/events");
+        # check that the path has migrated twice
+        like $log, qr{"type":"promote_path".*\n.*"type":"promote_path"}s;
+        subtest "CID seq 1 is used for 1st path probe" => sub {
+            plan skip_all => "zero-length CID"
+                unless @$client_opts;
+            complex $log, sub {
+                /"type":"new_connection_id_receive",[^\n]*"sequence":1,[^\n]*"cid":"(.*?)"/s;
+                my $cid1 = $1;
+                /"type":"packet_prepare",[^\n]*"dcid":"([^\"]*)"[^\n]*\n[^\n]*"type":"path_challenge_send",/s;
+                my $cid_probe = $1;
+                $cid1 eq $cid_probe;
+            };
+        };
+    };
+    my $do_set = sub {
+        my @opts = @_;
+        subtest "without-cid" => sub {
+            $doit->(\@opts, \@opts);
+        };
+        subtest "with-cid" => sub {
+            $doit->([@opts, qw(-B 01234567)], \@opts);
+        };
+    };
+    subtest "non-multipath" => sub {
+        $do_set->();
+    };
+    subtest "multipath" => sub {
+        $do_set->("--multipath");
+    };
+};
 
 done_testing;
 

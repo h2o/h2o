@@ -26,7 +26,8 @@
 static int64_t now;
 static uint64_t num_packets_lost = 0;
 
-static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lost_packet, int is_time_threshold)
+static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lost_packet, int is_time_threshold,
+                             struct st_quicly_conn_t *conn)
 {
     ++num_packets_lost;
 }
@@ -36,13 +37,13 @@ static void acked(quicly_loss_t *loss, uint64_t pn, size_t epoch)
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
 
-    quicly_loss_init_sentmap_iter(loss, &iter, now, quicly_spec_context.transport_params.max_ack_delay, 0);
+    quicly_loss_init_sentmap_iter(loss, &iter, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL);
     while ((sent = quicly_sentmap_get(&iter))->packet_number != pn) {
         assert(sent->packet_number != UINT64_MAX);
         quicly_sentmap_skip(&iter);
     }
     int64_t sent_at = sent->sent_at;
-    ok(quicly_sentmap_update(&loss->sentmap, &iter, QUICLY_SENTMAP_EVENT_ACKED) == 0);
+    ok(quicly_sentmap_update(&loss->sentmap, &iter, QUICLY_SENTMAP_EVENT_ACKED, NULL) == 0);
 
     quicly_loss_on_ack_received(loss, pn, epoch, now, sent_at, 0, 1);
 }
@@ -60,31 +61,31 @@ static void test_time_detection(void)
 
     /* commit 3 packets (pn=0..2); check that loss timer is not active */
     ok(quicly_sentmap_prepare(&loss.sentmap, 0, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 1, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 2, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
 
     now += 10;
 
     /* receive ack for the 1st packet; check that loss timer is not active */
     acked(&loss, 0, QUICLY_EPOCH_INITIAL);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
 
     now += 10;
 
     /* receive ack for the 3rd packet; check that loss timer is active */
     acked(&loss, 2, QUICLY_EPOCH_INITIAL);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time != INT64_MAX);
     ok(num_packets_lost == 0);
 
     now = loss.loss_time;
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
     ok(num_packets_lost == 1);
 
@@ -104,25 +105,25 @@ static void test_pn_detection(void)
 
     /* commit 4 packets (pn=0..3); check that loss timer is not active */
     ok(quicly_sentmap_prepare(&loss.sentmap, 0, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 1, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 2, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 3, now, QUICLY_EPOCH_INITIAL) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
 
     /* receive ack for the 3rd packet; loss timer is activated but no packets are declared as lost */
     acked(&loss, 2, QUICLY_EPOCH_INITIAL);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time != INT64_MAX);
     ok(num_packets_lost == 0);
 
     /* receive ack for the 4th packet; loss timer is active and pn=0 is declared lost */
     acked(&loss, 3, QUICLY_EPOCH_INITIAL);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time != INT64_MAX);
     ok(num_packets_lost == 1);
 
@@ -145,9 +146,9 @@ static void test_slow_cert_verify(void)
 
     /* sent Handshake+1RTT packet */
     ok(quicly_sentmap_prepare(&loss.sentmap, 1, now, QUICLY_EPOCH_HANDSHAKE) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 2, now, QUICLY_EPOCH_1RTT) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     last_retransmittable_sent_at = now;
     quicly_loss_update_alarm(&loss, now, last_retransmittable_sent_at, 1, 0, 1, 0, 1);
 
@@ -155,29 +156,29 @@ static void test_slow_cert_verify(void)
 
     /* receive ack for the Handshake packet, but 1RTT packet remains unacknowledged */
     acked(&loss, 1, QUICLY_EPOCH_HANDSHAKE);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
     ok(num_packets_lost == 0);
 
     /* PTO fires */
     now = loss.alarm_at;
     ok(quicly_loss_on_alarm(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, &min_packets_to_send,
-                            &restrict_sending, on_loss_detected) == 0);
+                            &restrict_sending, NULL, on_loss_detected) == 0);
     ok(restrict_sending);
     ok(min_packets_to_send == 2);
     ok(num_packets_lost == 0);
 
     /* therefore send probes */
     ok(quicly_sentmap_prepare(&loss.sentmap, 3, now, QUICLY_EPOCH_HANDSHAKE) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     ok(quicly_sentmap_prepare(&loss.sentmap, 4, now, QUICLY_EPOCH_1RTT) == 0);
-    quicly_sentmap_commit(&loss.sentmap, 10);
+    quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
 
     now += 10;
 
     /* again receives an ack for the Handshake packet, but 1RTT packet remains unacknowledged */
     acked(&loss, 3, QUICLY_EPOCH_HANDSHAKE);
-    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, on_loss_detected) == 0);
+    ok(quicly_loss_detect_loss(&loss, now, quicly_spec_context.transport_params.max_ack_delay, 0, NULL, on_loss_detected) == 0);
     ok(loss.loss_time == INT64_MAX);
     ok(num_packets_lost == 0);
 

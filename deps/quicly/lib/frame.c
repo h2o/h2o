@@ -31,7 +31,8 @@ uint8_t *quicly_encode_path_challenge_frame(uint8_t *dst, int is_response, const
     return dst;
 }
 
-uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t *ranges, uint64_t ack_delay)
+uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, uint64_t multipath_cid, quicly_ranges_t *ranges,
+                                 uint64_t ack_delay)
 {
 #define WRITE_BLOCK(start, end)                                                                                                    \
     do {                                                                                                                           \
@@ -47,7 +48,12 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
     assert(ranges->num_ranges != 0);
 
     /* number of bytes being emitted without space check are 1 + 8 + 8 + 1 bytes (as defined in QUICLY_ACK_FRAME_CAPACITY) */
-    *dst++ = QUICLY_FRAME_TYPE_ACK;
+    if (multipath_cid != UINT64_MAX) {
+        dst = quicly_encodev(dst, QUICLY_FRAME_TYPE_ACK_MP);
+        dst = quicly_encodev(dst, multipath_cid);
+    } else {
+        *dst++ = QUICLY_FRAME_TYPE_ACK;
+    }
     dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
     dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
     PTLS_BUILD_ASSERT(QUICLY_MAX_ACK_BLOCKS - 1 <= 63);
@@ -65,10 +71,39 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
 #undef WRITE_BLOCK
 }
 
-int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame, int is_ack_ecn)
+int quicly_decode_ack_frame(uint64_t frame_type, const uint8_t **src, const uint8_t *end, quicly_ack_frame_t *frame)
 {
     uint64_t i, num_gaps, gap, ack_range;
+    int is_ack_ecn = 0, is_multipath = 0;
 
+    switch (frame_type) {
+    case QUICLY_FRAME_TYPE_ACK:
+        is_ack_ecn = 0;
+        is_multipath = 0;
+        break;
+    case QUICLY_FRAME_TYPE_ACK_ECN:
+        is_ack_ecn = 1;
+        is_multipath = 0;
+        break;
+    case QUICLY_FRAME_TYPE_ACK_MP:
+        is_ack_ecn = 0;
+        is_multipath = 1;
+        break;
+    case QUICLY_FRAME_TYPE_ACK_MP_ECN:
+        is_ack_ecn = 1;
+        is_multipath = 1;
+        break;
+    default:
+        assert(!"logic flaw");
+        break;
+    }
+
+    if (is_multipath) {
+        if ((frame->multipath_cid = quicly_decodev(src, end)) == UINT64_MAX)
+            goto Error;
+    } else {
+        frame->multipath_cid = UINT64_MAX;
+    }
     if ((frame->largest_acknowledged = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
     if ((frame->ack_delay = quicly_decodev(src, end)) == UINT64_MAX)

@@ -156,13 +156,14 @@ void test_local_cid(void)
 
     /* retire everything */
     int has_pending;
-    ok(quicly_local_cid_retire(&set, 0, &has_pending) == 0);
+    struct st_quicly_pn_space_t *space;
+    ok(quicly_local_cid_retire(&set, 0, &has_pending, &space) == 0);
     ok(has_pending);
-    ok(quicly_local_cid_retire(&set, 1, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 1, &has_pending, &space) == 0);
     ok(has_pending);
-    ok(quicly_local_cid_retire(&set, 2, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 2, &has_pending, &space) == 0);
     ok(has_pending);
-    ok(quicly_local_cid_retire(&set, 3, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 3, &has_pending, &space) == 0);
     ok(has_pending);
     ok(count_by_state(&set, QUICLY_LOCAL_CID_STATE_PENDING) == 4);
     /* partial send */
@@ -175,7 +176,7 @@ void test_local_cid(void)
     ok(exists_once(&set, 7, QUICLY_LOCAL_CID_STATE_PENDING));
 
     /* retire one in the middle of PENDING CIDs */
-    ok(quicly_local_cid_retire(&set, 6, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 6, &has_pending, &space) == 0);
     ok(has_pending);
     ok(verify_array(&set) == 0);
 
@@ -189,9 +190,9 @@ void test_local_cid(void)
     ok(exists_once(&set, 8, QUICLY_LOCAL_CID_STATE_PENDING));
 
     /* at this moment sequence=0,1,2,3,6 have been retired */
-    ok(quicly_local_cid_retire(&set, 4, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 4, &has_pending, &space) == 0);
     ok(has_pending);
-    ok(quicly_local_cid_retire(&set, 5, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&set, 5, &has_pending, &space) == 0);
     ok(has_pending);
     /* sequence=0-6 have been retired */
 
@@ -201,9 +202,9 @@ void test_local_cid(void)
     while (num_retired < QUICLY_MAX_PATH_ID) {
         if (seq_to_retire == QUICLY_MAX_PATH_ID - 1) {
             /* this is the maximum CID we can generate -- after retiring it, there should be no CID to send */
-            ok(quicly_local_cid_retire(&set, seq_to_retire, &has_pending) == QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
+            ok(quicly_local_cid_retire(&set, seq_to_retire, &has_pending, &space) == QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
         } else {
-            ok(quicly_local_cid_retire(&set, seq_to_retire, &has_pending) == 0);
+            ok(quicly_local_cid_retire(&set, seq_to_retire, &has_pending, &space) == 0);
             ok(has_pending);
         }
         num_retired++;
@@ -229,7 +230,7 @@ void test_local_cid(void)
     ok(exists_once(&small_set, 1, QUICLY_LOCAL_CID_STATE_PENDING));
     ok(exists_once(&small_set, 2, QUICLY_LOCAL_CID_STATE_PENDING));
     ok(!exists_once(&small_set, 3, QUICLY_LOCAL_CID_STATE_PENDING)); /* seq=3 should not exist yet */
-    ok(quicly_local_cid_retire(&small_set, 0, &has_pending) == 0);
+    ok(quicly_local_cid_retire(&small_set, 0, &has_pending, &space) == 0);
     ok(has_pending);
     ok(exists_once(&small_set, 3, QUICLY_LOCAL_CID_STATE_PENDING));
 }
