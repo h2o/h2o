@@ -122,7 +122,7 @@ h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *);
                 do {                                                                                                               \
                     block                                                                                                          \
                 } while (0);                                                                                                       \
-                __atomic_store_n(&lock, 1, __ATOMIC_RELEASE);                                                                        \
+                __atomic_store_n(&lock, 1, __ATOMIC_RELEASE);                                                                      \
             }                                                                                                                      \
             pthread_mutex_unlock(&mutex);                                                                                          \
         }                                                                                                                          \
