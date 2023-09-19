@@ -529,7 +529,8 @@ static void usage(const char *progname)
             "  --max-udp-payload-size <bytes>\n"
             "               specifies the max_udp_payload_size transport parameter to send\n"
             "               (default: %" PRIu64 ")\n"
-            " --io-timeout <milliseconds>\n"
+            "  --multipath  enables QUIC multipath\n"
+            "  --io-timeout <milliseconds>\n"
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
             "  -h, --help   prints this help\n"
             "\n",
@@ -649,6 +650,7 @@ int main(int argc, char **argv)
         OPT_MAX_UDP_PAYLOAD_SIZE,
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
+        OPT_MULTIPATH,
         OPT_IO_TIMEOUT,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -656,6 +658,7 @@ int main(int argc, char **argv)
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+                                {"multipath", no_argument, NULL, OPT_MULTIPATH},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -825,6 +828,9 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.ack_frequency = (uint16_t)(f * 1024);
         } break;
+        case OPT_MULTIPATH:
+            h3ctx.quic.transport_params.enable_multipath = 1;
+            break;
         case OPT_IO_TIMEOUT:
             if (sscanf(optarg, "%" SCNu64, &io_timeout) != 1) {
                 fprintf(stderr, "failed to parse --io-timeout\n");
