@@ -2082,6 +2082,10 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
+
+    for (size_t i = 0; quic->tls->cipher_suites[i] != NULL; ++i)
+        assert(quic->tls->cipher_suites[i]->aead->ctr_cipher != NULL &&
+               "for header protection, QUIC ciphers MUST provide CTR mode");
 }
 
 h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic)

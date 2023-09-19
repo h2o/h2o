@@ -1456,7 +1456,7 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
-static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, int is_quic)
 {
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
@@ -1468,17 +1468,21 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             return NULL;
         }
         ptls_cipher_suite_t *cand;
-        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites_all[i]) != NULL; ++i)
             if (strcmp(element->data.scalar, cand->name) == 0)
                 goto Found;
         /* not found */
         char msg[1024];
         strcpy(msg, "Unexpected cipher suite. Expected one of:");
-        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        for (size_t i = 0; ptls_openssl_cipher_suites_all[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites_all[i]->name);
         h2o_configurator_errprintf(cmd, node, "%s", msg);
         return NULL;
     Found:
+        if (is_quic && cand->aead->ctr_cipher == NULL) {
+            h2o_configurator_errprintf(cmd, element, "cipher-suite %s cannot be used with QUIC (no CTR mode)", cand->name);
+            return NULL;
+        }
         h2o_vector_reserve(NULL, &ret, ret.size + 1);
         ret.entries[ret.size++] = cand;
         if (cand == &ptls_openssl_aes128gcmsha256)
@@ -1997,7 +2001,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
+        if (cipher_suite_tls13_node != NULL &&
+            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
@@ -4613,6 +4618,9 @@ int main(int argc, char **argv)
 #endif
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
+#endif
+#if PTLS_HAVE_AEGIS
+                printf("libaegis: YES\n");
 #endif
                 exit(0);
             case 'h':

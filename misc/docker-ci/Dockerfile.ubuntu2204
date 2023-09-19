@@ -73,6 +73,10 @@ RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/g
       && make clean \
     )
 
+# libaegis
+RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/jedisct1/libaegis.git \
+ && (cd libaegis && mkdir build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && make install && make clean)
+
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
