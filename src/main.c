@@ -4614,6 +4614,9 @@ int main(int argc, char **argv)
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
 #endif
+#if PTLS_HAVE_AEGIS
+                printf("libaegis: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
