@@ -64,7 +64,7 @@ static void test_secp256r1_sign(void)
 static void test_hrr(void)
 {
     ptls_key_exchange_algorithm_t *client_keyex[] = {&ptls_minicrypto_x25519, &ptls_minicrypto_secp256r1, NULL};
-    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, &ptls_get_time, client_keyex, ptls_minicrypto_cipher_suites};
+    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, &ptls_get_time, client_keyex, ptls_minicrypto_cipher_suites_all};
     ptls_t *client, *server;
     ptls_buffer_t cbuf, sbuf, decbuf;
     uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
@@ -153,7 +153,7 @@ int main(int argc, char **argv)
     ptls_context_t ctxbuf = {ptls_minicrypto_random_bytes,
                              &ptls_get_time,
                              ptls_minicrypto_key_exchanges,
-                             ptls_minicrypto_cipher_suites,
+                             ptls_minicrypto_cipher_suites_all,
                              {&cert, 1},
                              {{NULL}},
                              NULL,

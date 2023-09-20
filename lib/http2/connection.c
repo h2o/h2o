@@ -616,11 +616,11 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
+    h2o_probe_log_request(&stream->req, stream->stream_id);
+
     /* fixup the scheme so that it would never be a NULL pointer (note: checks below are done using `header_exists_map`) */
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
-
-    h2o_probe_log_request(&stream->req, stream->stream_id);
 
     int is_connect, must_exist_map, may_exist_map;
     if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
