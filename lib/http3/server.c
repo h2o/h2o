@@ -1378,9 +1378,9 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     } else {
         /* normal request */
         is_connect = 0;
-        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |
-                         H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
-        may_exist_map = 0;
+        must_exist_map =
+            H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
     }
 
     /* check that all MUST pseudo headers exist, and that there are no other pseudo headers than MUST or MAY */
