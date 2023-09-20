@@ -1246,7 +1246,7 @@ void quicly_amend_ptls_context(ptls_context_t *ptls);
  * `PTLS_MAX_IV_SIZE`. Once the IV is built, that should be applied to AEAD using `ptls_aead_xor_iv` prior to calling the encryption
  * function. After that, `ptls_aead_xor_iv` should be called again with the same arguments to nagate the changes to IV.
  */
-size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *iv);
+static size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *iv);
 /**
  * Encrypts an address token by serializing the plaintext structure and appending an authentication tag.
  *
@@ -1436,6 +1436,21 @@ inline uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream)
 inline void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window)
 {
     stream->_recv_aux.window = window;
+}
+
+inline size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *_iv)
+{
+    size_t len = algo->iv_size - 8;
+    uint8_t *iv = (uint8_t *)_iv;
+
+    for (size_t i = 0; i + 4 < len; ++i)
+        *iv++ = 0;
+    *iv++ = (uint8_t)(sequence >> 24);
+    *iv++ = (uint8_t)(sequence >> 16);
+    *iv++ = (uint8_t)(sequence >> 8);
+    *iv++ = (uint8_t)sequence;
+
+    return len;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)

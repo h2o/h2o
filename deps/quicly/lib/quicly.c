@@ -7490,21 +7490,6 @@ void quicly_amend_ptls_context(ptls_context_t *ptls)
         ptls->max_early_data_size = UINT32_MAX;
 }
 
-size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *_iv)
-{
-    size_t len = algo->iv_size - 8;
-    uint8_t *iv = _iv;
-
-    for (size_t i = 0; i + 4 < len; ++i)
-        *iv++ = 0;
-    *iv++ = (uint8_t)(sequence >> 24);
-    *iv++ = (uint8_t)(sequence >> 16);
-    *iv++ = (uint8_t)(sequence >> 8);
-    *iv++ = (uint8_t)sequence;
-
-    return len;
-}
-
 int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
                                  size_t start_off, const quicly_address_token_plaintext_t *plaintext)
 {

@@ -165,7 +165,6 @@ provider quicly {
     probe path_abandon_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t dcid, uint64_t error_code,
                                const char *reason_phrase);
 
-    probe path_status_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t dcid, uint64_t sequence, uint64_t status);
     probe path_status_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t dcid, uint64_t sequence, uint64_t status);
 
     probe debug_message(struct st_quicly_conn_t *conn, const char *function, int line, const char *message);
