@@ -2847,7 +2847,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     }
                     if (multipath != NULL) {
                         ssize_t v;
-                        if ((v = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+                        if ((v = h2o_configurator_get_one_of(cmd, *multipath, "OFF,ON")) == -1)
                             return -1;
                         listener->quic.ctx->transport_params.enable_multipath = !!v;
                     }
