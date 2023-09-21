@@ -3732,6 +3732,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     } encapsulated;
     struct listener_ctx_t *lctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
     h2o_context_t *h2octx = lctx->accept_ctx.ctx;
+    size_t sock_index;
 
     assert(msg->msg_iovlen == 1);
 
@@ -3741,17 +3742,23 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
-    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
-    switch (encapsulated.destaddr.sa.sa_family) {
-    case AF_UNSPEC:
-        break;
-    case AF_INET:
-        if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
+    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port
+     * (FIXME check address family and IP address too?) */
+    for (sock_index = 0;; ++sock_index) {
+        if (h3ctx->socks[sock_index].sock == NULL)
             return 1;
-        break;
-    case AF_INET6:
-        if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
-            return 1;
+        switch (encapsulated.destaddr.sa.sa_family) {
+        case AF_UNSPEC:
+            break;
+        case AF_INET:
+            if (encapsulated.destaddr.sin.sin_port != *h3ctx->socks[sock_index].port)
+                continue;
+            break;
+        case AF_INET6:
+            if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->socks[sock_index].port)
+                continue;
+            break;
+        }
         break;
     }
 

@@ -257,14 +257,14 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_loop_t *loop;
     /**
-     * underlying unbound socket
+     * list of underlying unbound sockets (terminated by socks[i].sock == NULL)
      */
-    struct {
+    struct st_h2o_quic_ctx_socket_t {
         h2o_socket_t *sock;
         struct sockaddr_storage addr;
         socklen_t addrlen;
         in_port_t *port; /* points to the port number in addr */
-    } sock;
+    } *socks;
     /**
      * quic context
      */
@@ -443,6 +443,14 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
  *
  */
 void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
+/**
+ *
+ */
+void h2o_quic_add_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
+/**
+ *
+ */
+void h2o_quic_delete_socket(h2o_quic_ctx_t *ctx, size_t sock_index);
 /**
  *
  */
