@@ -1012,7 +1012,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
 
     *ctx = (h2o_quic_ctx_t){
         .loop = loop,
-        .socks = h2o_mem_alloc(sizeof(*ctx->socks)),
+        .socks = h2o_mem_alloc(sizeof(ctx->socks[0])),
         .quic = quic,
         .next_cid = {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
         .conns_by_id = kh_init_h2o_quic_idmap(),
@@ -1045,7 +1045,7 @@ void h2o_quic_add_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
     /* expand the socket list, registering the new socket at slot `slot` */
     for (slot = 0; ctx->socks[slot].sock != NULL; ++slot)
         ;
-    ctx->socks = h2o_mem_realloc(ctx->socks, slot + 2);
+    ctx->socks = h2o_mem_realloc(ctx->socks, sizeof(ctx->socks[0]) * (slot + 2));
     ctx->socks[slot] = (struct st_h2o_quic_ctx_socket_t){.sock = sock};
     ctx->socks[slot + 1].sock = NULL;
 
