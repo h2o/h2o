@@ -147,7 +147,6 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             }
             break;
         }
-    SocketFound:;
     } else {
         sock_index = 0;
     }
