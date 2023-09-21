@@ -474,6 +474,11 @@ void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx);
  */
 size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx);
 /**
+ * Iterate through each connection. If the callback returns a non-zero value, iteration is aborted, and the value is returned.
+ * Otherwise, zero is returned.
+ */
+int h2o_quic_foreach_connection(h2o_quic_ctx_t *ctx, int (*cb)(h2o_quic_ctx_t *, h2o_quic_conn_t *, void *), void *cbdata);
+/**
  *
  */
 void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_quic_conn_callbacks_t *callbacks);

@@ -1122,6 +1122,19 @@ size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx)
     return kh_size(ctx->conns_by_id);
 }
 
+int h2o_quic_foreach_connection(h2o_quic_ctx_t *ctx, int (*cb)(h2o_quic_ctx_t *, h2o_quic_conn_t *, void *), void *cbdata)
+{
+    h2o_quic_conn_t *conn;
+    int ret = 0;
+
+    kh_foreach_value(ctx->conns_by_id, conn, {
+        if ((ret = cb(ctx, conn, cbdata)) != 0)
+            return ret;
+    });
+
+    return 0;
+}
+
 void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_quic_conn_callbacks_t *callbacks)
 {
     *conn = (h2o_quic_conn_t){ctx, NULL, callbacks};
