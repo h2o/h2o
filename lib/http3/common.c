@@ -111,7 +111,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     if (src->sa.sa_family != AF_UNSPEC) {
         /* find matching socket while setting up CMSG, or return if none found (FIXME check address family and IP address too?) */
         for (sock_index = 0;; ++sock_index) {
-            if (ctx->socks[sock_index].sock != NULL)
+            if (ctx->socks[sock_index].sock == NULL)
                 return 0;
             switch (src->sa.sa_family) {
             case AF_INET: {
