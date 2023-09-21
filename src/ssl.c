@@ -269,7 +269,11 @@ static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vec
     return NULL;
 }
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx, int enc)
+#else
 static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
+#endif
 {
     int ret;
     pthread_rwlock_rdlock(&session_tickets.rwlock);
@@ -286,7 +290,15 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
         memcpy(key_name, ticket->name, sizeof(ticket->name));
         ret = EVP_EncryptInit_ex(ctx, ticket->cipher, NULL, session_ticket_get_cipher_key(ticket), iv);
         assert(ret);
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+        OSSL_PARAM params[3], *p = params;
+        *p++ = OSSL_PARAM_construct_octet_string("key", session_ticket_get_hmac_key(ticket), 32);
+        *p++ = OSSL_PARAM_construct_utf8_string("digest", (char *)EVP_MD_get0_name((const EVP_MD *)ticket->hmac), 0);
+        *p = OSSL_PARAM_construct_end();
+        ret = EVP_MAC_CTX_set_params(hctx, params);
+#else
         ret = HMAC_Init_ex(hctx, session_ticket_get_hmac_key(ticket), EVP_MD_block_size(ticket->hmac), ticket->hmac, NULL);
+#endif
         assert(ret);
         if (temp_ticket != NULL)
             free_ticket(ticket);
@@ -305,7 +317,15 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
     Found:
         ret = EVP_DecryptInit_ex(ctx, ticket->cipher, NULL, session_ticket_get_cipher_key(ticket), iv);
         assert(ret);
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+        OSSL_PARAM params[3], *p = params;
+        *p++ = OSSL_PARAM_construct_octet_string("key", session_ticket_get_hmac_key(ticket), 32);
+        *p++ = OSSL_PARAM_construct_utf8_string("digest", (char *)EVP_MD_get0_name((const EVP_MD *)ticket->hmac), 0);
+        *p = OSSL_PARAM_construct_end();
+        ret = EVP_MAC_CTX_set_params(hctx, params);
+#else
         ret = HMAC_Init_ex(hctx, session_ticket_get_hmac_key(ticket), EVP_MD_block_size(ticket->hmac), ticket->hmac, NULL);
+#endif
         assert(ret);
         /* Request renewal if the youngest key is active */
         if (i != 0 && session_tickets.tickets.entries[i - 1]->not_before <= time(NULL))
@@ -319,8 +339,13 @@ Exit:
     return ret;
 }
 
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, EVP_MAC_CTX *hctx,
+                                    int enc)
+#else
 static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
                                     int enc)
+#endif
 {
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
@@ -361,11 +386,19 @@ static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is
             src.base = srcbuf;
             src.len += sizeof(self->quic_tag);
         }
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+        return ptls_openssl_encrypt_ticket_evp(dst, src, ticket_key_callback);
+#else
         return ptls_openssl_encrypt_ticket(dst, src, ticket_key_callback);
+#endif
     } else {
         /* decrypt given data, then if necessary, check and remove the QUIC tag */
         size_t dst_start_off = dst->off;
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+        if ((ret = ptls_openssl_decrypt_ticket_evp(dst, src, ticket_key_callback)) != 0)
+#else
         if ((ret = ptls_openssl_decrypt_ticket(dst, src, ticket_key_callback)) != 0)
+#endif
             return ret;
         if (self->is_quic) {
             if (dst->off - dst_start_off < sizeof(self->quic_tag))
@@ -1119,7 +1152,11 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
         size_t i;
         for (i = 0; i != num_contexts; ++i) {
             SSL_CTX *ctx = contexts[i];
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+            SSL_CTX_set_tlsext_ticket_key_evp_cb(ctx, ticket_key_callback_ossl);
+#else
             SSL_CTX_set_tlsext_ticket_key_cb(ctx, ticket_key_callback_ossl);
+#endif
             /* accompanying ptls context is initialized in ssl_setup_session_resumption_ptls */
         }
     } else {
@@ -1182,7 +1219,9 @@ void init_openssl(void)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 #if H2O_CAN_OSSL_ASYNC
+#if defined(LIBRESSL_VERSION_NUMBER) || OPENSSL_VERSION_NUMBER < 0x30000000L
     ERR_load_ASYNC_strings();
+#endif
 #endif
 
     /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
