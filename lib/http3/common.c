@@ -1046,7 +1046,7 @@ void h2o_quic_add_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         ;
     ctx->socks = h2o_mem_realloc(ctx->socks, sizeof(ctx->socks[0]) * (slot + 2));
     ctx->socks[slot] = (struct st_h2o_quic_ctx_socket_t){.sock = sock};
-    ctx->socks[slot + 1].sock = NULL;
+    ctx->socks[slot + 1] = (struct st_h2o_quic_ctx_socket_t){};
 
     ctx->socks[slot].sock->data = ctx;
     socklen_t slen = h2o_socket_getsockname(ctx->socks[slot].sock, &ctx->socks[slot].addr.sa);
