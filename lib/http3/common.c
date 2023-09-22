@@ -698,7 +698,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         ctx->notify_conn_update(ctx, conn);
 }
 
-void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
+void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 {
     struct {
         quicly_address_t destaddr, srcaddr;
@@ -740,16 +740,19 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
 
+    int fd = h2o_socket_get_fd(sock);
     size_t sock_index, dgram_index, num_dgrams;
 
-    /* find corresponding socket */
+    /* find corresponding socket; the lookup might fail e.g., when `sock` points to a UNIX socket for forwarding datagrams between
+     * threads, in which case SIZE_MAX is set to sock_index */
     for (sock_index = 0;; ++sock_index) {
-        assert(ctx->socks[sock_index].sock != NULL);
-        if (ctx->socks[sock_index].sock == _sock)
+        if (ctx->socks[sock_index].sock == NULL) {
+            sock_index = SIZE_MAX;
+            break;
+        }
+        if (ctx->socks[sock_index].sock == sock)
             break;
     }
-
-    int fd = h2o_socket_get_fd(ctx->socks[sock_index].sock);
 
     /* Read datagrams. Sender should be provided an ACK every fraction of RTT, otherwise its behavior becomes bursty (assuming that
      * pacing is not used), rather than packets being spread across entire round-trip. To minimize the chance of us entering such
@@ -791,6 +794,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
                  cmsg = CMSG_NXTHDR(&mess[dgram_index].msg_hdr, cmsg)) {
 #ifdef IP_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
+                    assert(sock_index != SIZE_MAX);
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
                            sizeof(struct in_addr));
@@ -800,6 +804,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
 #endif
 #ifdef IP_RECVDSTADDR
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
+                    assert(sock_index != SIZE_MAX);
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
                     dgrams[dgram_index].destaddr.sin.sin_port = ctx->socks[sock_index].addr.sin.sin_port;
@@ -808,6 +813,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
 #endif
 #ifdef IPV6_PKTINFO
                 if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+                    assert(sock_index != SIZE_MAX);
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
                     memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
                            sizeof(struct in6_addr));
