@@ -709,7 +709,8 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
         f(stream, dir) f(max_data, dir) f(max_stream_data, dir) f(max_streams_bidi, dir) f(max_streams_uni, dir)                   \
             f(data_blocked, dir) f(stream_data_blocked, dir) f(streams_blocked, dir) f(new_connection_id, dir)                     \
                 f(retire_connection_id, dir) f(path_challenge, dir) f(path_response, dir) f(transport_close, dir)                  \
-                    f(application_close, dir) f(handshake_done, dir) f(ack_frequency, dir)
+                    f(application_close, dir) f(handshake_done, dir) f(ack_frequency, dir) f(ack_mp, dir) f(path_abandon, dir)     \
+                        f(path_status, dir)
 #define FORMAT_OF_NUM_FRAMES(n, dir) "," H2O_TO_STR(n) "-" H2O_TO_STR(dir) "=%" PRIu64
 #define VALUE_OF_NUM_FRAMES(n, dir) , stats.num_frames_##dir.n
 
