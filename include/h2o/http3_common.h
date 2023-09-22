@@ -261,9 +261,7 @@ struct st_h2o_quic_ctx_t {
      */
     struct st_h2o_quic_ctx_socket_t {
         h2o_socket_t *sock;
-        struct sockaddr_storage addr;
-        socklen_t addrlen;
-        in_port_t *port; /* points to the port number in addr */
+        quicly_address_t addr;
     } *socks;
     /**
      * quic context

@@ -3751,11 +3751,11 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         case AF_UNSPEC:
             break;
         case AF_INET:
-            if (encapsulated.destaddr.sin.sin_port != *h3ctx->socks[sock_index].port)
+            if (encapsulated.destaddr.sin.sin_port != h3ctx->socks[sock_index].addr.sin.sin_port)
                 continue;
             break;
         case AF_INET6:
-            if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->socks[sock_index].port)
+            if (encapsulated.destaddr.sin6.sin6_port != h3ctx->socks[sock_index].addr.sin6.sin6_port)
                 continue;
             break;
         }

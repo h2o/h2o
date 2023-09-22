@@ -116,12 +116,12 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             switch (src->sa.sa_family) {
             case AF_INET: {
 #if defined(IP_PKTINFO)
-                if (*ctx->socks[sock_index].port != src->sin.sin_port)
+                if (ctx->socks[sock_index].addr.sin.sin_port != src->sin.sin_port)
                     continue;
                 struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
                 PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
-                if (*ctx->socks[sock_index].port != src->sin.sin_port)
+                if (*ctx->socks[sock_index].addr.sin.sin_port != src->sin.sin_port)
                     continue;
                 struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->socks[sock_index].addr;
                 assert(fdaddr->sin_family == AF_INET);
@@ -133,7 +133,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             } break;
             case AF_INET6:
 #ifdef IPV6_PKTINFO
-                if (*ctx->socks[sock_index].port != src->sin6.sin6_port)
+                if (ctx->socks[sock_index].addr.sin6.sin6_port != src->sin6.sin6_port)
                     continue;
                 struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
                 PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
@@ -794,7 +794,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
                            sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->socks[sock_index].port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = ctx->socks[sock_index].addr.sin.sin_port;
                     goto DestAddrFound;
                 }
 #endif
@@ -802,7 +802,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->socks[sock_index].port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = ctx->socks[sock_index].addr.sin.sin_port;
                     goto DestAddrFound;
                 }
 #endif
@@ -811,7 +811,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *_sock)
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
                     memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
                            sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->socks[sock_index].port;
+                    dgrams[dgram_index].destaddr.sin6.sin6_port = ctx->socks[sock_index].addr.sin6.sin6_port;
                     goto DestAddrFound;
                 }
 #endif
@@ -1049,19 +1049,8 @@ void h2o_quic_add_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
     ctx->socks[slot + 1].sock = NULL;
 
     ctx->socks[slot].sock->data = ctx;
-    ctx->socks[slot].addrlen = h2o_socket_getsockname(ctx->socks[slot].sock, (void *)&ctx->socks[slot].addr);
-    assert(ctx->socks[slot].addrlen != 0);
-    switch (ctx->socks[slot].addr.ss_family) {
-    case AF_INET:
-        ctx->socks[slot].port = &((struct sockaddr_in *)&ctx->socks[slot].addr)->sin_port;
-        break;
-    case AF_INET6:
-        ctx->socks[slot].port = &((struct sockaddr_in6 *)&ctx->socks[slot].addr)->sin6_port;
-        break;
-    default:
-        assert(!"unexpected address family");
-        break;
-    }
+    socklen_t slen = h2o_socket_getsockname(ctx->socks[slot].sock, &ctx->socks[slot].addr.sa);
+    assert(slen != 0);
 
     h2o_socket_read_start(ctx->socks[slot].sock, on_read);
 }
