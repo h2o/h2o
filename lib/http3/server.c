@@ -731,7 +731,7 @@ Redo:
         ",packets-initial-handshake-sent=%" PRIu64 ",packets-received-out-of-order=%" PRIu64 ",packets-sent-promoted-paths=%" PRIu64
         ",packets-ack-received-promoted-paths=%" PRIu64 ",bytes-received=%" PRIu64 ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64
         ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64 ",bytes-stream-data-resent=%" PRIu64
-        "paths-created=%" PRIu64 ",paths-validated=%" PRIu64 ",paths-validation-failed=%" PRIu64
+        ",paths-created=%" PRIu64 ",paths-validated=%" PRIu64 ",paths-validation-failed=%" PRIu64
         ",paths-migration-elicited=%" PRIu64 ",paths-promoted=%" PRIu64 ",paths-closed-no-dcid=%" PRIu64 ",rtt-minimum=%" PRIu32
         ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32 ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",ssthresh=%" PRIu32
         ",cwnd-initial=%" PRIu32 ",cwnd-exiting-slow-start=%" PRIu32 ",cwnd-minimum=%" PRIu32 ",cwnd-maximum=%" PRIu32
