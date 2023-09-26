@@ -24,6 +24,10 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED /* we'd like to use HMAC_Init_ex while it exists, to minimize code divergence between          \
+                                     * different TLS stacks. */
+#endif
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>

@@ -1353,10 +1353,10 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
 
+    h2o_probe_log_request(&stream->req, stream->quic->stream_id);
+
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
-
-    h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
     int is_connect_udp = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"));
