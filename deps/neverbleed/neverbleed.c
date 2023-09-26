@@ -529,7 +529,8 @@ void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 
 static void do_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
 {
-    assert(ptr != NULL);
+    if (ptr == NULL)
+        return;
     struct st_neverbleed_rsa_exdata_t *exdata = ptr;
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(exdata->nb);
 
