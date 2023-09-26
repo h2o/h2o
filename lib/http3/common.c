@@ -1068,9 +1068,8 @@ void h2o_quic_delete_socket(h2o_quic_ctx_t *ctx, size_t sock_index)
     h2o_socket_close(ctx->socks[sock_index].sock);
 
     /* shrink the list, by moving the sockets that followed up to the termintor by one */
-    do {
-        ctx->socks[sock_index] = ctx->socks[sock_index + 1];
-    } while (ctx->socks[sock_index].sock != NULL);
+    while ((ctx->socks[sock_index] = ctx->socks[sock_index + 1]).sock != NULL)
+        ++sock_index;
 }
 
 void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
