@@ -65,6 +65,7 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
+    debug
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -303,7 +304,7 @@ sub spawn_h2o_raw {
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf or confess("failed to write to $conffn: $!");
     $conffh->flush or confess("failed to write to $conffn: $!");
-    Test::More::diag($conf) if $ENV{TEST_DEBUG};
+    debug($conf);
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -1058,6 +1059,11 @@ sub get_exclusive_lock {
 
     # prevent waring above when trying to lock again
     $ENV{LOCKFD} = "SKIP";
+}
+
+sub debug {
+    return unless $ENV{TEST_DEBUG};
+    Test::More::diag(@_);
 }
 
 1;
