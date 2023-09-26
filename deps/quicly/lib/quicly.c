@@ -3771,7 +3771,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
         s->dst_payload_from - s->payload_buf.datagram, encrypt_dcid, path->egress->packet_number, coalesced);
 
     /* update CC, commit sentmap */
-    int on_promoted_path = s->path_index == 0 && !conn->paths[0]->initial; /* FIXME multipath */
+    int on_promoted_path = (quicly_is_multipath(conn) || s->path_index == 0) && !conn->paths[s->path_index]->initial;
     if (s->target.ack_eliciting) {
         packet_bytes_in_flight = s->dst - s->target.first_byte_at;
         s->send_window -= packet_bytes_in_flight;
