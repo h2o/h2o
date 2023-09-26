@@ -574,6 +574,23 @@ h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 }
 
+/* to simulate NAT rebinding, rewrite the local port directly */
+static int h3_rebind_rewrite_port(h2o_quic_ctx_t *_ctx, h2o_quic_conn_t *conn, void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+    struct sockaddr *connlocal = quicly_get_sockname(conn->quic);
+    quicly_address_t newlocal;
+
+    h2o_socket_getsockname(sock, &newlocal.sa);
+
+    assert(connlocal->sa_family == AF_INET);
+    assert(newlocal.sa.sa_family == AF_INET);
+
+    ((struct sockaddr_in *)connlocal)->sin_port = newlocal.sin.sin_port;
+
+    return 0;
+}
+
 static int h3_add_path(h2o_quic_ctx_t *_ctx, h2o_quic_conn_t *conn, void *_sock)
 {
     h2o_socket_t *sock = _sock;
@@ -938,8 +955,10 @@ int main(int argc, char **argv)
         h2o_evloop_run(ctx.loop, INT32_MAX);
         if (got_sig_rebind) {
             got_sig_rebind = 0;
-            h2o_quic_add_socket(&ctx.http3->h3, create_udp_socket(ctx.loop, 0));
+            h2o_socket_t *sock = create_udp_socket(ctx.loop, 0);
+            h2o_quic_add_socket(&ctx.http3->h3, sock);
             h2o_quic_delete_socket(&ctx.http3->h3, 0);
+            h2o_quic_foreach_connection(&ctx.http3->h3, h3_rebind_rewrite_port, sock);
         }
         if (got_sig_addpath) {
             got_sig_addpath = 0;
