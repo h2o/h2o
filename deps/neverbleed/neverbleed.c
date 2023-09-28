@@ -146,6 +146,28 @@ struct st_neverbleed_thread_data_t {
     int fd;
 };
 
+/**
+ * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable
+ */
+#define NEVERBLEED_MULTITHREAD_ONCE(block)                                                                                                \
+    do {                                                                                                                           \
+        static volatile int lock = 0;                                                                                              \
+        int lock_loaded = lock;                                                                                                    \
+        __sync_synchronize();                                                                                                      \
+        if (!lock_loaded) {                                                                                                        \
+            static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;                                                              \
+            pthread_mutex_lock(&mutex);                                                                                            \
+            if (!lock) {                                                                                                           \
+                do {                                                                                                               \
+                    block                                                                                                          \
+                } while (0);                                                                                                       \
+                __sync_synchronize();                                                                                              \
+                lock = 1;                                                                                                          \
+            }                                                                                                                      \
+            pthread_mutex_unlock(&mutex);                                                                                          \
+        }                                                                                                                          \
+    } while (0)
+
 static void warnvf(const char *fmt, va_list args)
 {
     char errbuf[256];
@@ -508,10 +530,42 @@ void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
     iobuf_transaction_write(buf, thdata);
 }
 
+static void do_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    /* when other engines are used, this callback gets called without neverbleed data */
+    if (ptr == NULL)
+        return;
+    struct st_neverbleed_rsa_exdata_t *exdata = ptr;
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(exdata->nb);
+
+    neverbleed_iobuf_t buf = {NULL};
+    iobuf_push_str(&buf, "del_pkey");
+    iobuf_push_num(&buf, exdata->key_index);
+    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
+    iobuf_transaction_no_response(&buf, thdata);
+
+    free(exdata);
+}
+
+static int get_rsa_exdata_idx(void);
+static void rsa_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    assert(idx == get_rsa_exdata_idx());
+    do_exdata_free_callback(parent, ptr, ad, idx, argl, argp);
+}
+
+static int get_rsa_exdata_idx(void)
+{
+    static volatile int index;
+    NEVERBLEED_MULTITHREAD_ONCE({
+        index = RSA_get_ex_new_index(0, NULL, NULL, NULL, rsa_exdata_free_callback);
+    });
+    return index;
+}
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
                              struct st_neverbleed_thread_data_t **thdata)
 {
-    *exdata = RSA_get_ex_data(rsa, 0);
+    *exdata = RSA_get_ex_data(rsa, get_rsa_exdata_idx());
     if (*exdata == NULL) {
         errno = 0;
         dief("invalid internal ref");
@@ -840,7 +894,7 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
     exdata->key_index = key_index;
 
     rsa = RSA_new_method(nb->engine);
-    RSA_set_ex_data(rsa, 0, exdata);
+    RSA_set_ex_data(rsa, get_rsa_exdata_idx(), exdata);
     if (BN_hex2bn(&e, ebuf) == 0) {
         fprintf(stderr, "failed to parse e:%s\n", ebuf);
         abort();
@@ -905,10 +959,26 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     return 0;
 }
 
+static int get_ecdsa_exdata_idx(void);
+static void ecdsa_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    assert(idx == get_ecdsa_exdata_idx());
+    do_exdata_free_callback(parent, ptr, ad, idx, argl, argp);
+}
+
+static int get_ecdsa_exdata_idx(void)
+{
+    static volatile int index;
+    NEVERBLEED_MULTITHREAD_ONCE({
+        index = EC_KEY_get_ex_new_index(0, NULL, NULL, NULL, ecdsa_exdata_free_callback);
+    });
+    return index;
+}
+
 static void ecdsa_get_privsep_data(const EC_KEY *ec_key, struct st_neverbleed_rsa_exdata_t **exdata,
                                    struct st_neverbleed_thread_data_t **thdata)
 {
-    *exdata = EC_KEY_get_ex_data(ec_key, 0);
+    *exdata = EC_KEY_get_ex_data(ec_key, get_ecdsa_exdata_idx());
     if (*exdata == NULL) {
         errno = 0;
         dief("invalid internal ref");
@@ -968,7 +1038,7 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     exdata->key_index = key_index;
 
     ec_key = EC_KEY_new_method(nb->engine);
-    EC_KEY_set_ex_data(ec_key, 0, exdata);
+    EC_KEY_set_ex_data(ec_key, get_ecdsa_exdata_idx(), exdata);
 
     ec_group = EC_GROUP_new_by_curve_name(curve_name);
     if (!ec_group) {
@@ -994,21 +1064,6 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     EC_KEY_free(ec_key);
 
     return pkey;
-}
-
-static void priv_ecdsa_finish(EC_KEY *key)
-{
-    struct st_neverbleed_rsa_exdata_t *exdata;
-    struct st_neverbleed_thread_data_t *thdata;
-
-    ecdsa_get_privsep_data(key, &exdata, &thdata);
-
-    neverbleed_iobuf_t buf = {NULL};
-    iobuf_push_str(&buf, "del_pkey");
-    iobuf_push_num(&buf, exdata->key_index);
-    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
-    iobuf_transaction_no_response(&buf, thdata);
-    free(exdata);
 }
 
 #endif
@@ -1639,23 +1694,6 @@ Redo:
     _exit(0);
 }
 
-static int priv_rsa_finish(RSA *rsa)
-{
-    struct st_neverbleed_rsa_exdata_t *exdata;
-    struct st_neverbleed_thread_data_t *thdata;
-
-    get_privsep_data(rsa, &exdata, &thdata);
-
-    neverbleed_iobuf_t buf = {NULL};
-    iobuf_push_str(&buf, "del_pkey");
-    iobuf_push_num(&buf, exdata->key_index);
-    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
-    iobuf_transaction_no_response(&buf, thdata);
-
-    free(exdata);
-    return 1;
-}
-
 static int del_pkey_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
@@ -2057,7 +2095,7 @@ static RSA_METHOD static_rsa_method = {
     NULL,                 /* rsa_mod_exp */
     NULL,                 /* bn_mod_exp */
     NULL,                 /* init */
-    priv_rsa_finish,      /* finish */
+    NULL,                 /* finish */
     RSA_FLAG_SIGN_VER,    /* flags */
     NULL,                 /* app data */
     sign_proxy,           /* rsa_sign */
@@ -2153,7 +2191,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         RSA_meth_set_priv_enc(rsa_method, priv_enc_proxy);
         RSA_meth_set_priv_dec(rsa_method, priv_dec_proxy);
         RSA_meth_set_sign(rsa_method, sign_proxy);
-        RSA_meth_set_finish(rsa_method, priv_rsa_finish);
 #else
         rsa_default_method = RSA_PKCS1_SSLeay();
         rsa_method = &static_rsa_method;
@@ -2170,7 +2207,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 
         /* it seems sign_sig and sign_setup is not used in TLS ECDSA. */
         EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
-        EC_KEY_METHOD_set_init(ecdsa_method, NULL, priv_ecdsa_finish, NULL, NULL, NULL, NULL);
 #endif
 
         if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
