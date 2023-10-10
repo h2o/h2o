@@ -2087,6 +2087,19 @@ A boolean flag (ON or OFF) indicating whether if the server should push resource
 .RE
 .RE
 
+.SS http2-dos-delay
+HTTP request processing delay to be applied when the client behavior is suspicious, in the unit of milliseconds.
+
+
+.PP
+
+
+When the client behavior is suspicious and there is a concern of Denial-of-Service attack, h2o stops processing requests arriving on the suspicious connection for specified amount of time.
+
+
+.RE
+.RE
+
 
 
 
