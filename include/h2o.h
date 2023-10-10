@@ -378,6 +378,10 @@ struct st_h2o_globalconf_t {
          * list of callbacks
          */
         h2o_protocol_callbacks_t callbacks;
+        /**
+         * milliseconds to delay processing requests when suspicious behavior is detected
+         */
+        uint64_t dos_delay;
     } http2;
 
     struct {
@@ -590,6 +594,10 @@ struct st_h2o_context_t {
          * timeout entry used for graceful shutdown
          */
         h2o_timeout_entry_t _graceful_shutdown_timeout;
+        /*
+         * dos timeout
+         */
+        h2o_timeout_t dos_delay_timeout;
         struct {
             /**
              * counter for http2 errors internally emitted by h2o
