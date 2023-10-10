@@ -201,6 +201,9 @@ static void process_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
+    if (h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        return;
+
     h2o_linklist_t *link, *lnext;
     int ran_one_request;
 
@@ -328,6 +331,16 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
 
+    /* Decrement reset_budget if the stream was reset by peer, otherwise increment. By doing so, we penalize connections that
+     * generate resets for >50% of requests. */
+    if (stream->reset_by_peer) {
+        if (conn->dos_mitigation.reset_budget > 0)
+            --conn->dos_mitigation.reset_budget;
+    } else {
+        if (conn->dos_mitigation.reset_budget < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection)
+            ++conn->dos_mitigation.reset_budget;
+    }
+
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         if (h2o_linklist_is_linked(&stream->_link))
@@ -387,6 +400,9 @@ void close_connection_now(h2o_http2_conn_t *conn)
 
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
         h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
+
+    if (h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        h2o_timer_unlink(&conn->dos_mitigation.process_delay);
 
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
@@ -1196,11 +1212,19 @@ static int handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fr
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
-    if (stream != NULL) {
-        /* reset the stream */
-        h2o_http2_stream_reset(conn, stream);
-    }
+    if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL)
+        return 0;
+
+    /* reset the stream */
+    stream->reset_by_peer = 1;
+    h2o_http2_stream_reset(conn, stream);
+
+    /* setup process delay if we've just ran out of reset budget */
+    if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
+        !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay,
+                       &conn->dos_mitigation.process_delay);
+
     /* TODO log */
 
     return 0;
@@ -1685,6 +1709,14 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static void on_dos_process_delay(h2o_timer_t *timer)
+{
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, dos_mitigation.process_delay, timer);
+
+    assert(!h2o_timer_is_linked(&conn->dos_mitigation.process_delay));
+    run_pending_requests(conn);
+}
+
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -1755,6 +1787,8 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
     conn->is_chromium_dependency_tree = 1; /* initially assume the client is Chromium until proven otherwise */
     conn->received_any_request = 0;
+    conn->dos_mitigation.process_delay.cb = on_dos_process_delay;
+    conn->dos_mitigation.reset_budget = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
 
     return conn;
 }
