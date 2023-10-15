@@ -179,6 +179,7 @@ struct st_h2o_http2_stream_t {
         h2o_linklist_t link;
         h2o_http2_scheduler_openref_t scheduler;
     } _refs;
+    unsigned reset_by_peer : 1;
     h2o_send_state_t send_state; /* state of the ostream, only used in push mode */
     /* placed at last since it is large and has it's own ctor */
     h2o_req_t req;
@@ -232,6 +233,13 @@ struct st_h2o_http2_conn_t {
     } _write;
     h2o_cache_t *push_memo;
     h2o_http2_casper_t *casper;
+    /**
+     * DoS mitigation; the idea here is to delay processing requests when observing suspicious behavior
+     */
+    struct {
+        h2o_timeout_entry_t process_delay;
+        size_t reset_budget; /* RST_STREAM frames are considered suspicious when this value goes down to zero */
+    } dos_mitigation;
 };
 
 int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t *src, size_t len, const char **err_desc);
