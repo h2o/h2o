@@ -31,7 +31,7 @@ uint8_t *quicly_encode_path_challenge_frame(uint8_t *dst, int is_response, const
     return dst;
 }
 
-uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t *ranges, uint64_t ack_delay)
+uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t *ranges, uint64_t *ecn_counts, uint64_t ack_delay)
 {
 #define WRITE_BLOCK(start, end)                                                                                                    \
     do {                                                                                                                           \
@@ -42,12 +42,14 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
         dst = quicly_encodev(dst, _end - _start - 1);                                                                              \
     } while (0)
 
+    /* emit ACK_ECN frame if any of the three ECN counts are non-zero */
+    uint8_t frame_type = (ecn_counts[0] | ecn_counts[1] | ecn_counts[2]) != 0 ? QUICLY_FRAME_TYPE_ACK_ECN : QUICLY_FRAME_TYPE_ACK;
     size_t range_index = ranges->num_ranges - 1;
 
     assert(ranges->num_ranges != 0);
 
     /* number of bytes being emitted without space check are 1 + 8 + 8 + 1 bytes (as defined in QUICLY_ACK_FRAME_CAPACITY) */
-    *dst++ = QUICLY_FRAME_TYPE_ACK;
+    *dst++ = frame_type;
     dst = quicly_encodev(dst, ranges->ranges[range_index].end - 1); /* largest acknowledged */
     dst = quicly_encodev(dst, ack_delay);                           /* ack delay */
     PTLS_BUILD_ASSERT(QUICLY_MAX_ACK_BLOCKS - 1 <= 63);
@@ -58,6 +60,17 @@ uint8_t *quicly_encode_ack_frame(uint8_t *dst, uint8_t *dst_end, quicly_ranges_t
         if (range_index-- == 0)
             break;
         WRITE_BLOCK(ranges->ranges[range_index].end, ranges->ranges[range_index + 1].start);
+    }
+
+    if (frame_type == QUICLY_FRAME_TYPE_ACK_ECN) {
+        uint8_t buf[24], *p = buf;
+        for (size_t i = 0; i < 3; ++i)
+            p = quicly_encodev(p, ecn_counts[i]);
+        size_t len = p - buf;
+        if (dst_end - dst < len)
+            return NULL;
+        memcpy(dst, buf, len);
+        dst += len;
     }
 
     return dst;
@@ -100,11 +113,14 @@ int quicly_decode_ack_frame(const uint8_t **src, const uint8_t *end, quicly_ack_
     }
 
     if (is_ack_ecn) {
-        /* just skip ECT(0), ECT(1), ECT-CE counters for the time being */
-        for (i = 0; i != 3; ++i)
-            if (quicly_decodev(src, end) == UINT64_MAX)
+        for (i = 0; i < PTLS_ELEMENTSOF(frame->ecn_counts); ++i)
+            if ((frame->ecn_counts[i] = quicly_decodev(src, end)) == UINT64_MAX)
                 goto Error;
+    } else {
+        for (i = 0; i < PTLS_ELEMENTSOF(frame->ecn_counts); ++i)
+            frame->ecn_counts[i] = 0;
     }
+
     return 0;
 Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;

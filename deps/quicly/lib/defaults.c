@@ -50,6 +50,7 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                               DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
                                               0, /* enlarge_client_hello */
+                                              1, /* enable_ecn */
                                               NULL,
                                               NULL, /* on_stream_open */
                                               &quicly_default_stream_scheduler,
@@ -80,6 +81,7 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                                     DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
                                                     0, /* enlarge_client_hello */
+                                                    1, /* enable_ecn */
                                                     NULL,
                                                     NULL, /* on_stream_open */
                                                     &quicly_default_stream_scheduler,
