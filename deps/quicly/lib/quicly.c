@@ -621,6 +621,15 @@ static int64_t get_sentmap_expiration_time(quicly_conn_t *conn)
     return quicly_loss_get_sentmap_expiration_time(&conn->egress.loss, conn->super.remote.transport_params.max_ack_delay);
 }
 
+/**
+ * converts ECN bits to index in the order of ACK-ECN field (i.e., ECT(0) -> 0, ECT(1) -> 1, CE -> 2)
+ */
+static size_t get_ecn_index_from_bits(uint8_t bits)
+{
+    assert(1 <= bits && bits <= 3);
+    return (18 >> bits) & 3;
+}
+
 static void update_ecn_state(quicly_conn_t *conn, enum en_quicly_ecn_state new_state)
 {
     conn->egress.ecn.state = new_state;
@@ -1465,22 +1474,8 @@ static int record_receipt(struct st_quicly_pn_space_t *space, uint64_t pn, uint8
         space->largest_pn_received_at = now;
 
     /* increment ecn counters */
-    switch (ecn) {
-    case 0: /* NOT-ECT */
-        break;
-    case 1: /* ECT(1) */
-        space->ecn_counts[1] += 1;
-        break;
-    case 2: /* ECT(0) */
-        space->ecn_counts[0] += 1;
-        break;
-    case 3: /* CE */
-        space->ecn_counts[2] += 1;
-        break;
-    default:
-        assert(!"unexpected ecn flag");
-        break;
-    }
+    if (ecn != 0)
+        space->ecn_counts[get_ecn_index_from_bits(ecn)] += 1;
 
     /* if the received packet is ack-eliciting, update / schedule transmission of ACK */
     if (!is_ack_only) {
@@ -5362,16 +5357,16 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
         /* update counters */
         for (size_t i = 0; i < PTLS_ELEMENTSOF(frame.ecn_counts); ++i) {
             if (frame.ecn_counts[i] > conn->egress.ecn.counts[state->epoch][i]) {
-                conn->super.stats.num_packets.ack_ecn_counts[i] += frame.ecn_counts[i] - conn->egress.ecn.counts[state->epoch][i];
+                conn->super.stats.num_packets.acked_ecn_counts[i] += frame.ecn_counts[i] - conn->egress.ecn.counts[state->epoch][i];
                 conn->egress.ecn.counts[state->epoch][i] = frame.ecn_counts[i];
             }
         }
 
         /* report congestion */
         if (report_congestion) {
-            QUICLY_PROBE(ECN_CONGESTION, conn, conn->stash.now, conn->super.stats.num_packets.ack_ecn_counts[2]);
+            QUICLY_PROBE(ECN_CONGESTION, conn, conn->stash.now, conn->super.stats.num_packets.acked_ecn_counts[2]);
             QUICLY_LOG_CONN(ecn_congestion, conn,
-                            { PTLS_LOG_ELEMENT_UNSIGNED(ce_count, conn->super.stats.num_packets.ack_ecn_counts[2]); });
+                            { PTLS_LOG_ELEMENT_UNSIGNED(ce_count, conn->super.stats.num_packets.acked_ecn_counts[2]); });
             notify_congestion_to_cc(conn, 0, largest_newly_acked.pn);
         }
     }
@@ -6199,6 +6194,8 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 
     /* handle the input; we ignore is_ack_only, we consult if there's any output from TLS in response to CH anyways */
     (*conn)->super.stats.num_packets.received += 1;
+    if (packet->ecn != 0)
+        (*conn)->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
     (*conn)->super.stats.num_bytes.received += packet->datagram_size;
     if ((ret = handle_payload(*conn, QUICLY_EPOCH_INITIAL, payload.base, payload.len, &offending_frame_type, &is_ack_only)) != 0)
         goto Exit;
@@ -6414,6 +6411,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT)
         conn->super.state = QUICLY_STATE_CONNECTED;
     conn->super.stats.num_packets.received += 1;
+    if (packet->ecn != 0)
+        conn->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
 
     /* state updates, that are triggered by the receipt of a packet */
     switch (epoch) {

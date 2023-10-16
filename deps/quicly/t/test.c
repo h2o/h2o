@@ -716,6 +716,13 @@ static void test_set_cc(void)
     ok(strcmp(stats.cc.type->name, "reno") == 0);
 }
 
+void test_ecn_index_from_bits(void)
+{
+    ok(get_ecn_index_from_bits(1) == 1);
+    ok(get_ecn_index_from_bits(2) == 0);
+    ok(get_ecn_index_from_bits(3) == 2);
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -791,6 +798,7 @@ int main(int argc, char **argv)
     subtest("lossy", test_lossy);
     subtest("test-nondecryptable-initial", test_nondecryptable_initial);
     subtest("set_cc", test_set_cc);
+    subtest("ecn-index-from-bits", test_ecn_index_from_bits);
 
     return done_testing();
 }
