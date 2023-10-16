@@ -725,9 +725,10 @@ Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
     len = snprintf(
         buf, bufsize,
-        "packets-received=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
-        ",packets-lost-time-threshold=%" PRIu64 ",packets-ack-received=%" PRIu64 ",packets-ack-ecn-ect0=%" PRIu64
-        ",packets-ack-ecn-ect1=%" PRIu64 ",packets-ack-ecn-ce=%" PRIu64 ",late-acked=%" PRIu64 ",bytes-received=%" PRIu64
+        "packets-received=%" PRIu64 ",packets-received-ecn-ect0=%" PRIu64 ",packets-received-ecn-ect1=%" PRIu64
+        ",packets-received-ecn-ce=%" PRIu64 ",packets-decryption-failed=%" PRIu64 ",packets-sent=%" PRIu64 ",packets-lost=%" PRIu64
+        ",packets-lost-time-threshold=%" PRIu64 ",packets-ack-received=%" PRIu64 ",packets-acked-ecn-ect0=%" PRIu64
+        ",packets-acked-ecn-ect1=%" PRIu64 ",packets-acked-ecn-ce=%" PRIu64 ",late-acked=%" PRIu64 ",bytes-received=%" PRIu64
         ",bytes-sent=%" PRIu64 ",bytes-lost=%" PRIu64 ",bytes-ack-received=%" PRIu64 ",bytes-stream-data-sent=%" PRIu64
         ",bytes-stream-data-resent=%" PRIu64 ",rtt-minimum=%" PRIu32 ",rtt-smoothed=%" PRIu32 ",rtt-variance=%" PRIu32
         ",rtt-latest=%" PRIu32 ",cwnd=%" PRIu32 ",ssthresh=%" PRIu32 ",cwnd-initial=%" PRIu32 ",cwnd-exiting-slow-start=%" PRIu32
@@ -735,12 +736,13 @@ Redo:
         ",num-ptos=%" PRIu64 ",delivery-rate-latest=%" PRIu64 ",delivery-rate-smoothed=%" PRIu64
         ",delivery-rate-stdev=%" PRIu64 APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, received)
             APPLY_NUM_FRAMES(FORMAT_OF_NUM_FRAMES, sent) ",num-sentmap-packets-largest=%zu",
-        stats.num_packets.received, stats.num_packets.decryption_failed, stats.num_packets.sent, stats.num_packets.lost,
-        stats.num_packets.lost_time_threshold, stats.num_packets.ack_received, stats.num_packets.ack_ecn_counts[0],
-        stats.num_packets.ack_ecn_counts[1], stats.num_packets.ack_ecn_counts[2], stats.num_packets.late_acked,
-        stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost, stats.num_bytes.ack_received,
-        stats.num_bytes.stream_data_sent, stats.num_bytes.stream_data_resent, stats.rtt.minimum, stats.rtt.smoothed,
-        stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.cc.ssthresh, stats.cc.cwnd_initial,
+        stats.num_packets.received, stats.num_packets.received_ecn_counts[0], stats.num_packets.received_ecn_counts[1],
+        stats.num_packets.received_ecn_counts[2], stats.num_packets.decryption_failed, stats.num_packets.sent,
+        stats.num_packets.lost, stats.num_packets.lost_time_threshold, stats.num_packets.ack_received,
+        stats.num_packets.acked_ecn_counts[0], stats.num_packets.acked_ecn_counts[1], stats.num_packets.acked_ecn_counts[2],
+        stats.num_packets.late_acked, stats.num_bytes.received, stats.num_bytes.sent, stats.num_bytes.lost,
+        stats.num_bytes.ack_received, stats.num_bytes.stream_data_sent, stats.num_bytes.stream_data_resent, stats.rtt.minimum,
+        stats.rtt.smoothed, stats.rtt.variance, stats.rtt.latest, stats.cc.cwnd, stats.cc.ssthresh, stats.cc.cwnd_initial,
         stats.cc.cwnd_exiting_slow_start, stats.cc.cwnd_minimum, stats.cc.cwnd_maximum, stats.cc.num_loss_episodes,
         stats.cc.num_ecn_loss_episodes, stats.num_ptos, stats.delivery_rate.latest, stats.delivery_rate.smoothed,
         stats.delivery_rate.stdev APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, received) APPLY_NUM_FRAMES(VALUE_OF_NUM_FRAMES, sent),
