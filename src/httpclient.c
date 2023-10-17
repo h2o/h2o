@@ -191,7 +191,8 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     if (client == NULL || client->write_req == NULL)
         return;
 
-    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
+    h2o_header_t dummy;
+    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed ? &dummy : NULL, 0) != 0) {
         fprintf(stderr, "write_req error\n");
         exit(1);
     }
@@ -441,7 +442,8 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
     if (vec.len > *filler_remaining_bytes(client))
         vec.len = *filler_remaining_bytes(client);
     *filler_remaining_bytes(client) -= vec.len;
-    client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
+    h2o_header_t dummy;
+    client->write_req(client, vec, *filler_remaining_bytes(client) == 0 ? &dummy : NULL, 0);
 }
 
 static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
