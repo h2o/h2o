@@ -493,6 +493,16 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
+    struct {                                                                                                                       \
+        /**                                                                                                                        \
+         * number of paths that were ECN-capable                                                                                   \
+         */                                                                                                                        \
+        uint64_t ecn_validated;                                                                                                    \
+        /**                                                                                                                        \
+         * number of paths that were deemed as ECN black holes                                                                     \
+         */                                                                                                                        \
+        uint64_t ecn_failed;                                                                                                       \
+    } num_paths;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of each frame being sent / received.                                                                           \
      */                                                                                                                            \
