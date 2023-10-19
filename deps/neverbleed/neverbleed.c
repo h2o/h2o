@@ -262,7 +262,7 @@ static void iobuf_dispose(neverbleed_iobuf_t *buf)
 
 static void iobuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
 {
-    char *n;
+    size_t start_off, end_off;
 
     if (extra <= buf->buf - buf->end + buf->capacity)
         return;
@@ -271,11 +271,20 @@ static void iobuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
         buf->capacity = 4096;
     while (buf->buf - buf->end + buf->capacity < extra)
         buf->capacity *= 2;
-    if ((n = realloc(buf->buf, buf->capacity)) == NULL)
+
+    if (buf->buf != NULL) {
+        start_off = buf->start - buf->buf;
+        end_off = buf->end - buf->buf;
+    } else {
+        /* C99 forbids us doing `buf->start - buf->buf` when both are NULL (undefined behavior) */
+        start_off = 0;
+        end_off = 0;
+    }
+
+    if ((buf->buf = realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
-    buf->start = n + (buf->start - buf->buf);
-    buf->end = n + (buf->end - buf->buf);
-    buf->buf = n;
+    buf->start = buf->buf + start_off;
+    buf->end = buf->buf + end_off;
 }
 
 static void iobuf_push_num(neverbleed_iobuf_t *buf, size_t v)
@@ -1210,7 +1219,7 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload && EVP_PKEY_id(pkey) == EVP_PKEY_RSA) {
         bssl_offload_digestsign(buf, pkey, md, signdata, signlen, rsa_pss);
-        return 0;
+        goto Exit;
     }
 #endif
 
@@ -1248,6 +1257,7 @@ Respond: /* build response */
     iobuf_push_bytes(buf, digestbuf, digestlen);
     if (mdctx != NULL)
         EVP_MD_CTX_destroy(mdctx);
+Exit:
     if (pkey != NULL)
         EVP_PKEY_free(pkey);
     return 0;
@@ -1333,7 +1343,7 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload) {
         bssl_offload_decrypt(buf, pkey, src, srclen);
-        return 0;
+        goto Exit;
     }
 #endif
 
@@ -1345,6 +1355,7 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, decryptbuf, decryptlen);
+Exit:
     RSA_free(rsa);
     EVP_PKEY_free(pkey);
     return 0;
