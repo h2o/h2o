@@ -709,6 +709,7 @@
 		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-selective-tracing.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-corrupted-scid-initial.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001C02730B6E30043886F /* forever_ticket.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = forever_ticket.yaml; sourceTree = "<group>"; };
@@ -2378,6 +2379,7 @@
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
+				08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
 				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
 				109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */,

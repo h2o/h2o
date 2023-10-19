@@ -431,6 +431,10 @@ struct st_h2o_globalconf_t {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         /* */
         h2o_iovec_t origin_frame;
+        /**
+         * milliseconds to delay processing requests when suspicious behavior is detected
+         */
+        uint64_t dos_delay;
     } http2;
 
     struct {

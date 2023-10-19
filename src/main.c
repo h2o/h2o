@@ -2778,16 +2778,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets,
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
                         **max_path_validation_failures, **multipath;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
-                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s,max-path-validation-failures:s,multipath:s",
-                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets, &max_path_validation_failures,
-                                                       &multipath) != 0)
+                    if (h2o_configurator_parse_mapping(
+                            cmd, *quic_node, NULL,
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
+                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "max-initial-handshake-packets:s,ecn:s,max-path-validation-failures:s,multipath:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
+                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn,
+                            &max_path_validation_failures, &multipath) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2839,6 +2839,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
+                    }
+                    if (ecn != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->enable_ecn = !!on;
                     }
                     if (max_path_validation_failures != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_path_validation_failures, "%" SCNu64,
