@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -130,6 +131,10 @@ struct st_quicly_pn_space_t {
      * number of ACK-eliciting packets that have not been ACKed yet
      */
     uint32_t unacked_count;
+    /**
+     * ECN in the order of ECT(0), ECT(1), CE
+     */
+    uint64_t ecn_counts[3];
     /**
      * maximum number of ACK-eliciting packets to be queued before sending an ACK
      */
@@ -303,6 +308,13 @@ struct st_quicly_conn_t {
          */
         quicly_cc_t cc;
         /**
+         * ECN
+         */
+        struct {
+            enum en_quicly_ecn_state { QUICLY_ECN_OFF, QUICLY_ECN_ON, QUICLY_ECN_PROBING } state;
+            uint64_t counts[QUICLY_NUM_EPOCHS][3];
+        } ecn;
+        /**
          * things to be sent at the stream-level, that are not governed by the stream scheduler
          */
         struct {
@@ -326,16 +338,13 @@ struct st_quicly_conn_t {
          * bit vector indicating if there's any pending crypto data (the insignificant 4 bits), or other non-stream data
          */
         uint8_t pending_flows;
-#define QUICLY_PENDING_FLOW_NEW_TOKEN_BIT (1 << 5)
-#define QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT (1 << 6)
-/**
- * is there a pending NEW_CONNECTION_ID or RETIRE_CONNECTION_ID frame?
- *
- * This single bit represents two frame types, to keep `pending_flows` within 8 bits, and to reduce `if` branch in `do_send`
- * function. If we had two separate bits, we would have to check each bit separately in `do_send` function. Given NEW_CONNECTION_ID
- * and RETIRE_CONNECTION_ID frames are expected to be rarely sent, folding two types into a single bit makes sense.
- */
-#define QUICLY_PENDING_FLOW_CID_FRAME_BIT (1 << 7)
+/* The flags below indicate if the respective frames have to be sent or not. There are no false positives. */
+#define QUICLY_PENDING_FLOW_NEW_TOKEN_BIT (1 << 4)
+#define QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT (1 << 5)
+/* Indicates that PATH_CHALLENGE, PATH_RESPONSE, MAX_STREAMS, MAX_DATA, DATA_BLOCKED, STREAMS_BLOCKED, NEW_CONNECTION_ID _might_
+ * have to be sent. There could be false positives; logic for sending each of these frames have the capability of detecting such
+ * false positives. The purpose of this bit is to consolidate information as an optimization. */
+#define QUICLY_PENDING_FLOW_OTHERS_BIT (1 << 6)
         /**
          * pending RETIRE_CONNECTION_ID frames to be sent
          */
@@ -609,6 +618,30 @@ static int64_t get_sentmap_expiration_time(quicly_conn_t *conn)
     return quicly_loss_get_sentmap_expiration_time(&conn->egress.loss, conn->super.remote.transport_params.max_ack_delay);
 }
 
+/**
+ * converts ECN bits to index in the order of ACK-ECN field (i.e., ECT(0) -> 0, ECT(1) -> 1, CE -> 2)
+ */
+static size_t get_ecn_index_from_bits(uint8_t bits)
+{
+    assert(1 <= bits && bits <= 3);
+    return (18 >> bits) & 3;
+}
+
+static void update_ecn_state(quicly_conn_t *conn, enum en_quicly_ecn_state new_state)
+{
+    assert(new_state == QUICLY_ECN_ON || new_state == QUICLY_ECN_OFF);
+
+    conn->egress.ecn.state = new_state;
+    if (new_state == QUICLY_ECN_ON) {
+        ++conn->super.stats.num_paths.ecn_validated;
+    } else {
+        ++conn->super.stats.num_paths.ecn_failed;
+    }
+
+    QUICLY_PROBE(ECN_VALIDATION, conn, conn->stash.now, (int)new_state);
+    QUICLY_LOG_CONN(ecn_validation, conn, { PTLS_LOG_ELEMENT_SIGNED(state, (int)new_state); });
+}
+
 static void ack_frequency_set_next_update_at(quicly_conn_t *conn)
 {
     if (conn->super.remote.transport_params.min_ack_delay_usec != UINT64_MAX)
@@ -628,6 +661,7 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
     packet->datagram_size = *off == 0 ? datagram_size : 0;
     packet->token = ptls_iovec_init(NULL, 0);
     packet->decrypted.pn = UINT64_MAX;
+    packet->ecn = 0; /* non-ECT */
 
     /* move the cursor to the second byte */
     src += *off + 1;
@@ -847,6 +881,8 @@ static void resched_stream_data(quicly_stream_t *stream)
     if (stream->stream_id < 0) {
         assert(-4 <= stream->stream_id);
         uint8_t mask = 1 << -(1 + stream->stream_id);
+        assert((mask & (QUICLY_PENDING_FLOW_NEW_TOKEN_BIT | QUICLY_PENDING_FLOW_HANDSHAKE_DONE_BIT |
+                        QUICLY_PENDING_FLOW_OTHERS_BIT)) == 0);
         if (stream->sendstate.pending.num_ranges != 0) {
             stream->conn->egress.pending_flows |= mask;
         } else {
@@ -912,6 +948,9 @@ static int schedule_path_challenge_frame(quicly_conn_t *conn, int is_response, c
 
     *conn->egress.path_challenge.tail_ref = pending;
     conn->egress.path_challenge.tail_ref = &pending->next;
+
+    conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
+
     return 0;
 }
 
@@ -938,7 +977,7 @@ static size_t local_cid_size(const quicly_conn_t *conn)
 static void schedule_retire_connection_id_frame(quicly_conn_t *conn, uint64_t sequence)
 {
     quicly_retire_cid_push(&conn->egress.retire_cid, sequence);
-    conn->egress.pending_flows |= QUICLY_PENDING_FLOW_CID_FRAME_BIT;
+    conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
 }
 
 static int write_crypto_data(quicly_conn_t *conn, ptls_buffer_t *tlsbuf, size_t epoch_offsets[5])
@@ -993,8 +1032,7 @@ static void crypto_handshake(quicly_conn_t *conn, size_t in_epoch, ptls_iovec_t 
         goto Exit;
     }
     /* drop 0-RTT write key if 0-RTT is rejected by remote peer */
-    if (conn->application != NULL && !conn->application->one_rtt_writable &&
-        conn->application->cipher.egress.key.aead != NULL) {
+    if (conn->application != NULL && !conn->application->one_rtt_writable && conn->application->cipher.egress.key.aead != NULL) {
         assert(quicly_is_client(conn));
         if (conn->crypto.handshake_properties.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED) {
             dispose_cipher(&conn->application->cipher.egress.key);
@@ -1196,14 +1234,8 @@ static void destroy_stream(quicly_stream_t *stream, int err)
 
     dispose_stream_properties(stream);
 
-    if (conn->application != NULL) {
-        /* The function is normally invoked when receiving a packet, therefore just setting send_ack_at to zero is sufficient to
-         * trigger the emission of the MAX_STREAMS frame. FWIW, the only case the function is invoked when not receiving a packet is
-         * when the connection is being closed. In such case, the change will not have any bad side effects.
-         */
-        if (should_send_max_streams(conn, quicly_stream_is_unidirectional(stream->stream_id)))
-            conn->egress.send_ack_at = 0;
-    }
+    if (conn->application != NULL && should_send_max_streams(conn, quicly_stream_is_unidirectional(stream->stream_id)))
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
 
     free(stream);
 }
@@ -1388,6 +1420,8 @@ static struct st_quicly_pn_space_t *alloc_pn_space(size_t sz, uint32_t packet_to
     space->largest_pn_received_at = INT64_MAX;
     space->next_expected_packet_number = 0;
     space->unacked_count = 0;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(space->ecn_counts); ++i)
+        space->ecn_counts[i] = 0;
     space->packet_tolerance = packet_tolerance;
     space->ignore_order = 0;
     if (sz != sizeof(*space))
@@ -1426,18 +1460,25 @@ static int record_pn(quicly_ranges_t *ranges, uint64_t pn, int *is_out_of_order)
     return 0;
 }
 
-static int record_receipt(struct st_quicly_pn_space_t *space, uint64_t pn, int is_ack_only, int64_t now, int64_t *send_ack_at)
+static int record_receipt(struct st_quicly_pn_space_t *space, uint64_t pn, uint8_t ecn, int is_ack_only, int64_t now,
+                          int64_t *send_ack_at, uint64_t *received_out_of_order)
 {
     int ret, ack_now, is_out_of_order;
 
     if ((ret = record_pn(&space->ack_queue, pn, &is_out_of_order)) != 0)
         goto Exit;
+    if (is_out_of_order)
+        *received_out_of_order += 1;
 
-    ack_now = is_out_of_order && !space->ignore_order && !is_ack_only;
+    ack_now = !is_ack_only && ((is_out_of_order && !space->ignore_order) || ecn == IPTOS_ECN_CE);
 
     /* update largest_pn_received_at (TODO implement deduplication at an earlier moment?) */
     if (space->ack_queue.ranges[space->ack_queue.num_ranges - 1].end == pn + 1)
         space->largest_pn_received_at = now;
+
+    /* increment ecn counters */
+    if (ecn != 0)
+        space->ecn_counts[get_ecn_index_from_bits(ecn)] += 1;
 
     /* if the received packet is ack-eliciting, update / schedule transmission of ACK */
     if (!is_ack_only) {
@@ -2210,6 +2251,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->egress.ack_frequency.update_at = INT64_MAX;
     conn->egress.send_ack_at = INT64_MAX;
     conn->super.ctx->init_cc->cb(conn->super.ctx->init_cc, &conn->egress.cc, initcwnd, conn->stash.now);
+    conn->egress.ecn.state = conn->super.ctx->enable_ecn ? QUICLY_ECN_PROBING : QUICLY_ECN_OFF;
     quicly_retire_cid_init(&conn->egress.retire_cid);
     quicly_linklist_init(&conn->egress.pending_streams.blocked.uni);
     quicly_linklist_init(&conn->egress.pending_streams.blocked.bidi);
@@ -2908,6 +2950,7 @@ static int on_ack_data_blocked(quicly_sentmap_t *map, const quicly_sent_packet_t
             conn->egress.data_blocked = QUICLY_SENDER_STATE_ACKED;
         } else if (packet->frames_in_flight && conn->egress.data_blocked == QUICLY_SENDER_STATE_UNACKED) {
             conn->egress.data_blocked = QUICLY_SENDER_STATE_SEND;
+            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
         }
     }
 
@@ -2951,7 +2994,7 @@ static int on_ack_new_token(quicly_sentmap_t *map, const quicly_sent_packet_t *p
     }
 
     if (conn->egress.new_token.num_inflight == 0 && conn->egress.new_token.max_acked < conn->egress.new_token.generation)
-        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_NEW_TOKEN_BIT;
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
 
     return 0;
 }
@@ -2965,7 +3008,7 @@ static int on_ack_new_connection_id(quicly_sentmap_t *map, const quicly_sent_pac
         quicly_local_cid_on_acked(&conn->super.local.cid_set, sequence);
     } else {
         if (quicly_local_cid_on_lost(&conn->super.local.cid_set, sequence))
-            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_CID_FRAME_BIT;
+            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
     }
 
     return 0;
@@ -3054,8 +3097,14 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
     uint64_t amp_window = calc_amplification_limit_allowance(conn);
 
     if (calc_send_window(conn, 0, amp_window, 0) > 0) {
-        if (conn->egress.pending_flows != 0)
-            return 0;
+        if (conn->egress.pending_flows != 0) {
+            /* crypto streams (as indicated by lower 4 bits) can be sent whenever CWND is available; other flows need application
+             * packet number space */
+            if (conn->application != NULL && conn->application->cipher.egress.key.header_protection != NULL)
+                return 0;
+            if ((conn->egress.pending_flows & 0xf) != 0)
+                return 0;
+        }
         if (quicly_linklist_is_linked(&conn->egress.pending_streams.control))
             return 0;
         if (scheduler_can_send(conn))
@@ -3445,7 +3494,7 @@ Emit: /* emit an ACK frame */
     if ((ret = do_allocate_frame(conn, s, QUICLY_ACK_FRAME_CAPACITY, ALLOCATE_FRAME_TYPE_NON_ACK_ELICITING)) != 0)
         return ret;
     uint8_t *dst = s->dst;
-    dst = quicly_encode_ack_frame(dst, s->dst_end, &space->ack_queue, ack_delay);
+    dst = quicly_encode_ack_frame(dst, s->dst_end, &space->ack_queue, space->ecn_counts, ack_delay);
 
     /* when there's no space, retry with a new MTU-sized packet */
     if (dst == NULL) {
@@ -3638,8 +3687,10 @@ int quicly_is_blocked(quicly_conn_t *conn)
         return 0;
 
     /* schedule the transmission of DATA_BLOCKED frame, if it's new information */
-    if (conn->egress.data_blocked == QUICLY_SENDER_STATE_NONE)
+    if (conn->egress.data_blocked == QUICLY_SENDER_STATE_NONE) {
         conn->egress.data_blocked = QUICLY_SENDER_STATE_SEND;
+        conn->egress.pending_flows = QUICLY_PENDING_FLOW_OTHERS_BIT;
+    }
 
     return 1;
 }
@@ -3918,29 +3969,35 @@ static int mark_frames_on_pto(quicly_conn_t *conn, uint8_t ack_epoch, size_t *by
     return 0;
 }
 
+static void notify_congestion_to_cc(quicly_conn_t *conn, uint16_t lost_bytes, uint64_t lost_pn)
+{
+    conn->egress.cc.type->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_bytes, lost_pn, conn->egress.packet_number,
+                                     conn->stash.now, conn->egress.max_udp_payload_size);
+    QUICLY_PROBE(CC_CONGESTION, conn, conn->stash.now, lost_pn + 1, conn->egress.loss.sentmap.bytes_in_flight,
+                 conn->egress.cc.cwnd);
+    QUICLY_LOG_CONN(cc_congestion, conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(max_lost_pn, lost_pn + 1);
+        PTLS_LOG_ELEMENT_UNSIGNED(flight, conn->egress.loss.sentmap.bytes_in_flight);
+        PTLS_LOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
+    });
+}
+
 static void on_loss_detected(quicly_loss_t *loss, const quicly_sent_packet_t *lost_packet, int is_time_threshold)
 {
     quicly_conn_t *conn = (void *)((char *)loss - offsetof(quicly_conn_t, egress.loss));
+
+    assert(lost_packet->cc_bytes_in_flight != 0);
 
     ++conn->super.stats.num_packets.lost;
     if (is_time_threshold)
         ++conn->super.stats.num_packets.lost_time_threshold;
     conn->super.stats.num_bytes.lost += lost_packet->cc_bytes_in_flight;
-    conn->egress.cc.type->cc_on_lost(&conn->egress.cc, &conn->egress.loss, lost_packet->cc_bytes_in_flight,
-                                     lost_packet->packet_number, conn->egress.packet_number, conn->stash.now,
-                                     conn->egress.max_udp_payload_size);
     QUICLY_PROBE(PACKET_LOST, conn, conn->stash.now, lost_packet->packet_number, lost_packet->ack_epoch);
     QUICLY_LOG_CONN(packet_lost, conn, {
         PTLS_LOG_ELEMENT_UNSIGNED(pn, lost_packet->packet_number);
         PTLS_LOG_ELEMENT_UNSIGNED(packet_type, lost_packet->ack_epoch);
     });
-    QUICLY_PROBE(CC_CONGESTION, conn, conn->stash.now, lost_packet->packet_number + 1, conn->egress.loss.sentmap.bytes_in_flight,
-                 conn->egress.cc.cwnd);
-    QUICLY_LOG_CONN(cc_congestion, conn, {
-        PTLS_LOG_ELEMENT_UNSIGNED(max_lost_pn, lost_packet->packet_number + 1);
-        PTLS_LOG_ELEMENT_UNSIGNED(flight, conn->egress.loss.sentmap.bytes_in_flight);
-        PTLS_LOG_ELEMENT_UNSIGNED(cwnd, conn->egress.cc.cwnd);
-    });
+    notify_congestion_to_cc(conn, lost_packet->cc_bytes_in_flight, lost_packet->packet_number);
     QUICLY_PROBE(QUICTRACE_CC_LOST, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
                  conn->egress.loss.sentmap.bytes_in_flight);
 }
@@ -4523,7 +4580,90 @@ static int update_traffic_key_cb(ptls_update_traffic_key_t *self, ptls_t *tls, i
         /* schedule NEW_CONNECTION_IDs */
         size_t size = local_cid_size(conn);
         if (quicly_local_cid_set_size(&conn->super.local.cid_set, size))
-            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_CID_FRAME_BIT;
+            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
+    }
+
+    return 0;
+}
+
+static int send_other_control_frames(quicly_conn_t *conn, quicly_send_context_t *s)
+{
+    int ret;
+
+    /* respond to all pending received PATH_CHALLENGE frames */
+    if (conn->egress.path_challenge.head != NULL) {
+        do {
+            struct st_quicly_pending_path_challenge_t *c = conn->egress.path_challenge.head;
+            if ((ret = do_allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY, ALLOCATE_FRAME_TYPE_NON_ACK_ELICITING)) !=
+                0)
+                return ret;
+            s->dst = quicly_encode_path_challenge_frame(s->dst, c->is_response, c->data);
+            if (c->is_response) {
+                ++conn->super.stats.num_frames_sent.path_response;
+            } else {
+                ++conn->super.stats.num_frames_sent.path_challenge;
+            }
+            conn->egress.path_challenge.head = c->next;
+            free(c);
+        } while (conn->egress.path_challenge.head != NULL);
+        conn->egress.path_challenge.tail_ref = &conn->egress.path_challenge.head;
+        s->target.full_size = 1; /* datagrams carrying PATH_CHALLENGE / PATH_RESPONSE have to be full-sized */
+    }
+
+    /* MAX_STREAMS */
+    if ((ret = send_max_streams(conn, 1, s)) != 0)
+        return ret;
+    if ((ret = send_max_streams(conn, 0, s)) != 0)
+        return ret;
+
+    /* MAX_DATA */
+    if (should_send_max_data(conn)) {
+        quicly_sent_t *sent;
+        if ((ret = allocate_ack_eliciting_frame(conn, s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
+            return ret;
+        uint64_t new_value = conn->ingress.max_data.bytes_consumed + conn->super.ctx->transport_params.max_data;
+        s->dst = quicly_encode_max_data_frame(s->dst, new_value);
+        quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
+        ++conn->super.stats.num_frames_sent.max_data;
+        QUICLY_PROBE(MAX_DATA_SEND, conn, conn->stash.now, new_value);
+        QUICLY_LOG_CONN(max_data_send, conn, { PTLS_LOG_ELEMENT_UNSIGNED(maximum, new_value); });
+    }
+
+    /* DATA_BLOCKED */
+    if (conn->egress.data_blocked == QUICLY_SENDER_STATE_SEND && (ret = send_data_blocked(conn, s)) != 0)
+        return ret;
+
+    /* STREAMS_BLOCKED */
+    if ((ret = send_streams_blocked(conn, 1, s)) != 0)
+        return ret;
+    if ((ret = send_streams_blocked(conn, 0, s)) != 0)
+        return ret;
+
+    { /* NEW_CONNECTION_ID */
+        size_t i, size = quicly_local_cid_get_size(&conn->super.local.cid_set);
+        for (i = 0; i < size; i++) {
+            /* PENDING CIDs are located at the front */
+            struct st_quicly_local_cid_t *c = &conn->super.local.cid_set.cids[i];
+            if (c->state != QUICLY_LOCAL_CID_STATE_PENDING)
+                break;
+            if ((ret = send_new_connection_id(conn, s, c)) != 0)
+                break;
+        }
+        quicly_local_cid_on_sent(&conn->super.local.cid_set, i);
+        if (ret != 0)
+            return ret;
+    }
+
+    { /* RETIRE_CONNECTION_ID */
+        size_t i, size = quicly_retire_cid_get_num_pending(&conn->egress.retire_cid);
+        for (i = 0; i < size; i++) {
+            uint64_t sequence = conn->egress.retire_cid.sequences[i];
+            if ((ret = send_retire_connection_id(conn, s, sequence)) != 0)
+                break;
+        }
+        quicly_retire_cid_shift(&conn->egress.retire_cid, i);
+        if (ret != 0)
+            return ret;
     }
 
     return 0;
@@ -4590,6 +4730,12 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                 (ret = mark_frames_on_pto(conn, QUICLY_EPOCH_1RTT, &bytes_to_mark)) != 0)
                 goto Exit;
         }
+    }
+
+    /* disable ECN if zero packets where acked in the first 3 PTO of the connection during which all sent packets are ECT(0) */
+    if (conn->egress.ecn.state == QUICLY_ECN_PROBING && conn->created_at + conn->egress.loss.rtt.smoothed * 3 < conn->stash.now) {
+        update_ecn_state(conn, QUICLY_ECN_OFF);
+        /* TODO reset CC? */
     }
 
     s->send_window = calc_send_window(conn, min_packets_to_send * conn->egress.max_udp_payload_size,
@@ -4663,80 +4809,15 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                         goto Exit;
                     resched_stream_data(stream);
                 }
-                /* respond to all pending received PATH_CHALLENGE frames */
-                if (conn->egress.path_challenge.head != NULL) {
-                    do {
-                        struct st_quicly_pending_path_challenge_t *c = conn->egress.path_challenge.head;
-                        if ((ret = do_allocate_frame(conn, s, QUICLY_PATH_CHALLENGE_FRAME_CAPACITY,
-                                                     ALLOCATE_FRAME_TYPE_NON_ACK_ELICITING)) != 0)
-                            goto Exit;
-                        s->dst = quicly_encode_path_challenge_frame(s->dst, c->is_response, c->data);
-                        if (c->is_response) {
-                            ++conn->super.stats.num_frames_sent.path_response;
-                        } else {
-                            ++conn->super.stats.num_frames_sent.path_challenge;
-                        }
-                        conn->egress.path_challenge.head = c->next;
-                        free(c);
-                    } while (conn->egress.path_challenge.head != NULL);
-                    conn->egress.path_challenge.tail_ref = &conn->egress.path_challenge.head;
-                    s->target.full_size = 1; /* datagrams carrying PATH_CHALLENGE / PATH_RESPONSE have to be full-sized */
-                }
-                /* send max_streams frames */
-                if ((ret = send_max_streams(conn, 1, s)) != 0)
+                /* send other connection-level control frames, and iff we succeed in sending all of them, clear OTHERS_BIT to
+                 * disable `quicly_send` being called right again to send more control frames */
+                if ((ret = send_other_control_frames(conn, s)) != 0)
                     goto Exit;
-                if ((ret = send_max_streams(conn, 0, s)) != 0)
-                    goto Exit;
-                /* send connection-level flow control frames */
-                if (should_send_max_data(conn)) {
-                    quicly_sent_t *sent;
-                    if ((ret = allocate_ack_eliciting_frame(conn, s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
-                        goto Exit;
-                    uint64_t new_value = conn->ingress.max_data.bytes_consumed + conn->super.ctx->transport_params.max_data;
-                    s->dst = quicly_encode_max_data_frame(s->dst, new_value);
-                    quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
-                    ++conn->super.stats.num_frames_sent.max_data;
-                    QUICLY_PROBE(MAX_DATA_SEND, conn, conn->stash.now, new_value);
-                    QUICLY_LOG_CONN(max_data_send, conn, { PTLS_LOG_ELEMENT_UNSIGNED(maximum, new_value); });
-                }
-                if (conn->egress.data_blocked == QUICLY_SENDER_STATE_SEND && (ret = send_data_blocked(conn, s)) != 0)
-                    goto Exit;
-                /* send streams_blocked frames */
-                if ((ret = send_streams_blocked(conn, 1, s)) != 0)
-                    goto Exit;
-                if ((ret = send_streams_blocked(conn, 0, s)) != 0)
-                    goto Exit;
+                conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_OTHERS_BIT;
                 /* send NEW_TOKEN */
                 if ((conn->egress.pending_flows & QUICLY_PENDING_FLOW_NEW_TOKEN_BIT) != 0 &&
                     (ret = send_resumption_token(conn, s)) != 0)
                     goto Exit;
-                if ((conn->egress.pending_flows & QUICLY_PENDING_FLOW_CID_FRAME_BIT) != 0) {
-                    /* send NEW_CONNECTION_ID */
-                    size_t i;
-                    size_t size = quicly_local_cid_get_size(&conn->super.local.cid_set);
-                    for (i = 0; i < size; i++) {
-                        /* PENDING CIDs are located at the front */
-                        struct st_quicly_local_cid_t *c = &conn->super.local.cid_set.cids[i];
-                        if (c->state != QUICLY_LOCAL_CID_STATE_PENDING)
-                            break;
-                        if ((ret = send_new_connection_id(conn, s, c)) != 0)
-                            break;
-                    }
-                    quicly_local_cid_on_sent(&conn->super.local.cid_set, i);
-                    if (ret != 0)
-                        goto Exit;
-                    /* send RETIRE_CONNECTION_ID */
-                    size = quicly_retire_cid_get_num_pending(&conn->egress.retire_cid);
-                    for (i = 0; i < size; i++) {
-                        uint64_t sequence = conn->egress.retire_cid.sequences[i];
-                        if ((ret = send_retire_connection_id(conn, s, sequence)) != 0)
-                            break;
-                    }
-                    quicly_retire_cid_shift(&conn->egress.retire_cid, i);
-                    if (ret != 0)
-                        goto Exit;
-                    conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_CID_FRAME_BIT;
-                }
             }
             /* send stream-level control frames */
             if ((ret = send_stream_control_frames(conn, s)) != 0)
@@ -4744,9 +4825,14 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
             /* send STREAM frames */
             if ((ret = conn->super.ctx->stream_scheduler->do_send(conn->super.ctx->stream_scheduler, conn, s)) != 0)
                 goto Exit;
-            /* once more, send stream-level control frames, as the state might have changed */
+            /* once more, send control frames related to streams, as the state might have changed */
             if ((ret = send_stream_control_frames(conn, s)) != 0)
                 goto Exit;
+            if ((conn->egress.pending_flows & QUICLY_PENDING_FLOW_OTHERS_BIT) != 0) {
+                if ((ret = send_other_control_frames(conn, s)) != 0)
+                    goto Exit;
+                conn->egress.pending_flows &= ~QUICLY_PENDING_FLOW_OTHERS_BIT;
+            }
         }
     }
 
@@ -4875,6 +4961,11 @@ Exit:
     *num_datagrams = s.num_datagrams;
     unlock_now(conn);
     return ret;
+}
+
+uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn)
+{
+    return conn->egress.ecn.state == QUICLY_ECN_OFF ? 0 : 2; /* NON-ECT or ECT(0) */
 }
 
 size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
@@ -5282,6 +5373,39 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     if ((ret = quicly_loss_detect_loss(&conn->egress.loss, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
                                        conn->initial == NULL && conn->handshake == NULL, on_loss_detected)) != 0)
         return ret;
+
+    /* ECN */
+    if (conn->egress.ecn.state != QUICLY_ECN_OFF && largest_newly_acked.pn != UINT64_MAX) {
+        /* if things look suspicious (ECT(1) count becoming non-zero), turn ECN off */
+        if (frame.ecn_counts[1] != 0)
+            update_ecn_state(conn, QUICLY_ECN_OFF);
+        /* TODO: maybe compare num_packets.acked vs. sum(ecn_counts) to see if any packet has been received as NON-ECT? */
+
+        /* ECN validation succeeds if at least one packet is acked using one of the expected marks during the probing period */
+        if (conn->egress.ecn.state == QUICLY_ECN_PROBING && frame.ecn_counts[0] + frame.ecn_counts[2] > 0)
+            update_ecn_state(conn, QUICLY_ECN_ON);
+
+        /* check if congestion should be reported */
+        int report_congestion =
+            conn->egress.ecn.state != QUICLY_ECN_OFF && frame.ecn_counts[2] > conn->egress.ecn.counts[state->epoch][2];
+
+        /* update counters */
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(frame.ecn_counts); ++i) {
+            if (frame.ecn_counts[i] > conn->egress.ecn.counts[state->epoch][i]) {
+                conn->super.stats.num_packets.acked_ecn_counts[i] += frame.ecn_counts[i] - conn->egress.ecn.counts[state->epoch][i];
+                conn->egress.ecn.counts[state->epoch][i] = frame.ecn_counts[i];
+            }
+        }
+
+        /* report congestion */
+        if (report_congestion) {
+            QUICLY_PROBE(ECN_CONGESTION, conn, conn->stash.now, conn->super.stats.num_packets.acked_ecn_counts[2]);
+            QUICLY_LOG_CONN(ecn_congestion, conn,
+                            { PTLS_LOG_ELEMENT_UNSIGNED(ce_count, conn->super.stats.num_packets.acked_ecn_counts[2]); });
+            notify_congestion_to_cc(conn, 0, largest_newly_acked.pn);
+        }
+    }
+
     setup_next_send(conn);
 
     return 0;
@@ -5332,7 +5456,7 @@ static int handle_data_blocked_frame(quicly_conn_t *conn, struct st_quicly_handl
 
     quicly_maxsender_request_transmit(&conn->ingress.max_data.sender);
     if (should_send_max_data(conn))
-        conn->egress.send_ack_at = 0;
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
 
     return 0;
 }
@@ -5381,7 +5505,7 @@ static int handle_streams_blocked_frame(quicly_conn_t *conn, struct st_quicly_ha
     if (should_send_max_streams(conn, uni)) {
         quicly_maxsender_t *maxsender = uni ? &conn->ingress.max_streams.uni : &conn->ingress.max_streams.bidi;
         quicly_maxsender_request_transmit(maxsender);
-        conn->egress.send_ack_at = 0;
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
     }
 
     return 0;
@@ -5439,6 +5563,8 @@ static int handle_new_token_frame(quicly_conn_t *conn, struct st_quicly_handle_p
     quicly_new_token_frame_t frame;
     int ret;
 
+    if (!quicly_is_client(conn))
+        return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
     if ((ret = quicly_decode_new_token_frame(&state->src, state->end, &frame)) != 0)
         return ret;
     QUICLY_PROBE(NEW_TOKEN_RECEIVE, conn, conn->stash.now, frame.token.base, frame.token.len);
@@ -5788,7 +5914,7 @@ static int handle_retire_connection_id_frame(quicly_conn_t *conn, struct st_quic
     if ((ret = quicly_local_cid_retire(&conn->super.local.cid_set, frame.sequence, &has_pending)) != 0)
         return ret;
     if (has_pending)
-        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_CID_FRAME_BIT;
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
 
     return 0;
 }
@@ -6103,10 +6229,13 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 
     /* handle the input; we ignore is_ack_only, we consult if there's any output from TLS in response to CH anyways */
     (*conn)->super.stats.num_packets.received += 1;
+    if (packet->ecn != 0)
+        (*conn)->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
     (*conn)->super.stats.num_bytes.received += packet->datagram_size;
     if ((ret = handle_payload(*conn, QUICLY_EPOCH_INITIAL, payload.base, payload.len, &offending_frame_type, &is_ack_only)) != 0)
         goto Exit;
-    if ((ret = record_receipt(&(*conn)->initial->super, pn, 0, (*conn)->stash.now, &(*conn)->egress.send_ack_at)) != 0)
+    if ((ret = record_receipt(&(*conn)->initial->super, pn, packet->ecn, 0, (*conn)->stash.now, &(*conn)->egress.send_ack_at,
+                              &(*conn)->super.stats.num_packets.received_out_of_order)) != 0)
         goto Exit;
 
 Exit:
@@ -6317,6 +6446,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT)
         conn->super.state = QUICLY_STATE_CONNECTED;
     conn->super.stats.num_packets.received += 1;
+    if (packet->ecn != 0)
+        conn->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
 
     /* state updates, that are triggered by the receipt of a packet */
     switch (epoch) {
@@ -6343,7 +6474,8 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     if ((ret = handle_payload(conn, epoch, payload.base, payload.len, &offending_frame_type, &is_ack_only)) != 0)
         goto Exit;
     if (*space != NULL && conn->super.state < QUICLY_STATE_CLOSING) {
-        if ((ret = record_receipt(*space, pn, is_ack_only, conn->stash.now, &conn->egress.send_ack_at)) != 0)
+        if ((ret = record_receipt(*space, pn, packet->ecn, is_ack_only, conn->stash.now, &conn->egress.send_ack_at,
+                                  &conn->super.stats.num_packets.received_out_of_order)) != 0)
             goto Exit;
     }
 
@@ -6378,7 +6510,7 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
         break;
     case QUICLY_EPOCH_1RTT:
         if (!is_ack_only && should_send_max_data(conn))
-            conn->egress.send_ack_at = 0;
+            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
         break;
     default:
         break;
@@ -6443,6 +6575,7 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **_stream, int uni)
         stream->streams_blocked = 1;
         quicly_linklist_insert((uni ? &conn->egress.pending_streams.blocked.uni : &conn->egress.pending_streams.blocked.bidi)->prev,
                                &stream->_send_aux.pending_link.control);
+        conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
     }
 
     /* application-layer initialization */
