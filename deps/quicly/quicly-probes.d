@@ -140,6 +140,9 @@ provider quicly {
     probe path_response_send(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
     probe path_response_receive(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
 
+    probe ecn_validation(struct st_quicly_conn_t *conn, int64_t at, int ecn_state);
+    probe ecn_congestion(struct st_quicly_conn_t *conn, int64_t at, uint64_t ce_count);
+
     probe datagram_send(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
     probe datagram_receive(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
 

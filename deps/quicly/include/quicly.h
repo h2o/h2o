@@ -344,6 +344,10 @@ struct st_quicly_context_t {
      */
     unsigned expand_client_hello : 1;
     /**
+     * whether to use ECN on the send side; ECN is always on on the receive side
+     */
+    unsigned enable_ecn : 1;
+    /**
      *
      */
     quicly_cid_encryptor_t *cid_encryptor;
@@ -468,6 +472,14 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t received_out_of_order;                                                                                            \
         /**                                                                                                                        \
+         * connection-wide counters for ECT(0), ECT(1), CE                                                                         \
+         */                                                                                                                        \
+        uint64_t received_ecn_counts[3];                                                                                           \
+        /**                                                                                                                        \
+         * connection-wide ack-received counters for ECT(0), ECT(1), CE                                                            \
+         */                                                                                                                        \
+        uint64_t acked_ecn_counts[3];                                                                                              \
+        /**                                                                                                                        \
          * Total number of packets sent on promoted paths.                                                                         \
          */                                                                                                                        \
         uint64_t sent_promoted_paths;                                                                                              \
@@ -527,6 +539,14 @@ struct st_quicly_conn_streamgroup_state_t {
          * number of alternate paths that were closed due to Connection ID being unavailable                                       \
          */                                                                                                                        \
         uint64_t closed_no_dcid;                                                                                                   \
+        /**                                                                                                                        \
+         * number of paths that were ECN-capable                                                                                   \
+         */                                                                                                                        \
+        uint64_t ecn_validated;                                                                                                    \
+        /**                                                                                                                        \
+         * number of paths that were deemed as ECN black holes                                                                     \
+         */                                                                                                                        \
+        uint64_t ecn_failed;                                                                                                       \
     } num_paths;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of each frame being sent / received.                                                                           \
@@ -854,6 +874,10 @@ typedef struct st_quicly_decoded_packet_t {
         uint64_t key_phase;
     } decrypted;
     /**
+     * ECN bits
+     */
+    uint8_t ecn : 2;
+    /**
      *
      */
     enum {
@@ -1070,6 +1094,10 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  */
 int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams, size_t *num_datagrams,
                 void *buf, size_t bufsize);
+/**
+ * returns ECN bits to be set for the packets built by the last invocation of `quicly_send`
+ */
+uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn);
 /**
  *
  */
