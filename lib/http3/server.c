@@ -752,7 +752,8 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 
     char *buf;
     size_t len;
-    static __thread size_t bufsize = 100; /* this value grows by 1.5x and is remembered for future invocations */
+    static __thread size_t bufsize = 100; /* this value grows by 1.5x to find adequete value, and is remembered for future
+                                           * invocations */
 Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
     len = 0;
