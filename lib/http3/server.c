@@ -706,7 +706,7 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 {
 #define PUSH_FIELD(name, type, field)                                                                                              \
     do {                                                                                                                           \
-        len += sprintf(buf, name "=" type ",", stats.field);                                                                      \
+        len += snprintf(buf + len, bufsize - len, name "=" type ",", stats.field);                                                 \
         if (len + 1 > bufsize) {                                                                                                   \
             bufsize = bufsize * 3 / 2;                                                                                             \
             goto Redo;                                                                                                             \
