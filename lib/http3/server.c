@@ -712,8 +712,9 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
             goto Redo;                                                                                                             \
         }                                                                                                                          \
     } while (0)
-#define PUSH_U64(name, field) PUSH_FIELD(name, "%" PRIu64, field)
+#define PUSH_U16(name, field) PUSH_FIELD(name, "%" PRIu16, field)
 #define PUSH_U32(name, field) PUSH_FIELD(name, "%" PRIu32, field)
+#define PUSH_U64(name, field) PUSH_FIELD(name, "%" PRIu64, field)
 #define PUSH_SIZE_T(name, field) PUSH_FIELD(name, "%zu", field)
 
 #define DO_PUSH_NUM_FRAMES(name, dir) PUSH_U64(H2O_TO_STR(name) "-" H2O_TO_STR(dir), num_frames_##dir.name)
@@ -792,6 +793,8 @@ Redo:
     PUSH_U32("num-loss-episodes", cc.num_loss_episodes);
     PUSH_U32("num-ecn-loss-episodes", cc.num_ecn_loss_episodes);
     PUSH_U64("num-ptos", num_ptos);
+    PUSH_U16("max-udp-received", max_udp_payload_size.received);
+    PUSH_U16("max-udp-sent", max_udp_payload_size.sent);
     PUSH_U64("delivery-rate-latest", delivery_rate.latest);
     PUSH_U64("delivery-rate-smoothed", delivery_rate.smoothed);
     PUSH_U64("delivery-rate-stdev", delivery_rate.stdev);
