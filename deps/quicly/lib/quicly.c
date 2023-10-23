@@ -3287,6 +3287,8 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
 
     if (!coalesced) {
         conn->super.stats.num_bytes.sent += datagram_size;
+        if (conn->super.stats.max_udp_payload_size.sent < datagram_size)
+            conn->super.stats.max_udp_payload_size.sent = datagram_size;
         s->datagrams[s->num_datagrams++] = (struct iovec){.iov_base = s->payload_buf.datagram, .iov_len = datagram_size};
         s->payload_buf.datagram += datagram_size;
         s->target.cipher = NULL;
@@ -6232,6 +6234,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
     if (packet->ecn != 0)
         (*conn)->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
     (*conn)->super.stats.num_bytes.received += packet->datagram_size;
+    (*conn)->super.stats.max_udp_payload_size.received = packet->datagram_size;
     if ((ret = handle_payload(*conn, QUICLY_EPOCH_INITIAL, payload.base, payload.len, &offending_frame_type, &is_ack_only)) != 0)
         goto Exit;
     if ((ret = record_receipt(&(*conn)->initial->super, pn, packet->ecn, 0, (*conn)->stash.now, &(*conn)->egress.send_ack_at,
@@ -6287,8 +6290,12 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
 
     /* FIXME check peer address */
 
-    /* add unconditionally, as packet->datagram_size is set only for the first packet within the UDP datagram */
-    conn->super.stats.num_bytes.received += packet->datagram_size;
+    /* update stats if this the first QUIC packet of a UDP datagram (as indicated by datagram_size of non-zero) */
+    if (packet->datagram_size != 0) {
+        conn->super.stats.num_bytes.received += packet->datagram_size;
+        if (conn->super.stats.max_udp_payload_size.received < packet->datagram_size)
+            conn->super.stats.max_udp_payload_size.received += packet->datagram_size;
+    }
 
     switch (conn->super.state) {
     case QUICLY_STATE_CLOSING:

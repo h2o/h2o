@@ -523,7 +523,14 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
      */                                                                                                                            \
-    uint64_t num_initial_handshake_exceeded
+    uint64_t num_initial_handshake_exceeded;                                                                                       \
+    /**                                                                                                                            \
+     *                                                                                                                             \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        uint16_t sent;                                                                                                             \
+        uint16_t received;                                                                                                         \
+    } max_udp_payload_size
 
 typedef struct st_quicly_stats_t {
     /**
