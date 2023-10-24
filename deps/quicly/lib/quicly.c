@@ -5696,7 +5696,6 @@ static int compare_socket_address(struct sockaddr *x, struct sockaddr *y)
         if (r != 0)
             return r;
         CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
-        CMP(xin6->sin6_flowinfo, yin6->sin6_flowinfo);
         CMP(xin6->sin6_scope_id, yin6->sin6_scope_id);
     } else if (x->sa_family == AF_UNSPEC) {
         return 1;
@@ -6744,6 +6743,7 @@ int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead
                 break;
             case AF_INET6:
                 ptls_buffer_pushv(buf, &plaintext->remote.sin6.sin6_addr, 16);
+                ptls_buffer_push32(buf, plaintext->remote.sin6.sin6_scope_id);
                 port = ntohs(plaintext->remote.sin6.sin6_port);
                 break;
             default:
@@ -6841,9 +6841,11 @@ int quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token
                 memcpy(&plaintext->remote.sin.sin_addr.s_addr, src, 4);
                 portaddr = &plaintext->remote.sin.sin_port;
                 break;
-            case 16: /* ipv6 */
-                plaintext->remote.sin6.sin6_family = AF_INET6;
+            case 20: /* ipv6 */
+                plaintext->remote.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
                 memcpy(&plaintext->remote.sin6.sin6_addr, src, 16);
+                if ((ret = ptls_decode32(&plaintext->remote.sin6.sin6_scope_id, &src, end)) != 0)
+                    goto Exit;
                 portaddr = &plaintext->remote.sin6.sin6_port;
                 break;
             default:
