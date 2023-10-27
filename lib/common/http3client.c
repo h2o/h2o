@@ -457,7 +457,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         case H2O_HTTP3_FRAME_TYPE_DATA:
             break;
         case H2O_HTTP3_FRAME_TYPE_HEADERS:
-            if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect)
+            if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect || req->super.extended_connect_protocol != NULL)
                 return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             /* flow continues */
         default:
@@ -741,6 +741,10 @@ void start_request(struct st_h2o_http3client_req_t *req)
         return;
     }
     req->quic->data = req;
+    h2o_iovec_t protocol = {};
+    if (req->super.extended_connect_protocol) {
+        protocol = h2o_iovec_init(req->super.extended_connect_protocol, strlen(req->super.extended_connect_protocol));
+    }
 
     /* send request (TODO optimize) */
     h2o_iovec_t datagram_flow_id = {};
@@ -752,7 +756,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     }
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
-                                  url.authority, url.path, headers, num_headers, datagram_flow_id);
+                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0)
         emit_data(req, body);
@@ -760,7 +764,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         req->super.write_req = do_write_req;
         req->proceed_req.bytes_inflight = body.len;
     }
-    if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL)
+    if (req->proceed_req.cb == NULL && req->super.upgrade_to == NULL && req->super.extended_connect_protocol == NULL)
         quicly_sendstate_shutdown(&req->quic->sendstate, req->sendbuf->size);
     quicly_stream_sync_sendbuf(req->quic, 1);
 
@@ -835,12 +839,13 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
 
 void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
-                                h2o_httpclient_connect_cb cb)
+                                const char* extended_connect_protocol, h2o_httpclient_connect_cb cb)
 {
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
 
     assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect);
+    assert(extended_connect_protocol == NULL || strcmp(extended_connect_protocol, "connect-udp") == 0);
 
     if ((conn = find_connection(connpool, target)) == NULL)
         conn = create_connection(ctx, connpool, target);
@@ -855,6 +860,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                   NULL,
                   {h2o_gettimeofday(ctx->loop)},
                   upgrade_to,
+                  extended_connect_protocol,
                   {0},
                   {0},
                   cancel_request,

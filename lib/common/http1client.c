@@ -577,7 +577,7 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     client->state.req = STREAM_STATE_CLOSED;
     client->super.timings.request_end_at = h2o_gettimeofday(client->super.ctx->loop);
 
-    if (client->super.upgrade_to != NULL) {
+    if (client->super.upgrade_to != NULL || client->super.extended_connect_protocol != NULL) {
         /* TODO use shutdown(2) to signal the peer that our send side has been closed, but continue reading on the receive side. */
         on_error(client, client->state.res < STREAM_STATE_BODY ? h2o_httpclient_error_io : h2o_httpclient_error_is_eos);
     } else {

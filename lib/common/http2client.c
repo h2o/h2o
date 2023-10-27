@@ -1085,6 +1085,11 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
         return;
     }
 
+    h2o_iovec_t protocol = {};
+    if (stream->super.extended_connect_protocol) {
+        protocol = h2o_iovec_init(stream->super.extended_connect_protocol, strlen(stream->super.extended_connect_protocol));
+    }
+
     h2o_http2_window_init(&stream->output.window, conn->peer_settings.initial_window_size);
 
     /* forward request state */
@@ -1102,8 +1107,8 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
 
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
-                              stream->stream_id, conn->peer_settings.max_frame_size, method, &url, headers, num_headers,
-                              stream->state.req == STREAM_STATE_CLOSED);
+                              stream->stream_id, conn->peer_settings.max_frame_size, method, &url, protocol,
+                              headers, num_headers, stream->state.req == STREAM_STATE_CLOSED);
 
     if (stream->state.req == STREAM_STATE_BODY) {
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);

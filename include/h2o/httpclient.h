@@ -257,6 +257,14 @@ struct st_h2o_httpclient_t {
      * special label called `h2o_httpclient_req_upgrade_connect`.
      */
     const char *upgrade_to;
+    /**
+     * Protocol to use to create extended CONNECT and CONNECT-UDP tunnels.
+     * Standards:
+     *   RFC 8441 Extended Connect and websockets over HTTP/2
+     *   RFC 9220 Extended Connect and websockets over HTTP/3
+     *   RFC 9298 CONNECT-UDP over extended Connect
+     */
+    const char* extended_connect_protocol;
 
     /**
      * bytes written (above the TLS layer)
@@ -386,7 +394,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
  */
 void h2o_httpclient_connect(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                             h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
-                            h2o_httpclient_connect_cb on_connect);
+                            const char* extended_connect_protocol, h2o_httpclient_connect_cb on_connect);
 
 void h2o_httpclient__h1_on_connect(h2o_httpclient_t *client, h2o_socket_t *sock, h2o_url_t *origin);
 extern const size_t h2o_httpclient__h1_size;
@@ -406,7 +414,7 @@ extern quicly_stream_open_t h2o_httpclient_http3_on_stream_open;
 extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame;
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
-                                h2o_httpclient_connect_cb cb);
+                                const char* extended_connect_protocol, h2o_httpclient_connect_cb cb);
 /**
  * internal API for checking if the stream is to be turned into a tunnel
  */
@@ -421,7 +429,11 @@ inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
             return 1;
         if (status == 101)
             return 1;
+    } else if (client->extended_connect_protocol != NULL) {
+        if (status == 200 || status == 101)
+            return 1;
     }
+
     return 0;
 }
 
