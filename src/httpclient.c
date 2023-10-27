@@ -274,7 +274,9 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
         }
-        if (strcmp(req.method, "CONNECT-UDP") == 0) {
+        if (strcmp(req.method, "CONNECT") == 0) {
+            url_parsed->scheme = &H2O_URL_SCHEME_CONNECT_NONE;
+        } else if (strcmp(req.method, "CONNECT-UDP") == 0) {
             url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
             url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
         }
