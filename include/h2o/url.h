@@ -32,8 +32,12 @@ typedef struct st_h2o_url_scheme_t {
     int is_ssl;
 } h2o_url_scheme_t;
 
-extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS, H2O_URL_SCHEME_MASQUE;
+extern const h2o_url_scheme_t H2O_URL_SCHEME_HTTP, H2O_URL_SCHEME_HTTPS;
 extern const h2o_url_scheme_t H2O_URL_SCHEME_MASQUE;
+/**
+ * no :scheme for CONNECT over H2/H3 prior to the introduction of extended CONNECT RFC 8441 / RFC 9220
+ */
+extern const h2o_url_scheme_t H2O_URL_SCHEME_CONNECT_NONE;
 /**
  * used by fastcgi handler
  */
