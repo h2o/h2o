@@ -24,6 +24,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 #include "picohttpparser.h"
 #include "h2o.h"
 #include "h2o/http1.h"
@@ -673,7 +676,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+        /* use syscall, as android does not provide the prototype for pipe2 */
+        if (syscall(SYS_pipe2, self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
             char errbuf[256];
             h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
         }
