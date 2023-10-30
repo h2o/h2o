@@ -3040,7 +3040,7 @@ static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd,
     const char *cpu_spec = node->data.scalar;
     unsigned cpu_low, cpu_high, cpu_num;
     int pos;
-    if (index(cpu_spec, '-') == NULL) {
+    if (strchr(cpu_spec, '-') == NULL) {
         if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
             goto Error;
         cpu_high = cpu_low;
