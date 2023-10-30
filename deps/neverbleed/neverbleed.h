@@ -33,7 +33,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__FreeBSD__) || defined(__NetBSD__)
 #define NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP 1
 #if defined(__linux__)
 #define NEVERBLEED_CPU_SET_T cpu_set_t
@@ -117,8 +117,15 @@ typedef void (*neverbleed_cb)(int);
 int neverbleed_get_fd(neverbleed_t *nb);
 static size_t neverbleed_iobuf_size(neverbleed_iobuf_t *buf);
 void neverbleed_iobuf_dispose(neverbleed_iobuf_t *buf);
-void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
-void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+
+/**
+ * read a transaction, returns -1 on failure, errno may be set
+ */
+int neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf);
+/**
+ * write a transaction, returns -1 on failure, errno may be set
+ */
+int neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf);
 
 /**
  * if set to a non-zero value, RSA operations are offloaded
