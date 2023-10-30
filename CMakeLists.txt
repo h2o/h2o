@@ -31,8 +31,9 @@ INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
-INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
 INCLUDE(deps/picotls/cmake/boringssl-adjust.cmake)
+INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
+INCLUDE(deps/picotls/cmake/fusion.cmake)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o-evloop.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o-evloop.pc @ONLY)
@@ -136,27 +137,8 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
-CHECK_C_SOURCE_COMPILES("
-#include <emmintrin.h>
-#include <immintrin.h>
-int main(void) {
-    __m256i  ord0, ord1, ord2, ord3 = _mm256_setzero_si256();
-    ord0 = _mm256_aesenc_epi128(ord1, ord2);
-    ord3 = _mm256_aesenclast_epi128(ord0, ord1);
-    ord1 = _mm256_clmulepi64_epi128(ord3, ord2, 0x00);
-    return 0;
-}
-" CC_HAS_AESNI256)
-CMAKE_POP_CHECK_STATE()
-IF (CC_HAS_AESNI256)
-    SET(WITH_FUSION_DEFAULT "ON")
-ELSE ()
-    SET(WITH_FUSION_DEFAULT "OFF")
-ENDIF ()
+CHECK_FUSION_PREREQUISITES()
 OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
-MESSAGE(STATUS "FUSION support : ${WITH_FUSION}")
 
 # KTLS
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
