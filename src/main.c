@@ -429,6 +429,7 @@ static __thread struct {
     h2o_socket_t *sock;
     struct async_nb_queue_t write_queue;
     struct async_nb_queue_t read_queue;
+    h2o_timer_t write_pending_timer;
 } async_nb = {NULL};
 
 static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
@@ -486,9 +487,19 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
     async_nb_submit_write_pending();
 }
 
+#define NEVERBLEED_MAX_IN_FLIGHT_TX 200
+
+static void do_neverbleed_write_pending(h2o_timer_t *entry) {
+    async_nb_submit_write_pending();
+}
+
 static void async_nb_submit_write_pending(void)
 {
     struct async_nb_transaction_t *transaction;
+
+    if (async_nb.read_queue.len >= NEVERBLEED_MAX_IN_FLIGHT_TX) {
+        return;
+    }
 
     if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
@@ -500,7 +511,7 @@ static void async_nb_submit_write_pending(void)
     }
 }
 
-static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
+static void async_nb_run_sync(neverbleed_iobuf_t *buf, int (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -511,7 +522,13 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
         abort();
     }
 
-    transaction_cb(neverbleed, buf);
+    if (transaction_cb(neverbleed, buf) == -1) {
+        if (errno != 0) {
+            h2o_fatal("%s error (%d) %s", transaction_cb == neverbleed_transaction_read ? "read": "write", errno, strerror(errno));
+        } else {
+            h2o_fatal("connection closed by daemon");
+        }
+    }
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
@@ -522,15 +539,39 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
-    assert(transaction != NULL);
+    // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
+    // read responses until we get EAGAIN
+    while (async_nb.read_queue.len > 0) {
+        // get the transaction from the read queue, without removing it yet
+        struct async_nb_transaction_t *transaction = async_nb_get(&async_nb.read_queue);
+        assert(transaction != NULL);
 
-    async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+        if (neverbleed_transaction_read(neverbleed, transaction->buf) == -1) {
+            if (errno != 0) {
+                if (errno == EAGAIN) {
+                    break;
+                }
+                h2o_fatal("read error (%d) %s", errno, strerror(errno));
+            } else {
+                h2o_fatal("connection closed by daemon");
+            }
+        }
+
+        // successfully read the transaction response, we can now remove it from the read queue
+        async_nb_pop(&async_nb.read_queue);
+        transaction->on_read_complete(transaction);
+    }
+
+    // resume writing if there's room
+    if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX) {
+        if (!h2o_timer_is_linked(&async_nb.write_pending_timer)) {
+            h2o_timer_link(h2o_socket_get_loop(async_nb.sock), 0, &async_nb.write_pending_timer);
+        }
+    }
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
 
-    transaction->on_read_complete(transaction);
 }
 
 #if H2O_CAN_OSSL_ASYNC
@@ -4023,6 +4064,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_linklist_init_anchor(&async_nb.read_queue.anchor);
         h2o_linklist_init_anchor(&async_nb.write_queue.anchor);
+        h2o_timer_init(&async_nb.write_pending_timer, do_neverbleed_write_pending);
     }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
