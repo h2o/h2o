@@ -3570,10 +3570,10 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
         src = end;
     });
 
-    /* CH defined in TLS versions below 1.2 might not have extensions (or they might, see what OpenSSL 1.0.0 sends); so bail out
-     * after parsing the main variables. Zero is returned as it is a valid ClientHello. However `ptls_t::selected_version` remains
-     * zero indicating that no compatible version were found. */
-    if (ch->legacy_version < 0x0303 && src == end) {
+    /* In TLS versions 1.2 and earlier CH might not have an extensions block (or they might, see what OpenSSL 1.0.0 sends); so bail
+     * out if that is the case after parsing the main variables. Zero is returned as it is a valid ClientHello. However
+     * `ptls_t::selected_version` remains zero indicating that no compatible version were found. */
+    if (src == end) {
         ret = 0;
         goto Exit;
     }
