@@ -40,8 +40,8 @@ typedef struct st_yoml_parse_args_t {
         yoml_t *(*cb)(const char *tag, yoml_t *node, void *cb_arg);
         void *cb_arg;
     } resolve_tag;
-    int resolve_alias : 1;
-    int resolve_merge : 1;
+    unsigned resolve_alias : 1;
+    unsigned resolve_merge : 1;
 } yoml_parse_args_t;
 
 static yoml_t *yoml__parse_node(yaml_parser_t *parser, yaml_event_type_t *last_event, yoml_parse_args_t *parse_args);
