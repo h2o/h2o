@@ -533,10 +533,6 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    fd_set rfds;
-    struct timeval tv;
-    int ret;
-
     // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
     // read responses until the neverbleed fd is no longer read ready
     while (async_nb.read_queue.len > 0) {
@@ -546,14 +542,14 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
         async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
         transaction->on_read_complete(transaction);
 
-        FD_ZERO(&rfds);
-        FD_SET(neverbleed_get_fd(neverbleed), &rfds);
-        tv.tv_sec = 0;
-        tv.tv_usec = 0;
-        while ((ret = select(neverbleed_get_fd(neverbleed) + 1, &rfds, NULL, NULL, &tv)) == -1 && (errno == EAGAIN || errno == EINTR))
+        int ret;
+        struct pollfd poll_fd;
+        poll_fd.fd = neverbleed_get_fd(neverbleed);
+        poll_fd.events = POLLIN;
+        while ((ret = poll(&poll_fd, 1, 0)) == -1 && (errno == EAGAIN || errno == EINTR))
             ;
         if (ret == -1)
-            h2o_fatal("select(2):%d\n", errno);
+            h2o_fatal("poll(2):%d\n", errno);
 
         if (!ret)
             break;
