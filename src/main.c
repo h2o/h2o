@@ -542,17 +542,20 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
         async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
         transaction->on_read_complete(transaction);
 
-        int ret;
-        struct pollfd poll_fd;
-        poll_fd.fd = neverbleed_get_fd(neverbleed);
-        poll_fd.events = POLLIN;
-        while ((ret = poll(&poll_fd, 1, 0)) == -1 && (errno == EAGAIN || errno == EINTR))
-            ;
-        if (ret == -1)
-            h2o_fatal("poll(2):%d\n", errno);
+        // if the neverleed fd is read ready, continue reading transactions
+        if (async_nb.read_queue.len > 0) {
+            int ret;
+            struct pollfd poll_fd;
+            poll_fd.fd = neverbleed_get_fd(neverbleed);
+            poll_fd.events = POLLIN;
+            while ((ret = poll(&poll_fd, 1, 0)) == -1 && (errno == EAGAIN || errno == EINTR))
+                ;
+            if (ret == -1)
+                h2o_fatal("poll(2):%d\n", errno);
 
-        if (!ret)
-            break;
+            if (!ret)
+                break;
+        }
     }
 
     // resume writing if there's room
