@@ -539,27 +539,30 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, int (*transaction_cb)(nev
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
+    fd_set rfds;
+    struct timeval tv;
+    int ret;
+    FD_ZERO(&rfds);
+    FD_SET(neverbleed_get_fd(neverbleed), &rfds);
+
     // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
-    // read responses until we get EAGAIN
+    // read responses until the neverbleed fd is no longer read ready
     while (async_nb.read_queue.len > 0) {
-        // get the transaction from the read queue, without removing it yet
-        struct async_nb_transaction_t *transaction = async_nb_get(&async_nb.read_queue);
+        struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
         assert(transaction != NULL);
 
-        if (neverbleed_transaction_read(neverbleed, transaction->buf) == -1) {
-            if (errno != 0) {
-                if (errno == EAGAIN) {
-                    break;
-                }
-                h2o_fatal("read error (%d) %s", errno, strerror(errno));
-            } else {
-                h2o_fatal("connection closed by daemon");
-            }
-        }
-
-        // successfully read the transaction response, we can now remove it from the read queue
-        async_nb_pop(&async_nb.read_queue);
+        async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
         transaction->on_read_complete(transaction);
+
+        tv.tv_sec = 0;
+        tv.tv_usec = 0;
+        while ((ret = select(neverbleed_get_fd(neverbleed) + 1, &rfds, NULL, NULL, &tv)) == -1 && (errno == EAGAIN || errno == EINTR))
+            ;
+        if (ret == -1)
+            h2o_fatal("select(2):%d\n", errno);
+
+        if (!ret)
+            break;
     }
 
     // resume writing if there's room
@@ -571,7 +574,6 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
-
 }
 
 #if H2O_CAN_OSSL_ASYNC
