@@ -511,7 +511,7 @@ static void async_nb_submit_write_pending(void)
     }
 }
 
-static void async_nb_run_sync(neverbleed_iobuf_t *buf, int (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
+static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
 {
     int fd = neverbleed_get_fd(neverbleed);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -522,13 +522,7 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, int (*transaction_cb)(nev
         abort();
     }
 
-    if (transaction_cb(neverbleed, buf) == -1) {
-        if (errno != 0) {
-            h2o_fatal("%s error (%d) %s", transaction_cb == neverbleed_transaction_read ? "read": "write", errno, strerror(errno));
-        } else {
-            h2o_fatal("connection closed by daemon");
-        }
-    }
+    transaction_cb(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
