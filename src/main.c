@@ -536,8 +536,6 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
     fd_set rfds;
     struct timeval tv;
     int ret;
-    FD_ZERO(&rfds);
-    FD_SET(neverbleed_get_fd(neverbleed), &rfds);
 
     // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
     // read responses until the neverbleed fd is no longer read ready
@@ -548,6 +546,8 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
         async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
         transaction->on_read_complete(transaction);
 
+        FD_ZERO(&rfds);
+        FD_SET(neverbleed_get_fd(neverbleed), &rfds);
         tv.tv_sec = 0;
         tv.tv_usec = 0;
         while ((ret = select(neverbleed_get_fd(neverbleed) + 1, &rfds, NULL, NULL, &tv)) == -1 && (errno == EAGAIN || errno == EINTR))
