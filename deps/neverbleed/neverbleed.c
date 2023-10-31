@@ -389,13 +389,9 @@ void neverbleed_iobuf_dispose(neverbleed_iobuf_t *buf)
     iobuf_dispose(buf);
 }
 
-static int do_iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata) {
-    return iobuf_write(buf, thdata->fd);
-}
-
 static void iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
-    if (do_iobuf_transaction_write(buf, thdata) == -1) {
+    if (iobuf_write(buf, thdata->fd) == -1) {
         if (errno != 0) {
             dief("write error (%d) %s", errno, strerror(errno));
         } else {
@@ -404,15 +400,10 @@ static void iobuf_transaction_write(neverbleed_iobuf_t *buf, struct st_neverblee
     }
 }
 
-static int do_iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
-{
-    iobuf_dispose(buf);
-    return iobuf_read(buf, thdata->fd);
-}
-
 static void iobuf_transaction_read(neverbleed_iobuf_t *buf, struct st_neverbleed_thread_data_t *thdata)
 {
-    if (do_iobuf_transaction_read(buf, thdata) == -1) {
+    iobuf_dispose(buf);
+    if (iobuf_read(buf, thdata->fd) == -1) {
         if (errno != 0) {
             dief("read error (%d) %s", errno, strerror(errno));
         } else {
@@ -536,16 +527,16 @@ int neverbleed_get_fd(neverbleed_t *nb)
     return thdata->fd;
 }
 
-int neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
+void neverbleed_transaction_read(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    return do_iobuf_transaction_read(buf, thdata);
+    iobuf_transaction_read(buf, thdata);
 }
 
-int neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
+void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
 {
     struct st_neverbleed_thread_data_t *thdata = get_thread_data(nb);
-    return do_iobuf_transaction_write(buf, thdata);
+    iobuf_transaction_write(buf, thdata);
 }
 
 static void do_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
@@ -645,11 +636,10 @@ struct engine_request {
 #endif
 };
 
-static void offload_free_request(struct engine_request *req)
+static void free_req(struct engine_request *req)
 {
 #ifdef OPENSSL_IS_BORINGSSL
     bssl_qat_async_finish_job(req->async_ctx);
-    RSA_free(req->data.rsa);
 #else
     ASYNC_WAIT_CTX_free(req->async.ctx);
 #endif
@@ -1176,7 +1166,7 @@ static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, con
     register_wait_fd(req);
 }
 
-static int bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *src, size_t len)
+static void bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *src, size_t len)
 {
     struct engine_request *req = bssl_offload_create_request(buf, pkey);
 
@@ -1185,20 +1175,13 @@ static int bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const v
     if (meth == NULL)
         dief("failed to obtain QAT RSA method table\n");
     size_t outlen;
-    if (!meth->decrypt(req->data.rsa, &outlen, req->data.output, sizeof(req->data.output), src, len, RSA_NO_PADDING)) {
-        warnf("RSA decrypt failure\n");
-        goto Exit;
-    }
+    if (!meth->decrypt(req->data.rsa, &outlen, req->data.output, len, src, len, RSA_NO_PADDING))
+        dief("RSA decrypt failure\n");
     if (outlen != 0)
-        dief("RSA decrypt completed synchronously unexpectedly\n");
+        dief("RSA decrypt completed synchronously unexppctedly\n");
 
     buf->processing = 1;
     register_wait_fd(req);
-    return 1;
-
-Exit:
-    offload_free_request(req);
-    return 0;
 }
 
 #endif
@@ -1359,9 +1342,7 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload) {
-        if (!bssl_offload_decrypt(buf, pkey, src, srclen))
-            goto Softfail;
-
+        bssl_offload_decrypt(buf, pkey, src, srclen);
         goto Exit;
     }
 #endif
@@ -1369,20 +1350,15 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
     if ((decryptlen = RSA_private_decrypt(srclen, src, decryptbuf, rsa, RSA_NO_PADDING)) == -1) {
         errno = 0;
         warnf("RSA decryption error");
-        goto Softfail;
+        decryptlen = 0; /* soft failure */
     }
 
-Respond:
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, decryptbuf, decryptlen);
 Exit:
     RSA_free(rsa);
     EVP_PKEY_free(pkey);
     return 0;
-
-Softfail:
-    decryptlen = 0;
-    goto Respond;
 }
 
 void neverbleed_start_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *input, size_t len)
@@ -1773,9 +1749,11 @@ static int offload_resume(struct engine_request *req)
     /* save the result */
     iobuf_dispose(req->buf);
     iobuf_push_bytes(req->buf, req->data.output, outlen);
+    /* cleanup */
+    RSA_free(req->data.rsa);
 
     req->buf->processing = 0;
-    offload_free_request(req);
+    free_req(req);
 
     return 0;
 }
@@ -1818,7 +1796,7 @@ static int offload_start(int (*stub)(neverbleed_iobuf_t *), neverbleed_iobuf_t *
         break;
     }
 
-    offload_free_request(req);
+    free_req(req);
 
     return ret;
 }
@@ -1842,7 +1820,7 @@ static int offload_resume(struct engine_request *req)
 
     /* job done */
     req->buf->processing = 0;
-    offload_free_request(req);
+    free_req(req);
 
     return ret;
 }
