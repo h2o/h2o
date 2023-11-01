@@ -492,9 +492,8 @@ static void async_nb_submit_write_pending(void)
 {
     struct async_nb_transaction_t *transaction;
 
-    if (async_nb.read_queue.len >= NEVERBLEED_MAX_IN_FLIGHT_TX) {
+    if (async_nb.read_queue.len >= NEVERBLEED_MAX_IN_FLIGHT_TX)
         return;
-    }
 
     if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
@@ -554,9 +553,8 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
     }
 
     // resume writing if there's room
-    if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX) {
+    if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX)
         async_nb_submit_write_pending();
-    }
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
