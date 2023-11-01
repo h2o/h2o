@@ -429,7 +429,6 @@ static __thread struct {
     h2o_socket_t *sock;
     struct async_nb_queue_t write_queue;
     struct async_nb_queue_t read_queue;
-    h2o_timer_t write_pending_timer;
 } async_nb = {NULL};
 
 static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
@@ -488,10 +487,6 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 }
 
 #define NEVERBLEED_MAX_IN_FLIGHT_TX 200
-
-static void do_neverbleed_write_pending(h2o_timer_t *entry) {
-    async_nb_submit_write_pending();
-}
 
 static void async_nb_submit_write_pending(void)
 {
@@ -553,16 +548,14 @@ static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
             if (ret == -1)
                 h2o_fatal("poll(2):%d\n", errno);
 
-            if (!ret)
+            if (ret == 0)
                 break;
         }
     }
 
     // resume writing if there's room
     if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX) {
-        if (!h2o_timer_is_linked(&async_nb.write_pending_timer)) {
-            h2o_timer_link(h2o_socket_get_loop(async_nb.sock), 0, &async_nb.write_pending_timer);
-        }
+        async_nb_submit_write_pending();
     }
 
     if (async_nb.read_queue.len == 0)
@@ -4059,7 +4052,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_linklist_init_anchor(&async_nb.read_queue.anchor);
         h2o_linklist_init_anchor(&async_nb.write_queue.anchor);
-        h2o_timer_init(&async_nb.write_pending_timer, do_neverbleed_write_pending);
     }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
