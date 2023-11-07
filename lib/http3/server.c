@@ -787,8 +787,11 @@ Redo:
     PUSH_U32("ssthresh", cc.ssthresh);
     PUSH_U32("cwnd-initial", cc.cwnd_initial);
     PUSH_U32("cwnd-exiting-slow-start", cc.cwnd_exiting_slow_start);
+    PUSH_U64("exit-slow-start-at", cc.exit_slow_start_at);
     PUSH_U32("cwnd-minimum", cc.cwnd_minimum);
     PUSH_U32("cwnd-maximum", cc.cwnd_maximum);
+    PUSH_U32("jumpstart-cwnd", jumpstart.cwnd);
+    PUSH_U32("jumpstart-exit-cwnd", cc.cwnd_exiting_jumpstart);
     PUSH_U32("num-loss-episodes", cc.num_loss_episodes);
     PUSH_U32("num-ecn-loss-episodes", cc.num_ecn_loss_episodes);
     PUSH_U64("num-ptos", num_ptos);
