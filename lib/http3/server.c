@@ -177,6 +177,10 @@ struct st_h2o_http3_server_conn_t {
      */
     khash_t(stream) * datagram_flows;
     /**
+     * the earliest moment (in terms of max_data.sent) when the next resumption token can be sent
+     */
+    uint64_t next_resumption_token_threshold;
+    /**
      * timeout entry used for graceful shutdown
      */
     h2o_timer_t _graceful_shutdown_timeout;
@@ -1803,8 +1807,11 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
+#define HAS_DATA_TO_SEND()                                                                                                         \
+    (conn->scheduler.uni.active != 0 || conn->scheduler.reqs.active.smallest_urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS)
+
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
-    int ret = 0;
+    int had_data_to_send = HAS_DATA_TO_SEND(), ret = 0;
 
     while (quicly_can_send_data(conn->h3.super.quic, s)) {
         /* The strategy is:
@@ -1892,7 +1899,25 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
     }
 
 Exit:
+    /* send a resumption token if we've sent all available data and there is still room to send something, but not too frequently */
+    if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
+        uint64_t max_data_sent;
+        quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
+        if (max_data_sent >= conn->next_resumption_token_threshold) {
+            quicly_send_resumption_token(conn->h3.super.quic);
+            if (max_data_sent < 131072) {
+                conn->next_resumption_token_threshold = max_data_sent + 131072;
+            } else if (max_data_sent < 1048576) {
+                conn->next_resumption_token_threshold = max_data_sent * 2;
+            } else {
+                conn->next_resumption_token_threshold = max_data_sent + 1048576;
+            }
+        }
+    }
+
     return ret;
+
+#undef HAS_DATA_TO_SEND
 }
 
 static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *qs)
