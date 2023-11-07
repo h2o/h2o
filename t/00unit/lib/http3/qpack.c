@@ -63,7 +63,7 @@ static void do_test_simple(int use_enc_stream)
         h2o_iovec_t headers_frame =
             h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
                                       h2o_iovec_init(H2O_STRLIT("example.com")), h2o_iovec_init(H2O_STRLIT("/foobar")),
-                                      headers.entries, headers.size, h2o_iovec_init(NULL, 0));
+                                      h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
         flattened = get_payload(headers_frame.base, headers_frame.len);
     }
 

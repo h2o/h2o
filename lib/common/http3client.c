@@ -457,7 +457,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         case H2O_HTTP3_FRAME_TYPE_DATA:
             break;
         case H2O_HTTP3_FRAME_TYPE_HEADERS:
-            if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect)
+            if (req->super.upgrade_to != NULL)
                 return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             /* flow continues */
         default:
@@ -743,16 +743,19 @@ void start_request(struct st_h2o_http3client_req_t *req)
     req->quic->data = req;
 
     /* send request (TODO optimize) */
+    h2o_iovec_t protocol = {};
     h2o_iovec_t datagram_flow_id = {};
     if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
         h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && req->conn->super.peer_settings.h3_datagram) {
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
+    } else if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect_udp) {
+        protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
-                                  url.authority, url.path, headers, num_headers, datagram_flow_id);
+                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0)
         emit_data(req, body);
@@ -840,7 +843,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
 
-    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect);
+    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect || upgrade_to == h2o_httpclient_upgrade_to_connect_udp);
 
     if ((conn = find_connection(connpool, target)) == NULL)
         conn = create_connection(ctx, connpool, target);

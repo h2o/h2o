@@ -59,7 +59,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
     struct {
         union {
             struct {
-                h2o_iovec_t method, authority, path;
+                h2o_iovec_t method, authority, path, protocol;
                 const h2o_url_scheme_t *scheme;
             };
             struct {
@@ -91,8 +91,8 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             assert(message.authority.base != NULL);                                                                                \
             assert(message.path.base != NULL);                                                                                     \
             h2o_qpack_flatten_request(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, &headers_buf,               \
-                                      message.method, message.scheme, message.authority, message.path, message.headers.entries,    \
-                                      message.headers.size);                                                                       \
+                                      message.method, message.scheme, message.authority, message.path, message.protocol,           \
+                                      message.headers.entries, message.headers.size);                                              \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
             h2o_qpack_flatten_response(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, &headers_buf,              \
