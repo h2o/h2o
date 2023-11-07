@@ -3860,10 +3860,14 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 
     if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
         age = 0;
-    if (h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0)
-        return 0;
+
+    token->address_mismatch =
+        h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0;
+
     switch (token->type) {
     case QUICLY_ADDRESS_TOKEN_TYPE_RETRY:
+        if (token->address_mismatch)
+            return 0;
         if (age > 30 * 1000)
             return 0;
         if (!quicly_cid_is_equal(&token->retry.client_cid, client_cid))
@@ -3873,7 +3877,7 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
         break;
     case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
         if (age > 10 * 60 * 1000)
-            return 0;
+            token->address_mismatch = 1;
         break;
     default:
         h2o_fatal("unexpected token type: %d", (int)token->type);
