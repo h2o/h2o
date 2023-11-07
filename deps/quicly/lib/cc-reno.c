@@ -27,9 +27,14 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
                           uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
-    /* Do not increase congestion window while in recovery. */
-    if (largest_acked < cc->recovery_end)
+
+    /* Do not increase congestion window while in recovery (but jumpstart may do something different). */
+    if (largest_acked < cc->recovery_end) {
+        quicly_cc_jumpstart_on_acked(cc, 1, bytes, largest_acked, inflight, next_pn);
         return;
+    }
+
+    quicly_cc_jumpstart_on_acked(cc, 0, bytes, largest_acked, inflight, next_pn);
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
@@ -53,19 +58,30 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
                             int64_t now, uint32_t max_udp_payload_size)
 {
+    /* when exiting slow start, use inverse of exponential growth ratio, as loss is detected 1 RTT later, at which point CWND has
+     * overshot as much as the growth ratio */
+    double beta = cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_RENO_BETA;
+
     quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
 
     /* Nothing to do if loss is in recovery window. */
     if (lost_pn < cc->recovery_end)
         return;
     cc->recovery_end = next_pn;
+    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(1.2);
+
+    /* if detected loss before receiving all acks for jumpstart, restore original CWND */
+    if (cc->ssthresh == UINT32_MAX)
+        quicly_cc_jumpstart_on_first_loss(cc, lost_pn, &beta);
 
     ++cc->num_loss_episodes;
-    if (cc->cwnd_exiting_slow_start == 0)
+    if (cc->cwnd_exiting_slow_start == 0) {
         cc->cwnd_exiting_slow_start = cc->cwnd;
+        cc->exit_slow_start_at = now;
+    }
 
     /* Reduce congestion window. */
-    cc->cwnd *= QUICLY_RENO_BETA;
+    cc->cwnd *= beta;
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;
@@ -89,7 +105,11 @@ static void reno_reset(quicly_cc_t *cc, uint32_t initcwnd)
     memset(cc, 0, sizeof(quicly_cc_t));
     cc->type = &quicly_cc_type_reno;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
+    cc->exit_slow_start_at = INT64_MAX;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(2);
+
+    quicly_cc_jumpstart_reset(cc);
 }
 
 static int reno_on_switch(quicly_cc_t *cc)
@@ -124,7 +144,8 @@ quicly_cc_type_t quicly_cc_type_reno = {"reno",
                                         quicly_cc_reno_on_lost,
                                         quicly_cc_reno_on_persistent_congestion,
                                         quicly_cc_reno_on_sent,
-                                        reno_on_switch};
+                                        reno_on_switch,
+                                        quicly_cc_jumpstart_enter};
 quicly_init_cc_t quicly_cc_reno_init = {reno_init};
 
 quicly_cc_type_t *quicly_cc_all_types[] = {&quicly_cc_type_reno, &quicly_cc_type_cubic, &quicly_cc_type_pico, NULL};

@@ -327,6 +327,14 @@ struct st_quicly_context_t {
      */
     uint64_t max_initial_handshake_packets;
     /**
+     * jumpstart delivery rate to be used when there is no previous information
+     */
+    uint32_t default_jumpstart_cwnd_bytes;
+    /**
+     * maximum CWND to be used by jumpstart
+     */
+    uint32_t max_jumpstart_cwnd_bytes;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
@@ -334,6 +342,10 @@ struct st_quicly_context_t {
      * whether to use ECN on the send side; ECN is always on on the receive side
      */
     unsigned enable_ecn : 1;
+    /**
+     * if pacing should be used
+     */
+    unsigned use_pacing : 1;
     /**
      *
      */
@@ -523,7 +535,16 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
      */                                                                                                                            \
-    uint64_t num_initial_handshake_exceeded
+    uint64_t num_initial_handshake_exceeded;                                                                                       \
+    /**                                                                                                                            \
+     * jumpstart parameters and the CWND being adopted (see also quicly_cc_t::cwnd_exiting_jumpstart)                              \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        uint64_t prev_rate;                                                                                                        \
+        uint32_t prev_rtt;                                                                                                         \
+        uint32_t new_rtt;                                                                                                          \
+        uint32_t cwnd;                                                                                                             \
+    } jumpstart;
 
 typedef struct st_quicly_stats_t {
     /**
@@ -858,6 +879,7 @@ struct st_quicly_address_token_plaintext_t {
     enum { QUICLY_ADDRESS_TOKEN_TYPE_RETRY, QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION } type;
     uint64_t issued_at;
     quicly_address_t local, remote;
+    unsigned address_mismatch : 1;
     union {
         struct {
             quicly_cid_t original_dcid;

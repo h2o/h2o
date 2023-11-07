@@ -72,6 +72,7 @@ SET(UNITTEST_SOURCE_FILES
     t/loss.c
     t/lossy.c
     t/maxsender.c
+    t/pacer.c
     t/ranges.c
     t/rate.c
     t/remote_cid.c

@@ -52,6 +52,7 @@ void test_ranges(void);
 void test_rate(void);
 void test_frame(void);
 void test_maxsender(void);
+void test_pacer(void);
 void test_sentmap(void);
 void test_loss(void);
 void test_simple(void);
