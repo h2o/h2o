@@ -74,8 +74,8 @@ static uint64_t io_timeout = DEFAULT_IO_TIMEOUT;
 static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
-// Use draft03 syntax if false.
-static int connect_udp_is_rfc9298 = 0;
+// Use rfc9298 syntax if false.
+static int connect_udp_is_draft03 = 0;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -215,12 +215,12 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     ssize_t rret;
 
     size_t context_id_len;
-    if (connect_udp_is_rfc9298) {
-        context_id_len = 1;
-        buf[0] = 0; // Context ID 0 used for UDP packets.
-    } else {
+    if (connect_udp_is_draft03) {
         // No context id for draft03.
         context_id_len = 0;
+    } else {
+        context_id_len = 1;
+        buf[0] = 0; // Context ID 0 used for UDP packets.
     }
 
     /* read one UDP datagram, or return */
@@ -257,7 +257,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    size_t context_id_len = (connect_udp_is_rfc9298) ? 1 : 0;
+    size_t context_id_len = (connect_udp_is_draft03) ? 0 : 1;
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
         struct iovec vec = {.iov_base = src->base + context_id_len, .iov_len = src->len - context_id_len};
@@ -299,7 +299,13 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             upgrade_to = h2o_httpclient_upgrade_to_connect;
             url_parsed->scheme = &H2O_URL_SCHEME_CONNECT_NONE;
         } else if (strcmp(req.method, "CONNECT-UDP") == 0) {
-            if (connect_udp_is_rfc9298) {
+            if (connect_udp_is_draft03) {
+                // Draft03
+                upgrade_to = h2o_httpclient_upgrade_to_connect;
+                url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
+                url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+            } else {
+                // RFC 9298
                 upgrade_to = "connect-udp";
                 req.method = "CONNECT";
 
@@ -314,11 +320,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
                 url_parsed->path = h2o_iovec_init(pathbuf, pathbuf_len);
                 url_parsed->scheme = &H2O_URL_SCHEME_HTTPS;
                 add_header("capsule-protocol", "?1");
-            } else {
-                // Draft03
-                upgrade_to = h2o_httpclient_upgrade_to_connect;
-                url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
-                url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
             }
         }
     } else {
@@ -884,9 +885,9 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
 #else
             if (strcmp(optarg, "rfc9298") == 0) {
-                connect_udp_is_rfc9298 = 1;
+                connect_udp_is_draft03 = 0;
             } else if (strcmp(optarg, "draft03") == 0) {
-                connect_udp_is_rfc9298 = 0;
+                connect_udp_is_draft03 = 1;
             } else {
                 fprintf(stderr, "Unknown --connect-udp-rfc-version: %s\n", optarg);
                 exit(EXIT_FAILURE);
