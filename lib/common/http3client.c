@@ -750,7 +750,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
-    } else if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect_udp) {
+    } else if (req->super.upgrade_to != NULL && strcmp(req->super.upgrade_to, "connect-udp") == 0) {
         protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
     h2o_iovec_t headers_frame =
@@ -843,7 +843,7 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
 
-    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect || upgrade_to == h2o_httpclient_upgrade_to_connect_udp);
+    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect || strcmp(upgrade_to, "connect-udp") == 0);
 
     if ((conn = find_connection(connpool, target)) == NULL)
         conn = create_connection(ctx, connpool, target);

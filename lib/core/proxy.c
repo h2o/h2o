@@ -169,7 +169,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
-        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect && upgrade_to != h2o_httpclient_upgrade_to_connect_udp) {
+        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
             h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
         } else if (keepalive) {

@@ -43,8 +43,6 @@ const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
  */
 const char h2o_httpclient_upgrade_to_connect[] = "\nCONNECT / CONNECT-UDP method";
 
-const char h2o_httpclient_upgrade_to_connect_udp[] = "connect-udp";
-
 void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connpool, h2o_socketpool_t *sockpool)
 {
     connpool->socketpool = sockpool;
@@ -245,9 +243,8 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     /* adjust selected protocol if the attempt is to create a tunnel */
     if (upgrade_to != NULL) {
-        /* upgrade other than to a CONNECT tunnel is supported only by H1 */
-        if (upgrade_to != h2o_httpclient_upgrade_to_connect &&
-            upgrade_to != h2o_httpclient_upgrade_to_connect_udp)
+        /* upgrade other than to a CONNECT and CONNECT-UDP tunnel is supported only by H1 */
+        if (upgrade_to != h2o_httpclient_upgrade_to_connect && strcmp(upgrade_to, "connect-udp") != 0)
             selected_protocol = PROTOCOL_SELECTOR_H1;
     }
 

@@ -300,7 +300,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             url_parsed->scheme = &H2O_URL_SCHEME_CONNECT_NONE;
         } else if (strcmp(req.method, "CONNECT-UDP") == 0) {
             if (connect_udp_is_rfc9298) {
-                upgrade_to = h2o_httpclient_upgrade_to_connect_udp;
+                upgrade_to = "connect-udp";
                 req.method = "CONNECT";
 
                 char *pathbuf = h2o_mem_alloc_pool(pool, char, 1000);
