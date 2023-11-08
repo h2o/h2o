@@ -75,7 +75,7 @@ static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
 // Use rfc9298 syntax if false.
-static int connect_udp_is_draft03 = 0;
+static int connect_udp_is_draft03 = 1;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -295,10 +295,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
         }
-        if (strcmp(req.method, "CONNECT") == 0) {
-            upgrade_to = h2o_httpclient_upgrade_to_connect;
-            url_parsed->scheme = &H2O_URL_SCHEME_CONNECT_NONE;
-        } else if (strcmp(req.method, "CONNECT-UDP") == 0) {
+        if (udp_sock != NULL) {
+            // CONNECT UDP
             if (connect_udp_is_draft03) {
                 // Draft03
                 upgrade_to = h2o_httpclient_upgrade_to_connect;
@@ -307,7 +305,6 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             } else {
                 // RFC 9298
                 upgrade_to = "connect-udp";
-                req.method = "CONNECT";
 
                 char *pathbuf = h2o_mem_alloc_pool(pool, char, 1000);
                 size_t pathbuf_len =
@@ -321,6 +318,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
                 url_parsed->scheme = &H2O_URL_SCHEME_HTTPS;
                 add_header("capsule-protocol", "?1");
             }
+        } else if (strcmp(req.method, "CONNECT") == 0) {
+            upgrade_to = h2o_httpclient_upgrade_to_connect;
         }
     } else {
         if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
@@ -907,6 +906,10 @@ int main(int argc, char **argv)
     ctx.first_byte_timeout = io_timeout;
     ctx.keepalive_timeout = io_timeout;
 
+    if (udp_sock != NULL) {
+        // Handling connect udp.  Override method based on requested version.
+        req.method = connect_udp_is_draft03 ? "CONNECT-UDP" : "CONNECT";
+    }
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);

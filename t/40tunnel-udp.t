@@ -24,7 +24,7 @@ sub create_tunnel {
 
     my ($tunnel_port) = empty_ports(1, { host  => "127.0.0.1", proto => "udp"});
     my $tunnel = spawn_forked(sub {
-        exec("$client_prog -k -$proto 100 $extra_args -m CONNECT-UDP -X $tunnel_port -x https://127.0.0.1:$proxy_port 127.0.0.1:$origin_port") or die "Failed to exec";
+        exec("$client_prog -k -$proto 100 $extra_args -X $tunnel_port -x https://127.0.0.1:$proxy_port 127.0.0.1:$origin_port") or die "Failed to exec";
     });
 
     my $ret;

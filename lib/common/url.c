@@ -31,8 +31,6 @@ const h2o_url_scheme_t H2O_URL_SCHEME_HTTP = {{H2O_STRLIT("http")}, 80, 0};
 const h2o_url_scheme_t H2O_URL_SCHEME_HTTPS = {{H2O_STRLIT("https")}, 443, 1};
 const h2o_url_scheme_t H2O_URL_SCHEME_MASQUE = {{H2O_STRLIT("masque")}, 65535, 0 /* ??? masque might or might not be over TLS */};
 const h2o_url_scheme_t H2O_URL_SCHEME_FASTCGI = {{H2O_STRLIT("fastcgi")}, 65535, 0};
-const h2o_url_scheme_t H2O_URL_SCHEME_CONNECT_NONE = {
-    {H2O_STRLIT("pre-rfc8441 connect")}, 65535, 0}; /* No scheme for pre RFC 8441 connect over H2 */
 
 static int decode_hex(int ch)
 {
