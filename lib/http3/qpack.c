@@ -1300,9 +1300,9 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 
     /* pseudo headers */
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_method, H2O_TOKEN_METHOD, method);
-    int has_scheme_and_path =
-        (scheme != &H2O_URL_SCHEME_CONNECT_NONE || !h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")));
-    if (has_scheme_and_path) {
+    /* CONNECT request that is not an RFC 9220 extended connect */
+    int old_style_connect = (h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")) && (protocol.base == NULL));
+    if (!old_style_connect) {
         if (scheme == &H2O_URL_SCHEME_HTTP) {
             flatten_static_indexed(&ctx, 22);
         } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
@@ -1312,7 +1312,7 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
         }
     }
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_authority, H2O_TOKEN_AUTHORITY, authority);
-    if (has_scheme_and_path)
+    if (!old_style_connect)
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_path, H2O_TOKEN_PATH, path);
     if (protocol.base != NULL)
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_protocol, H2O_TOKEN_PROTOCOL, protocol);
