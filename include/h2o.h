@@ -1337,7 +1337,7 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
+     * set by the proxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
     /**
