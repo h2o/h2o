@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
     const char *progname = argv[0];
     const char *authority = "www.example.com";
     const char *path = "/";
-    const char *protocol = NULL;
+    h2o_iovec_t protocol = {};
 
     h2o_mem_init_pool(&pool);
 
@@ -108,7 +108,7 @@ int main(int argc, char *argv[])
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
     h2o_iovec_t headers_frame = h2o_qpack_flatten_request(
         enc, &pool, 0, NULL, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(authority, strlen(authority)),
-        h2o_iovec_init(path, strlen(path)), h2o_iovec_init(protocol, protocol != NULL ? strlen(protocol) : 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
+        h2o_iovec_init(path, strlen(path)), protocol, headers.entries, headers.size, h2o_iovec_init(NULL, 0));
     fwrite(headers_frame.base, headers_frame.len, 1, fp);
 
     h2o_qpack_destroy_encoder(enc);
