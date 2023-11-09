@@ -4257,12 +4257,12 @@ static size_t encode_resumption_info(quicly_conn_t *conn, uint8_t *dst, size_t c
     } while (0)
 
     /* emit delivery rate for Careful Resume */
-    PUSH_ENTRY(QUICLY_RESUMPTION_ENTRY_TYPE_CAREFUL_RESUME, {
-        quicly_rate_t rate;
-        quicly_ratemeter_report(&conn->egress.ratemeter, &rate);
-        ptls_buffer_push_quicint(&buf, rate.smoothed);
-        ptls_buffer_push_quicint(&buf, conn->egress.loss.rtt.minimum);
-    });
+    if (conn->super.stats.token_sent.rate != 0 && conn->super.stats.token_sent.rtt != 0) {
+        PUSH_ENTRY(QUICLY_RESUMPTION_ENTRY_TYPE_CAREFUL_RESUME, {
+            ptls_buffer_push_quicint(&buf, conn->super.stats.token_sent.rate);
+            ptls_buffer_push_quicint(&buf, conn->super.stats.token_sent.rtt);
+        });
+    }
 
 #undef PUSH_ENTRY
 
@@ -4273,6 +4273,18 @@ Exit:
 
 static int send_resumption_token(quicly_conn_t *conn, quicly_send_context_t *s)
 {
+    { /* fill conn->super.stats.token_sent the information we are sending now */
+        quicly_rate_t rate;
+        conn->super.stats.token_sent.at = conn->stash.now - conn->created_at;
+        if (conn->egress.loss.rtt.minimum != 0 && (quicly_ratemeter_report(&conn->egress.ratemeter, &rate), rate.smoothed != 0)) {
+            conn->super.stats.token_sent.rate = rate.smoothed;
+            conn->super.stats.token_sent.rtt = conn->egress.loss.rtt.minimum;
+        } else {
+            conn->super.stats.token_sent.rate = 0;
+            conn->super.stats.token_sent.rtt = 0;
+        }
+    }
+
     quicly_address_token_plaintext_t token;
     ptls_buffer_t tokenbuf;
     uint8_t tokenbuf_small[128];
@@ -6382,7 +6394,7 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
         case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
             if (decode_resumption_info(address_token->resumption.bytes, address_token->resumption.len,
                                        &(*conn)->super.stats.jumpstart.prev_rate, &(*conn)->super.stats.jumpstart.prev_rtt) != 0) {
-                (*conn)->super.stats.jumpstart.prev_rtt = 0;
+                (*conn)->super.stats.jumpstart.prev_rate = 0;
                 (*conn)->super.stats.jumpstart.prev_rtt = 0;
             }
             break;

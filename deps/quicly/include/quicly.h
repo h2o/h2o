@@ -544,7 +544,24 @@ struct st_quicly_conn_streamgroup_state_t {
         uint32_t prev_rtt;                                                                                                         \
         uint32_t new_rtt;                                                                                                          \
         uint32_t cwnd;                                                                                                             \
-    } jumpstart;
+    } jumpstart;                                                                                                                   \
+    /**                                                                                                                            \
+     * some contents of the last token sent                                                                                        \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        /**                                                                                                                        \
+         * when sent, relative to the creation time of the connection                                                              \
+         */                                                                                                                        \
+        int64_t at;                                                                                                                \
+        /**                                                                                                                        \
+         * delivery rate                                                                                                           \
+         */                                                                                                                        \
+        uint64_t rate;                                                                                                             \
+        /**                                                                                                                        \
+         * rtt                                                                                                                     \
+         */                                                                                                                        \
+        uint32_t rtt;                                                                                                              \
+    } token_sent
 
 typedef struct st_quicly_stats_t {
     /**
