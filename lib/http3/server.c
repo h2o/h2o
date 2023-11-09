@@ -794,6 +794,8 @@ Redo:
     PUSH_U64("exit-slow-start-at", cc.exit_slow_start_at);
     PUSH_U32("cwnd-minimum", cc.cwnd_minimum);
     PUSH_U32("cwnd-maximum", cc.cwnd_maximum);
+    PUSH_U64("jumpstart-prev-rate", jumpstart.prev_rate);
+    PUSH_U32("jumpstart-pret-rtt", jumpstart.prev_rtt);
     PUSH_U32("jumpstart-cwnd", jumpstart.cwnd);
     PUSH_U32("jumpstart-exit-cwnd", cc.cwnd_exiting_jumpstart);
     PUSH_U32("num-loss-episodes", cc.num_loss_episodes);
@@ -802,6 +804,9 @@ Redo:
     PUSH_U64("delivery-rate-latest", delivery_rate.latest);
     PUSH_U64("delivery-rate-smoothed", delivery_rate.smoothed);
     PUSH_U64("delivery-rate-stdev", delivery_rate.stdev);
+    PUSH_U64("token-sent-at", token_sent.at);
+    PUSH_U64("token-sent-rate", token_sent.rate);
+    PUSH_U32("token-sent-rtt", token_sent.rtt);
     PUSH_NUM_FRAMES(received);
     PUSH_NUM_FRAMES(sent);
     PUSH_SIZE_T("num-sentmap-packets-largest", num_sentmap_packets_largest);
