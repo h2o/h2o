@@ -193,6 +193,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_via_header = 1;
     config->proxy.emit_missing_date_header = 1;
     config->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ENABLED;
+    config->proxy.max_pipes = 64;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_concurrent_streaming_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS;
     config->http2.max_streams_for_priority = 16;

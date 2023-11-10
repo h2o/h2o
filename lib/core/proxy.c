@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <alloca.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -50,6 +51,19 @@ struct rp_generator_t {
     unsigned pipe_inflight : 1;
     int *generator_disposed;
 };
+
+struct pipe_reader {
+    int fds[2];
+    h2o_linklist_t link;
+};
+
+struct pipe_list {
+    size_t len;
+    h2o_linklist_t anchor;
+};
+
+static __thread int pipe_list_init = 0;
+static __thread struct pipe_list pipe_list;
 
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
 {
@@ -300,6 +314,27 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
     return client;
 }
 
+static int empty_pipe(int fd)
+{
+    ssize_t ret;
+    char *dst = alloca(1024);
+
+drain_more:
+    while((ret = read(fd, dst, 1024)) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 1;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(dst)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
 static void do_close(struct rp_generator_t *self)
 {
     /**
@@ -319,8 +354,19 @@ static void do_close(struct rp_generator_t *self)
     }
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
-        close(self->pipe_reader.fds[0]);
-        close(self->pipe_reader.fds[1]);
+        h2o_conn_t *conn = self->src_req->conn;
+        if ((pipe_list.len < conn->ctx->globalconf->proxy.max_pipes) && empty_pipe(self->pipe_reader.fds[0])) {
+            struct pipe_reader *pr = h2o_mem_alloc(sizeof(*pr));
+            pr->fds[0] = self->pipe_reader.fds[0];
+            pr->fds[1] = self->pipe_reader.fds[1];
+            memset(&pr->link, 0, sizeof(pr->link));
+            h2o_linklist_insert(&pipe_list.anchor, &pr->link);
+            ++pipe_list.len;
+        } else {
+            close(self->pipe_reader.fds[0]);
+            close(self->pipe_reader.fds[1]);
+        }
+
         self->pipe_reader.fds[0] = -1;
     }
 }
@@ -673,9 +719,19 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        if (!h2o_linklist_is_empty(&pipe_list.anchor)) {
+            struct pipe_reader *pr = H2O_STRUCT_FROM_MEMBER(struct pipe_reader, link, pipe_list.anchor.next);
+            h2o_linklist_unlink(&pr->link);
+            self->pipe_reader.fds[0] = pr->fds[0];
+            self->pipe_reader.fds[1] = pr->fds[1];
+            free(pr);
+
+            --pipe_list.len;
+        } else {
+            if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+                char errbuf[256];
+                h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+            }
         }
         args->pipe_reader->fd = self->pipe_reader.fds[1];
         args->pipe_reader->on_body_piped = on_body_piped;
@@ -856,6 +912,12 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->pipe_inflight = 0;
     self->req_done = 0;
     self->res_done = 0;
+
+    if (!pipe_list_init) {
+        h2o_linklist_init_anchor(&pipe_list.anchor);
+        pipe_list.len = 0;
+        pipe_list_init = 1;
+    }
 
     return self;
 }
