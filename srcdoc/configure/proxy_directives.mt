@@ -321,7 +321,7 @@ But if the backend server has enough concurrency, <code>proxy.max-buffer-size</c
 
 <?
 $ctx->{directive}->(
-    name     => "proxy.max-pipes",
+    name     => "proxy.max-spare-pipes",
     levels   => [ qw(global) ],
     desc     => q{This setting specifies the maximum number of pipe file descriptors which will be retained for reuse, per h2o worker thread.},
     default  => 64,

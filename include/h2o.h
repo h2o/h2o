@@ -508,7 +508,7 @@ struct st_h2o_globalconf_t {
         /**
           * maximum number of pipes to retain for reuse
           */
-        size_t max_pipes;
+        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */

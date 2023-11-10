@@ -355,7 +355,7 @@ static void do_close(struct rp_generator_t *self)
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
         h2o_conn_t *conn = self->src_req->conn;
-        if ((pipe_list.len < conn->ctx->globalconf->proxy.max_pipes) && empty_pipe(self->pipe_reader.fds[0])) {
+        if ((pipe_list.len < conn->ctx->globalconf->proxy.max_spare_pipes) && empty_pipe(self->pipe_reader.fds[0])) {
             struct pipe_reader *pr = h2o_mem_alloc(sizeof(*pr));
             pr->fds[0] = self->pipe_reader.fds[0];
             pr->fds[1] = self->pipe_reader.fds[1];
