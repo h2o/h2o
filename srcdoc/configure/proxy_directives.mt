@@ -321,6 +321,22 @@ But if the backend server has enough concurrency, <code>proxy.max-buffer-size</c
 
 <?
 $ctx->{directive}->(
+    name     => "proxy.max-pipes",
+    levels   => [ qw(global) ],
+    desc     => q{This setting specifies the maximum number of pipe file descriptors which will be retained for reuse, per h2o worker thread.},
+    default  => 64,
+)->(sub {
+?>
+<p>
+By default, h2o will retain 64 pipes per worker thread. This setting can be
+adjusted to increase or decrease the number of pipes retained by h2o. The
+intention of this setting is to reduce lock contention in the kernel under
+high load when pipe reader is used.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "proxy.preserve-host",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.preserve-host: OFF},
