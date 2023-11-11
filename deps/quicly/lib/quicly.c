@@ -1385,6 +1385,21 @@ static void update_send_alarm(quicly_conn_t *conn, int can_send_stream_data, int
                              can_send_stream_data, handshake_is_in_progress, conn->egress.max_data.sent, is_after_send);
 }
 
+static void update_cc_limited(quicly_conn_t *conn, int is_cc_limited)
+{
+    if (quicly_ratemeter_is_cc_limited(&conn->egress.ratemeter) != is_cc_limited) {
+        if (is_cc_limited) {
+            quicly_ratemeter_enter_cc_limited(&conn->egress.ratemeter, conn->egress.packet_number);
+            QUICLY_PROBE(ENTER_CC_LIMITED, conn, conn->stash.now, conn->egress.packet_number);
+            QUICLY_LOG_CONN(enter_cc_limited, conn, { PTLS_LOG_ELEMENT_UNSIGNED(pn, conn->egress.packet_number); });
+        } else {
+            quicly_ratemeter_exit_cc_limited(&conn->egress.ratemeter, conn->egress.packet_number);
+            QUICLY_PROBE(EXIT_CC_LIMITED, conn, conn->stash.now, conn->egress.packet_number);
+            QUICLY_LOG_CONN(exit_cc_limited, conn, { PTLS_LOG_ELEMENT_UNSIGNED(pn, conn->egress.packet_number); });
+        }
+    }
+}
+
 /**
  * Updates the send alarm and adjusts the delivery rate estimator. This function is called from the receive path. From the sendp
  * path, `update_send_alarm` is called directly.
@@ -1397,7 +1412,7 @@ static void setup_next_send(quicly_conn_t *conn)
 
     /* When the flow becomes application-limited due to receiving some information, stop collecting delivery rate samples. */
     if (!can_send_stream_data)
-        quicly_ratemeter_not_cwnd_limited(&conn->egress.ratemeter, conn->egress.packet_number);
+        update_cc_limited(conn, 0);
 }
 
 static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
@@ -3124,6 +3139,15 @@ static int is_point5rtt_with_no_handshake_data_to_send(quicly_conn_t *conn)
     return stream->sendstate.pending.num_ranges == 0 && stream->sendstate.acked.ranges[0].end == stream->sendstate.size_inflight;
 }
 
+static int64_t pacer_can_send_at(quicly_conn_t *conn)
+{
+    if (conn->egress.pacer == NULL)
+        return 0;
+
+    uint32_t bytes_per_msec = calc_pacer_send_rate(conn);
+    return quicly_pacer_can_send_at(conn->egress.pacer, bytes_per_msec, conn->egress.max_udp_payload_size);
+}
+
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
     if (conn->super.state >= QUICLY_STATE_CLOSING)
@@ -3133,25 +3157,19 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
         return 0;
 
     uint64_t amp_window = calc_amplification_limit_allowance(conn);
-    int64_t at = conn->idle_timeout.at, pacer_can_send_at = 0;
-
-    if (conn->egress.pacer != NULL) {
-        uint32_t bytes_per_msec = calc_pacer_send_rate(conn);
-        pacer_can_send_at = quicly_pacer_can_send_at(conn->egress.pacer, bytes_per_msec, conn->egress.max_udp_payload_size);
-    }
+    int64_t at = conn->idle_timeout.at, pacer_at = pacer_can_send_at(conn);
 
     /* reduce at to the moment pacer provides credit, if we are not CC-limited and there's something to be sent over CC */
-    if (pacer_can_send_at < at && calc_send_window(conn, 0, amp_window, UINT64_MAX, 0) > 0) {
+    if (pacer_at < at && calc_send_window(conn, 0, amp_window, UINT64_MAX, 0) > 0) {
         if (conn->egress.pending_flows != 0) {
             /* crypto streams (as indicated by lower 4 bits) can be sent whenever CWND is available; other flows need application
              * packet number space */
             if ((conn->application != NULL && conn->application->cipher.egress.key.header_protection != NULL) ||
                 (conn->egress.pending_flows & 0xf) != 0)
-                at = pacer_can_send_at;
+                at = pacer_at;
         }
-        if (pacer_can_send_at < at &&
-            (quicly_linklist_is_linked(&conn->egress.pending_streams.control) || scheduler_can_send(conn)))
-            at = pacer_can_send_at;
+        if (pacer_at < at && (quicly_linklist_is_linked(&conn->egress.pending_streams.control) || scheduler_can_send(conn)))
+            at = pacer_at;
     }
 
     /* if something can be sent, return the earliest timeout. Otherwise return the idle timeout. */
@@ -5035,13 +5053,10 @@ Exit:
             conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
         int can_send_stream_data = scheduler_can_send(conn);
         update_send_alarm(conn, can_send_stream_data, 1);
-        if (can_send_stream_data &&
-            (s->num_datagrams == s->max_datagrams || conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd)) {
-            /* as the flow is CWND-limited, start delivery rate estimator */
-            quicly_ratemeter_in_cwnd_limited(&conn->egress.ratemeter, s->first_packet_number);
-        } else {
-            quicly_ratemeter_not_cwnd_limited(&conn->egress.ratemeter, conn->egress.packet_number);
-        }
+        int is_cc_limited = can_send_stream_data && (s->num_datagrams == s->max_datagrams ||
+                                                     conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
+                                                     pacer_can_send_at(conn) > conn->stash.now);
+        update_cc_limited(conn, is_cc_limited);
         if (s->num_datagrams != 0)
             update_idle_timeout(conn, 0);
     }
@@ -5525,8 +5540,9 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     QUICLY_PROBE(ACK_DELAY_RECEIVED, conn, conn->stash.now, frame.ack_delay);
     QUICLY_LOG_CONN(ack_delay_received, conn, { PTLS_LOG_ELEMENT_UNSIGNED(ack_delay, frame.ack_delay); });
 
-    quicly_ratemeter_on_ack(&conn->egress.ratemeter, conn->stash.now, conn->super.stats.num_bytes.ack_received,
-                            largest_newly_acked.pn);
+    if (largest_newly_acked.pn != UINT64_MAX)
+        quicly_ratemeter_on_ack(&conn->egress.ratemeter, conn->stash.now, conn->super.stats.num_bytes.ack_received,
+                                largest_newly_acked.pn);
 
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
