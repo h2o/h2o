@@ -1910,9 +1910,7 @@ Exit:
         quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
         if (max_data_sent >= conn->next_resumption_token_threshold) {
             quicly_send_resumption_token(conn->h3.super.quic);
-            if (max_data_sent < 131072) {
-                conn->next_resumption_token_threshold = max_data_sent + 131072;
-            } else if (max_data_sent < 1048576) {
+            if (max_data_sent < 1048576) {
                 conn->next_resumption_token_threshold = max_data_sent * 2;
             } else {
                 conn->next_resumption_token_threshold = max_data_sent + 1048576;
@@ -2119,6 +2117,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     conn->datagram_flows = kh_init(stream);
+    conn->next_resumption_token_threshold = 65536; /* send jumpstart token is meaningless if data being sent is as few as this */
 
     /* accept connection */
 #if PICOTLS_USE_DTRACE
