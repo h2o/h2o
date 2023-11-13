@@ -19,7 +19,6 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include <alloca.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
@@ -309,7 +308,7 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
 static int empty_pipe(int fd)
 {
     ssize_t ret;
-    char *dst = alloca(1024);
+    char dst[1024];
 
 drain_more:
     while((ret = read(fd, dst, 1024)) == -1 && errno == EINTR)
