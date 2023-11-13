@@ -750,6 +750,13 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
+        /**
+          * the list of spare pipes currently retained for reuse
+          */
+        struct pipe_list {
+            size_t len;
+            h2o_linklist_t anchor;
+        } pipe_list;
     } proxy;
 
     struct {
