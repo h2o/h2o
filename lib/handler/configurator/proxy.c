@@ -497,10 +497,7 @@ static int on_config_max_spare_pipes(h2o_configurator_command_t *cmd, h2o_config
 {
     if (h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->proxy.max_spare_pipes) != 0)
         return -1;
-    if (ctx->globalconf->proxy.max_spare_pipes == 0) {
-        h2o_configurator_errprintf(cmd, node, "proxy.buffer_size must be a positive value");
-        return -1;
-    }
+
     return 0;
 }
 

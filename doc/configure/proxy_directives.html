@@ -791,6 +791,11 @@ adjusted to increase or decrease the number of pipes retained by h2o. The
 intention of this setting is to reduce lock contention in the kernel under
 high load when pipe reader is used.
 </p>
+<p>
+Setting this value to 0 will cause no pipes to be retained by h2o; the
+pipes will be closed after they are used. In this case, h2o will create
+new pipes each time they are needed.
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
