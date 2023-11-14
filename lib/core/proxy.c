@@ -311,7 +311,7 @@ static int empty_pipe(int fd)
     char dst[1024];
 
 drain_more:
-    while((ret = read(fd, dst, 1024)) == -1 && errno == EINTR)
+    while((ret = read(fd, dst, sizeof(dst))) == -1 && errno == EINTR)
         ;
     if (ret == 0) {
         return 1;
