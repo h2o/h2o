@@ -738,7 +738,15 @@ static int write_req(void *ctx, int is_end_stream)
     }
 
     if (is_end_stream) {
-        return client->write_req(client, chunk, self->src_req->trailers.entries, self->src_req->trailers.size);
+        h2o_header_t *trailers = self->src_req->trailers.entries;
+        size_t trailers_len = self->src_req->trailers.size;
+        if (trailers == NULL) {
+            /* we have to pass non-NULL trailers to indicate end_stream */
+            h2o_header_t dummy;
+            trailers = &dummy;
+            trailers_len = 0;
+        }
+        return client->write_req(client, chunk, trailers, trailers_len);
     } else {
         return client->write_req(client, chunk, NULL, 0);
     }
