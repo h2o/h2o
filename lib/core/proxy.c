@@ -309,7 +309,7 @@ drain_more:
     while((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
         ;
     if (ret == 0) {
-        return 1;
+        return 0;
     } else if (ret == -1) {
         if (errno == EAGAIN)
             return 1;
