@@ -300,6 +300,16 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
     return client;
 }
 
+static int pipe_is_empty(int fd)
+{
+    ssize_t ret;
+    int ch;
+
+    while ((ret = read(fd, &ch, 1)) == -1 && errno == EINTR)
+        ;
+    return ret == -1 && errno == EAGAIN;
+}
+
 static int empty_pipe(int fd)
 {
     ssize_t ret;
@@ -341,8 +351,16 @@ static void do_close(struct rp_generator_t *self)
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
         h2o_conn_t *conn = self->src_req->conn;
-        if (conn->ctx->proxy.spare_pipes.count < conn->ctx->globalconf->proxy.max_spare_pipes &&
-            empty_pipe(self->pipe_reader.fds[0])) {
+        int reuse = 0;
+        if (conn->ctx->proxy.spare_pipes.count < conn->ctx->globalconf->proxy.max_spare_pipes) {
+            if (self->body_bytes_read == self->body_bytes_sent) {
+                assert(pipe_is_empty(self->pipe_reader.fds[0]));
+                reuse = 1;
+            } else if (empty_pipe(self->pipe_reader.fds[0])) {
+                reuse = 1;
+            }
+        }
+        if (reuse) {
             int *dst = conn->ctx->proxy.spare_pipes.pipes[conn->ctx->proxy.spare_pipes.count++];
             dst[0] = self->pipe_reader.fds[0];
             dst[1] = self->pipe_reader.fds[1];
