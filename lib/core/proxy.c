@@ -303,10 +303,10 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
 static int empty_pipe(int fd)
 {
     ssize_t ret;
-    char dst[1024];
+    char buf[1024];
 
 drain_more:
-    while((ret = read(fd, dst, sizeof(dst))) == -1 && errno == EINTR)
+    while((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
         ;
     if (ret == 0) {
         return 1;
@@ -314,7 +314,7 @@ drain_more:
         if (errno == EAGAIN)
             return 1;
         return 0;
-    } else if (ret == sizeof(dst)) {
+    } else if (ret == sizeof(buf)) {
         goto drain_more;
     }
 
