@@ -340,10 +340,9 @@ static void do_close(struct rp_generator_t *self)
     }
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
-        h2o_conn_t *conn = self->src_req->conn;
-        if (conn->ctx->proxy.spare_pipes.count < conn->ctx->globalconf->proxy.max_spare_pipes &&
-            empty_pipe(self->pipe_reader.fds[0])) {
-            int *dst = conn->ctx->proxy.spare_pipes.pipes[conn->ctx->proxy.spare_pipes.count++];
+        h2o_context_t *ctx = self->src_req->conn->ctx;
+        if (ctx->proxy.spare_pipes.count < ctx->globalconf->proxy.max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
+            int *dst = ctx->proxy.spare_pipes.pipes[ctx->proxy.spare_pipes.count++];
             dst[0] = self->pipe_reader.fds[0];
             dst[1] = self->pipe_reader.fds[1];
         } else {
