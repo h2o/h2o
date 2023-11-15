@@ -136,6 +136,12 @@ void h2o_context_dispose(h2o_context_t *ctx)
     h2o_globalconf_t *config = ctx->globalconf;
     size_t i, j;
 
+    for (size_t i = 0; i < ctx->proxy.spare_pipes.count; ++i) {
+        close(ctx->proxy.spare_pipes.pipes[i][0]);
+        close(ctx->proxy.spare_pipes.pipes[i][1]);
+    }
+    free(ctx->proxy.spare_pipes.pipes);
+
     h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
 
     for (i = 0; config->hosts[i] != NULL; ++i) {
