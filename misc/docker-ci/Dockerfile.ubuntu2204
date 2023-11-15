@@ -80,6 +80,12 @@ RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/j
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
 
+# mbedtls
+RUN mkdir -p /opt/src && cd /opt/src && wget -O - https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.5.1.tar.gz | tar xzf - \
+  && cd mbedtls-3.5.1 && mkdir -p build && cd build \
+  && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && make install \
+  && make clean
+
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
  && chmod +x /usr/local/bin/dumb-init
