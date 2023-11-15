@@ -753,10 +753,10 @@ struct st_h2o_context_t {
         /**
           * the list of spare pipes currently retained for reuse
           */
-        struct pipe_list {
-            size_t len;
-            h2o_linklist_t anchor;
-        } pipe_list;
+        struct {
+            int (*pipes)[2];
+            size_t count;
+        } spare_pipes;
     } proxy;
 
     struct {

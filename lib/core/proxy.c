@@ -346,16 +346,11 @@ static void do_close(struct rp_generator_t *self)
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
         h2o_conn_t *conn = self->src_req->conn;
-        struct pipe_list *pl = &conn->ctx->proxy.pipe_list;
-        size_t max_spare_pipes =
-            conn->ctx->globalconf->proxy.max_spare_pipes;
-        if ((pl->len < max_spare_pipes) && empty_pipe(self->pipe_reader.fds[0])) {
-            struct pipe_reader *pr = h2o_mem_alloc(sizeof(*pr));
-            pr->fds[0] = self->pipe_reader.fds[0];
-            pr->fds[1] = self->pipe_reader.fds[1];
-            memset(&pr->link, 0, sizeof(pr->link));
-            h2o_linklist_insert(&pl->anchor, &pr->link);
-            ++pl->len;
+        if (conn->ctx->proxy.spare_pipes.count < conn->ctx->globalconf->proxy.max_spare_pipes &&
+            empty_pipe(self->pipe_reader.fds[0])) {
+            int *dst = conn->ctx->proxy.spare_pipes.pipes[conn->ctx->proxy.spare_pipes.count++];
+            dst[0] = self->pipe_reader.fds[0];
+            dst[1] = self->pipe_reader.fds[1];
         } else {
             close(self->pipe_reader.fds[0]);
             close(self->pipe_reader.fds[1]);
@@ -713,14 +708,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        struct pipe_list *pl = &req->conn->ctx->proxy.pipe_list;
-        if (!h2o_linklist_is_empty(&pl->anchor)) {
-            struct pipe_reader *pr = H2O_STRUCT_FROM_MEMBER(struct pipe_reader, link, pl->anchor.next);
-            h2o_linklist_unlink(&pr->link);
-            self->pipe_reader.fds[0] = pr->fds[0];
-            self->pipe_reader.fds[1] = pr->fds[1];
-            free(pr);
-            --pl->len;
+        if (req->conn->ctx->proxy.spare_pipes.count > 0) {
+            int *src = req->conn->ctx->proxy.spare_pipes.pipes[--req->conn->ctx->proxy.spare_pipes.count];
+            self->pipe_reader.fds[0] = src[0];
+            self->pipe_reader.fds[1] = src[1];
         } else {
             if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
                 char errbuf[256];
