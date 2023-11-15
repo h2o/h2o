@@ -108,8 +108,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
     ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
-    ctx->proxy.pipe_list.len = 0;
-    h2o_linklist_init_anchor(&ctx->proxy.pipe_list.anchor);
+    ctx->proxy.spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->proxy.spare_pipes.pipes[0]) * config->proxy.max_spare_pipes);
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
