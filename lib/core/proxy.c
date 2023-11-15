@@ -51,11 +51,6 @@ struct rp_generator_t {
     int *generator_disposed;
 };
 
-struct pipe_reader {
-    int fds[2];
-    h2o_linklist_t link;
-};
-
 static h2o_httpclient_ctx_t *get_client_ctx(h2o_req_t *req)
 {
     h2o_req_overrides_t *overrides = req->overrides;
