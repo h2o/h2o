@@ -506,6 +506,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_buffer_size;
         /**
+         * maximum number of pipes to retain for reuse
+         */
+        size_t max_spare_pipes;
+        /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
         h2o_proxy_zerocopy_mode_t zerocopy;
@@ -746,6 +750,13 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
+        /**
+         * the list of spare pipes currently retained for reuse
+         */
+        struct {
+            int (*pipes)[2];
+            size_t count;
+        } spare_pipes;
     } proxy;
 
     struct {
