@@ -2778,14 +2778,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
-                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s,ecn:s",
-                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets, &ecn) != 0)
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
+                        **max_path_validation_failures, **multipath;
+                    if (h2o_configurator_parse_mapping(
+                            cmd, *quic_node, NULL,
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
+                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "max-initial-handshake-packets:s,ecn:s,max-path-validation-failures:s,multipath:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
+                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn,
+                            &max_path_validation_failures, &multipath) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2843,6 +2845,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         if (on == -1)
                             return -1;
                         listener->quic.ctx->enable_ecn = !!on;
+                    }
+                    if (max_path_validation_failures != NULL) {
+                        if (h2o_configurator_scanf(cmd, *max_path_validation_failures, "%" SCNu64,
+                                                   &listener->quic.ctx->max_path_validation_failures) != 0)
+                            return -1;
+                    }
+                    if (multipath != NULL) {
+                        ssize_t v;
+                        if ((v = h2o_configurator_get_one_of(cmd, *multipath, "OFF,ON")) == -1)
+                            return -1;
+                        listener->quic.ctx->transport_params.enable_multipath = !!v;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -3725,6 +3738,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     } encapsulated;
     struct listener_ctx_t *lctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx.super, h3ctx);
     h2o_context_t *h2octx = lctx->accept_ctx.ctx;
+    size_t sock_index;
 
     assert(msg->msg_iovlen == 1);
 
@@ -3734,17 +3748,23 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
-    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
-    switch (encapsulated.destaddr.sa.sa_family) {
-    case AF_UNSPEC:
-        break;
-    case AF_INET:
-        if (encapsulated.destaddr.sin.sin_port != *h3ctx->sock.port)
+    /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port
+     * (FIXME check address family and IP address too?) */
+    for (sock_index = 0;; ++sock_index) {
+        if (h3ctx->socks[sock_index].sock == NULL)
             return 1;
-        break;
-    case AF_INET6:
-        if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
-            return 1;
+        switch (encapsulated.destaddr.sa.sa_family) {
+        case AF_UNSPEC:
+            break;
+        case AF_INET:
+            if (encapsulated.destaddr.sin.sin_port != h3ctx->socks[sock_index].addr.sin.sin_port)
+                continue;
+            break;
+        case AF_INET6:
+            if (encapsulated.destaddr.sin6.sin6_port != h3ctx->socks[sock_index].addr.sin6.sin6_port)
+                continue;
+            break;
+        }
         break;
     }
 

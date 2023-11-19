@@ -35,6 +35,7 @@ static int generate_cid(quicly_local_cid_set_t *set, size_t idx)
         return 0;
 
     set->_encryptor->encrypt_cid(set->_encryptor, &set->cids[idx].cid, set->cids[idx].stateless_reset_token, &set->plaintext);
+    set->cids[idx].multipath.space = NULL;
     set->cids[idx].sequence = set->plaintext.path_id++;
 
     return 1;
@@ -179,8 +180,11 @@ int quicly_local_cid_on_lost(quicly_local_cid_set_t *set, uint64_t sequence)
     return 1;
 }
 
-int quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int *_has_pending)
+int quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int *_has_pending,
+                            struct st_quicly_pn_space_t **multipath_space)
 {
+    *multipath_space = NULL;
+
     /* find the CID to be retired, also check if there is at least one CID that has been issued */
     size_t retired_at = set->_size;
     int becomes_empty = 1;
@@ -208,6 +212,8 @@ int quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int 
     /* retire given CID */
     set->cids[retired_at].state = QUICLY_LOCAL_CID_STATE_IDLE;
     set->cids[retired_at].sequence = UINT64_MAX;
+    *multipath_space = set->cids[retired_at].multipath.space;
+    set->cids[retired_at].multipath.space = NULL;
 
     /* move following PENDING CIDs to front */
     for (size_t i = retired_at + 1; i < set->_size; i++) {
@@ -226,4 +232,14 @@ int quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int 
     }
 
     return 0;
+}
+
+ssize_t quicly_local_cid_get_next(quicly_local_cid_set_t *set, ssize_t index)
+{
+    while (++index < quicly_local_cid_get_size(set)) {
+        if (set->cids[index].state == QUICLY_LOCAL_CID_STATE_IDLE)
+            continue;
+        return index;
+    }
+    return -1;
 }

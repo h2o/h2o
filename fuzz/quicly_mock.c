@@ -34,6 +34,9 @@ mquicly_context_t mquicly_context;
 struct st_quicly_conn_t {
     struct _st_quicly_conn_public_t super;
     khash_t(quicly_stream_t) * streams;
+    struct {
+        quicly_address_t local, remote;
+    } address;
 };
 
 struct st_quicly_send_context_t {
@@ -58,10 +61,20 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, int is_client, st
     }
     conn->streams = kh_init(quicly_stream_t);
 
-    conn->super.local.address.sa = *local_addr;
-    conn->super.remote.address.sa = *remote_addr;
+    conn->address.local.sa = *local_addr;
+    conn->address.remote.sa = *remote_addr;
 
     return conn;
+}
+
+struct sockaddr *quicly_get_sockname(quicly_conn_t *conn)
+{
+    return &conn->address.local.sa;
+}
+
+struct sockaddr *quicly_get_peername(quicly_conn_t *conn)
+{
+    return &conn->address.remote.sa;
 }
 
 int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,

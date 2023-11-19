@@ -742,6 +742,9 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
         DO_PUSH_NUM_FRAMES(application_close, dir);                                                                                \
         DO_PUSH_NUM_FRAMES(handshake_done, dir);                                                                                   \
         DO_PUSH_NUM_FRAMES(ack_frequency, dir);                                                                                    \
+        DO_PUSH_NUM_FRAMES(ack_mp, dir);                                                                                           \
+        DO_PUSH_NUM_FRAMES(path_abandon, dir);                                                                                     \
+        DO_PUSH_NUM_FRAMES(path_status, dir);                                                                                      \
     } while (0)
 
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -770,15 +773,25 @@ Redo:
     PUSH_U64("packets-acked-ecn-ect0", num_packets.acked_ecn_counts[0]);
     PUSH_U64("packets-acked-ecn-ect1", num_packets.acked_ecn_counts[1]);
     PUSH_U64("packets-acked-ecn-ce", num_packets.acked_ecn_counts[2]);
-    PUSH_U64("late-acked", num_packets.late_acked);
+    PUSH_U64("packets-late-acked", num_packets.late_acked);
+    PUSH_U64("packets-initial-handshake-sent", num_packets.initial_handshake_sent);
+    PUSH_U64("packets-received-out-of-order", num_packets.received_out_of_order);
+    PUSH_U64("packets-sent-promoted-paths", num_packets.sent_promoted_paths);
+    PUSH_U64("packets-ack-received-promoted-paths", num_packets.ack_received_promoted_paths);
     PUSH_U64("bytes-received", num_bytes.received);
     PUSH_U64("bytes-sent", num_bytes.sent);
     PUSH_U64("bytes-lost", num_bytes.lost);
     PUSH_U64("bytes-ack-received", num_bytes.ack_received);
     PUSH_U64("bytes-stream-data-sent", num_bytes.stream_data_sent);
     PUSH_U64("bytes-stream-data-resent", num_bytes.stream_data_resent);
+    PUSH_U64("paths-created", num_paths.created);
+    PUSH_U64("paths-validated", num_paths.validated);
+    PUSH_U64("paths-validation-failed", num_paths.validation_failed);
     PUSH_U64("paths-ecn-validated", num_paths.ecn_validated);
     PUSH_U64("paths-ecn-failed", num_paths.ecn_failed);
+    PUSH_U64("paths-migration-elicited", num_paths.migration_elicited);
+    PUSH_U64("paths-promoted", num_paths.promoted);
+    PUSH_U64("paths-closed-no-dcid", num_paths.closed_no_dcid);
     PUSH_U32("rtt-minimum", rtt.minimum);
     PUSH_U32("rtt-smoothed", rtt.smoothed);
     PUSH_U32("rtt-variance", rtt.variance);

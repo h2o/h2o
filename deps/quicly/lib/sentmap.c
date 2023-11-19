@@ -84,6 +84,9 @@ static void discard_entry(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter)
 
 void quicly_sentmap_dispose(quicly_sentmap_t *map)
 {
+    /* size of `quicly_sent_t` is meant to be 4 pointers */
+    PTLS_BUILD_ASSERT(sizeof(void *) == 8 ? sizeof(quicly_sent_t) == sizeof(uint64_t) * 4 : 1);
+
     struct st_quicly_sent_block_t *block;
 
     while ((block = map->head) != NULL) {
@@ -129,7 +132,8 @@ void quicly_sentmap_skip(quicly_sentmap_iter_t *iter)
     } while (iter->p->acked != quicly_sentmap__type_packet);
 }
 
-int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event)
+int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event,
+                          struct st_quicly_conn_t *conn)
 {
     quicly_sent_packet_t packet;
     int ret = 0;
@@ -159,7 +163,7 @@ int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, qu
         --map->num_packets;
     }
     for (next_entry(iter); iter->p->acked != quicly_sentmap__type_packet; next_entry(iter)) {
-        if (should_notify && (ret = iter->p->acked(map, &packet, event == QUICLY_SENTMAP_EVENT_ACKED, iter->p)) != 0)
+        if (should_notify && (ret = iter->p->acked(map, &packet, event == QUICLY_SENTMAP_EVENT_ACKED, iter->p, conn)) != 0)
             goto Exit;
         if (should_discard)
             discard_entry(map, iter);
@@ -169,7 +173,8 @@ Exit:
     return ret;
 }
 
-int quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
+int quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent,
+                                struct st_quicly_conn_t *conn)
 {
     assert(!"quicly_sentmap__type_packet cannot be called");
     return QUICLY_TRANSPORT_ERROR_INTERNAL;

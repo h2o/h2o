@@ -192,10 +192,11 @@ typedef struct st_quicly_crypto_engine_t {
      * header protection using `header_protect_ctx`. Quicly does not read or write the content of the UDP datagram payload after
      * this function is called. Therefore, an engine might retain the information provided by this function, and protect the packet
      * and the header at a later moment (e.g., hardware crypto offload).
+     * @param dcid specifies the CID sequence number for encrypting Multipath QUIC packets; will always be zero in QUIC v1
      */
     void (*encrypt_packet)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
-                           size_t payload_from, uint64_t packet_number, int coalesced);
+                           size_t payload_from, uint64_t dcid, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
 
 /**
@@ -264,6 +265,10 @@ typedef struct st_quicly_transport_parameters_t {
     /**
      *
      */
+    uint8_t enable_multipath : 1;
+    /**
+     *
+     */
     uint64_t active_connection_id_limit;
     /**
      *
@@ -326,6 +331,14 @@ struct st_quicly_context_t {
      * the connection.
      */
     uint64_t max_initial_handshake_packets;
+    /**
+     * maximum number of probe packets (i.e., packets carrying PATH_CHALLENGE frames) to be sent before calling a path unreachable
+     */
+    uint64_t max_probe_packets;
+    /**
+     * once path validation fails for the specified number of times, packets arriving on new tuples will be dropped
+     */
+    uint64_t max_path_validation_failures;
     /**
      * expand client hello so that it does not fit into one datagram
      */
@@ -466,6 +479,14 @@ struct st_quicly_conn_streamgroup_state_t {
          * connection-wide ack-received counters for ECT(0), ECT(1), CE                                                            \
          */                                                                                                                        \
         uint64_t acked_ecn_counts[3];                                                                                              \
+        /**                                                                                                                        \
+         * Total number of packets sent on promoted paths.                                                                         \
+         */                                                                                                                        \
+        uint64_t sent_promoted_paths;                                                                                              \
+        /**                                                                                                                        \
+         * Total number of acked packets that were sent on promoted.                                                               \
+         */                                                                                                                        \
+        uint64_t ack_received_promoted_paths;                                                                                      \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -495,6 +516,30 @@ struct st_quicly_conn_streamgroup_state_t {
     } num_bytes;                                                                                                                   \
     struct {                                                                                                                       \
         /**                                                                                                                        \
+         * number of alternate paths created                                                                                       \
+         */                                                                                                                        \
+        uint64_t created;                                                                                                          \
+        /**                                                                                                                        \
+         * number alternate paths validated                                                                                        \
+         */                                                                                                                        \
+        uint64_t validated;                                                                                                        \
+        /**                                                                                                                        \
+         * number of alternate paths that were created but failed to validate                                                      \
+         */                                                                                                                        \
+        uint64_t validation_failed;                                                                                                \
+        /**                                                                                                                        \
+         * number of paths on which migration has been elicited (i.e., received non-probing packets)                               \
+         */                                                                                                                        \
+        uint64_t migration_elicited;                                                                                               \
+        /**                                                                                                                        \
+         * number of migrations                                                                                                    \
+         */                                                                                                                        \
+        uint64_t promoted;                                                                                                         \
+        /**                                                                                                                        \
+         * number of alternate paths that were closed due to Connection ID being unavailable                                       \
+         */                                                                                                                        \
+        uint64_t closed_no_dcid;                                                                                                   \
+        /**                                                                                                                        \
          * number of paths that were ECN-capable                                                                                   \
          */                                                                                                                        \
         uint64_t ecn_validated;                                                                                                    \
@@ -510,7 +555,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency;                                                                                                         \
+            ack_frequency, ack_mp, path_abandon, path_status;                                                                      \
     } num_frames_sent, num_frames_received;                                                                                        \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -582,10 +627,6 @@ struct _st_quicly_conn_public_t {
          */
         quicly_local_cid_set_t cid_set;
         /**
-         * the local address (may be AF_UNSPEC)
-         */
-        quicly_address_t address;
-        /**
          * the SCID used in long header packets. Equivalent to local_cid[seq=0]. Retaining the value separately is the easiest way
          * of staying away from the complexity caused by remote peer sending RCID frames before the handshake concludes.
          */
@@ -600,20 +641,12 @@ struct _st_quicly_conn_public_t {
          * CIDs received from the remote peer
          */
         quicly_remote_cid_set_t cid_set;
-        /**
-         * the remote address (cannot be AF_UNSPEC)
-         */
-        quicly_address_t address;
         struct st_quicly_conn_streamgroup_state_t bidi, uni;
         quicly_transport_parameters_t transport_params;
         struct {
             unsigned validated : 1;
             unsigned send_probe : 1;
         } address_validation;
-        /**
-         * largest value of Retire Prior To field observed so far
-         */
-        uint64_t largest_retire_prior_to;
     } remote;
     /**
      * Retains the original DCID used by the client. Servers use this to route packets incoming packets. Clients use this when
@@ -953,11 +986,11 @@ static quicly_stream_id_t quicly_get_remote_next_stream_id(quicly_conn_t *conn, 
 /**
  * Returns the local address of the connection. This may be AF_UNSPEC, indicating that the operating system is choosing the address.
  */
-static struct sockaddr *quicly_get_sockname(quicly_conn_t *conn);
+struct sockaddr *quicly_get_sockname(quicly_conn_t *conn);
 /**
  * Returns the remote address of the connection. This would never be AF_UNSPEC.
  */
-static struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
+struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
 /**
  *
  */
@@ -1113,8 +1146,8 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
  */
 int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
                    struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
-                   ptls_handshake_properties_t *handshake_properties,
-                   const quicly_transport_parameters_t *resumed_transport_params, void *appdata);
+                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params,
+                   void *appdata);
 /**
  * accepts a new connection
  * @param new_cid        The CID to be used for the connection. When an error is being returned, the application can reuse the CID
@@ -1129,9 +1162,19 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
                   quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
                   const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties, void *appdata);
 /**
+ * Adds a new path. Only usable when running as a client. Local must contain sufficient information to distinguish between the paths
+ * being establisished; i.e, either the port number should be different or if one port is shared then the IP addresses of each
+ * local address must be different.
+ */
+int quicly_add_path(quicly_conn_t *conn, struct sockaddr *local);
+/**
  *
  */
 ptls_t *quicly_get_tls(quicly_conn_t *conn);
+/**
+ *
+ */
+int quicly_is_multipath(quicly_conn_t *conn);
 /**
  * Resumes an async TLS handshake, and returns a pointer to the QUIC connection or NULL if the corresponding QUIC connection has
  * been discarded. See `quicly_async_handshake_t`.
@@ -1226,6 +1269,12 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
  *
  */
 void quicly_amend_ptls_context(ptls_context_t *ptls);
+/**
+ * Builds the IV prefix of used to encrypt / decrypt Multipath QUIC packets. Size of the supplied buffer (`iv`) must be no less than
+ * `PTLS_MAX_IV_SIZE`. Once the IV is built, that should be applied to AEAD using `ptls_aead_xor_iv` prior to calling the encryption
+ * function. After that, `ptls_aead_xor_iv` should be called again with the same arguments to nagate the changes to IV.
+ */
+static size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *iv);
 /**
  * Encrypts an address token by serializing the plaintext structure and appending an authentication tag.
  *
@@ -1384,18 +1433,6 @@ inline quicly_stream_id_t quicly_get_remote_next_stream_id(quicly_conn_t *conn, 
     return uni ? c->remote.uni.next_stream_id : c->remote.bidi.next_stream_id;
 }
 
-inline struct sockaddr *quicly_get_sockname(quicly_conn_t *conn)
-{
-    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return &c->local.address.sa;
-}
-
-inline struct sockaddr *quicly_get_peername(quicly_conn_t *conn)
-{
-    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return &c->remote.address.sa;
-}
-
 inline uint32_t quicly_get_protocol_version(quicly_conn_t *conn)
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
@@ -1427,6 +1464,21 @@ inline uint32_t quicly_stream_get_receive_window(quicly_stream_t *stream)
 inline void quicly_stream_set_receive_window(quicly_stream_t *stream, uint32_t window)
 {
     stream->_recv_aux.window = window;
+}
+
+inline size_t quicly_build_multipath_iv(ptls_aead_algorithm_t *algo, uint64_t sequence, void *_iv)
+{
+    size_t len = algo->iv_size - 8;
+    uint8_t *iv = (uint8_t *)_iv;
+
+    for (size_t i = 0; i + 4 < len; ++i)
+        *iv++ = 0;
+    *iv++ = (uint8_t)(sequence >> 24);
+    *iv++ = (uint8_t)(sequence >> 16);
+    *iv++ = (uint8_t)(sequence >> 8);
+    *iv++ = (uint8_t)sequence;
+
+    return len;
 }
 
 inline int quicly_stream_is_client_initiated(quicly_stream_id_t stream_id)

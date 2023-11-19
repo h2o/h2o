@@ -21,6 +21,7 @@
  */
 #include <sys/time.h>
 #include "quicly/defaults.h"
+#include "quicly.h"
 
 #define DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE 1280
 #define DEFAULT_MAX_UDP_PAYLOAD_SIZE 1472
@@ -30,6 +31,8 @@
 #define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
 #define DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER 400
 #define DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS 1000
+#define DEFAULT_MAX_PROBE_PACKETS 5
+#define DEFAULT_MAX_PATH_VALIDATION_FAILURES 100
 
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
@@ -49,6 +52,8 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               0, /* ack_frequency */
                                               DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                               DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+                                              DEFAULT_MAX_PROBE_PACKETS,
+                                              DEFAULT_MAX_PATH_VALIDATION_FAILURES,
                                               0, /* enlarge_client_hello */
                                               1, /* enable_ecn */
                                               NULL,
@@ -80,6 +85,8 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     0, /* ack_frequency */
                                                     DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                                     DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+                                                    DEFAULT_MAX_PROBE_PACKETS,
+                                                    DEFAULT_MAX_PATH_VALIDATION_FAILURES,
                                                     0, /* enlarge_client_hello */
                                                     1, /* enable_ecn */
                                                     NULL,
@@ -425,15 +432,25 @@ Exit:
 
 static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
                                          ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t packet_number,
-                                         int coalesced)
+                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t dcid,
+                                         uint64_t packet_number, int coalesced)
 {
+    assert(dcid != UINT64_MAX);
+
     ptls_aead_supplementary_encryption_t supp = {.ctx = header_protect_ctx,
                                                  .input = datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE};
+    uint8_t multipath_iv[PTLS_MAX_IV_SIZE];
+    size_t multipath_iv_len = 0;
 
+    if (dcid != 0) {
+        multipath_iv_len = quicly_build_multipath_iv(packet_protect_ctx->algo, dcid, multipath_iv);
+        ptls_aead_xor_iv(packet_protect_ctx, multipath_iv, multipath_iv_len);
+    }
     ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, datagram.base + payload_from,
                         datagram.len - payload_from - packet_protect_ctx->algo->tag_size, packet_number,
                         datagram.base + first_byte_at, payload_from - first_byte_at, &supp);
+    if (dcid != 0)
+        ptls_aead_xor_iv(packet_protect_ctx, multipath_iv, multipath_iv_len);
 
     datagram.base[first_byte_at] ^= supp.output[0] & (QUICLY_PACKET_IS_LONG_HEADER(datagram.base[first_byte_at]) ? 0xf : 0x1f);
     for (size_t i = 0; i != QUICLY_SEND_PN_SIZE; ++i)

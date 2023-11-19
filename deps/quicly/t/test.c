@@ -516,65 +516,65 @@ static void do_test_record_receipt(size_t epoch)
     struct st_quicly_pn_space_t *space =
         alloc_pn_space(sizeof(*space), epoch == QUICLY_EPOCH_1RTT ? QUICLY_DEFAULT_PACKET_TOLERANCE : 1);
     uint64_t pn = 0, out_of_order_cnt = 0;
-    int64_t now = 12345, send_ack_at = INT64_MAX;
+    int64_t now = 12345;
 
     if (epoch == QUICLY_EPOCH_1RTT) {
         /* 2nd packet triggers an ack */
-        ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+        ok(space->send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
         now += 1;
-        ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-        ok(send_ack_at == now);
+        ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+        ok(space->send_ack_at == now);
         now += 1;
     } else {
         /* every packet triggers an ack */
-        ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-        ok(send_ack_at == now);
+        ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+        ok(space->send_ack_at == now);
         now += 1;
     }
 
     /* reset */
     space->unacked_count = 0;
-    send_ack_at = INT64_MAX;
+    space->send_ack_at = INT64_MAX;
 
     /* ack-only packets do not elicit an ack */
-    ok(record_receipt(space, pn++, 0, 1, now, &send_ack_at, &out_of_order_cnt) == 0);
-    ok(send_ack_at == INT64_MAX);
+    ok(record_receipt(space, pn++, 0, 1, 0, now, &out_of_order_cnt) == 0);
+    ok(space->send_ack_at == INT64_MAX);
     now += 1;
-    ok(record_receipt(space, pn++, 0, 1, now, &send_ack_at, &out_of_order_cnt) == 0);
-    ok(send_ack_at == INT64_MAX);
+    ok(record_receipt(space, pn++, 0, 1, 0, now, &out_of_order_cnt) == 0);
+    ok(space->send_ack_at == INT64_MAX);
     now += 1;
     pn++; /* gap */
-    ok(record_receipt(space, pn++, 0, 1, now, &send_ack_at, &out_of_order_cnt) == 0);
-    ok(send_ack_at == INT64_MAX);
+    ok(record_receipt(space, pn++, 0, 1, 0, now, &out_of_order_cnt) == 0);
+    ok(space->send_ack_at == INT64_MAX);
     now += 1;
-    ok(record_receipt(space, pn++, 0, 1, now, &send_ack_at, &out_of_order_cnt) == 0);
-    ok(send_ack_at == INT64_MAX);
+    ok(record_receipt(space, pn++, 0, 1, 0, now, &out_of_order_cnt) == 0);
+    ok(space->send_ack_at == INT64_MAX);
     now += 1;
 
     /* gap triggers an ack */
     pn += 1; /* gap */
-    ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-    ok(send_ack_at == now);
+    ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+    ok(space->send_ack_at == now);
     now += 1;
 
     /* reset */
     space->unacked_count = 0;
-    send_ack_at = INT64_MAX;
+    space->send_ack_at = INT64_MAX;
 
     /* if 1-RTT, test ignore-order */
     if (epoch == QUICLY_EPOCH_1RTT) {
         space->ignore_order = 1;
         pn++; /* gap */
-        ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-        ok(send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
+        ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+        ok(space->send_ack_at == now + QUICLY_DELAYED_ACK_TIMEOUT);
         now += 1;
-        ok(record_receipt(space, pn++, 0, 0, now, &send_ack_at, &out_of_order_cnt) == 0);
-        ok(send_ack_at == now);
+        ok(record_receipt(space, pn++, 0, 0, 0, now, &out_of_order_cnt) == 0);
+        ok(space->send_ack_at == now);
         now += 1;
     }
 
-    do_free_pn_space(space);
+    free_pn_space(space);
 }
 
 static void test_record_receipt(void)

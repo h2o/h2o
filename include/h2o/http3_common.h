@@ -257,14 +257,12 @@ struct st_h2o_quic_ctx_t {
      */
     h2o_loop_t *loop;
     /**
-     * underlying unbound socket
+     * list of underlying unbound sockets (terminated by socks[i].sock == NULL)
      */
-    struct {
+    struct st_h2o_quic_ctx_socket_t {
         h2o_socket_t *sock;
-        struct sockaddr_storage addr;
-        socklen_t addrlen;
-        in_port_t *port; /* points to the port number in addr */
-    } sock;
+        quicly_address_t addr;
+    } *socks;
     /**
      * quic context
      */
@@ -446,6 +444,14 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
  *
  */
+void h2o_quic_add_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
+/**
+ *
+ */
+void h2o_quic_delete_socket(h2o_quic_ctx_t *ctx, size_t sock_index);
+/**
+ *
+ */
 void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
                                      h2o_quic_preprocess_packet_cb preprocess_cb);
@@ -465,6 +471,11 @@ void h2o_quic_close_all_connections(h2o_quic_ctx_t *ctx);
  *
  */
 size_t h2o_quic_num_connections(h2o_quic_ctx_t *ctx);
+/**
+ * Iterate through each connection. If the callback returns a non-zero value, iteration is aborted, and the value is returned.
+ * Otherwise, zero is returned.
+ */
+int h2o_quic_foreach_connection(h2o_quic_ctx_t *ctx, int (*cb)(h2o_quic_ctx_t *, h2o_quic_conn_t *, void *), void *cbdata);
 /**
  *
  */

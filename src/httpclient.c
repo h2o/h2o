@@ -91,6 +91,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .save_ticket = &save_http3_ticket,
         },
 };
+static int got_sig_rebind, got_sig_addpath;
 static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -529,7 +530,8 @@ static void usage(const char *progname)
             "  --max-udp-payload-size <bytes>\n"
             "               specifies the max_udp_payload_size transport parameter to send\n"
             "               (default: %" PRIu64 ")\n"
-            " --io-timeout <milliseconds>\n"
+            "  --multipath  enables QUIC multipath\n"
+            "  --io-timeout <milliseconds>\n"
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
             "  -h, --help   prints this help\n"
             "\n",
@@ -538,23 +540,78 @@ static void usage(const char *progname)
 }
 
 #if !H2O_USE_LIBUV
+
 h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
 {
+    struct sockaddr_in sin = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(0), .sin_port = htons(port)};
     int fd;
-    struct sockaddr_in sin;
+
     if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
         perror("failed to create UDP socket");
         exit(EXIT_FAILURE);
     }
-    sin.sin_family = AF_INET;
-    sin.sin_addr.s_addr = htonl(0);
-    sin.sin_port = htons(port);
     if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
         perror("failed to bind bind UDP socket");
         exit(EXIT_FAILURE);
     }
+
+    if (port == 0) {
+#ifdef IP_PKTINFO
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0) {
+            perror("setsockopt(IP_PKTINFO) failed");
+            exit(EXIT_FAILURE);
+        }
+#elif defined(IP_RECVDSTADDR)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0) {
+            perror("setsockopt(IP_RECVDSTADDR) failed");
+            return -1;
+        }
+#endif
+    }
+
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 }
+
+/* to simulate NAT rebinding, rewrite the local port directly */
+static int h3_rebind_rewrite_port(h2o_quic_ctx_t *_ctx, h2o_quic_conn_t *conn, void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+    struct sockaddr *connlocal = quicly_get_sockname(conn->quic);
+    quicly_address_t newlocal;
+
+    h2o_socket_getsockname(sock, &newlocal.sa);
+
+    assert(connlocal->sa_family == AF_INET);
+    assert(newlocal.sa.sa_family == AF_INET);
+
+    ((struct sockaddr_in *)connlocal)->sin_port = newlocal.sin.sin_port;
+
+    return 0;
+}
+
+static int h3_add_path(h2o_quic_ctx_t *_ctx, h2o_quic_conn_t *conn, void *_sock)
+{
+    h2o_socket_t *sock = _sock;
+    quicly_address_t localaddr;
+
+    h2o_socket_getsockname(sock, &localaddr.sa);
+    quicly_add_path(conn->quic, &localaddr.sa);
+
+    return 0;
+}
+
+static void on_sig_rebind(int signo)
+{
+    got_sig_rebind = 1;
+}
+
+static void on_sig_addpath(int signo)
+{
+    got_sig_addpath = 1;
+}
+
 #endif
 
 static void on_sigfatal(int signo)
@@ -579,6 +636,12 @@ int main(int argc, char **argv)
     h2o_set_signal_handler(SIGFPE, on_sigfatal);
     h2o_set_signal_handler(SIGILL, on_sigfatal);
     h2o_set_signal_handler(SIGSEGV, on_sigfatal);
+
+#if !H2O_USE_LIBUV
+    /* signal handlers for testing QUIC path migration and multipath, following that of quicly-cli */
+    h2o_set_signal_handler(SIGUSR1, on_sig_rebind);
+    h2o_set_signal_handler(SIGUSR2, on_sig_addpath);
+#endif
 
     h2o_multithread_queue_t *queue;
     h2o_multithread_receiver_t getaddr_receiver;
@@ -638,9 +701,8 @@ int main(int argc, char **argv)
             perror("failed to bind bind UDP socket");
             exit(EXIT_FAILURE);
         }
-        h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
-                              1 /* use_gso */, NULL);
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, create_udp_socket(ctx.loop, 0), &h3ctx.quic, NULL,
+                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
     }
 #endif
 
@@ -649,6 +711,7 @@ int main(int argc, char **argv)
         OPT_MAX_UDP_PAYLOAD_SIZE,
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
+        OPT_MULTIPATH,
         OPT_IO_TIMEOUT,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -656,6 +719,7 @@ int main(int argc, char **argv)
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+                                {"multipath", no_argument, NULL, OPT_MULTIPATH},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -825,6 +889,9 @@ int main(int argc, char **argv)
             }
             h3ctx.quic.ack_frequency = (uint16_t)(f * 1024);
         } break;
+        case OPT_MULTIPATH:
+            h3ctx.quic.transport_params.enable_multipath = 1;
+            break;
         case OPT_IO_TIMEOUT:
             if (sscanf(optarg, "%" SCNu64, &io_timeout) != 1) {
                 fprintf(stderr, "failed to parse --io-timeout\n");
@@ -886,6 +953,19 @@ int main(int argc, char **argv)
         uv_run(ctx.loop, UV_RUN_ONCE);
 #else
         h2o_evloop_run(ctx.loop, INT32_MAX);
+        if (got_sig_rebind) {
+            got_sig_rebind = 0;
+            h2o_socket_t *sock = create_udp_socket(ctx.loop, 0);
+            h2o_quic_add_socket(&ctx.http3->h3, sock);
+            h2o_quic_delete_socket(&ctx.http3->h3, 0);
+            h2o_quic_foreach_connection(&ctx.http3->h3, h3_rebind_rewrite_port, sock);
+        }
+        if (got_sig_addpath) {
+            got_sig_addpath = 0;
+            h2o_socket_t *sock = create_udp_socket(ctx.loop, 0);
+            h2o_quic_add_socket(&ctx.http3->h3, sock);
+            h2o_quic_foreach_connection(&ctx.http3->h3, h3_add_path, sock);
+        }
 #endif
     }
 

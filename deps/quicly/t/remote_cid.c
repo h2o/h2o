@@ -27,27 +27,33 @@
 
 /* clang-format off */
 static uint8_t cids[][CID_LEN] = {
-	{0, 1, 2, 3, 4, 5, 6, 7}, /* 0 */
-	{1, 2, 3, 4, 5, 6, 7, 0},
-	{2, 3, 4, 5, 6, 7, 0, 1},
-	{3, 4, 5, 6, 7, 0, 1, 2},
-	{4, 5, 6, 7, 0, 1, 2, 3},
-	{5, 6, 7, 0, 1, 2, 3, 4},
-	{6, 7, 0, 1, 2, 3, 4, 5},
-	{7, 0, 1, 2, 3, 4, 5, 6},
-	{8, 9, 10, 11, 12, 13, 14, 15}, /* 8 */
+    {0, 1, 2, 3, 4, 5, 6, 7}, /* 0 */
+    {1, 2, 3, 4, 5, 6, 7, 0},
+    {2, 3, 4, 5, 6, 7, 0, 1},
+    {3, 4, 5, 6, 7, 0, 1, 2},
+    {4, 5, 6, 7, 0, 1, 2, 3},
+    {5, 6, 7, 0, 1, 2, 3, 4},
+    {6, 7, 0, 1, 2, 3, 4, 5},
+    {7, 0, 1, 2, 3, 4, 5, 6},
+    {8, 9, 10, 11, 12, 13, 14, 15}, /* 8 */
+    {9, 10, 11, 12, 13, 14, 15, 16},
+    {10, 11, 12, 13, 14, 15, 16, 17},
+    {11, 12, 13, 14, 15, 16, 17, 18},
 };
 
 static uint8_t srts[][QUICLY_STATELESS_RESET_TOKEN_LEN] = {
-	{0},
-	{1},
-	{2},
-	{3},
-	{4},
-	{5},
-	{6},
-	{7},
-	{8},
+    {0},
+    {1},
+    {2},
+    {3},
+    {4},
+    {5},
+    {6},
+    {7},
+    {8},
+    {9},
+    {10},
+    {11},
 };
 /* clang-format on */
 
@@ -57,13 +63,33 @@ void test_received_cid(void)
     uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT];
     size_t num_unregistered;
 
+#define TEST_SET(...)                                                                                                              \
+    do {                                                                                                                           \
+        static const struct {                                                                                                      \
+            uint64_t seq;                                                                                                          \
+            quicly_remote_cid_state_t state;                                                                                       \
+        } expected[] = {__VA_ARGS__};                                                                                              \
+        PTLS_BUILD_ASSERT(PTLS_ELEMENTSOF(expected) == QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT);                                   \
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(expected); ++i) {                                                                   \
+            ok(set.cids[i].state == expected[i].state);                                                                            \
+            ok(set.cids[i].sequence == expected[i].seq);                                                                           \
+            if (expected[i].state != QUICLY_REMOTE_CID_UNAVAILABLE) {                                                              \
+                ok(set.cids[i].cid.len == CID_LEN);                                                                                \
+                ok(expected[i].seq == 0 /* cid is random for seq 0 */ ||                                                           \
+                   memcmp(set.cids[i].cid.cid, cids[expected[i].seq], CID_LEN) == 0);                                              \
+                ok(expected[i].seq == 0 /* so is srt */ ||                                                                         \
+                   memcmp(set.cids[i].stateless_reset_token, srts[expected[i].seq], QUICLY_STATELESS_RESET_TOKEN_LEN) == 0);       \
+            }                                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
+
     quicly_remote_cid_init_set(&set, NULL, quic_ctx.tls->random_bytes);
     /* fill CIDs */
     for (int i = 1; i < 4; i++) {
         ok(quicly_remote_cid_register(&set, i, cids[i], CID_LEN, srts[i], 0, unregistered_seqs, &num_unregistered) == 0);
         ok(num_unregistered == 0);
     }
-    /* active CIDs = {*0, 1, 2, 3} (*0 is the current one) */
+    /* CIDs = {0, 1, 2, 3} */
 
     /* dup */
     ok(quicly_remote_cid_register(&set, 1, cids[1], CID_LEN, srts[1], 0, unregistered_seqs, &num_unregistered) == 0);
@@ -74,23 +100,18 @@ void test_received_cid(void)
     /* already full */
     ok(quicly_remote_cid_register(&set, 4, cids[4], CID_LEN, srts[4], 0, unregistered_seqs, &num_unregistered) ==
        QUICLY_TRANSPORT_ERROR_CONNECTION_ID_LIMIT);
-    ok(set.cids[0].is_active && "we have CID to send error");
+    TEST_SET({0, QUICLY_REMOTE_CID_IN_USE}, /* we have CID to send error */
+             {1, QUICLY_REMOTE_CID_AVAILABLE}, {2, QUICLY_REMOTE_CID_AVAILABLE}, {3, QUICLY_REMOTE_CID_AVAILABLE});
 
-    /* try to unregister something doesn't exist */
-    ok(quicly_remote_cid_unregister(&set, 255) != 0);
     /* retire seq=0 */
-    ok(quicly_remote_cid_unregister(&set, 0) == 0);
-    /* active CIDs = {*1, 2, 3} */
-    ok(set.cids[0].is_active);
-    ok(set.cids[0].sequence == 1);
-    ok(memcmp(set.cids[0].cid.cid, cids[1], CID_LEN) == 0);
-    ok(memcmp(set.cids[0].stateless_reset_token, srts[1], QUICLY_STATELESS_RESET_TOKEN_LEN) == 0);
-    /* try to unregister sequence which is already unregistered */
-    ok(quicly_remote_cid_unregister(&set, 0) != 0);
+    quicly_remote_cid_unregister(&set, 0);
+    /* CIDs = {(4), 1, 2, 3} */
+    TEST_SET({4, QUICLY_REMOTE_CID_UNAVAILABLE}, {1, QUICLY_REMOTE_CID_AVAILABLE}, {2, QUICLY_REMOTE_CID_AVAILABLE},
+             {3, QUICLY_REMOTE_CID_AVAILABLE});
     /* sequence number out of current acceptable window */
     ok(quicly_remote_cid_register(&set, 255, cids[4], CID_LEN, srts[4], 0, unregistered_seqs, &num_unregistered) ==
        QUICLY_TRANSPORT_ERROR_CONNECTION_ID_LIMIT);
-    ok(set.cids[0].is_active && "we have CID to send error");
+    ok(set.cids[1].state == QUICLY_REMOTE_CID_AVAILABLE && "we have CID to send error");
 
     /* ignore already retired CID */
     ok(quicly_remote_cid_register(&set, 0, cids[0], CID_LEN, srts[0], 0, unregistered_seqs, &num_unregistered) == 0);
@@ -99,57 +120,54 @@ void test_received_cid(void)
     /* register 5th CID */
     ok(quicly_remote_cid_register(&set, 4, cids[4], CID_LEN, srts[4], 0, unregistered_seqs, &num_unregistered) == 0);
     ok(num_unregistered == 0);
-    /* active CIDs = {*1, 2, 3, 4} */
+    /* active CIDs = {4, 1, 2, 3} */
+    TEST_SET({4, QUICLY_REMOTE_CID_AVAILABLE}, {1, QUICLY_REMOTE_CID_AVAILABLE}, {2, QUICLY_REMOTE_CID_AVAILABLE},
+             {3, QUICLY_REMOTE_CID_AVAILABLE});
 
     /* unregister seq=2 */
-    ok(quicly_remote_cid_unregister(&set, 2) == 0);
-    /* active CIDs = {*1, 3, 4} */
-    ok(set.cids[0].is_active);
-    ok(set.cids[0].sequence == 1);
+    quicly_remote_cid_unregister(&set, 2);
+    /* active CIDs = {4, 1, (5), 3} */
+    TEST_SET({4, QUICLY_REMOTE_CID_AVAILABLE}, {1, QUICLY_REMOTE_CID_AVAILABLE}, {5, QUICLY_REMOTE_CID_UNAVAILABLE},
+             {3, QUICLY_REMOTE_CID_AVAILABLE});
 
     /* register 5, unregister prior to 5 -- seq=1,3,4 should be unregistered at this moment */
     ok(quicly_remote_cid_register(&set, 5, cids[5], CID_LEN, srts[5], 5, unregistered_seqs, &num_unregistered) == 0);
-    /* active CIDs = {} */
     ok(num_unregistered == 3);
-    {
-        /* order in unregistered_seqs is not defined, so use a set to determine equivalence */
-        char expected[5] = {0, 1, 0, 1, 1}; /* expect seq=1,3,4 */
-        char seqset[5] = {0};
-        for (size_t i = 0; i < num_unregistered; i++) {
-            if (unregistered_seqs[i] < sizeof(seqset))
-                seqset[unregistered_seqs[i]] = 1;
-        }
-        ok(memcmp(seqset, expected, sizeof(seqset)) == 0);
-    }
-    /* active CIDs = {*5} */
-    ok(set.cids[0].is_active);
-    ok(set.cids[0].sequence == 5);
-    ok(memcmp(set.cids[0].cid.cid, cids[5], CID_LEN) == 0);
-    ok(memcmp(set.cids[0].stateless_reset_token, srts[5], QUICLY_STATELESS_RESET_TOKEN_LEN) == 0);
+    /* check unregistered_seqs */
+    ok(unregistered_seqs[0] == 4);
+    ok(unregistered_seqs[1] == 1);
+    ok(unregistered_seqs[2] == 3);
+    /* active CIDs = {(6), (7), 5, (8)} */
+    TEST_SET({6, QUICLY_REMOTE_CID_UNAVAILABLE}, {7, QUICLY_REMOTE_CID_UNAVAILABLE}, {5, QUICLY_REMOTE_CID_AVAILABLE},
+             {8, QUICLY_REMOTE_CID_UNAVAILABLE});
 
     /* install CID with out-of-order sequence */
     ok(quicly_remote_cid_register(&set, 8, cids[8], CID_LEN, srts[8], 5, unregistered_seqs, &num_unregistered) == 0);
     ok(num_unregistered == 0);
-    /* active CIDs = {*5, 8} */
+    /* active CIDs = {(6), (7), 5, 8} */
+    TEST_SET({6, QUICLY_REMOTE_CID_UNAVAILABLE}, {7, QUICLY_REMOTE_CID_UNAVAILABLE}, {5, QUICLY_REMOTE_CID_AVAILABLE},
+             {8, QUICLY_REMOTE_CID_AVAILABLE});
     ok(quicly_remote_cid_register(&set, 7, cids[7], CID_LEN, srts[7], 5, unregistered_seqs, &num_unregistered) == 0);
-    /* active CIDs = {*5, 7, 8} */
-    ok(set.cids[0].is_active);
-    ok(set.cids[0].sequence == 5);
+    /* active CIDs = {(6), 7, 5, 8} */
+    TEST_SET({6, QUICLY_REMOTE_CID_UNAVAILABLE}, {7, QUICLY_REMOTE_CID_AVAILABLE}, {5, QUICLY_REMOTE_CID_AVAILABLE},
+             {8, QUICLY_REMOTE_CID_AVAILABLE});
 
-    /* unregister prior to 8 -- seq=5,7 should be unregistered at this moment */
+    /* unregister prior to 8 -- seq=5-7 should be unregistered at this moment */
     ok(quicly_remote_cid_register(&set, 8, cids[8], CID_LEN, srts[8], 8, unregistered_seqs, &num_unregistered) == 0);
     /* active CIDs = {*8} */
-    ok(num_unregistered == 2);
-    {
-        /* order in unregistered_seqs is not defined, so use a set to determine equivalence */
-        char expected[8] = {0, 0, 0, 0, 0, 1, 0, 1}; /* expect seq=5,7 */
-        char seqset[8] = {0};
-        for (size_t i = 0; i < num_unregistered; i++) {
-            if (unregistered_seqs[i] < sizeof(seqset))
-                seqset[unregistered_seqs[i]] = 1;
-        }
-        ok(memcmp(seqset, expected, sizeof(seqset)) == 0);
-    }
-    ok(set.cids[0].is_active);
-    ok(set.cids[0].sequence == 8);
+    ok(num_unregistered == 3);
+    /* check unregistered_seqs */
+    ok(unregistered_seqs[0] == 6);
+    ok(unregistered_seqs[1] == 7);
+    ok(unregistered_seqs[2] == 5);
+    /* active CIDs = {(9), (10), (11), 8} */
+    TEST_SET({9, QUICLY_REMOTE_CID_UNAVAILABLE}, {10, QUICLY_REMOTE_CID_UNAVAILABLE}, {11, QUICLY_REMOTE_CID_UNAVAILABLE},
+             {8, QUICLY_REMOTE_CID_AVAILABLE});
+
+    /* register 11 */
+    ok(quicly_remote_cid_register(&set, 11, cids[11], CID_LEN, srts[11], 8, unregistered_seqs, &num_unregistered) == 0);
+    ok(num_unregistered == 0);
+    /* active CIDs = {(9), (10), (11), 8} */
+    TEST_SET({9, QUICLY_REMOTE_CID_UNAVAILABLE}, {10, QUICLY_REMOTE_CID_UNAVAILABLE}, {11, QUICLY_REMOTE_CID_AVAILABLE},
+             {8, QUICLY_REMOTE_CID_AVAILABLE});
 }
