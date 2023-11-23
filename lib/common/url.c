@@ -218,7 +218,8 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
     if (token_start != end && *token_start == ':') {
         size_t p;
         ++token_start;
-        if ((token_end = memchr(token_start, '/', end - token_start)) == NULL)
+        if (((token_end = memchr(token_start, '/', end - token_start)) == NULL) &&
+            ((token_end = memchr(token_start, '?', end - token_start)) == NULL))
             token_end = end;
         if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
             return NULL;
@@ -238,7 +239,7 @@ static int parse_authority_and_path(const char *src, const char *url_end, h2o_ur
     if (p == url_end) {
         parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
     } else {
-        if (*p != '/')
+        if (*p != '/' && *p != '?')
             return -1;
         parsed->path = h2o_iovec_init(p, url_end - p);
     }

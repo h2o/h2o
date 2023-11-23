@@ -353,6 +353,11 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
 
+    input = h2o_iovec_init(H2O_STRLIT("?abc"));
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes);
+    ok(b.len == 1);
+    ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
+
     h2o_mem_clear_pool(&pool);
 }
 
@@ -484,6 +489,11 @@ static void test_parse(void)
     ok(parsed._port == 111);
     ok(h2o_url_get_port(&parsed) == 111);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/abc")));
+
+    ret = h2o_url_parse("http://example.com:8080?abc", SIZE_MAX, &parsed);
+    ok(ret == 0);
+    ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("?abc")));
+
 }
 
 static void test_parse_relative(void)
