@@ -551,7 +551,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
 
     /* uri */
-    if (h2o_url_parse(arg_url, arg_url_len, &url) != 0)
+    if (h2o_url_parse(&ctx->pool, arg_url, arg_url_len, &url) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "invaild URL");
     h2o_url_copy(&ctx->pool, &ctx->req.url, &url);
 

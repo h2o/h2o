@@ -233,7 +233,7 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
     return token_start;
 }
 
-static int parse_authority_and_path(const char *src, const char *url_end, h2o_url_t *parsed)
+static int parse_authority_and_path(h2o_mem_pool_t *pool, const char *src, const char *url_end, h2o_url_t *parsed)
 {
     const char *p = h2o_url_parse_hostport(src, url_end - src, &parsed->host, &parsed->_port);
     if (p == NULL)
@@ -241,15 +241,17 @@ static int parse_authority_and_path(const char *src, const char *url_end, h2o_ur
     parsed->authority = h2o_iovec_init(src, p - src);
     if (p == url_end) {
         parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
-    } else {
-        if (*p != '/' && *p != '?')
-            return -1;
+    } else if (*p == '/') {
         parsed->path = h2o_iovec_init(p, url_end - p);
+    } else if (*p == '?') {
+        parsed->path = h2o_concat(pool, h2o_iovec_init(H2O_STRLIT("/")), h2o_iovec_init(p, url_end - p));
+    } else {
+        return -1;
     }
     return 0;
 }
 
-int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
+int h2o_url_parse(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *parsed)
 {
     const char *url_end, *p;
 
@@ -266,10 +268,10 @@ int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *parsed)
         return -1;
     p += 2;
 
-    return parse_authority_and_path(p, url_end, parsed);
+    return parse_authority_and_path(pool, p, url_end, parsed);
 }
 
-int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
+int h2o_url_parse_relative(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *parsed)
 {
     const char *url_end, *p;
 
@@ -285,7 +287,7 @@ int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *parsed)
 
     /* handle "//" */
     if (url_end - p >= 2 && p[0] == '/' && p[1] == '/')
-        return parse_authority_and_path(p + 2, url_end, parsed);
+        return parse_authority_and_path(pool, p + 2, url_end, parsed);
 
     /* reset authority, host, port, and set path */
     parsed->authority = (h2o_iovec_t){NULL};

@@ -64,7 +64,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 {
     h2o_url_t loc_parsed;
 
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0)
+    if (h2o_url_parse(pool, location, location_len, &loc_parsed) != 0)
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
