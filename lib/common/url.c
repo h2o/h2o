@@ -217,15 +217,17 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
 
     /* parse port */
     if (token_start != end && *token_start == ':') {
-        size_t p;
-        ++token_start;
-        if (((token_end = memchr(token_start, '/', end - token_start)) == NULL) &&
-            ((token_end = memchr(token_start, '?', end - token_start)) == NULL))
-            token_end = end;
-        if ((p = h2o_strtosize(token_start, token_end - token_start)) >= 65535)
-            return NULL;
+        uint32_t p = 0;
+        for (++token_start; token_start != end; ++token_start) {
+            if ('0' <= *token_start && *token_start <= '9') {
+                p = p * 10 + *token_start - '0';
+                if (p >= 65535)
+                    return NULL;
+            } else if (*token_start == '/' || *token_start == '?') {
+                break;
+            }
+        }
         *port = (uint16_t)p;
-        token_start = token_end;
     }
 
     return token_start;
