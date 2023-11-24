@@ -204,7 +204,8 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
         *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end + 1;
     } else {
-        for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == ':'); ++token_end)
+        for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == '?' || *token_end == ':');
+             ++token_end)
             ;
         *host = h2o_iovec_init(token_start, token_end - token_start);
         token_start = token_end;
