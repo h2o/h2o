@@ -48,7 +48,7 @@
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
-static void add_header(const char* name, const char* value);
+static void add_header(h2o_iovec_t name, h2o_iovec_t value);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 struct {
@@ -75,7 +75,7 @@ static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
 // Use rfc9298 syntax if false.
-static int connect_udp_is_draft03 = 1;
+static int connect_udp_is_draft03 = 0;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -128,10 +128,15 @@ static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iove
     return 0;
 }
 
-static void add_header(const char* name, const char* value)
+static void add_header(h2o_iovec_t name, h2o_iovec_t value)
 {
-    req.headers[req.num_headers].name = h2o_iovec_init(name, strlen(name));
-    req.headers[req.num_headers].value = h2o_iovec_init(value, strlen(value));
+    if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
+        fprintf(stderr, "too many request headers\n");
+        exit(EXIT_FAILURE);
+    }
+
+    req.headers[req.num_headers].name = name;
+    req.headers[req.num_headers].value = value;
     ++req.num_headers;
 }
 
@@ -243,13 +248,13 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
     /* send the datagram directly or encapsulated on the stream */
     if (udp_write != NULL) {
-        h2o_iovec_t datagram = h2o_iovec_init(buf, rret + context_id_len);
+        h2o_iovec_t datagram = h2o_iovec_init(buf, context_id_len + rret);
         udp_write(client, &datagram, 1);
     } else {
         /* append UDP chunk to the input buffer of stdin read socket! */
         uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
         h2o_buffer_append(&std_in.sock->input, header, header_end - header);
-        h2o_buffer_append(&std_in.sock->input, buf, rret + context_id_len);
+        h2o_buffer_append(&std_in.sock->input, buf, context_id_len + rret);
         /* pretend as if we read from stdin */
         stdin_on_read(std_in.sock, NULL);
     }
@@ -257,9 +262,14 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    size_t context_id_len = (connect_udp_is_draft03) ? 0 : 1;
+    size_t context_id_len = connect_udp_is_draft03 ? 0 : 1;
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
+        if (context_id_len == 1) {
+            // Skip datagrams with context id != 0, rfc9298 section 5.
+            if (src->base[0] != 0)
+                continue;
+        }
         struct iovec vec = {.iov_base = src->base + context_id_len, .iov_len = src->len - context_id_len};
         struct msghdr mess = {
             .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
@@ -316,7 +326,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
                 url_parsed->host = h2o_iovec_init(authority, strlen(authority));
                 url_parsed->path = h2o_iovec_init(pathbuf, pathbuf_len);
                 url_parsed->scheme = &H2O_URL_SCHEME_HTTPS;
-                add_header("capsule-protocol", "?1");
+                add_header(h2o_iovec_init(H2O_STRLIT("capsule-protocol")), h2o_iovec_init(H2O_STRLIT("?1")));
             }
         } else if (strcmp(req.method, "CONNECT") == 0) {
             upgrade_to = h2o_httpclient_upgrade_to_connect;
@@ -566,10 +576,9 @@ static void usage(const char *progname)
             "               verification\n"
             "  -X <local-udp-port>\n"
             "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
-            "  --connect-udp-rfc-version <draft03 | rfc9298>\n"
-            "               specifies the spec version for the CONNECT-UDP tunnel: draft03 or\n"
-            "               rfc9298 (default: draft03)\n"
-            "  --initial-udp-payload-size <bytes>\n"
+            "  --connect-udp-draft03\n"
+            "               Create draft03 style CONNECT-UDP tunnels instead of RFC 9298\n"
+            "  --initial-udp-payload-ize <bytes>\n"
             "               specifies the udp payload size of the initial message (default:\n"
             "               %" PRIu16 ")\n"
             "  --max-udp-payload-size <bytes>\n"
@@ -696,14 +705,14 @@ int main(int argc, char **argv)
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
-        OPT_CONNECT_UDP_RFC_VERSION,
+        OPT_CONNECT_UDP_DRAFT03,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
-                                {"connect-udp-rfc-version", required_argument, NULL, OPT_CONNECT_UDP_RFC_VERSION},
+                                {"connect-udp-draft03", no_argument, NULL, OPT_CONNECT_UDP_DRAFT03},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -780,18 +789,12 @@ int main(int argc, char **argv)
                 fprintf(stderr, "no `:` found in -H\n");
                 exit(EXIT_FAILURE);
             }
-            if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
-                fprintf(stderr, "too many request headers\n");
-                exit(EXIT_FAILURE);
-            }
             for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
                 ;
             /* lowercase the header field name (HTTP/2: RFC 9113 Section 8.2, HTTP/3: RFC 9114 Section 4.2) */
             h2o_iovec_t name = h2o_strdup(NULL, optarg, colon - optarg);
             h2o_strtolower(name.base, name.len);
-            req.headers[req.num_headers].name = name;
-            req.headers[req.num_headers].value = h2o_iovec_init(value_start, strlen(value_start));
-            ++req.num_headers;
+            add_header(name, h2o_iovec_init(value_start, strlen(value_start)));
         } break;
         case 'i':
             io_interval = atoi(optarg);
@@ -878,19 +881,12 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case OPT_CONNECT_UDP_RFC_VERSION: {
+        case OPT_CONNECT_UDP_DRAFT03: {
 #if H2O_USE_LIBUV
-            fprintf(stderr, "-connect-udp-rfc-version is not supported by the libuv backend\n");
+            fprintf(stderr, "-connect-udp-draft03 is not supported by the libuv backend\n");
             exit(EXIT_FAILURE);
 #else
-            if (strcmp(optarg, "rfc9298") == 0) {
-                connect_udp_is_draft03 = 0;
-            } else if (strcmp(optarg, "draft03") == 0) {
-                connect_udp_is_draft03 = 1;
-            } else {
-                fprintf(stderr, "Unknown --connect-udp-rfc-version: %s\n", optarg);
-                exit(EXIT_FAILURE);
-            }
+            connect_udp_is_draft03 = 1;
 #endif
         } break;
         default:

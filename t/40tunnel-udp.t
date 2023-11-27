@@ -169,7 +169,7 @@ subtest "udp-draft03" => sub {
     my $test = setup_test();
 
     wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
-    my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "--connect-udp-rfc-version draft03");
+    my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "--connect-udp-draft03");
     foreach my $i (1..5) {
         issue_one_request("3", $tunnel->{port});
     }
@@ -180,7 +180,7 @@ subtest "udp-rfc9298" => sub {
     my $test = setup_test();
 
     wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
-    my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "--connect-udp-rfc-version rfc9298");
+    my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port});
     foreach my $i (1..5) {
         issue_one_request("3", $tunnel->{port});
     }
