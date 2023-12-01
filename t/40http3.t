@@ -147,4 +147,45 @@ EOT
     like $fetch->("?delay-fin"), qr{^HTTP/3 200\n.*\n\nx$}s;
 };
 
+subtest "large-headers" => sub {
+    my $server = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: t/assets/doc_root
+EOT
+
+    my $fetch = sub {
+        my ($query, $opts) = @_;
+        open my $fh, "-|", "$client_prog -3 100 $opts https://127.0.0.1:$quic_port/$query 2>&1"
+            or die "failed to spawn $client_prog:$!";
+        local $/;
+        join "", <$fh>;
+    };
+
+    like $fetch->(""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "no headers";
+
+    # When generating headers, 'X' is used, as it is 8 bits in cleartext and also in static huffman.
+    # TODO: can we check that the error is stream-level?
+    subtest "single header" => sub {
+        like $fetch->("", "-H a:" . "X" x 409600), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        unlike $fetch->("", "-H a:" . "X" x 512000), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
+    };
+    subtest "multiple headers" => sub {
+        like $fetch->("", join " ", map { "-H a:" . "X" x 4096 } (0..90)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        unlike $fetch->("", join " ", map { "-H a:" . "X" x 4096 } (0..110)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
+    };
+    subtest "URI" => sub {
+        like $fetch->("?q=" . "X" x 409600, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        unlike $fetch->("?q=" . "X" x 512000, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+    };
+};
+
 done_testing;
