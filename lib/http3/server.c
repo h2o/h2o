@@ -799,10 +799,7 @@ Redo:
     PUSH_NUM_FRAMES(sent);
     PUSH_SIZE_T("num-sentmap-packets-largest", num_sentmap_packets_largest);
 
-    /* convert comma at the tail to NULL char */
-    buf[len - 1] = '\0';
-
-    return h2o_iovec_init(buf, len);
+    return h2o_iovec_init(buf, len - 1);
 
 #undef PUSH_FIELD
 #undef PUSH_U64
