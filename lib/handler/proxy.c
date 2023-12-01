@@ -91,7 +91,11 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
     ptls_clear_memory(cid_key, sizeof(cid_key));
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
 
-    /* http3 */
+    /* http3 client-specific fields */
+    h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
+                                                                                           directions */
+
+    /* h2o server http3 integration */
     int sockfd;
     if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
         perror("failed to open UDP socket");

@@ -90,6 +90,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
+    .max_frame_payload_size = 16384,
 };
 static const char *progname; /* refers to argv[0] */
 
@@ -650,12 +651,14 @@ int main(int argc, char **argv)
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
+        OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -828,6 +831,12 @@ int main(int argc, char **argv)
         case OPT_IO_TIMEOUT:
             if (sscanf(optarg, "%" SCNu64, &io_timeout) != 1) {
                 fprintf(stderr, "failed to parse --io-timeout\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+                fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
                 exit(EXIT_FAILURE);
             }
             break;
