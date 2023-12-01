@@ -170,7 +170,7 @@ EOT
         join "", <$fh>;
     };
 
-    like $fetch->(""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "no headers";
+    like $fetch->("", ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "no headers";
 
     # When generating headers, 'X' is used, as it is 8 bits in cleartext and also in static huffman.
     # TODO: can we check that the error is stream-level?
