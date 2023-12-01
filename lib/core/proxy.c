@@ -48,6 +48,7 @@ struct rp_generator_t {
     unsigned req_done : 1;
     unsigned res_done : 1;
     unsigned pipe_inflight : 1;
+    unsigned expect_100_continue : 1;
     int *generator_disposed;
 };
 
@@ -140,7 +141,8 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to, int use_proxy_protocol,
+                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to,
+                          int use_proxy_protocol, int expect_100_continue,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -225,6 +227,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                 } else if (token == H2O_TOKEN_EARLY_DATA) {
                     found_early_data = 1;
                     goto AddHeader;
+                } else if (token == H2O_TOKEN_EXPECT) {
+                    /* this never happens as protocol handlers should have consumed expect header */
+                    h2o_error_printf("[WARN] expect header unexpectedly found on http %x\n", req->version);
+                    continue;
                 }
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
@@ -243,6 +249,10 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         *reprocess_if_too_early = 0;
     } else if (*reprocess_if_too_early) {
         h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
+    }
+
+    if (expect_100_continue) {
+        h2o_add_header(&req->pool, headers, H2O_TOKEN_EXPECT, NULL, H2O_STRLIT("100-continue"));
     }
 
     if (cookie_values.size == 1) {
@@ -733,7 +743,11 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
-    if (status != 101) {
+    if (status == 101) {
+        /* switching protocol */
+    } else if (status == 100) {
+        /* we don't need to forward 100 since protocol handlers have already done */
+    } else {
         self->src_req->res.status = status;
         self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
         h2o_send_informational(self->src_req);
@@ -797,6 +811,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
+        self->expect_100_continue = req->overrides->proxy_expect_100_continue;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -816,7 +831,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
                   !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
-                  use_proxy_protocol, &reprocess_if_too_early, origin);
+                  use_proxy_protocol, self->expect_100_continue, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 

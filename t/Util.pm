@@ -594,18 +594,29 @@ sub spawn_forked {
 
     my $pid = fork;
     if ($pid) {
+        my $wait = sub {
+            while (waitpid($pid, 0) != $pid) {}
+            undef $pid;
+        };
         my $guard = make_guard(sub {
             return unless defined $pid;
             kill 'TERM', $pid;
-            while (waitpid($pid, 0) != $pid) {}
+            $wait->();
         });
+        my $read_outputs = sub {
+            my $out = path("$tempdir/out")->slurp if $opts->{stdout};
+            my $err = path("$tempdir/err")->slurp if $opts->{stderr};
+            ($out, $err)
+        };
         return +{
             pid => $pid,
+            wait => sub {
+                $wait->();
+                $read_outputs->()
+            },
             kill => sub {
                 undef $guard;
-                my $out = path("$tempdir/out")->slurp if $opts->{stdout};
-                my $err = path("$tempdir/err")->slurp if $opts->{stderr};
-                ($out, $err)
+                $read_outputs->()
             },
         };
     }
