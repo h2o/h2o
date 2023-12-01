@@ -55,6 +55,8 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
+const char h2o_http3_err_frame_too_large[] = "HTTP/3 frame is too large";
+
 const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
@@ -923,7 +925,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
-            *err_desc = "H3 frame too large";
+            *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
         if (src_end - src < frame->length)

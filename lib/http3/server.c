@@ -1382,8 +1382,14 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     /* read the HEADERS frame (or a frame that precedes that) */
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
-                                    src_end, err_desc)) != 0)
-        return ret;
+                                    src_end, err_desc)) != 0) {
+        if (*err_desc == h2o_http3_err_frame_too_large && frame.type == H2O_HTTP3_FRAME_TYPE_HEADERS) {
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 0);
+            return 0;
+        } else {
+            return ret;
+        }
+    }
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
         switch (frame.type) {
         case H2O_HTTP3_FRAME_TYPE_DATA:

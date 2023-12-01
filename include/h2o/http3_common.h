@@ -416,6 +416,8 @@ typedef struct st_h2o_http3_read_frame_t {
     uint64_t length;
 } h2o_http3_read_frame_t;
 
+extern const char h2o_http3_err_frame_too_large[];
+
 extern const ptls_iovec_t h2o_http3_alpn[3];
 
 /**
