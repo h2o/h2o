@@ -595,9 +595,9 @@ static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2
     uint32_t v;
     if (h2o_configurator_scanf(cmd, node, "%" SCNu32, &v) != 0)
         return -1;
-    if (v < H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE) {
-        h2o_configurator_errprintf(cmd, node, "window size must be no less than %u",
-                                   (unsigned)H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE);
+    if (v < h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN)) {
+        h2o_configurator_errprintf(cmd, node, "window size must be no less than %" PRIu64,
+                                   h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN));
         return -1;
     }
     ctx->globalconf->http3.active_stream_window_size = v;
