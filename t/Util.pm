@@ -46,6 +46,7 @@ our @EXPORT = qw(
     openssl_can_negotiate
     openssl_supports_tls13
     curl_supports_http2
+    curl_supports_http3
     run_with_curl
     h2get_exists
     run_with_h2get
@@ -445,6 +446,10 @@ sub openssl_supports_tls13 {
 
 sub curl_supports_http2 {
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
+}
+
+sub curl_supports_http3 {
+    return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
 }
 
 sub run_with_curl {
