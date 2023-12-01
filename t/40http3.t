@@ -175,10 +175,16 @@ EOT
     # When generating headers, 'X' is used, as it is 8 bits in cleartext and also in static huffman.
     # TODO: can we check that the error is stream-level?
     subtest "single header" => sub {
+        plan skip_all => "linux cannot handle args longer than 128KB"
+            if $^O eq 'linux';
         like $fetch->("", "-H a:" . "X" x 409600), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
         unlike $fetch->("", "-H a:" . "X" x 512000), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
     };
-    subtest "multiple headers" => sub {
+    subtest "some large headers" => sub {
+        like $fetch->("", join " ", map { "-H a:" . "X" x 65536 } (0..5)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        unlike $fetch->("", join " ", map { "-H a:" . "X" x 65536 } (0..7)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
+    };
+    subtest "many headers" => sub {
         like $fetch->("", join " ", map { "-H a:" . "X" x 4096 } (0..90)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
         unlike $fetch->("", join " ", map { "-H a:" . "X" x 4096 } (0..110)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
     };
