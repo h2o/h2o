@@ -279,7 +279,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
         }
     } else {
-        if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
+        if (h2o_url_parse(pool, req.target, SIZE_MAX, url_parsed) != 0) {
             on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
             return;
         }
@@ -687,13 +687,16 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'x':
+        case 'x': {
+            h2o_mem_pool_t pool;
+            h2o_mem_init_pool(&pool);
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
-            if (h2o_url_parse(optarg, strlen(optarg), req.connect_to) != 0) {
+            /* we can leak pool and `req.connect_to`, as they are globals allocated only once in `main` */
+            if (h2o_url_parse(&pool, optarg, strlen(optarg), req.connect_to) != 0) {
                 fprintf(stderr, "invalid server URL specified for -x\n");
                 exit(EXIT_FAILURE);
             }
-            break;
+        } break;
         case 'X': {
 #if H2O_USE_LIBUV
             fprintf(stderr, "-X is not supported by the libuv backend\n");
