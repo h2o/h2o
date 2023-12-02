@@ -189,8 +189,13 @@ EOT
         unlike $fetch->("", join " ", map { "-H a:" . "X" x 4096 } (0..110)), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly above limit";
     };
     subtest "URI" => sub {
-        like $fetch->("?q=" . "X" x 409600, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
-        unlike $fetch->("?q=" . "X" x 512000, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        like $fetch->("?q=" . "X" x 120000, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        subtest "above linux limit" => sub {
+            plan skip_all => "linux cannot handle args longer than 128KB"
+                if $^O eq 'linux';
+            like $fetch->("?q=" . "X" x 409600, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+            unlike $fetch->("?q=" . "X" x 512000, ""), qr{^HTTP/3 200\n.*\n\nhello\n$}s, "slightly below limit";
+        };
     };
 };
 
