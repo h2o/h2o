@@ -1593,12 +1593,19 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     switch (stream->state) {
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
         h2o_iovec_t datagram_flow_id;
+        ssize_t priority_header_index;
         if (!finalize_do_send_setup_udp_tunnel(stream, send_state, &datagram_flow_id))
             return;
         stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         write_response(stream, datagram_flow_id);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
+        if ((priority_header_index = h2o_find_header(&stream->req.res.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
+            const h2o_header_t *header = &stream->req.res.headers.entries[priority_header_index];
+            handle_priority_change(
+                stream, header->value.base, header->value.len,
+                stream->scheduler.priority /* omission of a parameter is disinterest to change (RFC 9218 Section 8) */);
+        }
         break;
     }
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
