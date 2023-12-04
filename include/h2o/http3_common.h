@@ -26,7 +26,6 @@
 #include <sys/socket.h>
 #include "quicly.h"
 #include "quicly/defaults.h"
-#include "h2o/absprio.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"
@@ -105,14 +104,14 @@ typedef enum en_h2o_http3_priority_element_type_t {
 typedef struct st_h2o_http3_priority_update_frame_t {
     uint64_t element_is_push : 1;
     uint64_t element : 63;
-    h2o_absprio_t priority;
+    h2o_iovec_t value;
 } h2o_http3_priority_update_frame_t;
 
 typedef struct st_h2o_http3_goaway_frame_t {
     uint64_t stream_or_push_id;
 } h2o_http3_goaway_frame_t;
 
-#define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
+size_t h2o_http3_priority_update_frame_capacity(h2o_http3_priority_update_frame_t *frame);
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, int is_push, const uint8_t *payload,
                                            size_t len, const char **err_desc);
