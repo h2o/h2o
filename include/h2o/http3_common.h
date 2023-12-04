@@ -76,13 +76,6 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
-/**
- * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this + 16 bytes to hold the type and
- * the length
- */
-#define H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE 16384
-#define H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE (H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE * 2)
-
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
@@ -400,6 +393,13 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
+    /**
+     * Maximum frame payload size (excluding DATA); this property essentially limits the maximum size of HEADERS frame.
+     * As `h2o_http3_read_frame` parses the frame inside the receive buffer, stream-level flow control credits specified in
+     * `quicly_context_t::transport_params.max_stream_data` MUST be no less than
+     * `h2o_http3_calc_min_flow_control_size(max_frame_payload_size)`.
+     */
+    size_t max_frame_payload_size;
 };
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -414,6 +414,8 @@ typedef struct st_h2o_http3_read_frame_t {
     const uint8_t *payload;
     uint64_t length;
 } h2o_http3_read_frame_t;
+
+extern const char h2o_http3_err_frame_too_large[];
 
 extern const ptls_iovec_t h2o_http3_alpn[3];
 
@@ -432,8 +434,8 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
 /**
  * returns a frame header (if BODY frame) or an entire frame
  */
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **src,
-                         const uint8_t *src_end, const char **err_desc);
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, size_t max_frame_payload_size,
+                         const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
                            h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
@@ -480,7 +482,7 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
  * initializes a http3 connection
  */
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
-                         const h2o_http3_qpack_context_t *qpack_ctx);
+                         const h2o_http3_qpack_context_t *qpack_ctx, size_t max_frame_payload_size);
 /**
  *
  */
@@ -534,12 +536,22 @@ void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_i
  * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
  */
 uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len);
+/**
+ * Given maximum payload size of headers block (e.g., `H2O_MAX_REQLEN`), returns the mimimum stream-level flow control credit that
+ * have to be guaranteed.
+ */
+static uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length);
 
 /* inline definitions */
 
 inline int h2o_http3_has_received_settings(h2o_http3_conn_t *conn)
 {
     return conn->qpack.enc != NULL;
+}
+
+inline uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length)
+{
+    return 8 /* max. type field */ + 8 /* max. length field */ + max_headers_length;
 }
 
 #endif
