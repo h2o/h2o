@@ -13,7 +13,7 @@ use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Symbol qw(gensym);
 use Time::HiRes qw(sleep);
 use Test::More;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use t::Util;
 
 local $SIG{PIPE} = sub {};

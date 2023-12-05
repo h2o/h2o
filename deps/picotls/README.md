@@ -8,6 +8,7 @@ Picotls is a [TLS 1.3 (RFC 8446)](https://tools.ietf.org/html/rfc8446) protocol 
   * "OpenSSL" backend using libcrypto for crypto and X.509 operations
   * "minicrypto" backend using [cifra](https://github.com/ctz/cifra) for most crypto and [micro-ecc](https://github.com/kmackay/micro-ecc) for secp256r1
   * ["fusion" AES-GCM engine, optimized for QUIC and other protocols that use short AEAD blocks](https://github.com/h2o/picotls/pull/310)
+  * [libaegis](https://github.com/jedisct1/libaegis) for the AEGIS AEADs
 * support for PSK, PSK-DHE resumption using 0-RTT
 * API for dealing directly with TLS handshake messages (essential for QUIC)
 * supported extensions:
@@ -23,8 +24,8 @@ License and the cryptographic algorithms supported by the crypto bindings are as
 
 | Binding | License | Key Exchange | Certificate | AEAD cipher |
 |:-----:|:-----:|:-----:|:-----:|:-----:|
-| minicrypto | [CC0](https://github.com/ctz/cifra/) / [2-clause BSD](https://github.com/kmackay/micro-ecc) | secp256r1, x25519 | ECDSA (secp256r1)<sup>1</sup> | AES-128-GCM, chacha20-poly1305 |
-| OpenSSL | OpenSSL | secp256r1, secp384r1, secp521r1, x25519 | RSA, ECDSA (secp256r1, secp384r1, secp521r1), ed25519 | AES-128-GCM, AES-256-GCM, chacha20-poly1305 |
+| minicrypto | [CC0](https://github.com/ctz/cifra/) / [2-clause BSD](https://github.com/kmackay/micro-ecc) | secp256r1, x25519 | ECDSA (secp256r1)<sup>1</sup> | AES-128-GCM, chacha20-poly1305, AEGIS-128L (using libaegis), AEGIS-256 (using libaegis) |
+| OpenSSL | OpenSSL | secp256r1, secp384r1, secp521r1, x25519 | RSA, ECDSA (secp256r1, secp384r1, secp521r1), ed25519 | AES-128-GCM, AES-256-GCM, chacha20-poly1305, AEGIS-128L (using libaegis), AEGIS-256 (using libaegis) |
 
 Note 1: Minicrypto binding is capable of signing a handshake using the certificate's key, but cannot verify a signature sent by the peer.
 

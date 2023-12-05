@@ -89,7 +89,7 @@ typedef struct st_h2o_httpclient_on_head_t {
 } h2o_httpclient_on_head_t;
 
 typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, const char *errstr);
-typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr);
+typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr,
                                                          h2o_httpclient_on_head_t *args);
 /**
@@ -184,6 +184,7 @@ struct st_h2o_http3client_ctx_t {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
+    uint64_t max_frame_payload_size;
     /**
      * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
      * connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be freed by

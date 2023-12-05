@@ -138,9 +138,6 @@ struct st_h2o_qpack_flatten_context_t {
     int64_t largest_ref;
 };
 
-#define MAX_HEADER_NAME_LENGTH 128
-#define MAX_HEADER_VALUE_LENGTH 4096
-
 const char *h2o_qpack_err_header_name_too_long = "header name too long";
 const char *h2o_qpack_err_header_value_too_long = "header value too long";
 const char *h2o_qpack_err_header_exceeds_table_size = "header exceeds table size";
@@ -347,11 +344,6 @@ static int64_t qpack_table_total_inserts(struct st_h2o_qpack_header_table_t *tab
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
                                       const uint8_t *value, int64_t value_len, const char **err_desc)
 {
-    if (value_len >= MAX_HEADER_VALUE_LENGTH) {
-        *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
-
     if (name_is_static) {
         const h2o_qpack_static_table_entry_t *ref;
         if ((ref = resolve_static_abs(name_index, err_desc)) == NULL)
@@ -380,15 +372,6 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
 {
     h2o_iovec_t name;
     unsigned soft_errors = 0;
-
-    if (qnlen >= MAX_HEADER_NAME_LENGTH) {
-        *err_desc = h2o_qpack_err_header_name_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
-    if (qvlen >= MAX_HEADER_VALUE_LENGTH) {
-        *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
 
     if (qnhuff) {
         name.base = alloca(qnlen * 2);
@@ -589,7 +572,7 @@ static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, unsigned *s
 
     /* obtain flags and length */
     is_huff = (**src >> prefix_bits) & 1;
-    if (decode_int(&len, src, src_end, prefix_bits) != 0 || len > MAX_HEADER_NAME_LENGTH) {
+    if (decode_int(&len, src, src_end, prefix_bits) != 0) {
         *err_desc = h2o_qpack_err_header_name_too_long;
         goto Fail;
     }
@@ -634,7 +617,7 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
         goto Fail;
     int is_huff = (**src & 0x80) != 0;
 
-    if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
+    if (decode_int(&len, src, src_end, 7) != 0) {
         *err_desc = h2o_qpack_err_header_value_too_long;
         goto Fail;
     }
@@ -1238,7 +1221,7 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->headers_buf.size = PREFIX_CAPACITY;
 }
 
-static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
+static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, size_t *serialized_header_len)
 {
     if (ctx->largest_ref == 0) {
         ctx->base_index = 0;
@@ -1276,6 +1259,9 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx)
         memcpy(ctx->headers_buf.entries + start_off - (p - buf), buf, p - buf);
         start_off -= p - buf;
     }
+
+    if (serialized_header_len != NULL)
+        *serialized_header_len = ctx->headers_buf.size - start_off;
 
     /* prepend frame header */
     size_t len_len = quicly_encodev_capacity(ctx->headers_buf.size - start_off);
@@ -1320,12 +1306,13 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
 
-    return finalize_flatten(&ctx);
+    return finalize_flatten(&ctx, NULL);
 }
 
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
-                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id)
+                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
+                                       size_t *serialized_header_len)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1386,5 +1373,5 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_datagram_flow_id, H2O_TOKEN_DATAGRAM_FLOW_ID,
                                                 datagram_flow_id);
 
-    return finalize_flatten(&ctx);
+    return finalize_flatten(&ctx, serialized_header_len);
 }

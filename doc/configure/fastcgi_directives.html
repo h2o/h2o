@@ -14,7 +14,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>FastCGI Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>FastCGI Directives - Configure - H2O - the optimized HTTP server</title>
 </head>
 <body>
 <div id="body">
@@ -23,7 +23,7 @@
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -71,6 +71,9 @@ Other directives customize how the connections to the FastCGI processes should b
 <ul>
 <li><a href="configure/fastcgi_directives.html#fastcgi.connect">
 <code>fastcgi.connect</code>
+</a></li>
+<li><a href="configure/fastcgi_directives.html#fastcgi.document_root">
+<code>fastcgi.document_root</code>
 </a></li>
 <li><a href="configure/fastcgi_directives.html#fastcgi.spawn">
 <code>fastcgi.spawn</code>
@@ -129,6 +132,25 @@ If the argument is a scalar, the value is considered as a TCP port number and th
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>path, extension</dd>
 </dl>
+
+<div id="fastcgi.document_root" class="directive-head">
+<h3><a href="configure/fastcgi_directives.html#fastcgi.document_root"><code>"fastcgi.document_root"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets the DOCUMENT_ROOT variable to be passed to the FastCGI application.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>none</pre></code>
+</dl>
+
 
 <div id="fastcgi.spawn" class="directive-head">
 <h3><a href="configure/fastcgi_directives.html#fastcgi.spawn"><code>"fastcgi.spawn"</code></a></h3>
@@ -257,7 +279,7 @@ The directive specifies whether to send the original values to the FastCGI proce
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

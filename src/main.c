@@ -297,7 +297,7 @@ static struct {
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
-    } * threads;
+    } *threads;
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier_init;
     h2o_barrier_t startup_sync_barrier_post;
@@ -425,7 +425,7 @@ struct async_nb_transaction_t {
     neverbleed_iobuf_t *buf;
     size_t write_size;
     h2o_linklist_t link;
-    int reponseless;
+    int responseless;
     void (*on_read_complete)(struct async_nb_transaction_t *transaction);
 };
 
@@ -480,7 +480,7 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     /* add to the read queue the entry for which we have written the request, and start reading from the socket */
     struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.write_queue);
-    if (!transaction->reponseless) {
+    if (!transaction->responseless) {
         async_nb_push(&async_nb.read_queue, transaction);
         if (!h2o_socket_is_reading(async_nb.sock))
             h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
@@ -642,7 +642,7 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
         *transaction = (struct async_nb_transaction_t){
             .buf = h2o_mem_alloc(sizeof(*transaction->buf)),
             .link = (h2o_linklist_t){},
-            .reponseless = 1,
+            .responseless = 1,
         };
 
         /* transfer ownership of stack `buf` to heap allocated `transaction->buf` */
@@ -661,8 +661,11 @@ static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
 
         async_nb_run_sync(buf, neverbleed_transaction_write);
 
-        if (!reponseless)
+        if (!reponseless) {
             async_nb_run_sync(buf, neverbleed_transaction_read);
+        } else {
+            neverbleed_iobuf_dispose(buf);
+        }
     }
 }
 
@@ -1462,7 +1465,7 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
-static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, int is_quic)
 {
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
@@ -1474,17 +1477,21 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             return NULL;
         }
         ptls_cipher_suite_t *cand;
-        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites_all[i]) != NULL; ++i)
             if (strcmp(element->data.scalar, cand->name) == 0)
                 goto Found;
         /* not found */
         char msg[1024];
         strcpy(msg, "Unexpected cipher suite. Expected one of:");
-        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        for (size_t i = 0; ptls_openssl_cipher_suites_all[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites_all[i]->name);
         h2o_configurator_errprintf(cmd, node, "%s", msg);
         return NULL;
     Found:
+        if (is_quic && cand->aead->ctr_cipher == NULL) {
+            h2o_configurator_errprintf(cmd, element, "cipher-suite %s cannot be used with QUIC (no CTR mode)", cand->name);
+            return NULL;
+        }
         h2o_vector_reserve(NULL, &ret, ret.size + 1);
         ret.entries[ret.size++] = cand;
         if (cand == &ptls_openssl_aes128gcmsha256)
@@ -2003,7 +2010,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
+        if (cipher_suite_tls13_node != NULL &&
+            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
@@ -2779,14 +2787,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                                                        "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s",
+                                                       "max-initial-handshake-packets:s,ecn:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets) != 0)
+                                                       &max_initial_handshake_packets, &ecn) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2838,6 +2846,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
+                    }
+                    if (ecn != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->enable_ecn = !!on;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -2968,7 +2982,7 @@ static void capabilities_set_keepcaps(void)
 #endif
 }
 
-static void capabilities_drop(void)
+static int capabilities_drop(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
@@ -2980,13 +2994,17 @@ static void capabilities_drop(void)
             h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         if (cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
             h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        if (cap_set_proc(cap) != 0)
-            h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+
+        if (cap_set_proc(cap) != 0) {
+            h2o_error_printf("failed to setup capabilities: cap_set_proc: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
+            return 0;
+        }
         cap_free(cap);
         if (prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0) != 0)
             h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #endif
+    return 1;
 }
 
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -4523,8 +4541,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
-        h2o_configurator_define_command(c, "neverbleed-offload",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_neverbleed_offload);
     }
 
@@ -4635,9 +4652,14 @@ int main(int argc, char **argv)
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'}, {"mode", required_argument, NULL, 'm'},
-                                           {"test", no_argument, NULL, 't'},       {"version", no_argument, NULL, 'v'},
-                                           {"help", no_argument, NULL, 'h'},       {NULL}};
+        enum { OPT_LIST_DIRECTIVES = 256 };
+        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
+                                           {"mode", required_argument, NULL, 'm'},
+                                           {"test", no_argument, NULL, 't'},
+                                           {"version", no_argument, NULL, 'v'},
+                                           {"help", no_argument, NULL, 'h'},
+                                           {"list-directives", no_argument, NULL, OPT_LIST_DIRECTIVES},
+                                           {NULL}};
         while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
@@ -4694,6 +4716,9 @@ int main(int argc, char **argv)
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
 #endif
+#if PTLS_HAVE_AEGIS
+                printf("libaegis: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -4729,6 +4754,14 @@ int main(int argc, char **argv)
             case ':':
             case '?':
                 exit(EX_CONFIG);
+            case OPT_LIST_DIRECTIVES: {
+                for (h2o_linklist_t *l = conf.globalconf.configurators.next; l != &conf.globalconf.configurators; l = l->next) {
+                    h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, l);
+                    for (size_t i = 0; i != c->commands.size; ++i)
+                        printf("%s\n", c->commands.entries[i].name);
+                }
+            }
+                exit(0);
             default:
                 assert(0);
                 break;
@@ -4920,14 +4953,13 @@ int main(int argc, char **argv)
     /* call `bind()` before setuid(), different uids can't bind the same address */
     create_per_thread_listeners();
 
+    capabilities_set_keepcaps();
     /* setuid */
     if (conf.globalconf.user != NULL) {
-        capabilities_set_keepcaps();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
-        capabilities_drop();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
@@ -4939,6 +4971,8 @@ int main(int argc, char **argv)
             return EX_CONFIG;
         }
     }
+    if (!capabilities_drop())
+        return EX_OSERR;
 
     /* pid file must be written after setuid, since we need to remove it  */
     if (conf.pid_file != NULL) {

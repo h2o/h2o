@@ -38,6 +38,12 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint16_t max_blocked);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
+/**
+ * This function processes a stream of QPACK encoder instructions provided in [*src, src_end), and updates `*src` to point to the
+ * beginning of the first partial instruction being found.
+ * This decoder does not enforce its own limits to the instruction size. Instead, it relies on the caller's flow control to block
+ * encoder instructions that exceed the flow control size. That is how we protect us from memory exhaustion attacks.
+ */
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, int64_t **unblocked_stream_ids, size_t *num_unblocked,
                                    const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *outbuf);
@@ -79,6 +85,7 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t
  */
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id,
                                        h2o_byte_vector_t *encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
-                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id);
+                                       const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
+                                       size_t *serialized_header_len);
 
 #endif

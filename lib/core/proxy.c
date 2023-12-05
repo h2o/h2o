@@ -64,7 +64,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 {
     h2o_url_t loc_parsed;
 
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0)
+    if (h2o_url_parse(pool, location, location_len, &loc_parsed) != 0)
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
@@ -165,7 +165,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
 
     /* url */
-    h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len));
+    if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
+        h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
         if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
@@ -299,6 +300,27 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
     return client;
 }
 
+static int empty_pipe(int fd)
+{
+    ssize_t ret;
+    char buf[1024];
+
+drain_more:
+    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 0;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(buf)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
 static void do_close(struct rp_generator_t *self)
 {
     /**
@@ -318,8 +340,16 @@ static void do_close(struct rp_generator_t *self)
     }
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
-        close(self->pipe_reader.fds[0]);
-        close(self->pipe_reader.fds[1]);
+        h2o_context_t *ctx = self->src_req->conn->ctx;
+        if (ctx->proxy.spare_pipes.count < ctx->globalconf->proxy.max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
+            int *dst = ctx->proxy.spare_pipes.pipes[ctx->proxy.spare_pipes.count++];
+            dst[0] = self->pipe_reader.fds[0];
+            dst[1] = self->pipe_reader.fds[1];
+        } else {
+            close(self->pipe_reader.fds[0]);
+            close(self->pipe_reader.fds[1]);
+        }
+
         self->pipe_reader.fds[0] = -1;
     }
 }
@@ -480,13 +510,18 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
     }
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL) {
         /* Call `on_body_on_close`. This function might dispose `self`, in which case `generator_disposed` would be set to true. */
@@ -501,12 +536,17 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static int on_body_piped(h2o_httpclient_t *client, const char *errstr)
+static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL)
         on_body_on_close(self, errstr);
@@ -662,9 +702,15 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        if (req->conn->ctx->proxy.spare_pipes.count > 0) {
+            int *src = req->conn->ctx->proxy.spare_pipes.pipes[--req->conn->ctx->proxy.spare_pipes.count];
+            self->pipe_reader.fds[0] = src[0];
+            self->pipe_reader.fds[1] = src[1];
+        } else {
+            if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+                char errbuf[256];
+                h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+            }
         }
         args->pipe_reader->fd = self->pipe_reader.fds[1];
         args->pipe_reader->on_body_piped = on_body_piped;
@@ -861,8 +907,10 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (!overrides->proxy_preserve_host)
             target = NULL;
     }
-    if (target == &target_buf)
-        h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/")));
+    if (target == &target_buf && h2o_url_init(&target_buf, req->scheme, req->authority, h2o_iovec_init(H2O_STRLIT("/"))) != 0) {
+        h2o_send_error_400(req, "Invalid Request", "Invalid Request", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+        return;
+    }
 
     const char *upgrade_to = NULL;
     if (req->is_tunnel_req) {

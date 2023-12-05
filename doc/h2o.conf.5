@@ -20,13 +20,23 @@ The minimal configuration file looks like as follows.
 .nf
 .RS
 listen:
-  port: 8080
-user: nobody
+  port: 80
+
 hosts:
   "myhost.example.com":
+    listen: &listen_ssl
+      port: 443
+      ssl:
+        certificate-file: /path/to/certificate-file
+        key-file: /path/to/key-file
+    listen:
+      <<: *listen_ssl
+      type: quic
     paths:
       /:
         file.dir: /path/to/the/public-files
+
+user: nobody
 access-log: /path/to/the/access-log
 error-log: /path/to/the/error-log
 pid-file: /path/to/the/pid-file
@@ -38,9 +48,11 @@ pid-file: /path/to/the/pid-file
 
 The configuration instructs the server to:
 
-listen to port 8080
-under the privileges of nobody
+listen on TCP port 80 for all hosts
+for myhost.example.com, listen on TCP port 443 using given TLS certificate and key pair
+listen on UDP port 443 (QUIC), reusing the previous setting named as listen_ssl
 serve files under /path/to/the/public-files
+under the privileges of nobody
 emit access logs to file: /path/to/the/access-log
 emit error logs to /path/to/the/error-log
 store the process id of the server in /path/to/the/pid-file
@@ -382,8 +394,18 @@ Otherwise, the entry will match the requests targetting the specified port.
 Since version 1.7, a wildcard character * can be used as the first component of the hostname.
 If used, they are matched using the rule defined in RFC 2818 Section 3.1.
 For example, *.example.com will match HTTP requests for both foo.example.com and bar.example.com.
-Note that an exact match is preferred over host definitions using wildcard characters.
 
+
+
+For each HTTP request to be processed, the matching host entry is determined by the steps below:
+
+Among the host elements that do not use wildcards, find the first element that matches the host and port being specified by the URI.
+If none is found in the previous step, find a matching element among the entries that use wildcards.
+If none is found in the previous steps, use the first host element without a strict-match flag.
+
+
+
+When the hostname of the HTTP request is unknown (i.e., processing an HTTP/1.0 request without a host header field), only the last step is being used.
 
 
 .PP
@@ -468,7 +490,7 @@ Specifies the port at which the server should listen to.
 
 
 
-In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
+In addition to specifying the port number, it is also possible to designate the bind address or the SSL and HTTP/3 (QUIC) configuration.
 
 .PP
 .BR Example:\ 
@@ -502,6 +524,9 @@ listen:
 .RE
 .fi
 .PP
+
+
+To configure HTTP/3 (QUIC), see HTTP/3.
 
 Configuration Levels
 
@@ -602,6 +627,8 @@ synonym of maximum-version.
 
 cipher-suite:
 list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)
+cipher-suite-tls1.3:
+list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the IANA TLS Cipher Suite Registry; e.g., TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256.
 cipher-preference:
 
 side of the list that should be used for selecting the cipher-suite; should be either of: client, server.
@@ -668,11 +695,29 @@ The ech attribute must be set only in the first ssl attribute that binds to a pa
 
 neverbleed:
 
-unless set to OFF, H2O isolates RSA private key operations to an isolated process by using Neverbleed.
+unless set to OFF, H2O isolates SSL private key operations to a different process by using Neverbleed.
 Default is ON.
 
 
 ssl-session-resumption directive is provided for tuning parameters related to session resumption and session tickets.
+
+The CC Attribute
+
+The CC attribute specifies the congestion controller to be used for incoming HTTP connections.
+
+
+For TCP connections, the congestion controller is set using the TCP_CONGESTION socket option on platforms that have support for that socket option.
+To find out the default and the list of supported congestion controllers, please refer to man 7 tcp.
+If the platform does not have support for that socket option, the attribute has no effect.
+
+
+For QUIC connections, the congestion controller is one of Reno, Cubic, Pico.
+The default is Reno.
+
+The Initcwnd Attribute
+
+The initcwnd attribute specifies the initial congestion window of each incoming HTTP connection in the unit of packets.
+At the moment, this option only applies to QUIC. It has no effect for TCP connections.
 
 The Proxy-Protocol Attribute
 
@@ -686,6 +731,14 @@ If the first octets do not accord with the specification, it is considered as th
 
 Default is OFF.
 
+The Sndbuf and Rcvbuf Attributes
+
+The sndbuf and rcvbuf attributes specify the send and receive buffer size for each TCP or UNIX socket used for accepting incoming HTTP connections.
+If set, the values of these attributes are applied to the sockets using SO_SNDBUF and SO_RCVBUF socket options.
+
+
+These attributes have no effect for QUIC connections.
+
 Listening to a Unix Socket
 
 If the type attribute is set to unix, then the port attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
@@ -696,6 +749,11 @@ owner
 
 username of the owner of the socket file.
 If omitted, the socket file will be owned by the launching user.
+
+group
+
+name of the group of the socket file.
+If omitted, group ID associated to the socket file will be the group ID of the owner.
 
 permission
 
@@ -720,10 +778,19 @@ listen:
 .fi
 .PP
 
-Listening to HTTP/3 (QUIC)
 
-If the type attribute is set to quic, the port attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
-This is an experimental feature introduced in v2.3.0-beta3.
+.RE
+.RE
+
+.SS capabilities
+Set capabilities to be added to the process before dropping root privileges.
+
+.PP
+
+
+This directive can be used only on Linux.
+The argument is a YAML sequence of capabilites, where each capability is a name that is accepted by cap_from_name.
+See man 7 capabilities for details.
 
 
 .RE
@@ -811,16 +878,68 @@ Default is 1073741824 (1GB).
 .RE
 
 .SS max-connections
-Number of connections to handle at once at maximum.
+Maximum number of incoming connections to handle at once.
 
 .PP
 
+This includes TCP and QUIC connections.
+
+.PP
+.BR See\ also:
+max-quic-connections
+soft-connection-limit
+
 .RE
 .RE
+
+.SS max-quic-connections
+Maximum number of incoming QUIC connections to handle at once.
+
+.PP
+
+
+By default, maximum number of incoming connections is governed by max-connections regardless of the transport protocol (i.e., TCP or QUIC) being used.
+
+
+This directive introduces an additional cap for incoming QUIC connections. By setting max-quic-connections to a value smaller than max-connections, it would be possible to serve incoming requests that arrive on top of TCP (i.e., HTTP/1 and HTTP/2) even when there are issues with handling QUIC connections.
+
+
+.PP
+.BR See\ also:
+num-quic-threads
+
+.RE
+.RE
+
 .SS max-delegations
-Limits the number of delegations (i.e. internal redirects using the X-Reproxy-URL header).
+Limits the number of delegations (i.e. fetching the response body from an alternate source as specified by the X-Reproxy-URL header).
 
 .PP
+
+.RE
+.RE
+.SS max-reprocesses
+Limits the number of internal redirects.
+
+.PP
+
+.RE
+.RE
+.SS neverbleed-offload
+Sets an offload engine to be used with neverbleed.
+
+.PP
+
+
+When neverbleed is in use, RSA private key operations can be offload to accelerators using the Intel QuickAssist technology.
+
+This directive takes one of the three values that changes how the accelerators are used:
+
+OFF - the accelerator is not used
+QAT - use of QAT is enforced; startup will fail if the acclerator is unavailable
+QAT-AUTO - QAT is used if available
+
+
 
 .RE
 .RE
@@ -857,8 +976,37 @@ Number of worker threads.
 .PP
 
 
-Default is the number of the processors connected to the system as obtained by getconf NPROCESSORS_ONLN.
+By default, the number of worker threads spawned by h2o is the number of the CPU cores connected to the system as obtained by getconf NPROCESSORS_ONLN.
 
+
+This directive is used to override the behavior.
+
+
+If the argument is a YAML scalar, it specifies in integer the number of worker threads to spawn.
+
+
+If the argument is a YAML sequence, it specifies a list of CPU IDs on each of which one worker thread will be spawned and pinned.
+This mode can be used oly on systems that have pthread_setaffinity_np.
+
+
+.RE
+.RE
+
+.SS num-quic-threads
+Restricts the number of worker threads that handle incoming QUIC connections.
+
+.PP
+
+
+By default, all worker threads handle incoming QUIC connections as well as TCP connections.
+
+
+If num-threads was given a YAML sequence specifying the CPU IDs on which each worker thread will run, the threads pinned to first num-quic-threads threads will handle incoming QUIC connections.
+
+
+.PP
+.BR See\ also:
+max-quic-connections
 
 .RE
 .RE
@@ -997,13 +1145,12 @@ setenv
 
 .SS send-informational
 (since v2.3)
-Specify the client protocols to which H2O can send 1xx informational responses.
+Specifies the client protocols to which H2O can send 1xx informational responses.
 
 .PP
 
 
-This directive can be used to forward 1xx informational responses generated by the upstream or headers directive to the clients.
-
+This directive can be used to forward 1xx informational responses (e.g., 103 Early Hints) generated by upstream servers or headers directive to the clients.
 
 
 If the value is all, H2O always sends informational responses to the client whenever possible (i.e. unless the procotol is HTTP/1.0).
@@ -1015,7 +1162,61 @@ If the value is none, H2O never sends informational responses to the client.
 If the value is except-h1, H2O sends informational if the protocol is not HTTP/1.x.
 
 
+.RE
+.RE
 
+.SS soft-connection-limit
+Number of connections above which idle connections are closed agressively.
+
+.PP
+
+
+H2O accepts up to max-connections TCP connections and max-quic-connections QUIC connections.
+Once the number of connections reach these maximums, new connection attempts are ignored until existing connections close.
+
+
+To reduce the possibility of the number of connections reaching the maximum and new connection attempts getting ignored, soft-connection-limit can be used to introduce another threshold.
+When soft-connection-limit is set, connections that have been idle at least for soft-connection-limit.min-age seconds will start to get closed until the number of connections becomes no greater than soft-connection-limit.
+
+
+As the intention of this directive is to close connections more agressively under high load than usual, soft-connection-limit.min-age should be set to a smaller value than the other idle timeouts; e.g., http1-request-timeout, http2-idle-timeout.
+
+
+.RE
+.RE
+.SS soft-connection-limit.min-age
+Minimum amount of idle time to be guaranteed for HTTP connections even when the connections are closed agressively due to the number of connections exceeding soft-connection-limit.
+
+.PP
+
+
+See soft-connection-limit.
+
+
+.RE
+.RE
+
+.SS ssl-offload
+Knob for changing how TLS encryption is handled.
+
+.PP
+
+
+This directive takes one of the following values:
+
+OFF - TLS encryption is handled in userspace and the encrypted bytes are sent to the kernel using a write (2) system call.
+kernel - TLS encryption is offloaded to the kernel. When the network interface card supports TLS offloading, actual encryption might get offloaded to the interface, depending on the kernel configuration.
+zerocopy - TLS encryption is handled in userspace, but if the encryption logic is capable of writing directly to main memory without polluting the cache, the encrypted data is passed to the kernel without copying (i.e., sendmsg (2) with  MSG_ZEROCOPY socket option is used). Otherwise, this option is identical to OFF. This option minimizes cache pollution next to hardware offload.
+
+
+
+Kernel option can be used only on Linux.
+Zerocopy is only available on Linux running on CPUs that support the necessary features; see picotls PR#384 and H2O PR#3007.
+
+
+.PP
+.BR See\ also:
+proxy.zerocopy
 
 .RE
 .RE
@@ -1213,6 +1414,25 @@ Users can opt-in to using the legacy ASCII protocol by adding a protocol attribu
 
 .RE
 .RE
+
+.SS strict-match
+A boolean flag designating if the current host element should not be considered as the fallback element.
+
+.PP
+
+See hosts.
+
+.RE
+.RE
+
+.SS tcp-reuseport
+A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.
+
+.PP
+
+.RE
+.RE
+
 
 .SS temp-buffer-path
 (since v2.0)
@@ -1867,6 +2087,145 @@ A boolean flag (ON or OFF) indicating whether if the server should push resource
 .RE
 .RE
 
+.SS http2-dos-delay
+HTTP request processing delay to be applied when the client behavior is suspicious, in the unit of milliseconds.
+
+
+.PP
+
+
+When the client behavior is suspicious and there is a concern of Denial-of-Service attack, h2o stops processing requests arriving on the suspicious connection for specified amount of time.
+
+
+.RE
+.RE
+
+
+
+
+
+.SH HTTP/3
+
+
+
+HTTP/3 uses QUIC as the transport protocol.
+A listen directive with a type attribute set to quic instructs the standalone server to bind to a UDP port on which QUIC packets will be sent and received.
+The binding must have an ssl attribute, as QUIC uses TLS/1.3 as the handshake protocol.
+
+
+The example below setups a server that listens to both TCP port 443 and UDP port 443 using the same certificate and private key.
+
+
+First listen directive binds the server to TCP port 443 with specified credentials, marking that directive as an YAML alias called &listen_ssl.
+Then, it reuses (YAML merge) the first listen directive, adding type: quic to create a UDP port 443 binding for accepting QUIC connections.
+
+.PP
+.BR Example:\ 
+Serving HTTP/1,2 and 3 on port 443
+.PP
+.nf
+.RS
+listen: &listen_ssl
+  port: 443
+  ssl:
+    certificate-file: /path/to-ssl-certificate-file
+    key-file: /path/to/ssl-key-file
+listen:
+  <Fine-tuning QUIC Behavior
+
+To fine tune the behavior of QUIC, the quic attribute should be used in place of the type attribute specifying quic.
+The quic attribute accepts following parameters.
+
+
+amp-limit
+Amount of data that can be sent to the client before the client address is validated; see section 8.1 of RFC 9000. Default is 3.
+handshake-timeout-rtt-multiplier
+Handshake timeout in the unit of round-trip time. Default is 400.
+max-initial-handshake-packets
+Maximum number of Initial packets to be sent before the handshake is deemed to have failed. Default is 1,000.
+max-streams-bidi
+Maximum number of client-initated bi-directional streams. This parameter controls the HTTP request concurrency of a HTTP/3 connection. Default is 100.
+max-udp-payload-size
+See Section 18.2 of RFC 9000. Default is 1,472.
+qpack-encoder-table-capacity
+Size of the QPACK encoder table. Default is 4,096.
+retry
+A boolean flag (OFF or ON) indicating if a Retry packet should be used for validating the client address. Use of Retry packets mitigate denial-of-service attacks at the cost of incurring one additional round-trip for processing the handshake.
+sndbuf, rcvbuf
+Size of send and receive buffers, in the unit of bytes. Unlike the TCP counterparts that are per-connection, these buffers are associated to the listening port and applies to all the connections bound to that port.
+
+
+The example below reuses a previous binding but sets the retry parameter to ON.
+
+.PP
+.BR Example:\ 
+HTTP/3 endpoint using Retry packets
+.PP
+.nf
+.RS
+listen:
+  <
+Also, properties such as congestion controller and initial congestion window can be tuned using the top-level attribute of listen.
+
+
+HTTP/3 Directives
+
+Aside from QUIC-level properties, configuration directives listed below are provided for tuning HTTP/3 behavior.
+
+
+
+.SS http3-graceful-shutdown-timeout
+Maximum duration to retain HTTP/3 connections in half-closed state, in seconds.
+
+.PP
+
+
+When a graceful shutdown of h2o is initiated, h2o at first sends a GOAWAY frame indicating the clients that it is initiating shutdown, then after one second, starts rejecting new HTTP requests (a.k.a. half-closed state).
+
+
+This directive controls how long h2o should wait for the peer to close the QUIC connection in this half-closed state, before exitting.
+
+
+If set to zero, this timeout is disabled.
+h2o will not shut down until all QUIC connections are closed by the clients or times out.
+
+
+.RE
+.RE
+
+.SS http3-gso
+If Generic Segmentation Offload should be used when sending QUIC packets.
+
+.PP
+
+.RE
+.RE
+
+
+.SS http3-idle-timeout
+Idle timeout in the unit of seconds.
+
+.PP
+
+
+Unlike idle timeout of HTTP/1 and HTTP/2, this value should be small because it is faster to re-establish a new connection using 0-RTT than migrating to a different port due to NAT rebinding.
+
+
+.RE
+.RE
+
+.SS http3-input-window-size
+Default window size for HTTP request body.
+
+.PP
+
+
+See http2-input-window-size.
+
+
+.RE
+.RE
+
 
 
 
@@ -2246,6 +2605,15 @@ hosts:
 
 .RE
 .RE
+
+.SS fastcgi.document_root
+Sets the DOCUMENT_ROOT variable to be passed to the FastCGI application.
+
+.PP
+
+.RE
+.RE
+
 
 .SS fastcgi.spawn
 The directive specifies the command to start the FastCGI process manager.
@@ -2664,6 +3032,7 @@ Headers directives can be used to manipulate response headers.
 
 
 This document describes the following configuration directives as well as when they are applied.
+All the directives accept one header field (specified by a YAML scalar), or multiple header fields (specified by a YAML sequence).
 
 
 
@@ -2744,6 +3113,8 @@ Sets a header line when and only when a header with the same name does not alrea
 
 .RE
 .RE
+
+
 .SS header.unset
 Removes headers with given name.
 
@@ -2756,6 +3127,29 @@ Removing the X-Powered-By header
 .nf
 .RS
 header.unset: "X-Powered-By"
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
+.SS header.unsetunless
+Remove all headers but those listed.
+
+.PP
+
+.PP
+.BR Example:\ 
+Remove all headers but If-Match and If-Modified-Since
+.PP
+.nf
+.RS
+header.unsetunless:
+- "If-Match"
+- "If-Modified-Since"
 
 .RE
 .fi
@@ -2898,10 +3292,14 @@ mruby.handler
 
 
 
-Proxy module is the reverse proxy implementation for H2O - it implements a HTTP client that forwards a HTTP request to an upstream server.
+Proxy module is the proxy implementation for H2O - it implements a reverse HTTP proxy and a CONNECT proxy.
 
 
-When forwarding the requests, the module sets following request headers:
+A reverse HTTP proxy is setup using the proxy.reverse.url directive.
+A CONNECT proxy is setup using the proxy.connect directive.
+
+
+When acting as a reverse HTTP proxy, following request headers are added and forwarded to the backend server:
 
 via
 x-forwarded-for
@@ -2909,8 +3307,8 @@ x-forwarded-proto
 
 
 
-The HTTP client only supports HTTP/1.
-Support for HTTPS has been introduced in version 2.0.
+By default, all requests to the backend server are sent using HTTP/1.1.
+Use of HTTP/2 and HTTP/3 to backend servers is considered experimental; their use can be controlled via directives proxy.http2.ratio and proxy.http3.ratio.
 
 
 Following sections describe the configuration directives defined for the module.
@@ -2993,45 +3391,55 @@ Path to the unix socket should be surrounded by square brackets, and prefixed wi
 .RE
 .RE
 
-.SS proxy.preserve-host
-A boolean flag (ON or OFF) designating whether or not to pass Host header from incoming request to upstream.
-
-.PP
-
-.RE
-.RE
-
-
-.SS proxy.preserve-x-forwarded-proto
-(since v2.0)
-A boolean flag(ON or OFF) indicating if the server preserve the received x-forwarded-proto request header.
+.SS proxy.connect
+Setup a CONNECT proxy, taking an access control list as the argument.
 
 .PP
 
 
-By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received x-forwarded-proto request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
-However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+Each element of the access control list starts with either + or - followed by an wildcard (*) or an IP address with an optional netmask and an optional port number.
 
+
+When a CONNECT request is received and the name resolution of the connect target is complete, the access control list is searched from top to bottom.
+If the first entry that contains a matching address (and optionally the port number) starts with a +, the request is accepted and a tunnel is established.
+If the entry starts with a -, the request is rejected.
+
+
+If none of the entries match, the request is also rejected.
+
+.PP
+.BR Example:\ 
+Simple HTTPS proxy
+.PP
+.nf
+.RS
+proxy.connect:
+- "-192.168.0.0/24"  # reject any attempts to local network
+- "+*:443"           # accept attempts to port 443 of any host
 
 .RE
-.RE
-
-.SS proxy.proxy-protocol
-(since v2.1)
-A boolean flag (ON or OFF) indicating if PROXY protocol should be used when connecting to the application server.
-
+.fi
 .PP
 
 
-When using the PROXY protocol, connections to the application server cannot be persistent (i.e. proxy.timeout.keepalive must be set to zero).
+Note: The precise syntax of the access control list element is address:port/netmask. This is because the URL parser is reused.
 
+
+.RE
+.RE
+
+.SS proxy.connect.emit-proxy-status
+A boolean flag (ON or OFF) designating if a proxy-status response header should be sent.
+
+.PP
 
 .PP
 .BR See\ also:
-proxy.timeout.keepalive
+proxy.proxy-status.identity
 
 .RE
 .RE
+
 
 .SS proxy.emit-x-forwarded-headers
 (since v2.1)
@@ -3074,6 +3482,45 @@ A boolean flag (ON or OFF) indicating if H2O should add a date header to the res
 .RE
 
 
+.SS proxy.forward.close-connection
+A boolean flag indicating if closure of the backend connection should trigger the closure of the frontend HTTP/1.1 connection.
+
+.PP
+
+.RE
+.RE
+
+
+.SS proxy.happy-eyeballs.connection-attempt-delay
+Connection Attempt Delay parameter of Happy Eyeballs v2.
+
+.PP
+
+
+When trying to establish a connection to the CONNECT target, H2O uses Happy Eyeballs v2 (RFC 8305).
+This parameter controls the Connection Attempt Delay parameter of Happy Eyeballs v2 in the unit of milliseconds.
+
+
+At the moment, Happy Eyeballs is used only when acting as a CONNECT proxy.
+It is not used when running as an HTTP reverse proxy.
+
+
+.RE
+.RE
+
+.SS proxy.happy-eyeballs.name-resolution-delay
+Name Resolution Delay parameter of Happy Eyeballs v2.
+
+.PP
+
+
+For detail, see proxy.happy-eyeballs.connection-attempt-delay.
+
+
+.RE
+.RE
+
+
 .SS proxy.header.add
 (since v2.2)
 Modifies the request headers sent to the application server.
@@ -3081,7 +3528,7 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.add except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.add except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
 
@@ -3094,7 +3541,7 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.append except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.append except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
 
@@ -3107,7 +3554,7 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.merge except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.merge except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
 
@@ -3120,7 +3567,7 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.set except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.set except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
 
@@ -3133,7 +3580,7 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.setifempty except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.setifempty except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
 
@@ -3146,9 +3593,196 @@ Modifies the request headers sent to the application server.
 .PP
 
 
-The behavior is identical to header.unset except for the fact that it affects the request sent to the application server.
+The behavior is identical to header.unset except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
 Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
 
+
+.RE
+.RE
+.SS proxy.header.unsetunless
+(since v2.2)
+Modifies the request headers sent to the application server.
+
+.PP
+
+
+The behavior is identical to header.unsetunless except for the fact that it affects the request headers sent to the application server rather than the response headers sent to the client.
+Please refer to the documentation of the headers handler to see how the directives can be used to mangle the headers.
+
+
+.RE
+.RE
+
+
+.SS proxy.header.cookie.unset
+Removes cookies in the requests with given name.
+
+.PP
+
+.PP
+.BR See\ also:
+header.unset/a>
+
+.RE
+.RE
+
+
+.SS proxy.header.cookie.unsetunless
+Removes all cookies in the requests but those with given names.
+
+.PP
+
+.PP
+.BR See\ also:
+header.unsetunless
+
+.RE
+.RE
+
+
+.SS proxy.http2.force-cleartext
+See proxy.http2.ratio.
+
+.PP
+
+
+.RE
+.RE
+
+.SS proxy.http2.max-concurrent-streams
+Maxium number of concurrent requests issuable on one HTTP/2 connection to the backend server.
+
+.PP
+
+
+Actual number of maximum requests inflight will be capped to the minimum of this setting and the value advertised in the HTTP/2 SETTINGS frame of the bakend server.
+
+
+.PP
+.BR See\ also:
+proxy.http2.ratio
+
+.RE
+.RE
+
+.SS proxy.http2.ratio
+Ratio of forwarded HTTP requests with which use of HTTP/2 should be attempted.
+
+.PP
+
+
+When the backend protocol is HTTPS, for given ratio of HTTP requests, h2o will either attempt to create or reuse an existing HTTP/2 connection.
+Connection attempts to use HTTP/2 will be indicated to the server via ALPN, with fallback to HTTP/1.1.
+
+
+When the backend protocol is cleartext HTTP, this directive has impact only when the ratio is set to 100 with proxy.http2.force-cleartext set to ON. In such case, all backend connection will use HTTP/2 without negotiation.
+
+
+.RE
+.RE
+
+.SS proxy.http3.ratio
+Ratio of forwarded HTTP requests with which use of HTTP/3 should be attempted.
+
+.PP
+
+
+When the backend protocol is HTTPS, for given ratio of HTTP requests, h2o will either attempt to create or reuse an existing HTTP/3 connection.
+
+
+When the backend protocol is cleartext HTTP, this directive has no impact.
+
+
+.RE
+.RE
+
+.SS proxy.max-buffer-size
+This setting specifies the maximum amount of userspace memory / disk space used for buffering each HTTP response being forwarded, in the unit of bytes.
+
+.PP
+
+
+By default, h2o buffers unlimited amount of data being sent from backend servers.
+The intention behind this approach is to free up backend connections as soon as possible, under the assumption that the backend server might have lower concurrency limits than h2o.
+But if the backend server has enough concurrency, proxy.max-buffer-size can be used to restrict the memory / disk pressure caused by h2o at the cost of having more connections to the backend server.
+
+
+.PP
+.BR See\ also:
+temp-buffer-threshold
+
+.RE
+.RE
+
+.SS proxy.max-spare-pipes
+This setting specifies the maximum number of pipe file descriptors retained for reuse, when proxy.zerocopy is used.
+
+.PP
+
+
+This maximum is applied per each worker thread.
+The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
+
+
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+
+
+.PP
+.BR See\ also:
+proxy.zerocopy
+
+.RE
+.RE
+
+.SS proxy.preserve-host
+A boolean flag (ON or OFF) designating whether or not to pass Host header from incoming request to upstream.
+
+.PP
+
+.RE
+.RE
+
+
+.SS proxy.preserve-x-forwarded-proto
+(since v2.0)
+A boolean flag(ON or OFF) indicating if the server preserve the received x-forwarded-proto request header.
+
+.PP
+
+
+By default, when transmitting a HTTP request to an upstream HTTP server, H2O removes the received x-forwarded-proto request header and sends its own, as a precaution measure to prevent an attacker connecting through HTTP to lie that they are connected via HTTPS.
+However in case H2O is run behind a trusted HTTPS proxy, such protection might not be desirable, and this configuration directive can be used to modify the behaviour.
+
+
+.RE
+.RE
+
+.SS proxy.proxy-protocol
+(since v2.1)
+A boolean flag (ON or OFF) indicating if PROXY protocol should be used when connecting to the application server.
+
+.PP
+
+
+When using the PROXY protocol, connections to the application server cannot be persistent (i.e. proxy.timeout.keepalive must be set to zero).
+
+
+.PP
+.BR See\ also:
+proxy.timeout.keepalive
+
+.RE
+.RE
+
+.SS proxy.proxy-status.identity
+Specifies the name of the server to be emitted as part of the proxy-status header field.
+
+.PP
+
+.PP
+.BR See\ also:
+proxy.connect.proxy-status
 
 .RE
 .RE
@@ -3209,16 +3843,6 @@ proxy.ssl.cafile
 .RE
 .RE
 
-.SS proxy.timeout.io
-Sets the upstream I/O timeout in milliseconds.
-
-.PP
-
-This value will be used for proxy.timeout.connect and proxy.timeout.first_byte as well, unless these parameters are explicitely set.
-
-.RE
-.RE
-
 .SS proxy.timeout.connect
 (since v2.3)
 Sets the timeout before establishing the upstream in milliseconds.
@@ -3242,10 +3866,11 @@ This sets the maxium time we will wait for the first byte from upstream, after t
 .RE
 
 .SS proxy.timeout.io
-(since v2.3)
 Sets the upstream I/O timeout in milliseconds.
 
 .PP
+
+This value will be used for proxy.timeout.connect and proxy.timeout.first_byte as well, unless these parameters are explicitely set.
 
 .RE
 .RE
@@ -3274,24 +3899,42 @@ When set to ON, CONNECT requests and WebSocket handshakes are forwarded to the b
 Then, if the backend server accepts those requests, H2O forwards the HTTP response to the client and acts as a bi-directional tunnel.
 
 
-Support for tunnelling is considered experimental for the time being and therefore is not yet turned on by default.
+Timeouts are governed by properties proxy.timeout.connect and proxy.timeout.io.
 
 
 .RE
 .RE
 
-.SS proxy.tunnel.timeout
-Sets the idle timeout of a tunnel.
+.SS proxy.zerocopy
+Sets the use of zerocopy operations for forwarding the response body.
 
 .PP
+
+
+By default, this flag is set to OFF, in which case the response bytes are read from the upstream socket to an internal buffer as they arrive, then shipped to the client.
+Maximum size of this buffer is controlled by proxy.max-buffer-size.
+The drawback of this approach is that it causes pressure on memory bandwidth.
+
+
+This knob provides two alternative modes to remedy the pressure:
+
+
+When set to enabled, if zerocopy operation in supported by the downstream connection (i.e., downstream connection being cleoartext or encrypted using kernel TLS), h2o uses a pipe as an internal buffer instead of using userspace memory.
+Data is moved to the pipe using the splice system call, then shipped to the downstream connection by another call to splice.
+Pressure to memory bandwidth is eliminated, as the splice system call merely moves the references to kernel memory between file descriptors.
+
+
+When set to always, data from upstream is spliced into a pipe regardless of downstream connection providing support for zerocopy.
+When the downstream connection does not support zerocopy, data is intially moved into the pipe, then gets read and written to the socket (as well as being encrypted, if necessary) as late as it becomes possible to send the data.
+This approach does not reduce the total amount of bytes flowing through the CPU, but reduces the amount of userspace memory used by h2o by delaying the reads, thereby reducing cache spills.
+
 
 .PP
 .BR See\ also:
-proxy.tunnel
+ssl-offload, proxy.max-spare-pipes
 
 .RE
 .RE
-
 
 
 

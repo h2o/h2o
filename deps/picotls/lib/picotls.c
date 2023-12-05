@@ -39,6 +39,10 @@
 #include "picotls-probes.h"
 #endif
 
+#ifdef PTLS_HAVE_AEGIS
+#include <aegis.h>
+#endif
+
 #define PTLS_MAX_PLAINTEXT_RECORD_SIZE 16384
 #define PTLS_MAX_ENCRYPTED_RECORD_SIZE (16384 + 256)
 
@@ -1979,7 +1983,7 @@ Exit:
 }
 
 static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **candidates, const uint8_t *src,
-                         const uint8_t *const end, int server_preference)
+                         const uint8_t *const end, int server_preference, int server_chacha_priority)
 {
     size_t found_index = SIZE_MAX;
     int ret;
@@ -1990,7 +1994,7 @@ static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **c
             goto Exit;
         for (size_t i = 0; candidates[i] != NULL; ++i) {
             if (candidates[i]->id == id) {
-                if (server_preference) {
+                if (server_preference && !(server_chacha_priority && id == PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256)) {
                     /* preserve smallest matching index, and proceed to the next input */
                     if (i < found_index) {
                         found_index = i;
@@ -2003,6 +2007,11 @@ static int select_cipher(ptls_cipher_suite_t **selected, ptls_cipher_suite_t **c
                 }
             }
         }
+        /* first position of the server list matched (server_preference) */
+        if (found_index == 0)
+            break;
+        /* server preference is overridden only if the first entry of client-provided list is chachapoly */
+        server_chacha_priority = 0;
     }
     if (found_index != SIZE_MAX) {
         *selected = candidates[found_index];
@@ -3561,10 +3570,10 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
         src = end;
     });
 
-    /* CH defined in TLS versions below 1.2 might not have extensions (or they might, see what OpenSSL 1.0.0 sends); so bail out
-     * after parsing the main variables. Zero is returned as it is a valid ClientHello. However `ptls_t::selected_version` remains
-     * zero indicating that no compatible version were found. */
-    if (ch->legacy_version < 0x0303 && src == end) {
+    /* In TLS versions 1.2 and earlier CH might not have an extensions block (or they might, see what OpenSSL 1.0.0 sends); so bail
+     * out if that is the case after parsing the main variables. Zero is returned as it is a valid ClientHello. However
+     * `ptls_t::selected_version` remains zero indicating that no compatible version were found. */
+    if (src == end) {
         ret = 0;
         goto Exit;
     }
@@ -4353,7 +4362,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
     { /* select (or check) cipher-suite, create key_schedule */
         ptls_cipher_suite_t *cs;
         if ((ret = select_cipher(&cs, tls->ctx->cipher_suites, ch->cipher_suites.base,
-                                 ch->cipher_suites.base + ch->cipher_suites.len, tls->ctx->server_cipher_preference)) != 0)
+                                 ch->cipher_suites.base + ch->cipher_suites.len, tls->ctx->server_cipher_preference, tls->ctx->server_cipher_chacha_priority)) != 0)
             goto Exit;
         if (!is_second_flight) {
             tls->cipher_suite = cs;
@@ -5876,9 +5885,11 @@ int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inl
     assert(tls->traffic_protection.enc.aead != NULL);
 
     /* "For AES-GCM, up to 2^24.5 full-size records (about 24 million) may be encrypted on a given connection while keeping a
-     * safety margin of approximately 2^-57 for Authenticated Encryption (AE) security." (RFC 8446 section 5.5)
+     * safety margin of approximately 2^-57 for Authenticated Encryption (AE) security." (RFC 8446 section 5.5).
+     *
+     * Key updates do not happen with tls 1.2, check `key_schedule` to see if we are using tls/1.3
      */
-    if (tls->traffic_protection.enc.seq >= 16777216)
+    if (tls->traffic_protection.enc.seq >= 16777216 && tls->key_schedule != NULL)
         tls->needs_key_update = 1;
 
     if (tls->needs_key_update) {

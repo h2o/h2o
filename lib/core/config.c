@@ -193,6 +193,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->proxy.emit_via_header = 1;
     config->proxy.emit_missing_date_header = 1;
     config->proxy.zerocopy = H2O_PROXY_ZEROCOPY_ENABLED;
+    config->proxy.max_spare_pipes = 64;
     config->http2.max_concurrent_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS;
     config->http2.max_concurrent_streaming_requests_per_connection = H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMING_REQUESTS;
     config->http2.max_streams_for_priority = 16;
@@ -200,6 +201,7 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.min_rtt = 50; // milliseconds
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
+    config->http2.dos_delay = 100; /* 100ms processing delay when observing suspicious behavior */
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.allow_delayed_ack = 1;

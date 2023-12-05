@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use feature qw/say/;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use IO::Socket::INET;
@@ -30,7 +30,7 @@ for my $comb (0..3) {
                     h2g.send_data(1, 0, "a")
                     h2g.read_loop(100)
                     h2g.send_data(1, END_STREAM, "a" * 1024)
-                    h2g.read_loop(100)
+                    h2g.read_loop(300)
 EOS
                 like $output, qr/HEADERS frame .+':status' => '200'/s;
                 unlike $output, qr/RST_STREAM frame/s;
@@ -123,8 +123,7 @@ EOS
                 # (otherwise framing error happens)
                 `curl -ks https://127.0.0.1:$server->{tls_port}`;
 
-                $upstream->{kill}->();
-                my $log = join('', readline($upstream->{stdout}));
+                my ($log) = $upstream->{kill}->();
                 like $log, qr/received @{[1 + 1024 * 2]} bytes/;
                 like $log, qr/accepted request 2/;
             }

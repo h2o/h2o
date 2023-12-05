@@ -263,7 +263,7 @@ static __thread struct {
     struct buffer_recycle_bin_t {
         h2o_mem_recycle_conf_t conf;
         h2o_mem_recycle_t recycle;
-    } * bins;
+    } *bins;
     /**
      * Bins for capacicties no greater than this value exist.
      */
