@@ -8,13 +8,23 @@ The minimal configuration file looks like as follows.
 
 <?= $ctx->{code}->(<< 'EOT')
 listen:
-  port: 8080
-user: nobody
+  port: 80
+
 hosts:
   "myhost.example.com":
+    listen: &listen_ssl
+      port: 443
+      ssl:
+        certificate-file: /path/to/certificate-file
+        key-file: /path/to/key-file
+    listen:
+      <<: *listen_ssl
+      type: quic
     paths:
       /:
         file.dir: /path/to/the/public-files
+
+user: nobody
 access-log: /path/to/the/access-log
 error-log: /path/to/the/error-log
 pid-file: /path/to/the/pid-file
@@ -24,9 +34,11 @@ EOT
 <p>
 The configuration instructs the server to:
 <ol>
-<li>listen to port 8080</li>
-<li>under the privileges of <code>nobody</code></li>
+<li>listen on TCP port 80 for all hosts</li>
+<li>for myhost.example.com, listen on TCP port 443 using given TLS certificate and key pair</li>
+<li>listen on UDP port 443 (QUIC), reusing the previous setting named as <code>listen_ssl</code>
 <li>serve files under <code>/path/to/the/public-files</code></li>
+<li>under the privileges of <code>nobody</code></li>
 <li>emit access logs to file: <code>/path/to/the/access-log</code></li>
 <li>emit error logs to <code>/path/to/the/error-log</code></li>
 <li>store the process id of the server in <code>/path/to/the/pid-file</code>

@@ -58,7 +58,7 @@ static void quicly_ranges_clear(quicly_ranges_t *ranges);
  */
 int quicly_ranges_add(quicly_ranges_t *ranges, uint64_t start, uint64_t end);
 /**
- * subtracts given range, returns 0 if sucessful
+ * subtracts given range, returns 0 if successful
  */
 int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end);
 /**

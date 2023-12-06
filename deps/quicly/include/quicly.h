@@ -161,6 +161,11 @@ QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t 
  * delta must be either 1 or -1.
  */
 QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
+/**
+ * Called when picotls return PTLS_ERROR_ASYNC_OPERATION. The application must call `ptls_resume_handshake` once the async operation
+ * is complete.
+ */
+QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
 
 /**
  * crypto offload API
@@ -326,6 +331,10 @@ struct st_quicly_context_t {
      */
     unsigned expand_client_hello : 1;
     /**
+     * whether to use ECN on the send side; ECN is always on on the receive side
+     */
+    unsigned enable_ecn : 1;
+    /**
      *
      */
     quicly_cid_encryptor_t *cid_encryptor;
@@ -369,6 +378,10 @@ struct st_quicly_context_t {
      * optional refcount callback
      */
     quicly_update_open_count_t *update_open_count;
+    /**
+     *
+     */
+    quicly_async_handshake_t *async_handshake;
 };
 
 /**
@@ -441,6 +454,18 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total number of Initial and Handshake packets sent.                                                                     \
          */                                                                                                                        \
         uint64_t initial_handshake_sent;                                                                                           \
+        /**                                                                                                                        \
+         * Total number of packets received out of order.                                                                          \
+         */                                                                                                                        \
+        uint64_t received_out_of_order;                                                                                            \
+        /**                                                                                                                        \
+         * connection-wide counters for ECT(0), ECT(1), CE                                                                         \
+         */                                                                                                                        \
+        uint64_t received_ecn_counts[3];                                                                                           \
+        /**                                                                                                                        \
+         * connection-wide ack-received counters for ECT(0), ECT(1), CE                                                            \
+         */                                                                                                                        \
+        uint64_t acked_ecn_counts[3];                                                                                              \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -468,6 +493,16 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
+    struct {                                                                                                                       \
+        /**                                                                                                                        \
+         * number of paths that were ECN-capable                                                                                   \
+         */                                                                                                                        \
+        uint64_t ecn_validated;                                                                                                    \
+        /**                                                                                                                        \
+         * number of paths that were deemed as ECN black holes                                                                     \
+         */                                                                                                                        \
+        uint64_t ecn_failed;                                                                                                       \
+    } num_paths;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of each frame being sent / received.                                                                           \
      */                                                                                                                            \
@@ -551,7 +586,7 @@ struct _st_quicly_conn_public_t {
          */
         quicly_address_t address;
         /**
-         * the SCID used in long header packets. Equiavalent to local_cid[seq=0]. Retaining the value separately is the easiest way
+         * the SCID used in long header packets. Equivalent to local_cid[seq=0]. Retaining the value separately is the easiest way
          * of staying away from the complexity caused by remote peer sending RCID frames before the handshake concludes.
          */
         quicly_cid_t long_header_src_cid;
@@ -738,7 +773,7 @@ struct st_quicly_stream_t {
         uint32_t window;
         /**
          * Maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`.
-         * As discussed in https://github.com/h2o/quicly/issues/278, this value should be propotional to the size of the receive
+         * As discussed in https://github.com/h2o/quicly/issues/278, this value should be proportional to the size of the receive
          * window, so that the receive window can be maintained even in the worst case, where every one of the two packets being
          * sent are received.
          */
@@ -805,6 +840,10 @@ typedef struct st_quicly_decoded_packet_t {
         uint64_t pn;
         uint64_t key_phase;
     } decrypted;
+    /**
+     * ECN bits
+     */
+    uint8_t ecn : 2;
     /**
      *
      */
@@ -949,7 +988,7 @@ static quicly_tracer_t *quicly_get_tracer(quicly_conn_t *conn);
 void quicly_free(quicly_conn_t *conn);
 /**
  * closes the connection.  `err` is the application error code using the coalesced scheme (see QUICLY_ERROR_* macros), or zero (no
- * error; indicating idle close).  An application should continue calling quicly_recieve and quicly_send, until they return
+ * error; indicating idle close).  An application should continue calling quicly_receive and quicly_send, until they return
  * QUICLY_ERROR_FREE_CONNECTION.  At this point, it is should call quicly_free.
  */
 int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase);
@@ -979,7 +1018,7 @@ int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level);
 int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s);
 /**
  * Sends data of given stream.  Called by stream scheduler.  Only streams that can send some data or EOS should be specified.  It is
- * the responsibilty of the stream scheduler to maintain a list of such streams.
+ * the responsibility of the stream scheduler to maintain a list of such streams.
  */
 int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
@@ -1009,7 +1048,7 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  * Builds UDP datagrams to be sent for given connection.
  * @param [out] dest              destination address
  * @param [out] src               source address
- * @param [out] datagrams         vector of iovecs pointing to the payloads of UDP datagrams. Each iovec represens a single UDP
+ * @param [out] datagrams         vector of iovecs pointing to the payloads of UDP datagrams. Each iovec represents a single UDP
  *                                datagram.
  * @param [in,out] num_datagrams  Upon entry, the application provides the number of entries that the `packets` vector can contain.
  *                                Upon return, contains the number of packet vectors emitted by `quicly_send`.
@@ -1022,6 +1061,10 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  */
 int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams, size_t *num_datagrams,
                 void *buf, size_t bufsize);
+/**
+ * returns ECN bits to be set for the packets built by the last invocation of `quicly_send`
+ */
+uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn);
 /**
  *
  */
@@ -1066,11 +1109,12 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
 /**
  * Initiates a new connection.
  * @param new_cid the CID to be used for the connection. path_id is ignored.
+ * @param appdata initial value to be set to `*quicly_get_data(conn)`
  */
 int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
                    struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
                    ptls_handshake_properties_t *handshake_properties,
-                   const quicly_transport_parameters_t *resumed_transport_params);
+                   const quicly_transport_parameters_t *resumed_transport_params, void *appdata);
 /**
  * accepts a new connection
  * @param new_cid        The CID to be used for the connection. When an error is being returned, the application can reuse the CID
@@ -1078,15 +1122,21 @@ int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *serv
  * @param address_token  An validated address validation token, if any.  Applications MUST validate the address validation token
  *                       before calling this function, dropping the ones that failed to validate.  When a token is supplied,
  *                       `quicly_accept` will consult the values being supplied assuming that the remote peer's address has been
- * validated.
+ *                       validated.
+ * @param appdata        initial value to be set to `*quicly_get_data(conn)`
  */
 int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                   quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties);
+                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties, void *appdata);
 /**
  *
  */
 ptls_t *quicly_get_tls(quicly_conn_t *conn);
+/**
+ * Resumes an async TLS handshake, and returns a pointer to the QUIC connection or NULL if the corresponding QUIC connection has
+ * been discarded. See `quicly_async_handshake_t`.
+ */
+quicly_conn_t *quicly_resume_handshake(ptls_t *tls);
 /**
  *
  */

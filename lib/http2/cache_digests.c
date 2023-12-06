@@ -20,8 +20,11 @@
  * IN THE SOFTWARE.
  */
 #include <limits.h>
-#include <openssl/sha.h>
 #include <stdlib.h>
+#ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED /* cache-digests is legacy and we do not want to pay the cost of switchng away from SHA256_* */
+#endif
+#include <openssl/sha.h>
 #include "golombset.h"
 #include "h2o/string_.h"
 #include "h2o/cache_digests.h"

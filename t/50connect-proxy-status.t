@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use Test::More;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use t::Util;
 
 my $origin_port = empty_port();
@@ -15,7 +15,7 @@ my $origin = spawn_server(
 );
 
 my $server = spawn_h2o(<< "EOT");
-proxy-status.identity: "h2o/test"
+proxy.proxy-status.identity: "h2o/test"
 hosts:
   default:
     paths:
@@ -23,7 +23,7 @@ hosts:
         proxy.connect:
           - "+127.0.0.1:$origin_port"
           - "+127.0.0.1:1"
-        proxy.connect.proxy-status: ON
+        proxy.connect.emit-proxy-status: ON
 EOT
 
 my $ok_resp = qr{HTTP/[^ ]+ 200\s}m;
@@ -33,6 +33,7 @@ subtest "basic", sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error http://127.0.0.1:$origin_port/echo 2>&1`;
         like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200 response to CONNECT";
+        like $content, qr{proxy-status: h2o/test; next-hop=127\.0\.0\.1}i;
         my @c = $content =~ /$ok_resp/g;
         is @c, 2, "Got two 200 responses";
     });
@@ -61,7 +62,7 @@ subtest "refused" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://127.0.0.1:1/ 2>&1`;
-        like $content, qr{proxy-status: h2o/test; error=connection_refused}i;
+        like $content, qr{proxy-status: h2o/test; error=connection_refused; next-hop=127\.0\.0\.1}i;
         like $content, qr{Received HTTP code 502 from proxy after CONNECT};
     });
 };

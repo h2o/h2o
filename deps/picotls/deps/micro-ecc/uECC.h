@@ -38,13 +38,16 @@ faster somewhat faster, but increases the code size. */
 #endif
 
 /* uECC_VLI_NATIVE_LITTLE_ENDIAN - If enabled (defined as nonzero), this will switch to native
-little-endian format for *all* arrays passed in and out of the public API. This includes public 
-and private keys, shared secrets, signatures and message hashes. 
+little-endian format for *all* arrays passed in and out of the public API. This includes public
+and private keys, shared secrets, signatures and message hashes.
 Using this switch reduces the amount of call stack memory used by uECC, since less intermediate
-translations are required. 
+translations are required.
 Note that this will *only* work on native little-endian processors and it will treat the uint8_t
-arrays passed into the public API as word arrays, therefore requiring the provided byte arrays 
-to be word aligned on architectures that do not support unaligned accesses. */
+arrays passed into the public API as word arrays, therefore requiring the provided byte arrays
+to be word aligned on architectures that do not support unaligned accesses.
+IMPORTANT: Keys and signatures generated with uECC_VLI_NATIVE_LITTLE_ENDIAN=1 are incompatible
+with keys and signatures generated with uECC_VLI_NATIVE_LITTLE_ENDIAN=0; all parties must use
+the same endianness. */
 #ifndef uECC_VLI_NATIVE_LITTLE_ENDIAN
     #define uECC_VLI_NATIVE_LITTLE_ENDIAN 0
 #endif
@@ -163,7 +166,9 @@ Returns 1 if the key pair was generated successfully, 0 if an error occurred.
 int uECC_make_key(uint8_t *public_key, uint8_t *private_key, uECC_Curve curve);
 
 /* uECC_shared_secret() function.
-Compute a shared secret given your secret key and someone else's public key.
+Compute a shared secret given your secret key and someone else's public key. If the public key
+is not from a trusted source and has not been previously verified, you should verify it first
+using uECC_valid_public_key().
 Note: It is recommended that you hash the result of uECC_shared_secret() before using it for
 symmetric encryption or HMAC.
 

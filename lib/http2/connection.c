@@ -201,6 +201,9 @@ static void process_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
 {
+    if (h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        return;
+
     h2o_linklist_t *link, *lnext;
     int ran_one_request;
 
@@ -328,6 +331,16 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
 
+    /* Decrement reset_budget if the stream was reset by peer, otherwise increment. By doing so, we penalize connections that
+     * generate resets for >50% of requests. */
+    if (stream->reset_by_peer) {
+        if (conn->dos_mitigation.reset_budget > 0)
+            --conn->dos_mitigation.reset_budget;
+    } else {
+        if (conn->dos_mitigation.reset_budget < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection)
+            ++conn->dos_mitigation.reset_budget;
+    }
+
     switch (stream->state) {
     case H2O_HTTP2_STREAM_STATE_RECV_BODY:
         if (h2o_linklist_is_linked(&stream->_link))
@@ -387,6 +400,9 @@ void close_connection_now(h2o_http2_conn_t *conn)
 
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
         h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
+
+    if (h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        h2o_timer_unlink(&conn->dos_mitigation.process_delay);
 
     h2o_buffer_dispose(&conn->_write.buf);
     if (conn->_write.buf_in_flight != NULL)
@@ -614,11 +630,11 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return ret;
     }
 
+    h2o_probe_log_request(&stream->req, stream->stream_id);
+
     /* fixup the scheme so that it would never be a NULL pointer (note: checks below are done using `header_exists_map`) */
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
-
-    h2o_probe_log_request(&stream->req, stream->stream_id);
 
     int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
 
@@ -1196,11 +1212,19 @@ static int handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fr
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
-    if (stream != NULL) {
-        /* reset the stream */
-        h2o_http2_stream_reset(conn, stream);
-    }
+    if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL)
+        return 0;
+
+    /* reset the stream */
+    stream->reset_by_peer = 1;
+    h2o_http2_stream_reset(conn, stream);
+
+    /* setup process delay if we've just ran out of reset budget */
+    if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
+        !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay,
+                       &conn->dos_mitigation.process_delay);
+
     /* TODO log */
 
     return 0;
@@ -1483,16 +1507,20 @@ static int emit_writereq_of_openref(h2o_http2_scheduler_openref_t *ref, int *sti
             *still_is_active = 1;
         }
     } else {
-        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->req.send_server_timing) {
-            h2o_header_t trailers[1];
-            size_t num_trailers = 0;
+        if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
             h2o_iovec_t server_timing;
-            if ((server_timing = h2o_build_server_timing_trailer(&stream->req, NULL, 0, NULL, 0)).len != 0) {
+            if (stream->req.send_server_timing &&
+                (server_timing = h2o_build_server_timing_trailer(&stream->req, NULL, 0, NULL, 0)).len != 0) {
                 static const h2o_iovec_t name = {H2O_STRLIT("server-timing")};
-                trailers[num_trailers++] = (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
+                h2o_vector_reserve(&stream->req.pool, &stream->req.res.trailers, stream->req.res.trailers.size + 1);
+                stream->req.res.trailers.entries[stream->req.res.trailers.size++] =
+                    (h2o_header_t){(h2o_iovec_t *)&name, NULL, server_timing};
             }
-            h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, conn->peer_settings.header_table_size,
-                                       stream->stream_id, conn->peer_settings.max_frame_size, trailers, num_trailers);
+            if (stream->req.res.trailers.size != 0) {
+                h2o_hpack_flatten_trailers(&conn->_write.buf, &conn->_output_header_table, conn->peer_settings.header_table_size,
+                                           stream->stream_id, conn->peer_settings.max_frame_size, stream->req.res.trailers.entries,
+                                           stream->req.res.trailers.size);
+            }
         }
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     }
@@ -1597,6 +1625,10 @@ DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
 DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
+DEFINE_LOGGER(ssl_ech_config_id)
+DEFINE_LOGGER(ssl_ech_kem)
+DEFINE_LOGGER(ssl_ech_cipher)
+DEFINE_LOGGER(ssl_ech_cipher_bits)
 DEFINE_LOGGER(ssl_backend)
 #undef DEFINE_LOGGER
 
@@ -1677,6 +1709,14 @@ static h2o_iovec_t log_priority_actual_weight(h2o_req_t *req)
     return h2o_iovec_init(s, len);
 }
 
+static void on_dos_process_delay(h2o_timer_t *timer)
+{
+    h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, dos_mitigation.process_delay, timer);
+
+    assert(!h2o_timer_is_linked(&conn->dos_mitigation.process_delay));
+    run_pending_requests(conn);
+}
+
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -1706,6 +1746,10 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .session_id = log_ssl_session_id,
                     .server_name = log_ssl_server_name,
                     .negotiated_protocol = log_ssl_negotiated_protocol,
+                    .ech_config_id = log_ssl_ech_config_id,
+                    .ech_kem = log_ssl_ech_kem,
+                    .ech_cipher = log_ssl_ech_cipher,
+                    .ech_cipher_bits = log_ssl_ech_cipher_bits,
                     .backend = log_ssl_backend,
                 },
             .http2 =
@@ -1743,6 +1787,8 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_linklist_init_anchor(&conn->early_data.blocked_streams);
     conn->is_chromium_dependency_tree = 1; /* initially assume the client is Chromium until proven otherwise */
     conn->received_any_request = 0;
+    conn->dos_mitigation.process_delay.cb = on_dos_process_delay;
+    conn->dos_mitigation.reset_budget = conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection;
 
     return conn;
 }

@@ -37,6 +37,10 @@
 		0829879226E0A9DF0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879126E0A9DF0053638F /* rate.c */; };
 		085125F828F51BA20074C124 /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
 		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
+		08B3297A29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
+		08B3297B29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
+		08B3297C29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
+		08B3297D29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233F24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
@@ -187,6 +191,7 @@
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		085125F728EFC0480074C124 /* cplusplus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = cplusplus.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08B3297929407096009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9056C071F56965300E2B96C /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
@@ -439,6 +444,7 @@
 			isa = PBXGroup;
 			children = (
 				E9B43E11246943D300824E51 /* fusion.c */,
+				08B3297929407096009D6766 /* hpke.c */,
 				E98448271EA48D0000390927 /* openssl.c */,
 				E93E54681F663849001C50FE /* pembase64.c */,
 				E98448281EA48D0000390927 /* picotls.c */,
@@ -769,6 +775,7 @@
 				0829878326D37E370053638F /* simulator.c in Sources */,
 				0829877126D372B70053638F /* frame.c in Sources */,
 				0829877226D372B70053638F /* recvstate.c in Sources */,
+				08B3297D29407097009D6766 /* hpke.c in Sources */,
 				0829877326D372B70053638F /* fusion.c in Sources */,
 				0829877426D372B70053638F /* defaults.c in Sources */,
 				086001CB273271E80043886F /* rate.c in Sources */,
@@ -790,6 +797,7 @@
 				E980421F223952FD008B9745 /* pembase64.c in Sources */,
 				E98042292239533A008B9745 /* echo.c in Sources */,
 				E9804220223952FD008B9745 /* picotls.c in Sources */,
+				08B3297C29407097009D6766 /* hpke.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -844,6 +852,7 @@
 				E941429323B0B879002D3CE0 /* sentmap.c in Sources */,
 				E984483C1EA48DD300390927 /* picotls.c in Sources */,
 				085125F828F51BA20074C124 /* quicly-probes.d in Sources */,
+				08B3297A29407097009D6766 /* hpke.c in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -889,6 +898,7 @@
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E904233F24AED0410072C5B7 /* loss.c in Sources */,
 				E9DF012624E4BACA0002EEC7 /* cc-cubic.c in Sources */,
+				08B3297B29407097009D6766 /* hpke.c in Sources */,
 				E98042372244A5D7008B9745 /* defaults.c in Sources */,
 				E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */,
 				E9736536246FD3DA0039AA49 /* local_cid.c in Sources */,

@@ -61,6 +61,9 @@
 
 #ifdef _WINDOWS
 #define aligned_alloc(a, s) _aligned_malloc((s), (a))
+#define aligned_free(p) _aligned_free(p)
+#else
+#define aligned_free(p) free(p)
 #endif
 
 struct ptls_fusion_aesgcm_context {
@@ -1026,7 +1029,7 @@ ptls_fusion_aesgcm_context_t *ptls_fusion_aesgcm_set_capacity(ptls_fusion_aesgcm
         return NULL;
     memcpy(newp, ctx, old_ctx_size);
     ptls_clear_memory(ctx, old_ctx_size);
-    free(ctx);
+    aligned_free(ctx);
     ctx = newp;
 
     ctx->capacity = capacity;
@@ -1041,7 +1044,7 @@ void ptls_fusion_aesgcm_free(ptls_fusion_aesgcm_context_t *ctx)
     ptls_clear_memory(ctx, calc_aesgcm_context_size(&ctx->ghash_cnt, ctx->ecb.aesni256));
     /* skip ptls_fusion_aesecb_dispose, based on the knowledge that it does not allocate memory elsewhere */
 
-    free(ctx);
+    aligned_free(ctx);
 }
 
 static void ctr_dispose(ptls_cipher_context_t *_ctx)
@@ -1162,12 +1165,20 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const voi
     return enclen;
 }
 
-static inline void aesgcm_xor_iv(ptls_aead_context_t *_ctx, const void *_bytes, size_t len)
+static inline void aesgcm_get_iv(ptls_aead_context_t *_ctx, void *iv)
 {
     struct aesgcm_context *ctx = (struct aesgcm_context *)_ctx;
-    __m128i xor_mask = loadn128(_bytes, len);
-    xor_mask = _mm_shuffle_epi8(xor_mask, byteswap128);
-    ctx->static_iv = _mm_xor_si128(ctx->static_iv, xor_mask);
+
+    __m128i m128 = _mm_shuffle_epi8(ctx->static_iv, byteswap128);
+    storen128(iv, PTLS_AESGCM_IV_SIZE, m128);
+}
+
+static inline void aesgcm_set_iv(ptls_aead_context_t *_ctx, const void *iv)
+{
+    struct aesgcm_context *ctx = (struct aesgcm_context *)_ctx;
+
+    ctx->static_iv = loadn128(iv, PTLS_AESGCM_IV_SIZE);
+    ctx->static_iv = _mm_shuffle_epi8(ctx->static_iv, byteswap128);
 }
 
 static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv, size_t key_size)
@@ -1180,7 +1191,8 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
         return 0;
 
     ctx->super.dispose_crypto = aesgcm_dispose_crypto;
-    ctx->super.do_xor_iv = aesgcm_xor_iv;
+    ctx->super.do_get_iv = aesgcm_get_iv;
+    ctx->super.do_set_iv = aesgcm_set_iv;
     ctx->super.do_encrypt_init = aead_do_encrypt_init;
     ctx->super.do_encrypt_update = aead_do_encrypt_update;
     ctx->super.do_encrypt_final = aead_do_encrypt_final;
@@ -2105,7 +2117,8 @@ static int non_temporal_setup(ptls_aead_context_t *_ctx, int is_enc, const void 
         return 0;
 
     ctx->super.dispose_crypto = aesgcm_dispose_crypto;
-    ctx->super.do_xor_iv = aesgcm_xor_iv;
+    ctx->super.do_get_iv = aesgcm_get_iv;
+    ctx->super.do_set_iv = aesgcm_set_iv;
     ctx->super.do_encrypt_init = NULL;
     ctx->super.do_encrypt_update = NULL;
     ctx->super.do_encrypt_final = NULL;

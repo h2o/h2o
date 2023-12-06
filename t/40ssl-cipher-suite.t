@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -122,6 +122,30 @@ EOT
         $doit->("zerocopy");
     };
     # add ktls when we add support for TLS/1.2?
+};
+
+subtest "tls12-rsa-pkcs1" => sub {
+    my $server = spawn_h2o_raw(<< "EOT", [ $port ]);
+listen:
+  host: 127.0.0.1
+  port: $port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[ DOC_ROOT ]}
+EOT
+
+    my $output = run_openssl_client({
+        host => "127.0.0.1",
+        port => $port,
+        opts => "-no_tls1_3 -sigalgs RSA+SHA256",
+        request => "GET / HTTP/1.0\r\n\r\n",
+    });
+    like $output, qr{\nHTTP/1\.1 200 OK.*\nhello\n}s;
 };
 
 done_testing;

@@ -3,7 +3,6 @@
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use JSON;
 use t::Util;

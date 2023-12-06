@@ -36,7 +36,7 @@ my $create_tab = sub {
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title><?= join " - ", ($ctx->{filename} ne 'index.html' ? reverse @title : ()), "H2O - the optimized HTTP/2 server" ?></title>
+<title><?= join " - ", ($ctx->{filename} ne 'index.html' ? reverse @title : ()), "H2O - the optimized HTTP server" ?></title>
 </head>
 <body>
 <div id="body">
@@ -45,7 +45,7 @@ my $create_tab = sub {
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -102,7 +102,7 @@ my $create_tab = sub {
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

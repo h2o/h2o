@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use t::Util;
 
@@ -11,8 +10,8 @@ my $TLS_RAW_CERT_OPT = "-r examples/h2o/server.pub";
 my $TLS_RE_OK = qr{HTTP/1\.1 200 OK\r};
 my $TLS_RE_BAD_CERT = qr{ptls_handshake:299};
 my $QUIC_RAW_CERT_OPT = "-W examples/h2o/server.pub";
-my $QUIC_RE_OK = qr("type":"application_close_receive");
-my $QUIC_RE_BAD_CERT = qr("type":"transport_close_receive",.*"error_code":299,)m;
+my $QUIC_RE_OK = qr([{,]"type":"application_close_receive");
+my $QUIC_RE_BAD_CERT = qr([{,]"type":"transport_close_receive",.*"error_code":299,)m;
 
 subtest "x509 server" => sub {
     my $server = start_server(1, 0);

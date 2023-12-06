@@ -63,11 +63,7 @@ struct st_connect_generator_t {
      * Most significant and latest error that occurred, if any. Significance is represented as `class`, in descending order.
      */
     struct {
-        enum error_class {
-            ERROR_CLASS_NAME_RESOLUTION,
-            ERROR_CLASS_ACCESS_PROHIBITED,
-            ERROR_CLASS_CONNECT
-        } class;
+        enum error_class { ERROR_CLASS_NAME_RESOLUTION, ERROR_CLASS_ACCESS_PROHIBITED, ERROR_CLASS_CONNECT } class;
         const char *str;
     } last_error;
 
@@ -120,39 +116,90 @@ struct st_connect_generator_t {
     };
 };
 
+static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self)
+{
+    h2o_iovec_t identity = self->src_req->conn->ctx->globalconf->proxy_status_identity;
+    if (identity.base == NULL)
+        identity = h2o_iovec_init(H2O_STRLIT("h2o"));
+    return identity;
+}
+
+static const struct st_server_address_t *get_dest_addr(struct st_connect_generator_t *self)
+{
+    if (self->server_addresses.used > 0) {
+        return &self->server_addresses.list[self->server_addresses.used - 1];
+    } else {
+        return NULL;
+    }
+}
+
+static void add_proxy_status_header(struct st_connect_generator_t *self, const char *error_type, const char *details,
+                                    const char *rcode, h2o_iovec_t dest_addr_str)
+{
+    if (!self->handler->config.connect_proxy_status_enabled)
+        return;
+
+    h2o_mem_pool_t *pool = &self->src_req->pool;
+    h2o_iovec_t parts[9] = {
+        get_proxy_status_identity(self),
+    };
+    size_t nparts = 1;
+    if (error_type != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; error="));
+        parts[nparts++] = h2o_iovec_init(error_type, strlen(error_type));
+    }
+    if (rcode != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
+        parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+    }
+    if (details != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
+        parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
+    }
+    if (dest_addr_str.base != NULL) {
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
+        parts[nparts++] = dest_addr_str;
+    }
+    assert(nparts <= sizeof(parts) / sizeof(parts[0]));
+    h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
+    h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
+}
+
 #define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
 static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
 {
     H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
 
-    h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s", error_type, rcode != NULL ? rcode : "(null)",
-                      details != NULL ? details : "(null)");
-
-    if (self->handler->config.connect_proxy_status_enabled) {
-        h2o_mem_pool_t *pool = &self->src_req->pool;
-        h2o_iovec_t identity = self->src_req->conn->ctx->globalconf->proxy_status_identity;
-        if (identity.base == NULL)
-            identity = h2o_iovec_init(H2O_STRLIT("h2o"));
-
-        h2o_iovec_t parts[9] = {
-            identity,
-            h2o_iovec_init(H2O_STRLIT("; error=")),
-            h2o_iovec_init(error_type, strlen(error_type)),
-        };
-        size_t nparts = 3;
-        if (rcode != NULL) {
-            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
-            parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+    char dest_addr_strbuf[NI_MAXHOST];
+    h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
+    const struct st_server_address_t *addr = get_dest_addr(self);
+    if (addr != NULL) {
+        size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
+        if (len != SIZE_MAX) {
+            dest_addr_str = h2o_iovec_init(dest_addr_strbuf, len);
         }
-        if (details != NULL) {
-            parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
-            parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
-        }
-        assert(nparts <= sizeof(parts) / sizeof(parts[0]));
-        h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
+    }
 
-        h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
+    h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
+                      rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
+                      dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
+
+    add_proxy_status_header(self, error_type, details, rcode, dest_addr_str);
+}
+
+static void record_connect_success(struct st_connect_generator_t *self)
+{
+    const struct st_server_address_t *addr = get_dest_addr(self);
+    if (addr == NULL)
+        return;
+
+    H2O_PROBE_REQUEST(CONNECT_SUCCESS, self->src_req, addr->sa);
+
+    char dest_addr_strbuf[NI_MAXHOST];
+    size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
+    if (len != SIZE_MAX) {
+        add_proxy_status_header(self, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
     }
 }
 
@@ -219,26 +266,39 @@ static void dispose_generator(struct st_connect_generator_t *self)
     h2o_timer_unlink(&self->timeout);
 }
 
-static void close_socket(struct st_connect_generator_t *self)
+static int close_socket(struct st_connect_generator_t *self)
 {
-    if (self->is_tcp)
+    int send_inflight;
+
+    if (self->is_tcp) {
         self->tcp.recvbuf_detached = self->sock->input;
+        send_inflight = self->tcp.recvbuf_detached->size != 0;
+    } else {
+        send_inflight = !h2o_socket_is_reading(self->sock);
+    }
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
     self->sock = NULL;
     self->socket_closed = 1;
+
+    return send_inflight;
 }
 
 static void close_readwrite(struct st_connect_generator_t *self)
 {
+    int send_inflight = 0;
+
     if (self->sock != NULL)
-        close_socket(self);
+        send_inflight = close_socket(self);
+    else if (self->is_tcp)
+        send_inflight = self->tcp.recvbuf_detached->size != 0;
+
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
 
     /* immediately notify read-close if necessary, setting up delayed task to for destroying other items; the timer is reset if
      * `h2o_send` indirectly invokes `dispose_generator`. */
-    if (!self->read_closed && (self->is_tcp ? self->tcp.recvbuf_detached->size == 0 : 1)) {
+    if (!self->read_closed && !send_inflight) {
         h2o_timer_link(get_loop(self), 0, &self->timeout);
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -542,8 +602,7 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
     struct st_connect_generator_t *self = _sock->data;
 
     h2o_socket_read_stop(self->sock);
-    reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
-                             * within given interval */
+    h2o_timer_unlink(&self->timeout);
 
     if (err == NULL) {
         h2o_iovec_t vec = h2o_iovec_init(self->sock->input->bytes, self->sock->input->size);
@@ -594,6 +653,8 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     /* start the write if there's data to be sent */
     if (self->tcp.sendbuf->size != 0 || self->write_closed)
         tcp_do_write(self);
+
+    record_connect_success(self);
 
     /* build and submit 200 response */
     self->src_req->res.status = 200;
@@ -764,8 +825,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
         self->src_req->forward_datagram.read_(self->src_req, &vec, 1);
     } else {
         h2o_socket_read_stop(self->sock);
-        reset_io_timeout(self); /* for simplicity, we call out I/O timeout even when downstream fails to deliver data to the client
-                                 * within given interval */
+        h2o_timer_unlink(&self->timeout);
         size_t off = 0;
         self->udp.ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
         off = quicly_encodev(self->udp.ingress.buf + off, (uint64_t)rret) - self->udp.ingress.buf;
@@ -826,7 +886,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->src_req->write_req.ctx = self;
     if (self->udp.egress.buf->size != 0 || self->write_closed)
         udp_do_write_stream(self, h2o_iovec_init(NULL, 0));
-    h2o_socket_read_start(self->sock, udp_on_read);
+
+    record_connect_success(self);
 
     /* build and submit 200 response */
     self->src_req->res.status = 200;
@@ -896,14 +957,12 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
 
-    self->getaddr_req.v6 =
-        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_INET6, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
-                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
-    self->getaddr_req.v4 =
-        h2o_hostinfo_getaddr(&self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen),
-                             AF_INET, is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
-                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+    self->getaddr_req.v6 = h2o_hostinfo_getaddr(
+        &self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen), AF_INET6,
+        is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
+    self->getaddr_req.v4 = h2o_hostinfo_getaddr(
+        &self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen), AF_INET,
+        is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
 
     return 0;
 }

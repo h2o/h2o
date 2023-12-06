@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use t::Util;
 
@@ -57,7 +56,7 @@ subtest "quic" => sub {
         or die "failed to invoke command:$cmd:$!";
     my $output = do { local $/; <$fh> };
     # receipt of application-close in 1-RTT is a proof that the handshake succeeded
-    like $output, qr("type":"application_close_receive");
+    like $output, qr([{,]"type":"application_close_receive");
 };
 
 done_testing;

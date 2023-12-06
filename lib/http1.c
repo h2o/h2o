@@ -417,8 +417,7 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
 
 static int upgrade_is_h2(h2o_iovec_t upgrade)
 {
-    if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) ||
-        h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) ||
+    if (h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c")) || h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-14")) ||
         h2o_lcstris(upgrade.base, upgrade.len, H2O_STRLIT("h2c-16")))
         return 1;
     return 0;
@@ -487,7 +486,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         /* request line is in ordinary form, path might contain absolute URL; if so, convert it */
         if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
             h2o_url_t url;
-            if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
+            if (h2o_url_parse(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
                 conn->req.input.scheme = url.scheme;
                 conn->req.input.path = url.path;
                 host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
@@ -1036,6 +1035,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
             flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + strlen(connection));
         h2o_sendvec_init_raw(bufs + bufcnt, h2o_mem_alloc_pool(&conn->req.pool, char, headers_est_size), 0);
         bufs[bufcnt].len = flatten_headers(bufs[bufcnt].raw, &conn->req, connection);
+        conn->req.header_bytes_sent += bufs[bufcnt].len;
         ++bufcnt;
         h2o_probe_log_response(&conn->req, conn->_req_index);
         conn->_ostr_final.state = OSTREAM_STATE_BODY;
@@ -1116,6 +1116,8 @@ static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req
     *dst++ = '\r';
     *dst++ = '\n';
 
+    req->header_bytes_sent += dst - buf.base;
+
     h2o_vector_reserve(&req->pool, &conn->_ostr_final.informational.pending, conn->_ostr_final.informational.pending.size + 1);
     conn->_ostr_final.informational.pending.entries[conn->_ostr_final.informational.pending.size++] = buf;
 
@@ -1188,6 +1190,10 @@ DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
 DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
+DEFINE_LOGGER(ssl_ech_config_id)
+DEFINE_LOGGER(ssl_ech_kem)
+DEFINE_LOGGER(ssl_ech_cipher)
+DEFINE_LOGGER(ssl_ech_cipher_bits)
 DEFINE_LOGGER(ssl_backend)
 
 #undef DEFINE_LOGGER
@@ -1237,6 +1243,10 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .session_id = log_ssl_session_id,
                 .server_name = log_ssl_server_name,
                 .negotiated_protocol = log_ssl_negotiated_protocol,
+                .ech_config_id = log_ssl_ech_config_id,
+                .ech_kem = log_ssl_ech_kem,
+                .ech_cipher = log_ssl_ech_cipher,
+                .ech_cipher_bits = log_ssl_ech_cipher_bits,
                 .backend = log_ssl_backend,
             },
         .http1 =

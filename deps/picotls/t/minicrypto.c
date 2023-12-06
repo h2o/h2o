@@ -52,7 +52,7 @@ static void test_secp256r1_sign(void)
     uECC_make_key(pub, signer.key, uECC_secp256r1());
     ptls_buffer_init(&sigbuf, sigbuf_small, sizeof(sigbuf_small));
 
-    ok(secp256r1sha256_sign(&signer.super, NULL, &selected, &sigbuf, ptls_iovec_init(msg, 32),
+    ok(secp256r1sha256_sign(&signer.super, NULL, NULL, &selected, &sigbuf, ptls_iovec_init(msg, 32),
                             (uint16_t[]){PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256}, 1) == 0);
     ok(selected == PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256);
 
@@ -64,7 +64,7 @@ static void test_secp256r1_sign(void)
 static void test_hrr(void)
 {
     ptls_key_exchange_algorithm_t *client_keyex[] = {&ptls_minicrypto_x25519, &ptls_minicrypto_secp256r1, NULL};
-    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, &ptls_get_time, client_keyex, ptls_minicrypto_cipher_suites};
+    ptls_context_t client_ctx = {ptls_minicrypto_random_bytes, &ptls_get_time, client_keyex, ptls_minicrypto_cipher_suites_all};
     ptls_t *client, *server;
     ptls_buffer_t cbuf, sbuf, decbuf;
     uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
@@ -153,9 +153,9 @@ int main(int argc, char **argv)
     ptls_context_t ctxbuf = {ptls_minicrypto_random_bytes,
                              &ptls_get_time,
                              ptls_minicrypto_key_exchanges,
-                             ptls_minicrypto_cipher_suites,
+                             ptls_minicrypto_cipher_suites_all,
                              {&cert, 1},
-                             NULL,
+                             {{NULL}},
                              NULL,
                              NULL,
                              &sign_certificate.super};

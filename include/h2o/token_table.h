@@ -83,36 +83,37 @@
 #define H2O_TOKEN_PRIORITY (h2o__tokens + 56)
 #define H2O_TOKEN_PROXY_AUTHENTICATE (h2o__tokens + 57)
 #define H2O_TOKEN_PROXY_AUTHORIZATION (h2o__tokens + 58)
-#define H2O_TOKEN_PURPOSE (h2o__tokens + 59)
-#define H2O_TOKEN_RANGE (h2o__tokens + 60)
-#define H2O_TOKEN_REFERER (h2o__tokens + 61)
-#define H2O_TOKEN_REFRESH (h2o__tokens + 62)
-#define H2O_TOKEN_RETRY_AFTER (h2o__tokens + 63)
-#define H2O_TOKEN_SERVER (h2o__tokens + 64)
-#define H2O_TOKEN_SET_COOKIE (h2o__tokens + 65)
-#define H2O_TOKEN_STRICT_TRANSPORT_SECURITY (h2o__tokens + 66)
-#define H2O_TOKEN_TE (h2o__tokens + 67)
-#define H2O_TOKEN_TIMING_ALLOW_ORIGIN (h2o__tokens + 68)
-#define H2O_TOKEN_TRANSFER_ENCODING (h2o__tokens + 69)
-#define H2O_TOKEN_UPGRADE (h2o__tokens + 70)
-#define H2O_TOKEN_UPGRADE_INSECURE_REQUESTS (h2o__tokens + 71)
-#define H2O_TOKEN_USER_AGENT (h2o__tokens + 72)
-#define H2O_TOKEN_VARY (h2o__tokens + 73)
-#define H2O_TOKEN_VIA (h2o__tokens + 74)
-#define H2O_TOKEN_WWW_AUTHENTICATE (h2o__tokens + 75)
-#define H2O_TOKEN_X_COMPRESS_HINT (h2o__tokens + 76)
-#define H2O_TOKEN_X_CONTENT_TYPE_OPTIONS (h2o__tokens + 77)
-#define H2O_TOKEN_X_FORWARDED_FOR (h2o__tokens + 78)
-#define H2O_TOKEN_X_FRAME_OPTIONS (h2o__tokens + 79)
-#define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 80)
-#define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 81)
-#define H2O_TOKEN_X_XSS_PROTECTION (h2o__tokens + 82)
+#define H2O_TOKEN_PROXY_CONNECTION (h2o__tokens + 59)
+#define H2O_TOKEN_PURPOSE (h2o__tokens + 60)
+#define H2O_TOKEN_RANGE (h2o__tokens + 61)
+#define H2O_TOKEN_REFERER (h2o__tokens + 62)
+#define H2O_TOKEN_REFRESH (h2o__tokens + 63)
+#define H2O_TOKEN_RETRY_AFTER (h2o__tokens + 64)
+#define H2O_TOKEN_SERVER (h2o__tokens + 65)
+#define H2O_TOKEN_SET_COOKIE (h2o__tokens + 66)
+#define H2O_TOKEN_STRICT_TRANSPORT_SECURITY (h2o__tokens + 67)
+#define H2O_TOKEN_TE (h2o__tokens + 68)
+#define H2O_TOKEN_TIMING_ALLOW_ORIGIN (h2o__tokens + 69)
+#define H2O_TOKEN_TRANSFER_ENCODING (h2o__tokens + 70)
+#define H2O_TOKEN_UPGRADE (h2o__tokens + 71)
+#define H2O_TOKEN_UPGRADE_INSECURE_REQUESTS (h2o__tokens + 72)
+#define H2O_TOKEN_USER_AGENT (h2o__tokens + 73)
+#define H2O_TOKEN_VARY (h2o__tokens + 74)
+#define H2O_TOKEN_VIA (h2o__tokens + 75)
+#define H2O_TOKEN_WWW_AUTHENTICATE (h2o__tokens + 76)
+#define H2O_TOKEN_X_COMPRESS_HINT (h2o__tokens + 77)
+#define H2O_TOKEN_X_CONTENT_TYPE_OPTIONS (h2o__tokens + 78)
+#define H2O_TOKEN_X_FORWARDED_FOR (h2o__tokens + 79)
+#define H2O_TOKEN_X_FRAME_OPTIONS (h2o__tokens + 80)
+#define H2O_TOKEN_X_REPROXY_URL (h2o__tokens + 81)
+#define H2O_TOKEN_X_TRAFFIC (h2o__tokens + 82)
+#define H2O_TOKEN_X_XSS_PROTECTION (h2o__tokens + 83)
 
 extern const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61];
 extern const h2o_qpack_static_table_entry_t h2o_qpack_static_table[99];
 
 typedef int32_t (*h2o_qpack_lookup_static_cb)(h2o_iovec_t value, int *is_exact);
-extern const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[83];
+extern const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[84];
 
 int32_t h2o_qpack_lookup_authority(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_method(h2o_iovec_t value, int *is_exact);
@@ -173,6 +174,7 @@ int32_t h2o_qpack_lookup_origin(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_priority(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_proxy_authenticate(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_proxy_authorization(h2o_iovec_t value, int *is_exact);
+int32_t h2o_qpack_lookup_proxy_connection(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_purpose(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_range(h2o_iovec_t value, int *is_exact);
 int32_t h2o_qpack_lookup_referer(h2o_iovec_t value, int *is_exact);

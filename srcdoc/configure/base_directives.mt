@@ -26,9 +26,19 @@ Otherwise, the entry will match the requests targetting the specified port.
 Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
 If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
 For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
-Note that an exact match is preferred over host definitions using wildcard characters.
 </p>
 
+<p>
+For each HTTP request to be processed, the matching host entry is determined by the steps below:
+<ol>
+<li>Among the host elements that do not use wildcards, find the first element that matches the host and port being specified by the URI.</li>
+<li>If none is found in the previous step, find a matching element among the entries that use wildcards.</li>
+<li>If none is found in the previous steps, use the first host element without a <a href="configure/base_directives.html#strict-match"><code>strict-match</code></a> flag.
+</ol>
+</p>
+<p>
+When the hostname of the HTTP request is unknown (i.e., processing an HTTP/1.0 request without a host header field), only the last step is being used.
+</p>
 
 <?= $ctx->{example}->('A host redirecting all HTTP requests to HTTPS', <<'EOT');
 hosts:
@@ -96,7 +106,7 @@ $ctx->{directive}->(
 ?>
 </p>
 <p>
-In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
+In addition to specifying the port number, it is also possible to designate the bind address or the SSL and HTTP/3 (QUIC) configuration.
 </p>
 <?= $ctx->{example}->('Various ways of using the Listen Directive', <<'EOT')
 # accept HTTP on port 80 on default address (both IPv4 and IPv6)
@@ -123,6 +133,9 @@ listen:
   proxy-protocol: ON
 EOT
 ?>
+<p>
+To configure HTTP/3 (QUIC), see <a href="configure/http3_directives.html">HTTP/3</a>.
+</p>
 <h4 id="listen-configuration-levels">Configuration Levels</h4>
 <p>
 The directive can be used either at global-level or at host-level.
@@ -206,6 +219,8 @@ synonym of <code>maximum-version</code>.
 </dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
+<dt id="cipher-suite-tls1.3">cipher-suite-tls1.3:</dt>
+<dd>list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the <a href="https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4" target=_blank>IANA TLS Cipher Suite Registry</a>; e.g., <code>TLS_AES_128_GCM_SHA256</code>, <code>TLS_CHACHA20_POLY1305_SHA256</code>.
 <dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
@@ -227,13 +242,66 @@ Default is <code>14400</code> (4 hours).
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
+<dt id="ech">ech:</dt>
+<dd>
+This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
+The attribute takes a sequence of mappings, each of them defining one ECH configuration.
+<?= $ctx->{example}->('Encrypted Clint hello', <<'EOT')
+ssl:
+  key-file: /path/to/rsa.key
+  certificate-file: /path/to/rsa.crt
+  ech:
+  - key-file: /path/to/ech.key
+    config-id: 11
+    public-name: public-name.example.net
+    cipher-suite: [ HKDF-SHA256/AES-128-GCM ]
+EOT
+?>
+<p>
+The example above defines one ECH configuration that uses <code>/path/to/ech.key</code> as the semi-static ECDH key with a config-id of 11, with the public-name being <code>public-name.example.net</code>, and the HPKE SymmetricCipherSuite being <code>HKDF-SHA256/AES-128-GCM</code>.
+</p>
+<p>
+In addition to these four attributes, following attributes may be specified.
+</p>
+<p>
+<code>max-name-length</code> specifies the maximum-name-length field of an ECH confguration (default: 64).
+</p>
+<p>
+<code>advertise</code> takes either <code>YES</code> (default) or <code>NO</code> as the argument.
+This argument indicates if given ECH configuration should be advertised as part of <code>retry_configs</code> (draft-ietf-tls-esni-15; section 5).
+</p>
+<p>
+When removing a stale ECH configuration, its <code>advertise</code> attribute should be set at first to <code>NO</code> so that the stale configuration would not be advertised.
+Then, after waiting for the expiry of caches containing the stale configuration, the stale ECH configuration can be removed.
+This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
+</p>
+The <code>ech</code> attribute must be set only in the first <code>ssl</code> attribute that binds to a particular address.
+</dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
-unless set to <code>OFF</code>, H2O isolates RSA private key operations to an isolated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+unless set to <code>OFF</code>, H2O isolates SSL private key operations to a different process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
 Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
+</p>
+<h4 id="listen-cc">The CC Attribute</h4>
+<p>
+The <code>CC</code> attribute specifies the congestion controller to be used for incoming HTTP connections.
+</p>
+<p>
+For TCP connections, the congestion controller is set using the <code>TCP_CONGESTION</code> socket option on platforms that have support for that socket option.
+To find out the default and the list of supported congestion controllers, please refer to <code>man 7 tcp</code>.
+If the platform does not have support for that socket option, the attribute has no effect.
+</p>
+<p>
+For QUIC connections, the congestion controller is one of <code>Reno</code>, <code>Cubic</code>, <code>Pico</code>.
+The default is <code>Reno</code>.
+</p>
+<h4 id="listen-initcwnd">The Initcwnd Attribute</h4>
+<p>
+The <code>initcwnd</code> attribute specifies the initial congestion window of each incoming HTTP connection in the unit of packets.
+At the moment, this option only applies to QUIC. It has no effect for TCP connections.
 </p>
 <h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
@@ -247,6 +315,14 @@ If the first octets do not accord with the specification, it is considered as th
 <p>
 Default is <code>OFF</code>.
 </p>
+<h4 id="listen-sndbuf">The Sndbuf and Rcvbuf Attributes</h4>
+<p>
+The <code>sndbuf</code> and <code>rcvbuf</code> attributes specify the send and receive buffer size for each TCP or UNIX socket used for accepting incoming HTTP connections.
+If set, the values of these attributes are applied to the sockets using <code>SO_SNDBUF</code> and <code>SO_RCVBUF</code> socket options.
+</p>
+<p>
+These attributes have no effect for QUIC connections.
+</p>
 <h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
 <p>
 If the <code>type</code> attribute is set to <code>unix</code>, then the <code>port</code> attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
@@ -257,6 +333,11 @@ Also following attributes are recognized.
 <dd>
 username of the owner of the socket file.
 If omitted, the socket file will be owned by the launching user.
+</dd>
+<dt>group</dt>
+<dd>
+name of the group of the socket file.
+If omitted, group ID associated to the socket file will be the group ID of the owner.
 </dd>
 <dt>permission</dt>
 <dd>
@@ -273,10 +354,19 @@ listen:
   permission: 600
 EOT
 ?>
-<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "capabilities",
+    levels => [ qw(global) ],
+    desc   => "Set capabilities to be added to the process before dropping root privileges.",
+)->(sub {
+?>
 <p>
-If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
-This is an experimental feature introduced in v2.3.0-beta3.
+This directive can be used only on Linux.
+The argument is a YAML sequence of capabilites, where each capability is a name that is accepted by <code>cap_from_name</code>.
+See <code>man 7 capabilities</code> for details.
 </p>
 ? })
 
@@ -324,6 +414,25 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 
 <?
 $ctx->{directive}->(
+    name    => "h2olog",
+    levels  => [ qw(global) ],
+    desc    => q{Settings for h2olog(1).},
+)->(sub {
+?>
+<?= $ctx->{example}->('Configure a UNIX domain socket for h2olog', <<'EOT')
+h2olog:
+  path: /path/to/h2olog.sock # required
+  appdata: ON # optional
+  owner: h2o # optional
+  group: h2o # optional
+  permission: 666 # optional
+  sndbuf: 65536 # optional
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "handshake-timeout",
     levels  => [ qw(global) ],
     default => "handshake-timeout: 10",
@@ -347,18 +456,73 @@ Default is 1073741824 (1GB).
 
 <?
 $ctx->{directive}->(
-    name    => "max-connections",
-    levels  => [ qw(global) ],
-    default => 'max-connections: 1024',
-    desc    => q{Number of connections to handle at once at maximum.},
-)->(sub {});
+    name     => "max-connections",
+    levels   => [ qw(global) ],
+    default  => 'max-connections: 1024',
+    desc     => q{Maximum number of incoming connections to handle at once.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
+<a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>
+EOT
+)->(sub {
+?>
+This includes TCP and QUIC connections.
+? })
 
+<?
+$ctx->{directive}->(
+    name         => "max-quic-connections",
+    levels       => [ qw(global) ],
+    desc         => q{Maximum number of incoming QUIC connections to handle at once.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#num-quic-threads"><code>num-quic-threads</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, maximum number of incoming connections is governed by <code>max-connections</code> regardless of the transport protocol (i.e., TCP or QUIC) being used.
+</p>
+<p>
+This directive introduces an additional cap for incoming QUIC connections. By setting <code>max-quic-connections</code> to a value smaller than <code>max-connections</code>, it would be possible to serve incoming requests that arrive on top of TCP (i.e., HTTP/1 and HTTP/2) even when there are issues with handling QUIC connections.
+</p>
+? })
+
+<?
 $ctx->{directive}->(
     name    => "max-delegations",
     levels  => [ qw(global) ],
     default => 'max-delegations: 5',
-    desc    => q{Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).},
+    desc    => q{Limits the number of delegations (i.e. fetching the response body from an alternate source as specified by the <code>X-Reproxy-URL</code> header).},
 )->(sub {});
+
+$ctx->{directive}->(
+    name    => "max-reprocesses",
+    levels  => [ qw(global) ],
+    default => 'max-reprocesses: 5',
+    desc    => q{Limits the number of internal redirects.},
+)->(sub {});
+
+$ctx->{directive}->(
+    name         => "neverbleed-offload",
+    levels       => [ qw(global) ],
+    default      => "neverbleed-offload: OFF",
+    experimental => 1,
+    desc         => "Sets an offload engine to be used with neverbleed.",
+)->(sub {
+?>
+<p>
+When <a href="configure/base_directives.html#neverbleed">neverbleed</a> is in use, RSA private key operations can be offload to accelerators using the <a href="https://www.intel.com/content/www/us/en/architecture-and-technology/intel-quick-assist-technology-overview.html" target=_blank>Intel QuickAssist technology</a>.
+</p>
+<p>This directive takes one of the three values that changes how the accelerators are used:
+<ul>
+<li>OFF - the accelerator is not used</li>
+<li>QAT - use of QAT is enforced; startup will fail if the acclerator is unavailable</li>
+<li>QAT-AUTO - QAT is used if available</li>
+</ul>
+</p>
+<?
+});
 
 $ctx->{directive}->(
     name    => "num-name-resolution-threads",
@@ -395,7 +559,36 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+By default, the number of worker threads spawned by h2o is the number of the CPU cores connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+</p>
+<p>
+This directive is used to override the behavior.
+</p>
+<p>
+If the argument is a YAML scalar, it specifies in integer the number of worker threads to spawn.
+</p>
+<p>
+If the argument is a YAML sequence, it specifies a list of CPU IDs on each of which one worker thread will be spawned and pinned.
+This mode can be used oly on systems that have <code>pthread_setaffinity_np</code>.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name         => "num-quic-threads",
+    levels       => [ qw(global) ],
+    desc         => q{Restricts the number of worker threads that handle incoming QUIC connections.},
+    experimental => 1,
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, all worker threads handle incoming QUIC connections as well as TCP connections.
+</p>
+<p>
+If <a href="configure/base_directives.html#num-threads"><code>num-threads</code></a> was given a YAML sequence specifying the CPU IDs on which each worker thread will run, the threads pinned to first <code>num-quic-threads</code> threads will handle incoming QUIC connections.
 </p>
 ? })
 
@@ -518,12 +711,11 @@ $ctx->{directive}->(
     levels   => [ qw(global) ],
     default => 'except-h1',
     since    => '2.3',
-    desc     => 'Specify the client protocols to which H2O can send 1xx informational responses.',
+    desc     => 'Specifies the client protocols to which H2O can send 1xx informational responses.',
 )->(sub {
 ?>
 <p>
-This directive can be used to forward 1xx informational responses generated by the upstream or <a href="configure/headers_directives.html">headers</a> directive to the clients.
-
+This directive can be used to forward 1xx informational responses (e.g., <a href="https://www.rfc-editor.org/rfc/rfc8297.html" target=_blank>103 Early Hints</a>) generated by <a href="configure/proxy_directives.html">upstream servers</a> or <a href="configure/headers_directives.html">headers</a> directive to the clients.
 </p>
 <p>
 If the value is <code>all</code>, H2O always sends informational responses to the client whenever possible (i.e. unless the procotol is HTTP/1.0).
@@ -534,8 +726,64 @@ If the value is <code>none</code>, H2O never sends informational responses to th
 <p>
 If the value is <code>except-h1</code>, H2O sends informational if the protocol is not HTTP/1.x.
 </p>
+? })
 
+<?
+$ctx->{directive}->(
+    name     => "soft-connection-limit",
+    levels   => [ qw(global) ],
+    desc     => "Number of connections above which idle connections are closed agressively.",
+)->(sub {
 ?>
+<p>
+H2O accepts up to <a href="configure/base_directives.html#max-connections"><code>max-connections</code></a> TCP connections and <a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a> QUIC connections.
+Once the number of connections reach these maximums, new connection attempts are ignored until existing connections close.
+</p>
+<p>
+To reduce the possibility of the number of connections reaching the maximum and new connection attempts getting ignored, <code>soft-connection-limit</code> can be used to introduce another threshold.
+When <code>soft-connection-limit</code> is set, connections that have been idle at least for <a href="configure/base_directives.html#soft-connection-limit.min-age"><code>soft-connection-limit.min-age</code></a> seconds will start to get closed until the number of connections becomes no greater than <code>soft-connection-limit</code>.
+</p>
+<p>
+As the intention of this directive is to close connections more agressively under high load than usual, <code>soft-connection-limit.min-age</code> should be set to a smaller value than the other idle timeouts; e.g., <a href="configure/http1_directives.html#http1-request-timeout"><code>http1-request-timeout</code></a>, <a href="configure/http2_directives.html#http2-idle-timeout"><code>http2-idle-timeout</code></a>.
+</p>
+<?
+});
+
+$ctx->{directive}->(
+    name   => "soft-connection-limit.min-age",
+    levels => [ qw(global) ],
+    desc   => "Minimum amount of idle time to be guaranteed for HTTP connections even when the connections are closed agressively due to the number of connections exceeding <code>soft-connection-limit</code>.",
+    default => "soft-connection-limit.min-age: 30",
+)->(sub {
+?>
+<p>
+See <a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>.
+</p>
+? });
+
+<?
+$ctx->{directive}->(
+    name   => "ssl-offload",
+    levels => [ qw(global) ],
+    desc   => "Knob for changing how TLS encryption is handled.",
+    default => "ssl-offload: OFF",
+    see_also => render_mt(<<'EOT'),
+<a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+EOT
+)->(sub {
+?>
+<p>
+This directive takes one of the following values:
+<ul>
+<li><code>OFF</code> - TLS encryption is handled in userspace and the encrypted bytes are sent to the kernel using a write (2) system call.</li>
+<li><code>kernel</code> - TLS encryption is offloaded to the kernel. When the network interface card supports TLS offloading, actual encryption might get offloaded to the interface, depending on the kernel configuration.</li>
+<li><code>zerocopy</code> - TLS encryption is handled in userspace, but if the encryption logic is capable of writing directly to main memory without polluting the cache, the encrypted data is passed to the kernel without copying (i.e., sendmsg (2) with  <code>MSG_ZEROCOPY</code> socket option is used). Otherwise, this option is identical to <code>OFF</code>. This option minimizes cache pollution next to hardware offload.</li>
+</ul>
+</p>
+<p>
+<code>Kernel</code> option can be used only on Linux.
+<code>Zerocopy</code> is only available on Linux running on CPUs that support the necessary features; see <a href="https://github.com/h2o/picotls/pull/384" target=_blank>picotls PR#384</a> and <a href="https://github.com/h2o/h2o/pull/3007" target=_blank>H2O PR#3007</a>.
+</p>
 ? })
 
 <?
@@ -718,6 +966,26 @@ Users can opt-in to using the legacy <a href="https://github.com/memcached/memca
 
 <?
 $ctx->{directive}->(
+    name     => "strict-match",
+    levels   => [ qw(host) ],
+    desc     => q{A boolean flag designating if the current host element should not be considered as the fallback element.},
+    default  => q{strict-match: OFF},
+)->(sub {
+?>
+See <a href="configure/base_directives.html#hosts"><code>hosts</code></a>.
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "tcp-reuseport",
+    levels  => [ qw(global) ],
+    desc    => "A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.",
+    default => "tcp-reuseport: OFF",
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
     name     => "temp-buffer-path",
     levels   => [ qw(global) ],
     desc     => q{Directory in which temporary buffer files are created.},
@@ -816,7 +1084,7 @@ process.</p>
 <?
 $ctx->{directive}->(
     name   => "stash",
-    levels => [ qw(global host path extensions) ],
+    levels => [ qw(global host path extension) ],
     desc   => q{Directive being used to store reusable YAML variables.},
     since    => "2.3",
 )->(sub {

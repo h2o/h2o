@@ -22,7 +22,7 @@
 #include <inttypes.h>
 #include "h2o.h"
 
-#define SEND_WAIT 500 /* how frequent new loglines should be pushed out; in milliseconds */
+#define SEND_WAIT 500        /* how frequent new loglines should be pushed out; in milliseconds */
 #define BUFFER_LIMIT 8388608 /* do not buffer more than 8MB */
 
 struct h2o_self_trace_generator {
@@ -69,7 +69,6 @@ static void adjust_send_timer(struct h2o_self_trace_generator *self)
     if (!self->inflight.inflight && self->should_send_buffered && !h2o_timer_is_linked(&self->send_timer))
         h2o_timer_link(self->req->conn->ctx->loop, SEND_WAIT, &self->send_timer);
 }
-
 
 static void log_trace(void *_self, const char *fmt, ...)
 {

@@ -62,6 +62,10 @@ typedef struct st_quicly_cc_t {
      */
     uint64_t recovery_end;
     /**
+     * If the most recent loss episode was signalled by ECN only (i.e., no packet loss).
+     */
+    unsigned episode_by_ecn : 1;
+    /**
      * State information specific to the congestion controller implementation.
      */
     union {
@@ -130,9 +134,13 @@ typedef struct st_quicly_cc_t {
      */
     uint32_t cwnd_maximum;
     /**
-     * Total number of number of loss episodes (congestion window reductions).
+     * Total number of loss episodes (congestion window reductions).
      */
     uint32_t num_loss_episodes;
+    /**
+     * Total number of loss episodes that was reported only by ECN (hence no packet loss).
+     */
+    uint32_t num_ecn_loss_episodes;
 } quicly_cc_t;
 
 struct st_quicly_cc_type_t {
@@ -150,8 +158,9 @@ struct st_quicly_cc_type_t {
     void (*cc_on_acked)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
                         uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size);
     /**
-     * Called when a packet is detected as lost. |next_pn| is the next unsent packet number,
-     * used for setting the recovery window.
+     * Called when a packet is detected as lost.
+     * @param bytes    bytes declared lost, or zero iff ECN_CE is observed
+     * @param next_pn  the next unsent packet number, used for setting the recovery window
      */
     void (*cc_on_lost)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn, int64_t now,
                        uint32_t max_udp_payload_size);
@@ -192,6 +201,27 @@ void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
                             int64_t now, uint32_t max_udp_payload_size);
 void quicly_cc_reno_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
 void quicly_cc_reno_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
+/**
+ * Updates ECN counter when loss is observed.
+ */
+static void quicly_cc__update_ecn_episodes(quicly_cc_t *cc, uint32_t lost_bytes, uint64_t lost_pn);
+
+/* inline definitions */
+
+inline void quicly_cc__update_ecn_episodes(quicly_cc_t *cc, uint32_t lost_bytes, uint64_t lost_pn)
+{
+    /* when it is a new loss episode, initially assume that all losses are due to ECN signalling ... */
+    if (lost_pn >= cc->recovery_end) {
+        ++cc->num_ecn_loss_episodes;
+        cc->episode_by_ecn = 1;
+    }
+
+    /* ... but if a loss is observed, decrement the ECN loss episode counter */
+    if (lost_bytes != 0 && cc->episode_by_ecn) {
+        --cc->num_ecn_loss_episodes;
+        cc->episode_by_ecn = 0;
+    }
+}
 
 #ifdef __cplusplus
 }

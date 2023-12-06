@@ -7,56 +7,71 @@ TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
-	-v `pwd`:$(SRC_DIR).ro:ro \
+	-v `pwd`:$(SRC_DIR):ro \
 	-v /sys/kernel/debug:/sys/kernel/debug \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
 	--add-host=localhost.examp1e.net:127.0.0.1 \
 	-it
+TMP_SIZE=1G
 
 ALL:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl1.1.0+fuzz:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
 		env CC=clang CXX=clang++ \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DBUILD_FUZZER=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl1.1.1:
 	docker run $(DOCKER_RUN_OPTS) $(CONTAINER_NAME) \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.1' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='$(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
 		env DTRACE_TESTS=1 \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='$(TEST_ENV)'
+		TEST_ENV='SKIP_PROG_EXISTS=1 $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
+
+boringssl:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='SKIP_PROG_EXISTS=1 $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)'
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
-		make -f $(SRC_DIR).ro/misc/docker-ci/check.mk _check _coverage_report \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)'
+		TEST_ENV='SKIP_PROG_EXISTS=1 LLVM_PROFILE_FILE=/home/ci/profraw/%c%p.profraw $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
 
 _coverage_report:
 	llvm-profdata merge -sparse -o h2o.profdata /home/ci/profraw/*.profraw
@@ -70,24 +85,9 @@ _check: _mount _do_check
 
 _mount:
 	uname -a
-	sudo mount -t tmpfs tmpfs -o size=1G /tmp
+	sudo mount -t tmpfs tmpfs -o size=$(TMP_SIZE) /tmp
 	sudo mkdir -p /sys/fs/bpf
 	sudo mount -t bpf bpf -o mode=700 /sys/fs/bpf
-	# create writable source directory using overlay
-	sudo mkdir /tmp/src /tmp/src/upper /tmp/src/work $(SRC_DIR)
-	sudo mount -t overlay overlay -o lowerdir=$(SRC_DIR).ro,upperdir=/tmp/src/upper,workdir=/tmp/src/work /tmp/src/upper
-	sudo mount --bind /tmp/src/upper $(SRC_DIR)
-	# allow overwrite of include/h2o/version.h
-	sudo chown -R ci:ci $(SRC_DIR)/include/h2o
-	# allow taking lock: mruby_config.rb.lock (which might or might not exist)
-	sudo touch $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
-	sudo chown ci:ci $(SRC_DIR)/misc/mruby_config.rb.lock $(SRC_DIR)/misc/h2get/misc/mruby_config.rb.lock
-	# allow write of mruby executables being generated (FIXME don't generate here)
-	for i in deps/mruby/bin misc/h2get/deps/mruby/bin; do \
-		sudo rm -rf $(SRC_DIR)/$$i; \
-		sudo mkdir $(SRC_DIR)/$$i; \
-		sudo chown -R ci:ci $(SRC_DIR)/$$i; \
-	done
 
 _do_check:
 	cmake $(CMAKE_ARGS) -H$(SRC_DIR) -B.

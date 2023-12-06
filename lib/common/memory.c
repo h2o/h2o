@@ -263,7 +263,7 @@ static __thread struct {
     struct buffer_recycle_bin_t {
         h2o_mem_recycle_conf_t conf;
         h2o_mem_recycle_t recycle;
-    } * bins;
+    } *bins;
     /**
      * Bins for capacicties no greater than this value exist.
      */
@@ -449,12 +449,11 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                 int fallocate_ret;
 #if USE_POSIX_FALLOCATE
                 fallocate_ret = posix_fallocate(fd, 0, new_allocsize);
-                if (fallocate_ret != 0) {
+                if (fallocate_ret != EINVAL) {
                     errno = fallocate_ret;
-                }
-#else
-                fallocate_ret = ftruncate(fd, new_allocsize);
+                } else
 #endif
+                    fallocate_ret = ftruncate(fd, new_allocsize);
                 if (fallocate_ret != 0) {
                     h2o_perror("failed to resize temporary file");
                     goto MapError;

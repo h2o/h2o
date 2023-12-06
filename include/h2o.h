@@ -433,6 +433,10 @@ struct st_h2o_globalconf_t {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         /* */
         h2o_iovec_t origin_frame;
+        /**
+         * milliseconds to delay processing requests when suspicious behavior is detected
+         */
+        uint64_t dos_delay;
     } http2;
 
     struct {
@@ -503,6 +507,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+        /**
+         * maximum number of pipes to retain for reuse
+         */
+        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -744,6 +752,13 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
+        /**
+         * the list of spare pipes currently retained for reuse
+         */
+        struct {
+            int (*pipes)[2];
+            size_t count;
+        } spare_pipes;
     } proxy;
 
     struct {
@@ -861,6 +876,10 @@ typedef struct st_h2o_res_t {
      */
     h2o_headers_t headers;
     /**
+     * list of response trailers
+     */
+    h2o_headers_t trailers;
+    /**
      * mime-related attributes (may be NULL)
      */
     h2o_mime_attributes_t *mime_attr;
@@ -952,6 +971,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     union {
         struct {
+            h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
@@ -964,6 +984,10 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
                 h2o_iovec_t (*server_name)(h2o_req_t *req);
                 h2o_iovec_t (*negotiated_protocol)(h2o_req_t *req);
+                h2o_iovec_t (*ech_config_id)(h2o_req_t *req);
+                h2o_iovec_t (*ech_kem)(h2o_req_t *req);
+                h2o_iovec_t (*ech_cipher)(h2o_req_t *req);
+                h2o_iovec_t (*ech_cipher_bits)(h2o_req_t *req);
                 h2o_iovec_t (*backend)(h2o_req_t *req);
             } ssl;
             struct {
@@ -1279,9 +1303,13 @@ struct st_h2o_req_t {
      */
     h2o_res_t res;
     /**
-     * number of bytes sent by the generator (excluding headers)
+     * number of body bytes sent by the generator (excluding headers)
      */
     uint64_t bytes_sent;
+    /**
+     * number of header bytes sent by the generator
+     */
+    uint64_t header_bytes_sent;
     /**
      * the number of times the request can be reprocessed (excluding delegation)
      */
@@ -1327,7 +1355,7 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
+     * set by the proxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
     /**
@@ -1474,9 +1502,11 @@ void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer);
 h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, size_t prefix_len, const char *suffix,
                                             size_t suffix_len);
 /**
- * release all thread-local resources used by h2o
+ * Garbage collects resources kept for future reuse in the current thread. If `now` is set to zero, performs full GC. If a valid
+ * pointer is passed to `ctx_optional`, resource associated to the context will be collected as well. This function returns how long
+ * the next event loop can block before calling `h2o_cleanup_thread` again, in milliseconds.
  */
-void h2o_cleanup_thread(void);
+uint32_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional);
 
 extern uint64_t h2o_connection_id;
 

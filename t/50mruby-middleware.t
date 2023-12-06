@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port check_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Test::Exception;
 use Hash::MultiValue;
@@ -967,6 +967,71 @@ EOT
     my ($status, $headers, $body);
     ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/1', +{ headers => ['content-type: OK'] });
     is $body, 'OK1OK2';
+};
+
+subtest 'headers with same name' => sub {
+    my $server = spawn_h2o(sub {
+        my ($port, $tls_port) = @_;
+        << 'EOT';
+hosts:
+  default:
+    paths:
+      /next:
+      - mruby.handler: |
+          proc {|env|
+            env['HTTP_FROM_FRONT'] = ['front1', 'front2']
+            H2O.next.call(env)
+          }
+      - mruby.handler: |
+          proc {|env|
+            [
+              200,
+              {'from-back' => ['back1', 'back2'], 'set-cookie' => ['x=1', 'y=2']},
+              [[
+                env['HTTP_FROM_CLIENT'],
+                env['HTTP_COOKIE'],
+                env['HTTP_FROM_FRONT'],
+              ].join("\n")],
+            ]
+          }
+      /reprocess:
+      - mruby.handler: |
+          proc {|env|
+            env['SCRIPT_NAME'] = '/reprocess/back'
+            env['HTTP_FROM_FRONT'] = ['front1', 'front2']
+            H2O.reprocess.call(env)
+          }
+      /reprocess/back:
+      - mruby.handler: |
+          proc {|env|
+            [
+              200,
+              {'from-back' => ['back1', 'back2'], 'set-cookie' => ['x=1', 'y=2']},
+              [[
+                env['HTTP_FROM_CLIENT'],
+                env['HTTP_COOKIE'],
+                env['HTTP_FROM_FRONT'],
+              ].join("\n")],
+            ]
+          }
+EOT
+    });
+    for my $subtest (qw(next reprocess)) {
+        subtest $subtest => sub {
+            my ($status, $headers, $body) =
+                get('http', $server->{port}, 'curl', "/$subtest",
+                    +{headers => [
+                        "from-client: client1",
+                        "from-client: client2",
+                        "cookie: a",
+                        "cookie: b",
+                    ]});
+            is $status, 200, 'status';
+            is_deeply [$headers->get_all('from-back')], ["back1, back2"], 'headers';
+            is_deeply [$headers->get_all('set-cookie')], [qw(x=1 y=2)], 'set-cookie';
+            is $body, "client1, client2\na; b\nfront1, front2", 'body';
+        };
+    }
 };
 
 done_testing();

@@ -12,7 +12,7 @@ def usage():
     print(r"""
 Usage:
     quictrace-adapter.py inTrace.jsonl outTrace.json cid
-    quictrace-adatper.py inTrace.jsonl outTraceDir
+    quictrace-adapter.py inTrace.jsonl outTraceDir
 """.strip())
 
 

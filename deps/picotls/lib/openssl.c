@@ -32,6 +32,11 @@
 #define OPENSSL_API_COMPAT 0x00908000L
 #include <openssl/bn.h>
 #include <openssl/crypto.h>
+#ifdef OPENSSL_IS_BORINGSSL
+#include <openssl/curve25519.h>
+#include <openssl/chacha.h>
+#include <openssl/poly1305.h>
+#endif
 #include <openssl/ec.h>
 #include <openssl/ecdh.h>
 #include <openssl/err.h>
@@ -44,6 +49,12 @@
 #include <openssl/x509_vfy.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
+#ifdef OPENSSL_IS_BORINGSSL
+#include "./chacha20poly1305.h"
+#endif
+#ifdef PTLS_HAVE_AEGIS
+#include "./libaegis.h"
+#endif
 
 #ifdef _WINDOWS
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -89,22 +100,22 @@ static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 
 #endif
 
-static const struct st_ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
+static const ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
                                                                                   {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
                                                                                   {UINT16_MAX, NULL}};
-static const struct st_ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256}, {UINT16_MAX, NULL}};
 #if PTLS_OPENSSL_HAVE_SECP384R1
-static const struct st_ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-static const struct st_ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
+static const ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
     {PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512}, {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_ED25519
-static const struct st_ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
+static const ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
                                                                                       {UINT16_MAX, NULL}};
 #endif
 
@@ -127,9 +138,9 @@ static const uint16_t default_signature_schemes[] = {
     PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
     UINT16_MAX};
 
-static const struct st_ptls_openssl_signature_scheme_t *lookup_signature_schemes(EVP_PKEY *key)
+const ptls_openssl_signature_scheme_t *ptls_openssl_lookup_signature_schemes(EVP_PKEY *key)
 {
-    const struct st_ptls_openssl_signature_scheme_t *schemes = NULL;
+    const ptls_openssl_signature_scheme_t *schemes = NULL;
 
     switch (EVP_PKEY_id(key)) {
     case EVP_PKEY_RSA:
@@ -166,6 +177,20 @@ static const struct st_ptls_openssl_signature_scheme_t *lookup_signature_schemes
     }
 
     return schemes;
+}
+
+const ptls_openssl_signature_scheme_t *ptls_openssl_select_signature_scheme(const ptls_openssl_signature_scheme_t *available,
+                                                                            const uint16_t *algorithms, size_t num_algorithms)
+{
+    const ptls_openssl_signature_scheme_t *scheme;
+
+    /* select the algorithm, driven by server-isde preference of `available` */
+    for (scheme = available; scheme->scheme_id != UINT16_MAX; ++scheme)
+        for (size_t i = 0; i != num_algorithms; ++i)
+            if (algorithms[i] == scheme->scheme_id)
+                return scheme;
+
+    return NULL;
 }
 
 void ptls_openssl_random_bytes(void *buf, size_t len)
@@ -499,6 +524,38 @@ static int evp_keyex_on_exchange(ptls_key_exchange_context_t **_ctx, int release
         goto Exit;
     }
 
+#ifdef OPENSSL_IS_BORINGSSL
+#define X25519_KEY_SIZE 32
+    if (ctx->super.algo->id == PTLS_GROUP_X25519) {
+        /* allocate memory to return secret */
+        if ((secret->base = malloc(X25519_KEY_SIZE)) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        secret->len = X25519_KEY_SIZE;
+        /* fetch raw key and derive the secret */
+        uint8_t sk_raw[X25519_KEY_SIZE];
+        size_t sk_raw_len = sizeof(sk_raw);
+        if (EVP_PKEY_get_raw_private_key(ctx->privkey, sk_raw, &sk_raw_len) != 1) {
+            ret = PTLS_ERROR_LIBRARY;
+            goto Exit;
+        }
+        assert(sk_raw_len == sizeof(sk_raw));
+        X25519(secret->base, sk_raw, peerkey.base);
+        ptls_clear_memory(sk_raw, sizeof(sk_raw));
+        /* check bad key */
+        static const uint8_t zeros[X25519_KEY_SIZE] = {0};
+        if (ptls_mem_equal(secret->base, zeros, X25519_KEY_SIZE)) {
+            ret = PTLS_ERROR_INCOMPATIBLE_KEY;
+            goto Exit;
+        }
+        /* success */
+        ret = 0;
+        goto Exit;
+    }
+#undef X25519_KEY_SIZE
+#endif
+
     if ((evppeer = EVP_PKEY_new()) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
@@ -694,8 +751,106 @@ int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY
     }
 }
 
-static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input)
+#if PTLS_OPENSSL_HAVE_ASYNC
+
+struct async_sign_ctx {
+    ptls_async_job_t super;
+    const ptls_openssl_signature_scheme_t *scheme;
+    EVP_MD_CTX *ctx;
+    ASYNC_WAIT_CTX *waitctx;
+    ASYNC_JOB *job;
+    size_t siglen;
+    uint8_t sig[0]; // must be last, see `async_sign_ctx_new`
+};
+
+static void async_sign_ctx_free(ptls_async_job_t *_self)
+{
+    struct async_sign_ctx *self = (void *)_self;
+
+    /* Once the async operation is complete, the user might call `ptls_free` instead of `ptls_handshake`. In such case, to avoid
+     * desynchronization, let the backend read the result from the socket. The code below is a loop, but it is not going to block;
+     * it is the responsibility of the user to refrain from calling `ptls_free` until the asynchronous operation is complete. */
+    if (self->job != NULL) {
+        int ret;
+        while (ASYNC_start_job(&self->job, self->waitctx, &ret, NULL, NULL, 0) == ASYNC_PAUSE)
+            ;
+    }
+
+    EVP_MD_CTX_destroy(self->ctx);
+    ASYNC_WAIT_CTX_free(self->waitctx);
+    free(self);
+}
+
+int async_sign_ctx_get_fd(ptls_async_job_t *_self)
+{
+    struct async_sign_ctx *self = (void *)_self;
+    OSSL_ASYNC_FD fds[1];
+    size_t numfds;
+
+    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, NULL, &numfds);
+    assert(numfds == 1);
+    ASYNC_WAIT_CTX_get_all_fds(self->waitctx, fds, &numfds);
+    return (int)fds[0];
+}
+
+static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)
+{
+    struct async_sign_ctx *self;
+
+    if ((self = malloc(offsetof(struct async_sign_ctx, sig) + siglen)) == NULL)
+        return NULL;
+
+    self->super = (ptls_async_job_t){async_sign_ctx_free, async_sign_ctx_get_fd};
+    self->scheme = scheme;
+    self->ctx = ctx;
+    self->waitctx = ASYNC_WAIT_CTX_new();
+    self->job = NULL;
+    self->siglen = siglen;
+    memset(self->sig, 0, siglen);
+
+    return &self->super;
+}
+
+static int do_sign_async_job(void *_async)
+{
+    struct async_sign_ctx *async = *(struct async_sign_ctx **)_async;
+    return EVP_DigestSignFinal(async->ctx, async->sig, &async->siglen);
+}
+
+static int do_sign_async(ptls_buffer_t *outbuf, ptls_async_job_t **_async)
+{
+    struct async_sign_ctx *async = (void *)*_async;
+    int ret;
+
+    switch (ASYNC_start_job(&async->job, async->waitctx, &ret, do_sign_async_job, &async, sizeof(async))) {
+    case ASYNC_PAUSE:
+        return PTLS_ERROR_ASYNC_OPERATION; // async operation inflight; bail out without getting rid of async context
+    case ASYNC_ERR:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_NO_JOBS:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    case ASYNC_FINISH:
+        async->job = NULL;
+        ptls_buffer_pushv(outbuf, async->sig, async->siglen);
+        ret = 0;
+        break;
+    default:
+        ret = PTLS_ERROR_LIBRARY;
+        break;
+    }
+
+Exit:
+    async_sign_ctx_free(&async->super);
+    *_async = NULL;
+    return ret;
+}
+
+#endif
+
+static int do_sign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
+                   ptls_iovec_t input, ptls_async_job_t **async)
 {
     EVP_MD_CTX *ctx = NULL;
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
@@ -751,6 +906,18 @@ static int do_sign(EVP_PKEY *key, const struct st_ptls_openssl_signature_scheme_
             ret = PTLS_ERROR_LIBRARY;
             goto Exit;
         }
+        /* If permitted by the caller (by providing a non-NULL `async` slot), use the asynchronous signing method and return
+         * immediately. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+        if (async != NULL) {
+            if ((*async = async_sign_ctx_new(scheme, ctx, siglen)) == NULL) {
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
+            return do_sign_async(outbuf, async);
+        }
+#endif
+        /* Otherwise, generate signature synchronously. */
         if ((ret = ptls_buffer_reserve(outbuf, siglen)) != 0)
             goto Exit;
         if (EVP_DigestSignFinal(ctx, outbuf->base + outbuf->off, &siglen) != 1) {
@@ -851,12 +1018,107 @@ static int aes256ctr_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const 
 }
 
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+#ifdef OPENSSL_IS_BORINGSSL
+
+struct boringssl_chacha20_context_t {
+    ptls_cipher_context_t super;
+    uint8_t key[PTLS_CHACHA20_KEY_SIZE];
+    uint8_t iv[12];
+    struct {
+        uint32_t ctr;
+        uint8_t bytes[64];
+        size_t len;
+    } keystream;
+};
+
+static void boringssl_chacha20_dispose(ptls_cipher_context_t *_ctx)
+{
+    struct boringssl_chacha20_context_t *ctx = (struct boringssl_chacha20_context_t *)_ctx;
+
+    ptls_clear_memory(ctx->key, sizeof(ctx->key));
+    ptls_clear_memory(ctx->iv, sizeof(ctx->iv));
+    ptls_clear_memory(ctx->keystream.bytes, sizeof(ctx->keystream.bytes));
+}
+
+static void boringssl_chacha20_init(ptls_cipher_context_t *_ctx, const void *_iv)
+{
+    struct boringssl_chacha20_context_t *ctx = (struct boringssl_chacha20_context_t *)_ctx;
+    const uint8_t *iv = _iv;
+
+    memcpy(ctx->iv, iv + 4, sizeof(ctx->iv));
+    ctx->keystream.ctr = iv[0] | ((uint32_t)iv[1] << 8) | ((uint32_t)iv[2] << 16) | ((uint32_t)iv[3] << 24);
+    ctx->keystream.len = 0;
+}
+
+static inline void boringssl_chacha20_transform_buffered(struct boringssl_chacha20_context_t *ctx, uint8_t **output,
+                                                         const uint8_t **input, size_t *len)
+{
+    size_t apply_len = *len < ctx->keystream.len ? *len : ctx->keystream.len;
+    const uint8_t *ks = ctx->keystream.bytes + sizeof(ctx->keystream.bytes) - ctx->keystream.len;
+    ctx->keystream.len -= apply_len;
+
+    *len -= apply_len;
+    for (size_t i = 0; i < apply_len; ++i)
+        *(*output)++ = *(*input)++ ^ *ks++;
+}
+
+static void boringssl_chacha20_transform(ptls_cipher_context_t *_ctx, void *_output, const void *_input, size_t len)
+{
+    struct boringssl_chacha20_context_t *ctx = (struct boringssl_chacha20_context_t *)_ctx;
+    uint8_t *output = _output;
+    const uint8_t *input = _input;
+
+    if (len == 0)
+        return;
+
+    if (ctx->keystream.len != 0) {
+        boringssl_chacha20_transform_buffered(ctx, &output, &input, &len);
+        if (len == 0)
+            return;
+    }
+
+    assert(ctx->keystream.len == 0);
+
+    if (len >= sizeof(ctx->keystream.bytes)) {
+        size_t blocks = len / CHACHA20POLY1305_BLOCKSIZE;
+        CRYPTO_chacha_20(output, input, blocks * CHACHA20POLY1305_BLOCKSIZE, ctx->key, ctx->iv, ctx->keystream.ctr);
+        ctx->keystream.ctr += blocks;
+        output += blocks * CHACHA20POLY1305_BLOCKSIZE;
+        input += blocks * CHACHA20POLY1305_BLOCKSIZE;
+        len -= blocks * CHACHA20POLY1305_BLOCKSIZE;
+        if (len == 0)
+            return;
+    }
+
+    memset(ctx->keystream.bytes, 0, CHACHA20POLY1305_BLOCKSIZE);
+    CRYPTO_chacha_20(ctx->keystream.bytes, ctx->keystream.bytes, CHACHA20POLY1305_BLOCKSIZE, ctx->key, ctx->iv,
+                     ctx->keystream.ctr++);
+    ctx->keystream.len = sizeof(ctx->keystream.bytes);
+
+    boringssl_chacha20_transform_buffered(ctx, &output, &input, &len);
+    assert(len == 0);
+}
+
+static int boringssl_chacha20_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key)
+{
+    struct boringssl_chacha20_context_t *ctx = (struct boringssl_chacha20_context_t *)_ctx;
+
+    ctx->super.do_dispose = boringssl_chacha20_dispose;
+    ctx->super.do_init = boringssl_chacha20_init;
+    ctx->super.do_transform = boringssl_chacha20_transform;
+    memcpy(ctx->key, key, sizeof(ctx->key));
+
+    return 0;
+}
+
+#else
 
 static int chacha20_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void *key)
 {
     return cipher_setup_crypto(ctx, 1, key, EVP_chacha20(), cipher_encrypt);
 }
 
+#endif
 #endif
 
 #if PTLS_OPENSSL_HAVE_BF
@@ -882,13 +1144,18 @@ static void aead_dispose_crypto(ptls_aead_context_t *_ctx)
         EVP_CIPHER_CTX_free(ctx->evp_ctx);
 }
 
-static void aead_xor_iv(ptls_aead_context_t *_ctx, const void *_bytes, size_t len)
+static void aead_get_iv(ptls_aead_context_t *_ctx, void *iv)
 {
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
-    const uint8_t *bytes = _bytes;
 
-    for (size_t i = 0; i < len; ++i)
-        ctx->static_iv[i] ^= bytes[i];
+    memcpy(iv, ctx->static_iv, ctx->super.algo->iv_size);
+}
+
+static void aead_set_iv(ptls_aead_context_t *_ctx, const void *iv)
+{
+    struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
+
+    memcpy(ctx->static_iv, iv, ctx->super.algo->iv_size);
 }
 
 static void aead_do_encrypt_init(ptls_aead_context_t *_ctx, uint64_t seq, const void *aad, size_t aadlen)
@@ -971,12 +1238,9 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
     struct aead_crypto_context_t *ctx = (struct aead_crypto_context_t *)_ctx;
     int ret;
 
-    memcpy(ctx->static_iv, iv, ctx->super.algo->iv_size);
-    if (key == NULL)
-        return 0;
-
     ctx->super.dispose_crypto = aead_dispose_crypto;
-    ctx->super.do_xor_iv = aead_xor_iv;
+    ctx->super.do_get_iv = aead_get_iv;
+    ctx->super.do_set_iv = aead_set_iv;
     if (is_enc) {
         ctx->super.do_encrypt_init = aead_do_encrypt_init;
         ctx->super.do_encrypt_update = aead_do_encrypt_update;
@@ -1014,6 +1278,8 @@ static int aead_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *
         goto Error;
     }
 
+    memcpy(ctx->static_iv, iv, ctx->super.algo->iv_size);
+
     return 0;
 
 Error:
@@ -1032,10 +1298,45 @@ static int aead_aes256gcm_setup_crypto(ptls_aead_context_t *ctx, int is_enc, con
 }
 
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+#ifdef OPENSSL_IS_BORINGSSL
+
+struct boringssl_chacha20poly1305_context_t {
+    struct chacha20poly1305_context_t super;
+    poly1305_state poly1305;
+};
+
+static void boringssl_poly1305_init(struct chacha20poly1305_context_t *_ctx, const void *key)
+{
+    struct boringssl_chacha20poly1305_context_t *ctx = (struct boringssl_chacha20poly1305_context_t *)_ctx;
+    CRYPTO_poly1305_init(&ctx->poly1305, key);
+}
+
+static void boringssl_poly1305_update(struct chacha20poly1305_context_t *_ctx, const void *input, size_t len)
+{
+    struct boringssl_chacha20poly1305_context_t *ctx = (struct boringssl_chacha20poly1305_context_t *)_ctx;
+    CRYPTO_poly1305_update(&ctx->poly1305, input, len);
+}
+
+static void boringssl_poly1305_finish(struct chacha20poly1305_context_t *_ctx, void *tag)
+{
+    struct boringssl_chacha20poly1305_context_t *ctx = (struct boringssl_chacha20poly1305_context_t *)_ctx;
+    CRYPTO_poly1305_finish(&ctx->poly1305, tag);
+}
+
+static int boringssl_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
+{
+    return chacha20poly1305_setup_crypto(ctx, is_enc, key, iv, &ptls_openssl_chacha20, boringssl_poly1305_init,
+                                         boringssl_poly1305_update, boringssl_poly1305_finish);
+}
+
+#else
+
 static int aead_chacha20poly1305_setup_crypto(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv)
 {
     return aead_setup_crypto(ctx, is_enc, key, iv, EVP_chacha20_poly1305());
 }
+
+#endif
 #endif
 
 #define _sha256_final(ctx, md) SHA256_Final((md), (ctx))
@@ -1044,24 +1345,37 @@ ptls_define_hash(sha256, SHA256_CTX, SHA256_Init, SHA256_Update, _sha256_final);
 #define _sha384_final(ctx, md) SHA384_Final((md), (ctx))
 ptls_define_hash(sha384, SHA512_CTX, SHA384_Init, SHA384_Update, _sha384_final);
 
-static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, uint16_t *selected_algorithm, ptls_buffer_t *outbuf,
-                            ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+#define _sha512_final(ctx, md) SHA512_Final((md), (ctx))
+ptls_define_hash(sha512, SHA512_CTX, SHA512_Init, SHA512_Update, _sha512_final);
+
+static int sign_certificate(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **async, uint16_t *selected_algorithm,
+                            ptls_buffer_t *outbuf, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
 {
     ptls_openssl_sign_certificate_t *self = (ptls_openssl_sign_certificate_t *)_self;
-    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    const ptls_openssl_signature_scheme_t *scheme;
 
-    /* select the algorithm (driven by server-side preference of `self->schemes`) */
-    for (scheme = self->schemes; scheme->scheme_id != UINT16_MAX; ++scheme) {
-        size_t i;
-        for (i = 0; i != num_algorithms; ++i)
-            if (algorithms[i] == scheme->scheme_id)
-                goto Found;
+    /* Just resume the asynchronous operation, if one is in flight. */
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (async != NULL && *async != NULL) {
+        struct async_sign_ctx *sign_ctx = (struct async_sign_ctx *)(*async);
+        *selected_algorithm = sign_ctx->scheme->scheme_id;
+        return do_sign_async(outbuf, async);
     }
-    return PTLS_ALERT_HANDSHAKE_FAILURE;
+#endif
 
-Found:
+    /* Select the algorithm or return failure if none found. */
+    if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
+        return PTLS_ALERT_HANDSHAKE_FAILURE;
     *selected_algorithm = scheme->scheme_id;
-    return do_sign(self->key, scheme, outbuf, input);
+
+#if PTLS_OPENSSL_HAVE_ASYNC
+    if (!self->async && async != NULL) {
+        /* indicate to `do_sign` that async mode is disabled for this operation */
+        assert(*async == NULL);
+        async = NULL;
+    }
+#endif
+    return do_sign(self->key, scheme, outbuf, input, async);
 }
 
 static X509 *to_x509(ptls_iovec_t vec)
@@ -1073,7 +1387,7 @@ static X509 *to_x509(ptls_iovec_t vec)
 static int verify_sign(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_iovec_t signature)
 {
     EVP_PKEY *key = verify_ctx;
-    const struct st_ptls_openssl_signature_scheme_t *scheme;
+    const ptls_openssl_signature_scheme_t *scheme;
     EVP_MD_CTX *ctx = NULL;
     EVP_PKEY_CTX *pkey_ctx = NULL;
     int ret = 0;
@@ -1081,7 +1395,7 @@ static int verify_sign(void *verify_ctx, uint16_t algo, ptls_iovec_t data, ptls_
     if (data.base == NULL)
         goto Exit;
 
-    if ((scheme = lookup_signature_schemes(key)) == NULL) {
+    if ((scheme = ptls_openssl_lookup_signature_schemes(key)) == NULL) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -1151,9 +1465,9 @@ Exit:
 
 int ptls_openssl_init_sign_certificate(ptls_openssl_sign_certificate_t *self, EVP_PKEY *key)
 {
-    *self = (ptls_openssl_sign_certificate_t){{sign_certificate}};
+    *self = (ptls_openssl_sign_certificate_t){.super = {sign_certificate}, .async = 0 /* libssl has it off by default too */};
 
-    if ((self->schemes = lookup_signature_schemes(key)) == NULL)
+    if ((self->schemes = ptls_openssl_lookup_signature_schemes(key)) == NULL)
         return PTLS_ERROR_INCOMPATIBLE_KEY;
     EVP_PKEY_up_ref(key);
     self->key = key;
@@ -1247,7 +1561,7 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
             if (ptls_server_name_is_ipaddr(server_name)) {
                 X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
             } else {
-                X509_VERIFY_PARAM_set1_host(params, server_name, 0);
+                X509_VERIFY_PARAM_set1_host(params, server_name, strlen(server_name));
                 X509_VERIFY_PARAM_set_hostflags(params, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
             }
         }
@@ -1291,7 +1605,7 @@ Exit:
     return ret;
 }
 
-static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char *server_name,
                        int (**verifier)(void *, uint16_t, ptls_iovec_t, ptls_iovec_t), void **verify_data, ptls_iovec_t *certs,
                        size_t num_certs)
 {
@@ -1316,7 +1630,7 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
             }
             sk_X509_push(chain, interm);
         }
-        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), ptls_get_server_name(tls), &ossl_x509_err);
+        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), server_name, &ossl_x509_err);
     } else {
         ret = PTLS_ALERT_CERTIFICATE_REQUIRED;
         ossl_x509_err = 0;
@@ -1386,7 +1700,7 @@ Error:
     return NULL;
 }
 
-static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
+static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char *server_name,
                            int (**verifier)(void *, uint16_t algo, ptls_iovec_t, ptls_iovec_t), void **verify_data,
                            ptls_iovec_t *certs, size_t num_certs)
 {
@@ -1417,7 +1731,7 @@ static int verify_raw_cert(ptls_verify_certificate_t *_self, ptls_t *tls,
     *verifier = verify_sign;
     ret = 0;
 Exit:
-    free(expected_pubkey.base);
+    OPENSSL_free(expected_pubkey.base);
     return ret;
 }
 
@@ -1780,10 +2094,12 @@ ptls_aead_algorithm_t ptls_openssl_aes256gcm = {"AES256-GCM",
                                                 0,
                                                 sizeof(struct aead_crypto_context_t),
                                                 aead_aes256gcm_setup_crypto};
-ptls_hash_algorithm_t ptls_openssl_sha256 = {PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
+ptls_hash_algorithm_t ptls_openssl_sha256 = {"sha256", PTLS_SHA256_BLOCK_SIZE, PTLS_SHA256_DIGEST_SIZE, sha256_create,
                                              PTLS_ZERO_DIGEST_SHA256};
-ptls_hash_algorithm_t ptls_openssl_sha384 = {PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
+ptls_hash_algorithm_t ptls_openssl_sha384 = {"sha384", PTLS_SHA384_BLOCK_SIZE, PTLS_SHA384_DIGEST_SIZE, sha384_create,
                                              PTLS_ZERO_DIGEST_SHA384};
+ptls_hash_algorithm_t ptls_openssl_sha512 = {"sha512", PTLS_SHA512_BLOCK_SIZE, PTLS_SHA512_DIGEST_SIZE, sha512_create,
+                                             PTLS_ZERO_DIGEST_SHA512};
 ptls_cipher_suite_t ptls_openssl_aes128gcmsha256 = {.id = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256,
                                                     .name = PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256,
                                                     .aead = &ptls_openssl_aes128gcm,
@@ -1814,21 +2130,38 @@ ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_aes256gcmsha384 = {
     .hash = &ptls_openssl_sha384};
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
 ptls_cipher_algorithm_t ptls_openssl_chacha20 = {
-    "CHACHA20",           PTLS_CHACHA20_KEY_SIZE, 1 /* block size */, PTLS_CHACHA20_IV_SIZE, sizeof(struct cipher_context_t),
-    chacha20_setup_crypto};
-ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {"CHACHA20-POLY1305",
-                                                       PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT,
-                                                       PTLS_CHACHA20POLY1305_INTEGRITY_LIMIT,
-                                                       &ptls_openssl_chacha20,
-                                                       NULL,
-                                                       PTLS_CHACHA20_KEY_SIZE,
-                                                       PTLS_CHACHA20POLY1305_IV_SIZE,
-                                                       PTLS_CHACHA20POLY1305_TAG_SIZE,
-                                                       {PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE, PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE},
-                                                       0,
-                                                       0,
-                                                       sizeof(struct aead_crypto_context_t),
-                                                       aead_chacha20poly1305_setup_crypto};
+    .name = "CHACHA20",
+    .key_size = PTLS_CHACHA20_KEY_SIZE,
+    .block_size = 1,
+    .iv_size = PTLS_CHACHA20_IV_SIZE,
+#ifdef OPENSSL_IS_BORINGSSL
+    .context_size = sizeof(struct boringssl_chacha20_context_t),
+    .setup_crypto = boringssl_chacha20_setup_crypto,
+#else
+    .context_size = sizeof(struct cipher_context_t),
+    .setup_crypto = chacha20_setup_crypto,
+#endif
+};
+ptls_aead_algorithm_t ptls_openssl_chacha20poly1305 = {
+    .name = "CHACHA20-POLY1305",
+    .confidentiality_limit = PTLS_CHACHA20POLY1305_CONFIDENTIALITY_LIMIT,
+    .integrity_limit = PTLS_CHACHA20POLY1305_INTEGRITY_LIMIT,
+    .ctr_cipher = &ptls_openssl_chacha20,
+    .ecb_cipher = NULL,
+    .key_size = PTLS_CHACHA20_KEY_SIZE,
+    .iv_size = PTLS_CHACHA20POLY1305_IV_SIZE,
+    .tag_size = PTLS_CHACHA20POLY1305_TAG_SIZE,
+    .tls12 = {.fixed_iv_size = PTLS_TLS12_CHACHAPOLY_FIXED_IV_SIZE, .record_iv_size = PTLS_TLS12_CHACHAPOLY_RECORD_IV_SIZE},
+    .non_temporal = 0,
+    .align_bits = 0,
+#ifdef OPENSSL_IS_BORINGSSL
+    .context_size = sizeof(struct boringssl_chacha20poly1305_context_t),
+    .setup_crypto = boringssl_chacha20poly1305_setup_crypto,
+#else
+    .context_size = sizeof(struct aead_crypto_context_t),
+    .setup_crypto = aead_chacha20poly1305_setup_crypto,
+#endif
+};
 ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256 = {.id = PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256,
                                                            .name = PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256,
                                                            .aead = &ptls_openssl_chacha20poly1305,
@@ -1844,11 +2177,77 @@ ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256 = {
     .aead = &ptls_openssl_chacha20poly1305,
     .hash = &ptls_openssl_sha256};
 #endif
-ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {&ptls_openssl_aes256gcmsha384, &ptls_openssl_aes128gcmsha256,
+
+
+#if PTLS_HAVE_AEGIS
+ptls_aead_algorithm_t ptls_openssl_aegis128l = {
+    .name = "AEGIS-128L",
+    .confidentiality_limit = PTLS_AEGIS128L_CONFIDENTIALITY_LIMIT,
+    .integrity_limit = PTLS_AEGIS128L_INTEGRITY_LIMIT,
+    .ctr_cipher = NULL,
+    .ecb_cipher = NULL,
+    .key_size = PTLS_AEGIS128L_KEY_SIZE,
+    .iv_size = PTLS_AEGIS128L_IV_SIZE,
+    .tag_size = PTLS_AEGIS128L_TAG_SIZE,
+    .tls12 = { .fixed_iv_size = 0, .record_iv_size = 0 },
+    .non_temporal = 0,
+    .align_bits = 0,
+    .context_size = sizeof(struct aegis128l_context_t),
+    .setup_crypto = aegis128l_setup_crypto,
+};
+ptls_cipher_suite_t ptls_openssl_aegis128lsha256 = {.id = PTLS_CIPHER_SUITE_AEGIS128L_SHA256,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AEGIS128L_SHA256,
+                                                    .aead = &ptls_openssl_aegis128l,
+                                                    .hash = &ptls_openssl_sha256};
+
+ptls_aead_algorithm_t ptls_openssl_aegis256 = {
+    .name = "AEGIS-256",
+    .confidentiality_limit = PTLS_AEGIS256_CONFIDENTIALITY_LIMIT,
+    .integrity_limit = PTLS_AEGIS256_INTEGRITY_LIMIT,
+    .ctr_cipher = NULL,
+    .ecb_cipher = NULL,
+    .key_size = PTLS_AEGIS256_KEY_SIZE,
+    .iv_size = PTLS_AEGIS256_IV_SIZE,
+    .tag_size = PTLS_AEGIS256_TAG_SIZE,
+    .tls12 = { .fixed_iv_size = 0, .record_iv_size = 0 },
+    .non_temporal = 0,
+    .align_bits = 0,
+    .context_size = sizeof(struct aegis256_context_t),
+    .setup_crypto = aegis256_setup_crypto,
+};
+ptls_cipher_suite_t ptls_openssl_aegis256sha384 = {.id = PTLS_CIPHER_SUITE_AEGIS256_SHA384,
+                                                    .name = PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA384,
+                                                    .aead = &ptls_openssl_aegis256,
+                                                    .hash = &ptls_openssl_sha384};
+#endif
+
+
+
+ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {// ciphers used with sha384 (must be first)
+                                                     &ptls_openssl_aes256gcmsha384,
+
+                                                     // ciphers used with sha256
+                                                     &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
                                                      &ptls_openssl_chacha20poly1305sha256,
 #endif
                                                      NULL};
+
+ptls_cipher_suite_t *ptls_openssl_cipher_suites_all[] = {// ciphers used with sha384 (must be first)
+#if PTLS_HAVE_AEGIS
+                                                        &ptls_openssl_aegis256sha384,
+#endif
+                                                        &ptls_openssl_aes256gcmsha384,
+
+                                                        // ciphers used with sha256
+#if PTLS_HAVE_AEGIS
+                                                        &ptls_openssl_aegis128lsha256,
+#endif
+                                                        &ptls_openssl_aes128gcmsha256,
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+                                                        &ptls_openssl_chacha20poly1305sha256,
+#endif
+                                                        NULL};
 
 ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256,
                                                            &ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256,
@@ -1864,3 +2263,44 @@ ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_e
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,
                                               0 /* iv size */, sizeof(struct cipher_context_t), bfecb_setup_crypto};
 #endif
+
+ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256 = {PTLS_HPKE_KEM_P256_SHA256, &ptls_openssl_secp256r1, &ptls_openssl_sha256};
+ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384 = {PTLS_HPKE_KEM_P384_SHA384, &ptls_openssl_secp384r1, &ptls_openssl_sha384};
+#if PTLS_OPENSSL_HAVE_X25519
+ptls_hpke_kem_t ptls_openssl_hpke_kem_x25519sha256 = {PTLS_HPKE_KEM_X25519_SHA256, &ptls_openssl_x25519, &ptls_openssl_sha256};
+#endif
+ptls_hpke_kem_t *ptls_openssl_hpke_kems[] = {&ptls_openssl_hpke_kem_p384sha384,
+#if PTLS_OPENSSL_HAVE_X25519
+                                             &ptls_openssl_hpke_kem_x25519sha256,
+#endif
+                                             &ptls_openssl_hpke_kem_p256sha256, NULL};
+
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha256 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .name = "HKDF-SHA256/AES-128-GCM",
+    .hash = &ptls_openssl_sha256,
+    .aead = &ptls_openssl_aes128gcm};
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes128gcmsha512 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA512, .aead = PTLS_HPKE_AEAD_AES_128_GCM},
+    .name = "HKDF-SHA512/AES-128-GCM",
+    .hash = &ptls_openssl_sha512,
+    .aead = &ptls_openssl_aes128gcm};
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_aes256gcmsha384 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA384, .aead = PTLS_HPKE_AEAD_AES_256_GCM},
+    .name = "HKDF-SHA384/AES-256-GCM",
+    .hash = &ptls_openssl_sha384,
+    .aead = &ptls_openssl_aes256gcm};
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+ptls_hpke_cipher_suite_t ptls_openssl_hpke_chacha20poly1305sha256 = {
+    .id = {.kdf = PTLS_HPKE_HKDF_SHA256, .aead = PTLS_HPKE_AEAD_CHACHA20POLY1305},
+    .name = "HKDF-SHA256/ChaCha20Poly1305",
+    .hash = &ptls_openssl_sha256,
+    .aead = &ptls_openssl_chacha20poly1305};
+#endif
+ptls_hpke_cipher_suite_t *ptls_openssl_hpke_cipher_suites[] = {&ptls_openssl_hpke_aes128gcmsha256,
+                                                               &ptls_openssl_hpke_aes256gcmsha384,
+#if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
+                                                               &ptls_openssl_hpke_chacha20poly1305sha256,
+#endif
+                                                               &ptls_openssl_hpke_aes128gcmsha512, /* likely only for tests */
+                                                               NULL};

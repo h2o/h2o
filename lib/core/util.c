@@ -600,7 +600,7 @@ static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec
     h2o_url_t parsed, resolved;
 
     /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
+    if (h2o_url_parse_relative(pool, url.base, url.len, &parsed) != 0)
         goto Invalid;
 
     /* fast-path for abspath form */
@@ -939,8 +939,29 @@ const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"
 
 uint64_t h2o_connection_id = 0;
 
-void h2o_cleanup_thread(void)
+uint32_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
 {
-    h2o_mem_clear_recycle(&h2o_mem_pool_allocator, 1);
-    h2o_buffer_clear_recycle(1);
+    /* File descriptor cache is cleared fully per event loop and it is sufficient to do so, because:
+     * * if the file handler opens one file only once per event loop, then calling open (2) is relatively lightweight compared to
+     *   other stuff such as connection establishment, and
+     * * if a file is large enough that it is not served in one event loop, the file descriptor remains open within the cache. */
+    if (ctx_optional != NULL)
+        h2o_filecache_clear(ctx_optional->filecache);
+
+    /* recycle either fully, or partially if at least 1 second has elasped since previous gc */
+    static __thread uint64_t next_gc_at;
+    if (now >= next_gc_at) {
+        int full = now == 0;
+        h2o_buffer_clear_recycle(full);
+        h2o_socket_clear_recycle(full);
+        h2o_mem_clear_recycle(&h2o_mem_pool_allocator, full);
+        next_gc_at = now + 1000;
+    }
+
+    /* if all the recyclers are empty, we can sleep forever; otherwise request to be invoked again within no more than one second */
+    if (h2o_buffer_recycle_is_empty() && h2o_socket_recycle_is_empty() && h2o_mem_recycle_is_empty(&h2o_mem_pool_allocator)) {
+        return INT32_MAX;
+    } else {
+        return 1000;
+    }
 }

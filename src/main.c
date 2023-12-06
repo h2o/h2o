@@ -24,6 +24,8 @@
 #ifdef __APPLE__
 #define __APPLE_USE_RFC_3542 /* to use IPV6_RECVPKTINFO */
 #endif
+
+/* system header files */
 #include <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
@@ -49,9 +51,14 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <openssl/opensslv.h>
+
+/* OS-specific header files */
 #ifdef __FreeBSD__
 #include <pthread_np.h>
 #endif
+
+/* environment / configuration-specific header files */
 #ifdef LIBCAP_FOUND
 #include <sys/capability.h>
 #include <sys/prctl.h>
@@ -62,9 +69,9 @@
 #include <openssl/ssl.h>
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
-#include <quicly.h>
-
 #endif
+
+/* non-system header files */
 #include "picotls.h"
 #include "picotls/certificate_compression.h"
 #include "picotls/minicrypto.h"
@@ -73,6 +80,7 @@
 #if H2O_USE_FUSION
 #include "picotls/fusion.h"
 #endif
+#include "quicly.h"
 #include "cloexec.h"
 #include "yoml-parser.h"
 #include "neverbleed.h"
@@ -89,6 +97,11 @@
 #endif
 #include "standalone.h"
 #include "../lib/probes_.h"
+
+#if defined(__linux__)
+#include <sys/eventfd.h>
+#define ASYNC_NB_USE_EVENTFD 1
+#endif
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
@@ -146,9 +159,12 @@ struct listener_ssl_identity_t {
      */
     h2o_iovec_t cert_chain_pem;
     /**
-     * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, this property will be set to NULL.
+     * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, `ptls.ctx` will be set to NULL.
      */
-    ptls_context_t *ptls;
+    struct {
+        ptls_context_t *ctx;
+        const ptls_openssl_signature_scheme_t *signature_schemes;
+    } ptls;
     /**
      * if non-NULL, points to OCSP stapling configuration
      */
@@ -277,7 +293,7 @@ static struct {
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
-    } * threads;
+    } *threads;
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier_init;
     h2o_barrier_t startup_sync_barrier_post;
@@ -305,6 +321,10 @@ static struct {
     int crash_handler_wait_pipe_close;
     int tcp_reuseport;
     int ssl_zerocopy;
+    struct {
+        h2o_sem_t semaphore;
+        unsigned capacity;
+    } ocsp_updater;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -331,6 +351,7 @@ static struct {
     .crash_handler_wait_pipe_close = 0,
     .tcp_reuseport = 0,
     .ssl_zerocopy = 0,
+    .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
 };
 
 static __thread size_t thread_index;
@@ -390,6 +411,449 @@ static void on_neverbleed_fork(void)
     strcpy(cmd_argv[0], "neverbleed");
 #endif
 }
+
+struct async_nb_transaction_t {
+    neverbleed_iobuf_t *buf;
+    size_t write_size;
+    h2o_linklist_t link;
+    int responseless;
+    void (*on_read_complete)(struct async_nb_transaction_t *transaction);
+};
+
+struct async_nb_queue_t {
+    h2o_linklist_t anchor;
+    size_t len;
+};
+
+static __thread struct {
+    h2o_socket_t *sock;
+    struct async_nb_queue_t write_queue;
+    struct async_nb_queue_t read_queue;
+} async_nb = {NULL};
+
+static struct async_nb_transaction_t *async_nb_get(struct async_nb_queue_t *queue)
+{
+    if (queue->len == 0) {
+        assert(h2o_linklist_is_empty(&queue->anchor));
+        return NULL;
+    }
+
+    assert(!h2o_linklist_is_empty(&queue->anchor));
+
+    struct async_nb_transaction_t *transaction = H2O_STRUCT_FROM_MEMBER(struct async_nb_transaction_t, link, queue->anchor.next);
+    return transaction;
+}
+
+static struct async_nb_transaction_t *async_nb_pop(struct async_nb_queue_t *queue)
+{
+    struct async_nb_transaction_t *transaction;
+
+    if ((transaction = async_nb_get(queue)) != NULL) {
+        h2o_linklist_unlink(&transaction->link);
+        --queue->len;
+    }
+
+    return transaction;
+}
+
+static void async_nb_push(struct async_nb_queue_t *queue, struct async_nb_transaction_t *transaction)
+{
+    assert(!h2o_linklist_is_linked(&transaction->link));
+
+    h2o_linklist_insert(&queue->anchor, &transaction->link);
+    ++queue->len;
+}
+
+static void async_nb_submit_write_pending(void);
+static void async_nb_read_ready(h2o_socket_t *sock, const char *err);
+
+static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
+{
+    /* add to the read queue the entry for which we have written the request, and start reading from the socket */
+    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.write_queue);
+    if (!transaction->responseless) {
+        async_nb_push(&async_nb.read_queue, transaction);
+        if (!h2o_socket_is_reading(async_nb.sock))
+            h2o_socket_read_start(async_nb.sock, async_nb_read_ready);
+    } else {
+        // no reponse expected, free the transaction
+        assert(!h2o_linklist_is_linked(&transaction->link));
+        neverbleed_iobuf_dispose(transaction->buf);
+        free(transaction);
+    }
+
+    /* submit more requests if there's anything queued */
+    async_nb_submit_write_pending();
+}
+
+static void async_nb_submit_write_pending(void)
+{
+    struct async_nb_transaction_t *transaction;
+
+    if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
+        /* write the first buf in the write queue */
+        h2o_iovec_t bufs[2];
+        transaction->write_size = neverbleed_iobuf_size(transaction->buf);
+        bufs[0] = h2o_iovec_init(&transaction->write_size, sizeof(transaction->write_size));
+        bufs[1] = h2o_iovec_init(transaction->buf->start, transaction->write_size);
+        h2o_socket_write(async_nb.sock, bufs, 2, async_nb_on_write_complete);
+    }
+}
+
+static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(neverbleed_t *, neverbleed_iobuf_t *))
+{
+    int fd = neverbleed_get_fd(neverbleed);
+    int flags = fcntl(fd, F_GETFL, 0);
+
+    // set fd to blocking for synchronous I/O
+    if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
+        perror("fcntl");
+        abort();
+    }
+
+    transaction_cb(neverbleed, buf);
+
+    // set fd back to original
+    if (fcntl(fd, F_SETFL, flags) == -1) {
+        perror("fcntl");
+        abort();
+    }
+}
+
+static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
+{
+    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
+    assert(transaction != NULL);
+
+    async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+
+    if (async_nb.read_queue.len == 0)
+        h2o_socket_read_stop(sock);
+
+    transaction->on_read_complete(transaction);
+}
+
+#if H2O_CAN_OSSL_ASYNC
+
+struct async_nb_transaction_fd_notify_t {
+    struct async_nb_transaction_t super;
+    int notify_fd;
+};
+
+static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
+{
+    struct async_nb_transaction_fd_notify_t *transaction = (struct async_nb_transaction_fd_notify_t *)_transaction;
+
+#if ASYNC_NB_USE_EVENTFD
+    if (eventfd_write(transaction->notify_fd, 1) != 0) {
+        perror("eventfd_write");
+        abort();
+    }
+#else
+    ssize_t ret;
+    while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
+        ;
+    if (ret != 1) {
+        perror("write");
+        abort();
+    }
+#endif
+}
+
+static void async_nb_do_async_transaction(ASYNC_JOB *job, neverbleed_iobuf_t *buf)
+{
+    struct async_nb_transaction_fd_notify_t transaction = {{.buf = buf, .on_read_complete = async_nb_notify_fd}};
+    int readfd;
+
+    /* setup fd to notify OpenSSL; eventfd is used if available, as it is lightweight and uses only one file descriptor */
+#if ASYNC_NB_USE_EVENTFD
+    if ((transaction.notify_fd = eventfd(0, EFD_CLOEXEC)) == -1) {
+        char errbuf[256];
+        h2o_fatal("eventfd:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+    }
+    readfd = transaction.notify_fd;
+#else
+    {
+        int pipefds[2];
+        if (cloexec_pipe(pipefds) == -1) {
+            char errbuf[256];
+            h2o_fatal("pipe:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        readfd = pipefds[0];
+        transaction.notify_fd = pipefds[1];
+    }
+#endif
+
+    /* register the request and kick the write operation */
+    async_nb_push(&async_nb.write_queue, &transaction.super);
+    async_nb_submit_write_pending();
+
+    { /* setup file descriptor and call `ASYNC_pause_job`, to yield the operation back to the original fiber, until
+       * `nb_read_ready` notifies the this fiber (in paused state) to resume. */
+        size_t numfds;
+        ASYNC_WAIT_CTX *waitctx = ASYNC_get_wait_ctx(job);
+        assert(ASYNC_WAIT_CTX_get_all_fds(waitctx, NULL, &numfds) && numfds == 0);
+        if (!ASYNC_WAIT_CTX_set_wait_fd(waitctx, "neverbleed", readfd, NULL, NULL))
+            h2o_fatal("could not set async fd");
+        ASYNC_pause_job();
+        if (!ASYNC_WAIT_CTX_clear_fd(waitctx, "neverbleed"))
+            h2o_fatal("could not clear async fd");
+    }
+
+    assert(!h2o_linklist_is_linked(&transaction.super.link));
+
+    /* close the notification file descriptors used for notification */
+#if !ASYNC_NB_USE_EVENTFD
+    close(readfd);
+#endif
+    close(transaction.notify_fd);
+}
+
+#endif
+
+static void async_nb_transaction(neverbleed_iobuf_t *buf, int reponseless)
+{
+#if H2O_CAN_OSSL_ASYNC
+    /* When using OpenSSL with ASYNC support, we may receive requests from a fiber. If so, process them asynchronously. */
+    ASYNC_JOB *job;
+    if ((job = ASYNC_get_current_job()) != NULL) {
+        assert(!reponseless);
+        assert(h2o_socket_get_fd(async_nb.sock) == neverbleed_get_fd(neverbleed));
+        async_nb_do_async_transaction(job, buf);
+        return;
+    }
+#endif
+
+    if (reponseless && async_nb.sock != NULL) {
+        /* this is an optimization for fire-and-forget transactions which do not require a response.
+           these transactions are queued on the async socket with `reponseless` being true, and are free'd
+           upon write completion in `async_nb_on_write_complete`
+        */
+        struct async_nb_transaction_t *transaction = h2o_mem_alloc(sizeof(*transaction));
+        *transaction = (struct async_nb_transaction_t){
+            .buf = h2o_mem_alloc(sizeof(*transaction->buf)),
+            .link = (h2o_linklist_t){},
+            .responseless = 1,
+        };
+
+        /* transfer ownership of stack `buf` to heap allocated `transaction->buf` */
+        h2o_memcpy(transaction->buf, buf, sizeof(*buf));
+        memset(buf, 0, sizeof(*buf));
+        buf = NULL;
+
+        async_nb_push(&async_nb.write_queue, transaction);
+        async_nb_submit_write_pending();
+    } else {
+        /* do it synchronously, by at first reading all pending reads, then write asynchronously and wait for the repsonse */
+        if (async_nb.sock != NULL) {
+            while (async_nb.read_queue.len != 0)
+                async_nb_read_ready(async_nb.sock, NULL);
+        }
+
+        async_nb_run_sync(buf, neverbleed_transaction_write);
+
+        if (!reponseless) {
+            async_nb_run_sync(buf, neverbleed_transaction_read);
+        } else {
+            neverbleed_iobuf_dispose(buf);
+        }
+    }
+}
+
+struct async_nb_picotls_context_t {
+    ptls_sign_certificate_t super;
+    EVP_PKEY *key;
+    const ptls_openssl_signature_scheme_t *schemes;
+};
+
+struct async_nb_job_t {
+    ptls_async_job_t super;
+    struct async_nb_transaction_t transaction;
+    struct {
+        void (*func)(void *);
+        void *data;
+    } on_complete;
+    struct {
+        uint16_t scheme_id;
+    } ptls;
+    neverbleed_iobuf_t buf;
+};
+
+static void async_nb_job_free(ptls_async_job_t *job)
+{
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
+
+    assert(!h2o_linklist_is_linked(&ctx->transaction.link));
+
+    neverbleed_iobuf_dispose(&ctx->buf);
+    free(ctx);
+}
+
+static void async_nb_job_set_completion_callback(ptls_async_job_t *job, void (*cb)(void *), void *cbdata)
+{
+    struct async_nb_job_t *ctx = (struct async_nb_job_t *)job;
+
+    ctx->on_complete.func = cb;
+    ctx->on_complete.data = cbdata;
+}
+
+static void async_nb_job_handle_response(struct async_nb_transaction_t *transaction)
+{
+    struct async_nb_job_t *ctx = H2O_STRUCT_FROM_MEMBER(struct async_nb_job_t, transaction, transaction);
+
+    assert(ctx->on_complete.func != NULL);
+    ctx->on_complete.func(ctx->on_complete.data);
+}
+
+/*
+ * Instantiates an async_nb_job_t. The caller should setup `job->buf` and call `async_nb_submit_request`.
+ */
+static struct async_nb_job_t *async_nb_job_new(void)
+{
+    struct async_nb_job_t *job = h2o_mem_alloc(sizeof(*job));
+    *job = (struct async_nb_job_t){
+        .super = {.destroy_ = async_nb_job_free, .set_completion_callback = async_nb_job_set_completion_callback},
+        .transaction = {.on_read_complete = async_nb_job_handle_response}};
+    job->transaction.buf = &job->buf;
+
+    return job;
+}
+
+static void async_nb_job_submit(struct async_nb_job_t *job)
+{
+    async_nb_push(&async_nb.write_queue, &job->transaction);
+    async_nb_submit_write_pending();
+}
+
+static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, ptls_async_job_t **_job, uint16_t *selected_algorithm,
+                                 ptls_buffer_t *output, ptls_iovec_t input, const uint16_t *algorithms, size_t num_algorithms)
+{
+    struct async_nb_picotls_context_t *self = (struct async_nb_picotls_context_t *)_self;
+    const ptls_openssl_signature_scheme_t *scheme;
+    int ret;
+
+    assert(_job != NULL);
+
+    if (*_job != NULL) {
+        struct async_nb_job_t *job = (struct async_nb_job_t *)*_job;
+        void *digest;
+        size_t digestlen;
+
+        assert(!h2o_linklist_is_linked(&job->transaction.link));
+
+        *selected_algorithm = job->ptls.scheme_id;
+
+        /* obtain signature, dispose async context */
+        neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+        async_nb_job_free(&job->super);
+        *_job = NULL;
+
+        /* build response */
+        if ((ret = ptls_buffer_reserve(output, digestlen)) == 0) {
+            memcpy(output->base + output->off, digest, digestlen);
+            output->off += digestlen;
+        }
+
+        ptls_clear_memory(digest, digestlen);
+        free(digest);
+        return 0;
+    }
+
+    /* select the signature scheme or return an error */
+    if ((scheme = ptls_openssl_select_signature_scheme(self->schemes, algorithms, num_algorithms)) == NULL)
+        return PTLS_ALERT_HANDSHAKE_FAILURE;
+
+    /* submit async request */
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, self->key, scheme->scheme_md(), input.base, input.len, 1);
+    job->ptls.scheme_id = scheme->scheme_id;
+    *_job = &job->super;
+    async_nb_job_submit(job);
+
+    return PTLS_ERROR_ASYNC_OPERATION;
+}
+
+static void async_nb_quic_resume_handshake(void *tls)
+{
+    quicly_conn_t *quic = quicly_resume_handshake(tls);
+
+    /* if the connection is still alive, schedule the timer for packet emission */
+    if (quic != NULL) {
+        h2o_quic_conn_t *conn = *quicly_get_data(quic);
+        h2o_quic_schedule_timer(conn);
+    }
+}
+
+static void async_nb_quic_start(quicly_async_handshake_t *self, ptls_t *tls)
+{
+    ptls_async_job_t *job = ptls_get_async_job(tls);
+
+    assert(job->set_completion_callback != NULL);
+    job->set_completion_callback(job, async_nb_quic_resume_handshake, tls);
+}
+
+static quicly_async_handshake_t async_nb_quic_handler = {async_nb_quic_start};
+
+#ifdef OPENSSL_IS_BORINGSSL
+
+enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
+                                                      uint16_t signature_algorithm, const uint8_t *in, size_t len)
+{
+    if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
+        return ssl_private_key_failure;
+
+    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
+    int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
+
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_digestsign(&job->buf, key, md, in, len, rsa_pss);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
+    async_nb_job_submit(job);
+
+    return ssl_private_key_retry;
+}
+
+enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out, const uint8_t *in,
+                                                         size_t len)
+{
+    if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
+        return ssl_private_key_failure;
+
+    EVP_PKEY *key = SSL_get_privatekey(ssl);
+
+    struct async_nb_job_t *job = async_nb_job_new();
+    neverbleed_start_decrypt(&job->buf, key, in, len);
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), job);
+    async_nb_job_submit(job);
+
+    return ssl_private_key_retry;
+}
+
+enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out)
+{
+    struct async_nb_job_t *job = SSL_get_ex_data(ssl, h2o_socket_boringssl_get_async_job_index());
+    void *digest;
+    size_t digestlen;
+
+    assert(job != NULL);
+
+    neverbleed_finish_digestsign(&job->buf, &digest, &digestlen);
+    async_nb_job_free(&job->super);
+    job = NULL;
+    SSL_set_ex_data(ssl, h2o_socket_boringssl_get_async_job_index(), NULL);
+
+    assert(digestlen <= max_out);
+    memcpy(out, digest, digestlen);
+    *outlen = digestlen;
+
+    ptls_clear_memory(digest, digestlen);
+    free(digest);
+
+    return ssl_private_key_success;
+}
+
+#endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
 {
@@ -506,14 +970,13 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
         return 0;
 
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
-    void *conn = *ptls_get_data_ptr(tls);
+    void *conn = *ptls_get_data_ptr(tls); /* either h2o_socket_t (TCP) or quicly_conn_t (QUIC) */
+    int conn_is_quic = self->listener->quic.ctx != NULL, ret = 0;
     struct listener_ssl_config_t *ssl_config;
-    int ret = 0;
 
     /* determine ssl_config based on SNI */
     if (params->server_name.base != NULL) {
-        on_sni_update_tracing(conn, self->listener->quic.ctx != NULL, (const char *)params->server_name.base,
-                              params->server_name.len);
+        on_sni_update_tracing(conn, conn_is_quic, (const char *)params->server_name.base, params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
     } else {
@@ -522,7 +985,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     }
 
     /* apply config at ssl_config-level */
-    if (self->listener->quic.ctx == NULL) {
+    if (!conn_is_quic) {
         set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
     } else {
         if (ssl_config->cc.quic != NULL)
@@ -535,26 +998,25 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
                                        params->server_certificate_types.count) != NULL;
     struct listener_ssl_identity_t *identity;
     for (identity = ssl_config->identities + 1; identity->certificate_file != NULL; ++identity) {
-        if (prefer_raw_public_key == identity->ptls->use_raw_public_keys) {
-            ptls_openssl_sign_certificate_t *signer = (ptls_openssl_sign_certificate_t *)identity->ptls->sign_certificate;
+        if (prefer_raw_public_key == identity->ptls.ctx->use_raw_public_keys) {
             /* If the client omits siganture_algorithms extension (using RFC 7250), use the first identity with the same certificate
              * type. Otherwise, choose the first identity that contains a compatible signature scheme. */
             if (params->signature_algorithms.count == 0)
                 goto IdentityFound;
-            for (size_t signer_index = 0; signer->schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index)
+            for (size_t signer_index = 0; identity->ptls.signature_schemes[signer_index].scheme_id != UINT16_MAX; ++signer_index)
                 for (size_t hello_index = 0; hello_index < params->signature_algorithms.count; ++hello_index)
-                    if (signer->schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index])
+                    if (identity->ptls.signature_schemes[signer_index].scheme_id == params->signature_algorithms.list[hello_index])
                         goto IdentityFound;
         }
     }
     /* Compatible identity was not found within the alternatives. Use the default. */
     identity = ssl_config->identities;
 IdentityFound:
-    ptls_set_context(tls, identity->ptls);
+    ptls_set_context(tls, identity->ptls.ctx);
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
-        if (self->listener->quic.ctx != NULL) {
+        if (conn_is_quic) {
             size_t i, j;
             for (i = 0; i != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++i) {
                 for (j = 0; j != params->negotiated_protocols.count; ++j)
@@ -600,9 +1062,9 @@ static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
 
-    if (identity->ptls != NULL)
+    if (identity->ptls.ctx != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
-            identity->ptls,
+            identity->ptls.ctx,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
 
     pthread_mutex_lock(&identity->dynamic.mutex);
@@ -653,8 +1115,6 @@ Exit:
     return ret;
 }
 
-static h2o_sem_t ocsp_updater_semaphore;
-
 static void *ocsp_updater_thread(void *_identity)
 {
     struct listener_ssl_identity_t *identity = _identity;
@@ -673,9 +1133,9 @@ static void *ocsp_updater_thread(void *_identity)
             continue;
         }
         /* fetch the response */
-        h2o_sem_wait(&ocsp_updater_semaphore);
+        h2o_sem_wait(&conf.ocsp_updater.semaphore);
         status = get_ocsp_response(identity->ocsp_stapling->cmd, identity->cert_chain_pem, &resp);
-        h2o_sem_post(&ocsp_updater_semaphore);
+        h2o_sem_post(&conf.ocsp_updater.semaphore);
         switch (status) {
         case 0: /* success */
             fail_cnt = 0;
@@ -804,7 +1264,8 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference)
+                                              int server_cipher_preference, int use_neverbleed,
+                                              ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #ifdef PTLS_OPENSSL_HAVE_X25519
@@ -817,7 +1278,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
         struct st_emit_certificate_ptls_t ec;
-        ptls_openssl_sign_certificate_t sc;
+        struct {
+            ptls_openssl_sign_certificate_t ossl;
+            struct async_nb_picotls_context_t async_digestsign;
+        } sc;
         ptls_openssl_verify_certificate_t vc;
     } *pctx = h2o_mem_alloc(sizeof(*pctx));
     EVP_PKEY *key;
@@ -837,10 +1301,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .cipher_suites = cipher_suites,
                 .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
-                .esni = NULL,        /* fill later */
+                .ech.server = {ech_create_opener, ech_retry_configs},
                 .on_client_hello = &pctx->ch.super,
                 .emit_certificate = &pctx->ec.super,
-                .sign_certificate = &pctx->sc.super,
+                .sign_certificate = NULL, /* initailized below */
                 .verify_certificate = NULL,
                 .ticket_lifetime = 0, /* initialized alongside encrypt_ticket */
                 .max_early_data_size = 8192,
@@ -857,7 +1321,6 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .update_open_count = NULL,
                 .update_traffic_key = NULL,
                 .decompress_certificate = NULL,
-                .update_esni_key = NULL,
                 .on_extension = NULL,
             },
         .ch =
@@ -882,7 +1345,8 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         assert(fakeconn != NULL);
         key = SSL_get_privatekey(fakeconn);
         assert(key != NULL);
-        cert = SSL_get_certificate(fakeconn);
+        if ((cert = SSL_get_certificate(fakeconn)) != NULL)
+            X509_up_ref(cert); /* boringssl calls the destructor when SSL_free is called */
         /* obtain peer verify mode */
         use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
@@ -900,9 +1364,24 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     }
 
     /* create signer */
-    if (ptls_openssl_init_sign_certificate(&pctx->sc, key) != 0) {
-        free(pctx);
-        return "failed to setup private key";
+    if (use_neverbleed) {
+        pctx->sc.async_digestsign = (struct async_nb_picotls_context_t){
+            .super = {async_nb_picotls_sign},
+            .key = key,
+            .schemes = ptls_openssl_lookup_signature_schemes(key),
+        };
+        EVP_PKEY_up_ref(key);
+        if (pctx->sc.async_digestsign.schemes == NULL)
+            return "failed to setup private key";
+        pctx->ctx.sign_certificate = &pctx->sc.async_digestsign.super;
+        identity->ptls.signature_schemes = pctx->sc.async_digestsign.schemes;
+    } else {
+        if (ptls_openssl_init_sign_certificate(&pctx->sc.ossl, key) != 0) {
+            free(pctx);
+            return "failed to setup private key";
+        }
+        pctx->ctx.sign_certificate = &pctx->sc.ossl.super;
+        identity->ptls.signature_schemes = pctx->sc.ossl.schemes;
     }
 
     if (raw_public_key.base == NULL) {
@@ -935,7 +1414,9 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         quicly_amend_ptls_context(&pctx->ctx);
     }
 
-    identity->ptls = &pctx->ctx;
+    identity->ptls.ctx = &pctx->ctx;
+
+    X509_free(cert);
 
     return NULL;
 }
@@ -975,7 +1456,7 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
-static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, int is_quic)
 {
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
@@ -987,17 +1468,21 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             return NULL;
         }
         ptls_cipher_suite_t *cand;
-        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites_all[i]) != NULL; ++i)
             if (strcmp(element->data.scalar, cand->name) == 0)
                 goto Found;
         /* not found */
         char msg[1024];
         strcpy(msg, "Unexpected cipher suite. Expected one of:");
-        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        for (size_t i = 0; ptls_openssl_cipher_suites_all[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites_all[i]->name);
         h2o_configurator_errprintf(cmd, node, "%s", msg);
         return NULL;
     Found:
+        if (is_quic && cand->aead->ctr_cipher == NULL) {
+            h2o_configurator_errprintf(cmd, element, "cipher-suite %s cannot be used with QUIC (no CTR mode)", cand->name);
+            return NULL;
+        }
         h2o_vector_reserve(NULL, &ret, ret.size + 1);
         ret.entries[ret.size++] = cand;
         if (cand == &ptls_openssl_aes128gcmsha256)
@@ -1067,6 +1552,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
                 fprintf(stderr, "%s\n", errbuf);
                 abort();
             }
+            neverbleed_transaction_cb = async_nb_transaction;
         }
         if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*parsed->key_file)->data.scalar, errbuf) != 1) {
             h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s:%s\n",
@@ -1100,13 +1586,222 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     return 0;
 }
 
+struct ech_create_opener_t {
+    ptls_ech_create_opener_t super;
+    struct ech_opener_config_t {
+        ptls_key_exchange_context_t *keyex; /* NULL indicates end of configs */
+        uint8_t config_id;
+        ptls_hpke_kem_t *kem;
+        ptls_hpke_cipher_suite_t **cipher_suites;
+        uint8_t max_name_length;
+        ptls_iovec_t ech_config;
+        unsigned advertise : 1;
+    } configs[1];
+};
+
+static ptls_aead_context_t *ech_create_opener(ptls_ech_create_opener_t *_self, ptls_hpke_kem_t **kem,
+                                              ptls_hpke_cipher_suite_t **cipher, ptls_t *tls, uint8_t config_id,
+                                              ptls_hpke_cipher_suite_id_t cipher_id, ptls_iovec_t enc, ptls_iovec_t info_prefix)
+{
+    struct ech_create_opener_t *self = (struct ech_create_opener_t *)_self;
+    struct ech_opener_config_t *config = NULL;
+    ptls_aead_context_t *aead = NULL;
+    ptls_buffer_t info;
+    int ret;
+
+    *kem = NULL;
+    *cipher = NULL;
+
+    ptls_buffer_init(&info, "", 0);
+
+    /* find matching config, or bail out if not found */
+    for (config = self->configs; config->keyex != NULL; ++config)
+        if (config->config_id == config_id)
+            break;
+    if (config->keyex == NULL)
+        goto Exit;
+
+    /* find matching cipher-suite, or bail out if not found */
+    for (size_t i = 0; config->cipher_suites[i] != NULL; ++i) {
+        if (config->cipher_suites[i]->id.kdf == cipher_id.kdf && config->cipher_suites[i]->id.aead == cipher_id.aead) {
+            *cipher = config->cipher_suites[i];
+            break;
+        }
+    }
+    if (*cipher == NULL)
+        goto Exit;
+
+    /* build info */
+    ptls_buffer_pushv(&info, info_prefix.base, info_prefix.len);
+    ptls_buffer_pushv(&info, config->ech_config.base, config->ech_config.len);
+
+    /* set kem, generate AEAD */
+    *kem = config->kem;
+    if ((ret = ptls_hpke_setup_base_r(*kem, *cipher, config->keyex, &aead, enc, ptls_iovec_init(info.base, info.off))) != 0)
+        goto Exit;
+
+Exit:
+    ptls_buffer_dispose(&info);
+    return aead;
+}
+
+static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struct ech_opener_config_t *config)
+{
+    yoml_t **key_file, **config_id, **public_name, **cipher_suites, **max_name_length, **advertise;
+
+    *config = (struct ech_opener_config_t){.cipher_suites = ptls_openssl_hpke_cipher_suites, .max_name_length = 64, .advertise = 1};
+
+    if (h2o_configurator_parse_mapping(cmd, map, "key-file:s,config-id:s,public-name:s",
+                                       "cipher-suite:a,max-name-length:s,advertise:s", &key_file, &config_id, &public_name,
+                                       &cipher_suites, &max_name_length, &advertise) != 0)
+        return -1;
+
+    { /* Load private key. TODO use neverbleed instead of retaining the ECH private key inside h2o. We may not need or want
+       * asynchronous handling though, because X25519 is lightweight. */
+        FILE *fp;
+        if ((fp = fopen((*key_file)->data.scalar, "rt")) == NULL) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to open ECH private key file:%s:%s", (*key_file)->data.scalar,
+                                       strerror(errno));
+            return -1;
+        }
+        EVP_PKEY *pkey;
+        if ((pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL)) == NULL) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to load ECH private key from file:%s", (*key_file)->data.scalar);
+            return -1;
+        }
+        if (ptls_openssl_create_key_exchange(&config->keyex, pkey) != 0) {
+            h2o_configurator_errprintf(cmd, *key_file, "failed to setup ECH private key from file:%s", (*key_file)->data.scalar);
+            return -1;
+        }
+        EVP_PKEY_free(pkey);
+        fclose(fp);
+    }
+
+    /* determine kem */
+    for (size_t i = 0; ptls_openssl_hpke_kems[i] != NULL; ++i) {
+        if (ptls_openssl_hpke_kems[i]->keyex == config->keyex->algo) {
+            config->kem = ptls_openssl_hpke_kems[i];
+            break;
+        }
+    }
+    if (config->kem == NULL) {
+        h2o_configurator_errprintf(cmd, *key_file, "private key of type %s is not supported for ECH", config->keyex->algo->name);
+        return -1;
+    }
+
+    /* replace ciphers to the provided list, if specified */
+    if (cipher_suites != NULL) {
+        config->cipher_suites = h2o_mem_alloc(sizeof(config->cipher_suites[0]) * ((*cipher_suites)->data.sequence.size + 1));
+        for (size_t input_index = 0; input_index < (*cipher_suites)->data.sequence.size; ++input_index) {
+            yoml_t *input = (*cipher_suites)->data.sequence.elements[input_index];
+            if (input->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, input, "elements of cipher-suites must be a string");
+                return -1;
+            }
+            ptls_hpke_cipher_suite_t **cand;
+            for (cand = ptls_openssl_hpke_cipher_suites; *cand != NULL; ++cand)
+                if (strcasecmp(input->data.scalar, (*cand)->name) == 0)
+                    break;
+            if (*cand == NULL) {
+                h2o_configurator_errprintf(cmd, input,
+                                           "ECH cipher-suite not found; should be in specified in the form of <kdf>/<aead> using "
+                                           "the names defined in IANA HPKE registry");
+                return -1;
+            }
+            config->cipher_suites[input_index] = *cand;
+        }
+        config->cipher_suites[(*cipher_suites)->data.sequence.size] = NULL;
+    }
+
+    /* rest of the parameters */
+    if (h2o_configurator_scanf(cmd, *config_id, "%" SCNu8, &config->config_id) != 0) {
+        h2o_configurator_errprintf(cmd, *config_id, "config_id must be uint8");
+        return -1;
+    }
+    if (max_name_length != NULL &&
+        (h2o_configurator_scanf(cmd, *max_name_length, "%" SCNu8, &config->max_name_length) != 0 || config->max_name_length < 64)) {
+        h2o_configurator_errprintf(cmd, *max_name_length, "max-name-length must be a number between 64 and 255");
+        return -1;
+    }
+    if (advertise != NULL) {
+        ssize_t v;
+        if ((v = h2o_configurator_get_one_of(cmd, *advertise, "NO,YES")) == -1) {
+            h2o_configurator_errprintf(cmd, *advertise, "advertise must be either YES or NO (default: YES)");
+            return -1;
+        }
+        config->advertise = !!v;
+    }
+
+    { /* build ECHConfig */
+        ptls_buffer_t buf;
+        ptls_buffer_init(&buf, "", 0);
+        int ret = ptls_ech_encode_config(&buf, config->config_id, config->kem, config->keyex->pubkey, config->cipher_suites,
+                                         config->max_name_length, (*public_name)->data.scalar);
+        if (ret != 0)
+            h2o_fatal("failed to build ECHConfig:%d", ret);
+        config->ech_config = ptls_iovec_init(buf.base, buf.off); /* steal ownership of malloc'ed memory */
+    }
+
+    return 0;
+}
+
+/**
+ * Given config, instantiates opener and retry_configs.
+ */
+static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_ech_create_opener_t **_opener,
+                         ptls_iovec_t *retry_configs)
+{
+    struct ech_create_opener_t *opener =
+        h2o_mem_alloc(sizeof(opener) + sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
+    *opener = (struct ech_create_opener_t){{ech_create_opener}};
+    *_opener = &opener->super;
+
+    /* By default, retry_configs is not set, indicating that ECH support is not to be advertised. Note that while in the midst of
+     * turning off ECH, we might continue accepting ECH handshakes but not advertise retry_configs. */
+    *retry_configs = ptls_iovec_init(NULL, 0);
+
+    /* parse configs being provided */
+    for (size_t config_index = 0; config_index < configs->data.sequence.size; ++config_index) {
+        yoml_t *element = configs->data.sequence.elements[config_index];
+        if (element->type != YOML_TYPE_MAPPING) {
+            h2o_configurator_errprintf(cmd, element, "elements of ech must be a mapping");
+            return -1;
+        }
+        if (on_config_one_ech(cmd, element, opener->configs + config_index) != 0)
+            return -1;
+
+        /* append to retry_config */
+        if (opener->configs[config_index].advertise) {
+            if (retry_configs->base == NULL)
+                *retry_configs = ptls_iovec_init(h2o_mem_alloc(2), 2);
+            retry_configs->base =
+                h2o_mem_realloc(retry_configs->base, retry_configs->len + opener->configs[config_index].ech_config.len);
+            memcpy(retry_configs->base + retry_configs->len, opener->configs[config_index].ech_config.base,
+                   opener->configs[config_index].ech_config.len);
+            retry_configs->len += opener->configs[config_index].ech_config.len;
+        }
+    }
+
+    /* terminate the list of configs */
+    opener->configs[configs->data.sequence.size] = (struct ech_opener_config_t){NULL};
+
+    /* write the length of retry_configs */
+    if (retry_configs->base != NULL) {
+        uint16_t len = retry_configs->len - 2;
+        retry_configs->base[0] = (uint8_t)(len >> 8);
+        retry_configs->base[1] = (uint8_t)len;
+    }
+
+    return 0;
+}
+
 static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *listen_node,
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file;
+        **http2_origin_frame_node, **client_ca_file, **ech_node;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
@@ -1114,6 +1809,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     long ssl_options = SSL_OP_ALL;
     int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
+    struct {
+        ptls_ech_create_opener_t *create_opener;
+        ptls_iovec_t retry_configs;
+    } ech = {NULL};
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -1135,11 +1834,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s",
+                                           "http2-origin-frame:*,client-ca-file:s,ech:a",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -1302,11 +2001,31 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
+        if (cipher_suite_tls13_node != NULL &&
+            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
+    }
+
+    /* ECH: only the first SSL entry for each address can have ECH configured. For entries sharing the same address, supply the
+     * the values configured for the first entry. */
+    if (ech_node != NULL) {
+        if (!use_picotls) {
+            h2o_configurator_errprintf(cmd, *ech_node, "ECH requires use of TLS 1.3");
+            goto Error;
+        }
+        if (listener->ssl.size != 0) {
+            h2o_configurator_errprintf(cmd, *ech_node, "only the first `ssl` node for each address may have `ech` configured");
+            goto Error;
+        }
+        if (on_config_ech(cmd, *ech_node, &ech.create_opener, &ech.retry_configs) != 0)
+            goto Error;
+    } else if (listener->ssl.size != 0 && listener->ssl.entries[0]->identities[0].ptls.ctx != NULL) {
+        ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls.ctx;
+        ech.create_opener = base->ech.server.create_opener;
+        ech.retry_configs = base->ech.server.retry_configs;
     }
 
     /* create a new entry in the SSL context list */
@@ -1337,6 +2056,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         /* initialize OpenSSL context */
         identity->ossl = SSL_CTX_new(SSLv23_server_method());
         SSL_CTX_set_options(identity->ossl, ssl_options);
+#if H2O_CAN_OSSL_ASYNC
+        if (use_neverbleed)
+            SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
+#elif defined(OPENSSL_IS_BORINGSSL)
+        if (use_neverbleed) {
+            static const SSL_PRIVATE_KEY_METHOD meth = {
+                .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
+            SSL_CTX_set_private_key_method(identity->ossl, &meth);
+        }
+#endif
+
         SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         setup_ecc_key(identity->ossl);
         if (cipher_suite != NULL && SSL_CTX_set_cipher_list(identity->ossl, (*cipher_suite)->data.scalar) != 1) {
@@ -1381,7 +2111,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
         if (use_picotls) {
             const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
-                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE));
+                                                            !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), use_neverbleed,
+                                                            ech.create_opener, ech.retry_configs);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {
@@ -1391,7 +2122,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled", errstr);
             }
             if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
-                listener->quic.ctx->tls = ssl_config->identities[0].ptls;
+                listener->quic.ctx->tls = ssl_config->identities[0].ptls.ctx;
         } else if (raw_pubkey.base != NULL) {
             h2o_configurator_errprintf(cmd, *parsed->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
             goto Error;
@@ -1406,8 +2137,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 SSL_CTX_set_tlsext_servername_arg(ossl, listener);
             }
             /* associate picotls context to SSL_CTX, so that the handshake can switch to TLS 1.3 */
-            if (identity->ptls != NULL)
-                h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls);
+            if (identity->ptls.ctx != NULL)
+                h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
         } else {
             /* at the moment, on the OpenSSL-side, we do not support multiple types of certificate. */
             SSL_CTX_free(identity->ossl);
@@ -1415,7 +2146,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 
         /* start OCSP fetcher */
-        if (ocsp_stapling != NULL && (identity->ptls == NULL || !identity->ptls->use_raw_public_keys)) {
+        if (ocsp_stapling != NULL && (identity->ptls.ctx == NULL || !identity->ptls.ctx->use_raw_public_keys)) {
             identity->ocsp_stapling = ocsp_stapling;
             switch (conf.run_mode) {
             case RUN_MODE_WORKER: {
@@ -2042,18 +2773,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 *quic = quicly_spec_context;
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
+                quic->async_handshake = &async_nb_quic_handler;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                                                        "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s",
+                                                       "max-initial-handshake-packets:s,ecn:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets) != 0)
+                                                       &max_initial_handshake_packets, &ecn) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2105,6 +2837,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
+                    }
+                    if (ecn != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->enable_ecn = !!on;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -2195,11 +2933,12 @@ static int on_config_user(h2o_configurator_command_t *cmd, h2o_configurator_cont
 static int on_config_capabilities(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #ifndef LIBCAP_FOUND
-    h2o_configurator_errprintf(cmd, node, "the platform does not support Linux capabilities"
+    h2o_configurator_errprintf(cmd, node,
+                               "the platform does not support Linux capabilities"
 #ifdef __linux
-        " (hint: install libcap-dev or libcap-devel and rerun cmake)"
+                               " (hint: install libcap-dev or libcap-devel and rerun cmake)"
 #endif
-        );
+    );
     return -1;
 #else
 
@@ -2234,7 +2973,7 @@ static void capabilities_set_keepcaps(void)
 #endif
 }
 
-static void capabilities_drop(void)
+static int capabilities_drop(void)
 {
 #ifdef LIBCAP_FOUND
     if (conf.capabilities.size > 0) {
@@ -2246,13 +2985,17 @@ static void capabilities_drop(void)
             h2o_fatal("cap_set_flag(CAP_EFFECTIVE): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         if (cap_set_flag(cap, CAP_PERMITTED, conf.capabilities.size, conf.capabilities.entries, CAP_SET) != 0)
             h2o_fatal("cap_set_flag(CAP_PERMITTED): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-        if (cap_set_proc(cap) != 0)
-            h2o_fatal("cap_set_proc: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+
+        if (cap_set_proc(cap) != 0) {
+            h2o_error_printf("failed to setup capabilities: cap_set_proc: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
+            return 0;
+        }
         cap_free(cap);
         if (prctl(PR_SET_KEEPCAPS, 0, 0, 0, 0) != 0)
             h2o_fatal("prctl(PR_SET_KEEPCAPS,0): %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #endif
+    return 1;
 }
 
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -2459,7 +3202,7 @@ static int on_config_num_ocsp_updaters(h2o_configurator_command_t *cmd, h2o_conf
         h2o_configurator_errprintf(cmd, node, "num-ocsp-updaters must be >=1");
         return -1;
     }
-    h2o_sem_set_capacity(&ocsp_updater_semaphore, n);
+    conf.ocsp_updater.capacity = n;
     return 0;
 }
 
@@ -2555,6 +3298,25 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_neverbleed_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,QAT,QAT-AUTO")) {
+    case 0:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_OFF;
+        break;
+    case 1:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_QAT_ON;
+        break;
+    case 2:
+        neverbleed_offload = NEVERBLEED_OFFLOAD_QAT_AUTO;
+        break;
+    default:
+        h2o_fatal("logic flaw");
+    }
+
+    return 0;
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -2610,10 +3372,11 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
 
     yoml_parse_args_t parse_args = {
         .filename = filename,
-        .resolve_tag = {
-            .cb = resolve_tag,
-            .cb_arg = arg,
-        },
+        .resolve_tag =
+            {
+                .cb = resolve_tag,
+                .cb_arg = arg,
+            },
         .resolve_alias = 1,
         .resolve_merge = 1,
     };
@@ -3049,9 +3812,11 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf, sizeof(listener_config->sndbuf)) != 0)
+        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
+                                                       sizeof(listener_config->sndbuf)) != 0)
             h2o_perror("failed to set SO_SNDBUF");
-        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf, sizeof(listener_config->rcvbuf))  != 0)
+        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf,
+                                                       sizeof(listener_config->rcvbuf)) != 0)
             h2o_perror("failed to set SO_RCVBUF");
         set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
 
@@ -3254,7 +4019,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
                                       h2o_memcached_receiver);
-
+    if (neverbleed != NULL) {
+        int fd = neverbleed_get_fd(neverbleed);
+        async_nb.sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+        h2o_linklist_init_anchor(&async_nb.read_queue.anchor);
+        h2o_linklist_init_anchor(&async_nb.write_queue.anchor);
+    }
     if (conf.thread_map.entries[thread_index] >= 0) {
 #if H2O_HAS_PTHREAD_SETAFFINITY_NP
         int r;
@@ -3347,22 +4117,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
-    uint64_t next_buffer_gc_at = UINT64_MAX;
-    while (1) {
-        if (conf.shutdown_requested)
-            break;
+    while (!conf.shutdown_requested) {
+        h2o_context_t *ctx = &conf.threads[thread_index].ctx;
+        uint32_t max_wait = h2o_cleanup_thread(h2o_now(ctx->loop), ctx);
         update_listener_state(listeners);
-        /* run the loop once */
-        h2o_evloop_run(conf.threads[thread_index].ctx.loop, next_buffer_gc_at == UINT64_MAX ? INT32_MAX : 1000);
-        /* cleanup */
-        h2o_filecache_clear(conf.threads[thread_index].ctx.filecache);
-        if (h2o_now(conf.threads[thread_index].ctx.loop) >= next_buffer_gc_at) {
-            h2o_buffer_clear_recycle(0);
-            h2o_socket_clear_recycle(0);
-            next_buffer_gc_at = UINT64_MAX;
-        }
-        if (next_buffer_gc_at == UINT64_MAX && (!h2o_buffer_recycle_is_empty() || !h2o_socket_recycle_is_empty()))
-            next_buffer_gc_at = h2o_now(conf.threads[thread_index].ctx.loop) + 1000;
+        h2o_evloop_run(ctx->loop, max_wait);
     }
 
     if (thread_index == 0)
@@ -3697,6 +4456,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
+        h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_neverbleed_offload);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -3798,19 +4559,23 @@ int main(int argc, char **argv)
     conf.quic.conn_callbacks.super.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
+    h2o_sem_init(&conf.ocsp_updater.semaphore, 0); /* raised after unsetenv is called, as the updater thread refers to `environ` */
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
-
-    h2o_sem_init(&ocsp_updater_semaphore, H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS);
 
     init_openssl();
     setup_configurators();
 
     { /* parse options */
         int ch;
-        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'}, {"mode", required_argument, NULL, 'm'},
-                                           {"test", no_argument, NULL, 't'},       {"version", no_argument, NULL, 'v'},
-                                           {"help", no_argument, NULL, 'h'},       {NULL}};
+        enum { OPT_LIST_DIRECTIVES = 256 };
+        static struct option longopts[] = {{"conf", required_argument, NULL, 'c'},
+                                           {"mode", required_argument, NULL, 'm'},
+                                           {"test", no_argument, NULL, 't'},
+                                           {"version", no_argument, NULL, 'v'},
+                                           {"help", no_argument, NULL, 'h'},
+                                           {"list-directives", no_argument, NULL, OPT_LIST_DIRECTIVES},
+                                           {NULL}};
         while ((ch = getopt_long(argc, argv, "c:m:tvh", longopts, NULL)) != -1) {
             switch (ch) {
             case 'c':
@@ -3867,6 +4632,9 @@ int main(int argc, char **argv)
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
 #endif
+#if PTLS_HAVE_AEGIS
+                printf("libaegis: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -3902,6 +4670,14 @@ int main(int argc, char **argv)
             case ':':
             case '?':
                 exit(EX_CONFIG);
+            case OPT_LIST_DIRECTIVES: {
+                for (h2o_linklist_t *l = conf.globalconf.configurators.next; l != &conf.globalconf.configurators; l = l->next) {
+                    h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, l);
+                    for (size_t i = 0; i != c->commands.size; ++i)
+                        printf("%s\n", c->commands.entries[i].name);
+                }
+            }
+                exit(0);
             default:
                 assert(0);
                 break;
@@ -3927,10 +4703,7 @@ int main(int argc, char **argv)
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
             .filename = opt_config_file,
-            .resolve_tag = {
-                .cb = resolve_tag,
-                .cb_arg = &resolve_tag_arg
-            },
+            .resolve_tag = {.cb = resolve_tag, .cb_arg = &resolve_tag_arg},
             .resolve_alias = 1,
             .resolve_merge = 1,
         };
@@ -3962,11 +4735,11 @@ int main(int argc, char **argv)
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
                          ++identity) {
-                        if (identity->ptls != NULL) {
-                            identity->ptls->cipher_suites =
-                                replace_ciphersuites(identity->ptls->cipher_suites, tls13_non_temporal_all);
-                            identity->ptls->tls12_cipher_suites =
-                                replace_ciphersuites(identity->ptls->tls12_cipher_suites, tls12_non_temporal_all);
+                        if (identity->ptls.ctx != NULL) {
+                            identity->ptls.ctx->cipher_suites =
+                                replace_ciphersuites(identity->ptls.ctx->cipher_suites, tls13_non_temporal_all);
+                            identity->ptls.ctx->tls12_cipher_suites =
+                                replace_ciphersuites(identity->ptls.ctx->tls12_cipher_suites, tls12_non_temporal_all);
                         }
                     }
                 }
@@ -4032,8 +4805,9 @@ int main(int argc, char **argv)
         struct rlimit limit = {0};
         if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
             if (conf.max_connections > limit.rlim_max) {
-                fprintf(stderr, "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
-                                "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
+                fprintf(stderr,
+                        "[error] 'max-connections'=[%d] configuration value should not exceed the hard limit of file "
+                        "descriptors 'RLIMIT_NOFILE'=[%llu]\n",
                         conf.max_connections, (unsigned long long)limit.rlim_max);
                 return EX_CONFIG;
             }
@@ -4042,7 +4816,7 @@ int main(int argc, char **argv)
 #ifdef __APPLE__
                 || (limit.rlim_cur = OPEN_MAX, setrlimit(RLIMIT_NOFILE, &limit)) == 0
 #endif
-                ) {
+            ) {
                 fprintf(stderr, "[INFO] raised RLIMIT_NOFILE to %llu\n", (unsigned long long)limit.rlim_cur);
             } else {
                 fprintf(stderr, "[warning] setrlimit(RLIMIT_NOFILE) failed:%s\n", strerror(errno));
@@ -4095,14 +4869,13 @@ int main(int argc, char **argv)
     /* call `bind()` before setuid(), different uids can't bind the same address */
     create_per_thread_listeners();
 
+    capabilities_set_keepcaps();
     /* setuid */
     if (conf.globalconf.user != NULL) {
-        capabilities_set_keepcaps();
         if (h2o_setuidgid(conf.globalconf.user) != 0) {
             fprintf(stderr, "failed to change the running user (are you sure you are running as root?)\n");
             return EX_OSERR;
         }
-        capabilities_drop();
         if (neverbleed != NULL && neverbleed_setuidgid(neverbleed, conf.globalconf.user, 1) != 0) {
             fprintf(stderr, "failed to change the running user of neverbleed daemon\n");
             return EX_OSERR;
@@ -4114,6 +4887,8 @@ int main(int argc, char **argv)
             return EX_CONFIG;
         }
     }
+    if (!capabilities_drop())
+        return EX_OSERR;
 
     /* pid file must be written after setuid, since we need to remove it  */
     if (conf.pid_file != NULL) {
@@ -4130,6 +4905,9 @@ int main(int argc, char **argv)
     assert(conf.thread_map.size != 0);
     h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
     h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
+
+    /* launch threads that fetch OCSP responses for stapling */
+    h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
@@ -4158,7 +4936,7 @@ int main(int argc, char **argv)
         free(ssl_contexts.entries);
         for (i = 0; i != conf.num_listeners; ++i) {
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
-                ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls;
+                ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls.ctx;
                 if (ptls != NULL)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
             }

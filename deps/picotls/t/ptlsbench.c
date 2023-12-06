@@ -253,6 +253,10 @@ static ptls_bench_entry_t aead_list[] = {
     {"minicrypto", "aes128gcm", &ptls_minicrypto_aes128gcm, &ptls_minicrypto_sha256, 0},
     {"minicrypto", "aes256gcm", &ptls_minicrypto_aes256gcm, &ptls_minicrypto_sha384, 0},
     {"minicrypto", "chacha20poly1305", &ptls_minicrypto_chacha20poly1305, &ptls_minicrypto_sha256, 1},
+#ifdef PTLS_HAVE_AEGIS
+    {"minicrypto", "aegis128l", &ptls_minicrypto_aegis128l, &ptls_minicrypto_sha256, 1},
+    {"minicrypto", "aegis256", &ptls_minicrypto_aegis256, &ptls_minicrypto_sha384, 1},
+#endif
 #ifdef _WINDOWS
     {"ptlsbcrypt", "aes128gcm", &ptls_bcrypt_aes128gcm, &ptls_bcrypt_sha256, 1},
     {"ptlsbcrypt", "aes256gcm", &ptls_bcrypt_aes256gcm, &ptls_bcrypt_sha384, 1},

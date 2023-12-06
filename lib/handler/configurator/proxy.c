@@ -43,6 +43,12 @@ struct proxy_configurator_t {
     struct proxy_config_vars_t _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
+static void warn_deprecation(h2o_configurator_command_t *cmd, yoml_t *node, const char *new_cmd, const char *extra)
+{
+    if (strcasecmp(cmd->name, new_cmd) != 0)
+        h2o_configurator_errprintf(cmd, node, "the command is deprecated; use %s%s", new_cmd, extra);
+}
+
 static int on_config_timeout_io(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     int ret;
@@ -113,6 +119,8 @@ static int on_config_proxy_protocol(h2o_configurator_command_t *cmd, h2o_configu
 
 static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    warn_deprecation(cmd, node, "proxy.connect.emit-proxy-status", "");
+
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
     if (ret == -1)
@@ -123,6 +131,8 @@ static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_c
 
 static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    warn_deprecation(cmd, node, "proxy.proxy-status.identity", "");
+
     /* https://tools.ietf.org/html/rfc8941#section-3.3.4 */
     static const char *tfirst = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz*";
     static const char *tchars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&'*+-.^_`|~:/";
@@ -132,7 +142,7 @@ static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_
     for (size_t i = 0; i < slen; ++i) {
         unsigned char b = s[i];
         if (b < 0x20 || b > 0x7E) {
-            h2o_configurator_errprintf(cmd, node, "proxy-status.identity must only consist of printable ASCII characters");
+            h2o_configurator_errprintf(cmd, node, "the identity must only consist of printable ASCII characters");
             return -1;
         }
     }
@@ -306,8 +316,12 @@ static int on_config_ssl_session_cache(h2o_configurator_command_t *cmd, h2o_conf
 
 static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, yoml_t *backend)
 {
+    h2o_mem_pool_t pool;
     yoml_t **url_node;
+    h2o_socketpool_target_t *result = NULL;
     h2o_socketpool_target_conf_t lb_per_target_conf = {0}; /* default weight of each target */
+
+    h2o_mem_init_pool(&pool);
 
     switch (backend->type) {
     case YOML_TYPE_SCALAR:
@@ -316,14 +330,14 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
     case YOML_TYPE_MAPPING: {
         yoml_t **weight_node;
         if (h2o_configurator_parse_mapping(cmd, backend, "url:s", "weight:*", &url_node, &weight_node) != 0)
-            return NULL;
+            goto Exit;
         if (weight_node != NULL) {
             unsigned weight;
             if (h2o_configurator_scanf(cmd, *weight_node, "%u", &weight) != 0)
-                return NULL;
+                goto Exit;
             if (!(1 <= weight && weight <= H2O_SOCKETPOOL_TARGET_MAX_WEIGHT)) {
                 h2o_configurator_errprintf(cmd, *weight_node, "weight must be an integer in range 1 - 256");
-                return NULL;
+                goto Exit;
             }
             lb_per_target_conf.weight_m1 = weight - 1;
         }
@@ -331,15 +345,20 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
     default:
         h2o_configurator_errprintf(cmd, backend,
                                    "items of arguments passed to proxy.reverse.url must be either a scalar or a mapping");
-        return NULL;
+        goto Exit;
     }
 
     h2o_url_t url;
-    if (h2o_url_parse((*url_node)->data.scalar, SIZE_MAX, &url) != 0) {
+    if (h2o_url_parse(&pool, (*url_node)->data.scalar, SIZE_MAX, &url) != 0) {
         h2o_configurator_errprintf(cmd, *url_node, "failed to parse URL: %s\n", (*url_node)->data.scalar);
-        return NULL;
+        goto Exit;
     }
-    return h2o_socketpool_create_target(&url, &lb_per_target_conf);
+
+    result = h2o_socketpool_create_target(&url, &lb_per_target_conf);
+
+Exit:
+    h2o_mem_clear_pool(&pool);
+    return result;
 }
 
 static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -483,6 +502,14 @@ static int on_config_emit_missing_date_header(h2o_configurator_command_t *cmd, h
     return 0;
 }
 
+static int on_config_max_spare_pipes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->proxy.max_spare_pipes) != 0)
+        return -1;
+
+    return 0;
+}
+
 static int on_config_zerocopy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON,ALWAYS");
@@ -514,11 +541,19 @@ static int on_config_preserve_x_forwarded_proto(h2o_configurator_command_t *cmd,
 static int on_config_max_buffer_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    return h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size);
+    if (h2o_configurator_scanf(cmd, node, "%zu", &self->vars->conf.max_buffer_size) != 0)
+        return -1;
+    if (self->vars->conf.max_buffer_size == 0) {
+        h2o_configurator_errprintf(cmd, node, "proxy.buffer_size must be a positive value");
+        return -1;
+    }
+    return 0;
 }
 
 static int on_config_http2_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+    warn_deprecation(cmd, node, "proxy.http2.max-concurrent-streams", " (notice `-` and `_`)");
+
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     return h2o_configurator_scanf(cmd, node, "%u", &self->vars->conf.http2.max_concurrent_streams);
 }
@@ -665,9 +700,15 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
                                     on_config_connect_proxy);
+    h2o_configurator_define_command(&c->super, "proxy.connect.emit-proxy-status",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_connect_proxy_status);
     h2o_configurator_define_command(&c->super, "proxy.connect.proxy-status",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_connect_proxy_status);
+    h2o_configurator_define_command(&c->super, "proxy.proxy-status.identity",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_proxy_status_identity);
     h2o_configurator_define_command(&c->super, "proxy-status.identity",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_proxy_status_identity);
@@ -716,10 +757,15 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_emit_missing_date_header);
     h2o_configurator_define_command(&c->super, "proxy.zerocopy", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_zerocopy);
+    h2o_configurator_define_command(&c->super, "proxy.max-spare-pipes",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_max_spare_pipes);
     h2o_configurator_define_headers_commands(conf, &c->super, "proxy.header", get_headers_commands);
     h2o_configurator_define_command(&c->super, "proxy.max-buffer-size",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_max_buffer_size);
+    h2o_configurator_define_command(&c->super, "proxy.http2.max-concurrent-streams",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_http2_max_concurrent_streams);
     h2o_configurator_define_command(&c->super, "proxy.http2.max-concurrent_streams",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_http2_max_concurrent_streams);
