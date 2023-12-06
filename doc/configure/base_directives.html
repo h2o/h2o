@@ -82,6 +82,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#error-log.emit-request-errors">
 <code>error-log.emit-request-errors</code>
 </a></li>
+<li><a href="configure/base_directives.html#h2olog">
+<code>h2olog</code>
+</a></li>
 <li><a href="configure/base_directives.html#handshake-timeout">
 <code>handshake-timeout</code>
 </a></li>
@@ -645,6 +648,35 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 <dd><a href="configure/access_log_directives.html#access-log"><code>access-log</code></a>
 <a href="configure/base_directives.html#error-log"><code>error-log</code></a>
 </dd>
+</dl>
+
+<div id="h2olog" class="directive-head">
+<h3><a href="configure/base_directives.html#h2olog"><code>"h2olog"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Settings for h2olog(1).
+</p>
+
+<div class="example">
+<div class="caption">Example. Configure a UNIX domain socket for h2olog</div>
+<pre><code>h2olog:
+  path: /path/to/h2olog.sock # required
+  appdata: ON # optional
+  owner: h2o # optional
+  group: h2o # optional
+  permission: 666 # optional
+  sndbuf: 65536 # optional
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
 </dl>
 
 <div id="handshake-timeout" class="directive-head">

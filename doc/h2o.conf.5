@@ -855,6 +855,33 @@ error-log
 .RE
 .RE
 
+.SS h2olog
+Settings for h2olog(1).
+
+.PP
+
+.PP
+.BR Example:\ 
+Configure a UNIX domain socket for h2olog
+.PP
+.nf
+.RS
+h2olog:
+  path: /path/to/h2olog.sock # required
+  appdata: ON # optional
+  owner: h2o # optional
+  group: h2o # optional
+  permission: 666 # optional
+  sndbuf: 65536 # optional
+
+.RE
+.fi
+.PP
+
+
+.RE
+.RE
+
 .SS handshake-timeout
 Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.
 

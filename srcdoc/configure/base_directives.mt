@@ -414,6 +414,25 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 
 <?
 $ctx->{directive}->(
+    name    => "h2olog",
+    levels  => [ qw(global) ],
+    desc    => q{Settings for h2olog(1).},
+)->(sub {
+?>
+<?= $ctx->{example}->('Configure a UNIX domain socket for h2olog', <<'EOT')
+h2olog:
+  path: /path/to/h2olog.sock # required
+  appdata: ON # optional
+  owner: h2o # optional
+  group: h2o # optional
+  permission: 666 # optional
+  sndbuf: 65536 # optional
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "handshake-timeout",
     levels  => [ qw(global) ],
     default => "handshake-timeout: 10",
