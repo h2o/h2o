@@ -431,6 +431,10 @@ struct st_h2o_globalconf_t {
         h2o_socket_latency_optimization_conditions_t latency_optimization;
         /* */
         h2o_iovec_t origin_frame;
+        /**
+         * milliseconds to delay processing requests when suspicious behavior is detected
+         */
+        uint64_t dos_delay;
     } http2;
 
     struct {
@@ -501,6 +505,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+        /**
+         * maximum number of pipes to retain for reuse
+         */
+        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -742,6 +750,13 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
+        /**
+         * the list of spare pipes currently retained for reuse
+         */
+        struct {
+            int (*pipes)[2];
+            size_t count;
+        } spare_pipes;
     } proxy;
 
     struct {
@@ -1333,7 +1348,7 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
+     * set by the proxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
     /**

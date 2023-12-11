@@ -60,27 +60,71 @@ static void test_select_cipher(void)
 {
 #define C(x) ((x) >> 8) & 0xff, (x)&0xff
 
-    ptls_cipher_suite_t *selected,
-        *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
+    ptls_cipher_suite_t *selected;
 
     {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input; /* `input[0]` is preferable, but prohibited by MSVC */
-        ok(select_cipher(&selected, candidates, &input, &input, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
+        ok(select_cipher(&selected, candidates, &input, &input, 0, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
     }
 
     {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
         ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
     }
 
     {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+    }
+
+    {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes128gcmsha256, &ptls_minicrypto_aes256gcmsha384, &ptls_minicrypto_chacha20poly1305sha256, NULL};
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
+    }
+
+    {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes256gcmsha384, &ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(selected == &ptls_minicrypto_aes256gcmsha384);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1) == 0);
+        ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
+    }
+
+    {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes256gcmsha384, &ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(selected == &ptls_minicrypto_aes256gcmsha384);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(selected == &ptls_minicrypto_aes256gcmsha384);
+    }
+
+    {
+        ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes256gcmsha384, &ptls_minicrypto_aes128gcmsha256, NULL};
+        static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(selected == &ptls_minicrypto_aes256gcmsha384);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(selected == &ptls_minicrypto_aes256gcmsha384);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
+        ok(selected == &ptls_minicrypto_aes128gcmsha256);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
     }
 
@@ -449,6 +493,34 @@ static void test_chacha20poly1305(void)
         test_aad96_ciphersuite(cs, cs_peer);
     }
 }
+
+#ifdef PTLS_HAVE_AEGIS
+static void test_aegis128l(void)
+{
+    ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AEGIS128L_SHA256),
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AEGIS128L_SHA256);
+
+    if (cs != NULL && cs_peer != NULL) {
+        test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
+        test_aad_ciphersuite(cs, cs_peer);
+        test_aad96_ciphersuite(cs, cs_peer);
+    }
+}
+
+static void test_aegis256(void)
+{
+    ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AEGIS256_SHA384),
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AEGIS256_SHA384);
+
+    if (cs != NULL && cs_peer != NULL) {
+        test_ciphersuite(cs, cs_peer);
+        test_ciphersuite_stream(cs, cs_peer);
+        test_aad_ciphersuite(cs, cs_peer);
+        test_aad96_ciphersuite(cs, cs_peer);
+    }
+}
+#endif
 
 static void test_ffx(void)
 {
@@ -1954,6 +2026,13 @@ static void test_legacy_ch(void)
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x04, 0x00, 0x05, 0x00, 0x2f, 0x00, 0x33, 0x00, 0x32, 0x00, 0x0a, 0x00, 0x16,
         0x00, 0x13, 0x00, 0x09, 0x00, 0x15, 0x00, 0x12, 0x00, 0x03, 0x00, 0x08, 0x00, 0x14, 0x00, 0x11, 0x00, 0xff, 0x01, 0x00};
+    static const uint8_t tls12_no_exts[] = {
+        0x16, 0x03, 0x01, 0x00, 0x67, 0x01, 0x00, 0x00, 0x63, 0x03, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x20, 0xee, 0x8a, 0x29, 0xdd, 0xcf, 0x6d, 0x64, 0xfd, 0xd0, 0xcd,
+        0xa0, 0x9b, 0xc1, 0x32, 0x46, 0xbf, 0x53, 0xda, 0x29, 0x23, 0x81, 0x5f, 0x54, 0x1f, 0xbd, 0xe0, 0x8e, 0x97,
+        0x17, 0x5b, 0x03, 0x5d, 0x00, 0x1c, 0x00, 0xff, 0x00, 0x9c, 0xc0, 0x2b, 0xc0, 0x2f, 0xc0, 0x0a, 0xc0, 0x09,
+        0xc0, 0x13, 0xc0, 0x14, 0x00, 0x2f, 0x00, 0x35, 0x00, 0x9e, 0x00, 0x33, 0x00, 0x39, 0x00, 0x0a, 0x01, 0x00};
     /* client hello generated by openssl 1.0.0s; s_client -bugs -no_ticket -cipher DES-CBC-SHA -connect */
     static const uint8_t tls10_with_exts[] = {0x16, 0x03, 0x01, 0x00, 0x2f, 0x01, 0x00, 0x00, 0x2b, 0x03, 0x01, 0x63, 0xfc,
                                               0x5a, 0x16, 0xde, 0x7a, 0xfc, 0xc1, 0x0c, 0x54, 0x12, 0xa6, 0xd3, 0x8c, 0xcf,
@@ -2016,6 +2095,14 @@ static void test_legacy_ch(void)
     legacy_params = NULL;
 
     tls = ptls_new(ctx, 1);
+    len = sizeof(tls12_no_exts);
+    ret = ptls_handshake(tls, &sendbuf, tls12_no_exts, &len, NULL);
+    ptls_free(tls);
+    ok(ret == PTLS_ALERT_PROTOCOL_VERSION);
+    free(legacy_params);
+    legacy_params = NULL;
+
+    tls = ptls_new(ctx, 1);
     len = sizeof(tls10_with_exts);
     ret = ptls_handshake(tls, &sendbuf, tls10_with_exts, &len, NULL);
     ptls_free(tls);
@@ -2068,6 +2155,10 @@ void test_picotls(void)
     subtest("aes128gcm", test_aes128gcm);
     subtest("aes256gcm", test_aes256gcm);
     subtest("chacha20poly1305", test_chacha20poly1305);
+#ifdef PTLS_HAVE_AEGIS
+    subtest("aegis-128l", test_aegis128l);
+    subtest("aegis-256", test_aegis256);
+#endif
     subtest("aes128ecb", test_aes128ecb);
     subtest("aes256ecb", test_aes256ecb);
     subtest("aes128ctr", test_aes128ctr);
@@ -2112,4 +2203,10 @@ void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_
     ret = ctx->on_exchange(&ctx, 1, NULL, ptls_iovec_init(NULL, 0));
     ok(ret == 0);
     ok(ctx == NULL);
+
+    /* test derivation failure. In case of X25519, the outcome is derived key becoming all-zero and rejected. In case of others, it
+     * is most likely that the provided key would be rejected. */
+    static uint8_t zeros[32] = {0};
+    ret = server->exchange(server, &server_pubkey, &server_secret, ptls_iovec_init(zeros, sizeof(zeros)));
+    ok(ret != 0);
 }

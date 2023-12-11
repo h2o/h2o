@@ -328,8 +328,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         headers = &dummy_headers;
     }
 
-    if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table,
-                                        status, headers, NULL, src, len, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table, status, headers, NULL, src, len,
+                                        err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
@@ -400,8 +400,8 @@ SendRSTStream:
     return 0;
 }
 
-static int on_trailers(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream,
-                       const uint8_t *src, size_t len, const char **err_desc)
+static int on_trailers(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream, const uint8_t *src,
+                       size_t len, const char **err_desc)
 {
     int ret;
 
@@ -416,7 +416,8 @@ static int on_trailers(struct st_h2o_http2client_conn_t *conn, struct st_h2o_htt
         return ret;
     }
 
-    if (stream->super._cb.on_body(&stream->super, h2o_httpclient_error_is_eos, stream->input.trailers.entries, stream->input.trailers.size) != 0) {
+    if (stream->super._cb.on_body(&stream->super, h2o_httpclient_error_is_eos, stream->input.trailers.entries,
+                                  stream->input.trailers.size) != 0) {
         ret = H2O_HTTP2_ERROR_INTERNAL;
         goto SendRSTStream;
     }
@@ -463,8 +464,8 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
         conn->input.read_frame = expect_default;
 
         if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
-            hret = on_trailers(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes, conn->input.headers_unparsed->size,
-                              err_desc);
+            hret = on_trailers(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes,
+                               conn->input.headers_unparsed->size, err_desc);
         } else {
             hret = on_head(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes, conn->input.headers_unparsed->size,
                            err_desc, is_end_stream);
@@ -668,7 +669,8 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
     stream = get_stream(conn, frame->stream_id);
     if (stream != NULL) {
         /* reset the stream */
-        call_callback_with_error(stream, h2o_httpclient_error_refused_stream);
+        call_callback_with_error(stream, payload.error_code == -H2O_HTTP2_ERROR_REFUSED_STREAM ? h2o_httpclient_error_refused_stream
+                                                                                               : h2o_httpclient_error_io);
         close_stream(stream);
     }
 

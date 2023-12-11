@@ -600,7 +600,7 @@ static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec
     h2o_url_t parsed, resolved;
 
     /* check the authority, and extract absolute path */
-    if (h2o_url_parse_relative(url.base, url.len, &parsed) != 0)
+    if (h2o_url_parse_relative(pool, url.base, url.len, &parsed) != 0)
         goto Invalid;
 
     /* fast-path for abspath form */

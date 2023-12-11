@@ -293,7 +293,7 @@ static struct {
         h2o_context_t ctx;
         h2o_multithread_receiver_t server_notifications;
         h2o_multithread_receiver_t memcached;
-    } * threads;
+    } *threads;
     volatile sig_atomic_t shutdown_requested;
     h2o_barrier_t startup_sync_barrier_init;
     h2o_barrier_t startup_sync_barrier_post;
@@ -1462,7 +1462,7 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
     return http2_origin_frame;
 }
 
-static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node)
+static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd, yoml_t *node, int is_quic)
 {
     int seen_tls_aes_128_gcm_sha256 = 0;
     H2O_VECTOR(ptls_cipher_suite_t *) ret = {};
@@ -1474,17 +1474,21 @@ static ptls_cipher_suite_t **parse_tls13_ciphers(h2o_configurator_command_t *cmd
             return NULL;
         }
         ptls_cipher_suite_t *cand;
-        for (size_t i = 0; (cand = ptls_openssl_cipher_suites[i]) != NULL; ++i)
+        for (size_t i = 0; (cand = ptls_openssl_cipher_suites_all[i]) != NULL; ++i)
             if (strcmp(element->data.scalar, cand->name) == 0)
                 goto Found;
         /* not found */
         char msg[1024];
         strcpy(msg, "Unexpected cipher suite. Expected one of:");
-        for (size_t i = 0; ptls_openssl_cipher_suites[i] != NULL; ++i)
-            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites[i]->name);
+        for (size_t i = 0; ptls_openssl_cipher_suites_all[i] != NULL; ++i)
+            sprintf(msg + strlen(msg), " %s", ptls_openssl_cipher_suites_all[i]->name);
         h2o_configurator_errprintf(cmd, node, "%s", msg);
         return NULL;
     Found:
+        if (is_quic && cand->aead->ctr_cipher == NULL) {
+            h2o_configurator_errprintf(cmd, element, "cipher-suite %s cannot be used with QUIC (no CTR mode)", cand->name);
+            return NULL;
+        }
         h2o_vector_reserve(NULL, &ret, ret.size + 1);
         ret.entries[ret.size++] = cand;
         if (cand == &ptls_openssl_aes128gcmsha256)
@@ -2015,7 +2019,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
-        if (cipher_suite_tls13_node != NULL && (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node)) == NULL)
+        if (cipher_suite_tls13_node != NULL &&
+            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
     } else if (listener->quic.ctx != NULL) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
@@ -2790,14 +2795,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                                                        "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s",
+                                                       "max-initial-handshake-packets:s,ecn:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets) != 0)
+                                                       &max_initial_handshake_packets, &ecn) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2849,6 +2854,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
+                    }
+                    if (ecn != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->enable_ecn = !!on;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -4456,8 +4467,7 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
-        h2o_configurator_define_command(c, "neverbleed-offload",
-                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+        h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_neverbleed_offload);
     }
 
@@ -4632,6 +4642,9 @@ int main(int argc, char **argv)
 #if H2O_USE_KTLS
                 printf("ktls: YES\n");
 #endif
+#if PTLS_HAVE_AEGIS
+                printf("libaegis: YES\n");
+#endif
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -4673,7 +4686,8 @@ int main(int argc, char **argv)
                     for (size_t i = 0; i != c->commands.size; ++i)
                         printf("%s\n", c->commands.entries[i].name);
                 }
-            } exit(0);
+            }
+                exit(0);
             default:
                 assert(0);
                 break;

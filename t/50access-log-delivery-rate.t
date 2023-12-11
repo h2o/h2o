@@ -51,7 +51,7 @@ sub truncate_access_log {
 sub load_logs {
     open my $fh, "<", "$tempdir/access_log" or die $!;
     my @json_logs = <$fh>;
-    diag(@json_logs) if $ENV{TEST_DEBUG};
+    debug(@json_logs);
     return map { decode_json($_) } @json_logs;
 }
 
