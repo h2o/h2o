@@ -398,6 +398,23 @@ static uint32_t *get_state_counter(struct st_h2o_http3_server_conn_t *conn, enum
     return conn->num_streams.counters + (size_t)state;
 }
 
+static void handle_priority_change(struct st_h2o_http3_server_stream_t *stream, const char *value, size_t len, h2o_absprio_t base)
+{
+    int reactivate = 0;
+
+    if (h2o_linklist_is_linked(&stream->scheduler.link)) {
+        req_scheduler_deactivate(&get_conn(stream)->scheduler.reqs, &stream->scheduler);
+        reactivate = 1;
+    }
+
+    /* update priority, using provided value as the base */
+    stream->scheduler.priority = base;
+    h2o_absprio_parse_priority(value, len, &stream->scheduler.priority);
+
+    if (reactivate)
+        req_scheduler_activate(&get_conn(stream)->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
+}
+
 static void tunnel_on_udp_read(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
@@ -1229,7 +1246,8 @@ int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, cons
     int ret;
 
     /* read and ignore unknown frames */
-    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0)
+    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
+                                    src_end, err_desc)) != 0)
         return ret;
     switch (frame.type) {
     case H2O_HTTP3_FRAME_TYPE_HEADERS:
@@ -1272,7 +1290,8 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
     int ret;
 
     /* read frame */
-    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0)
+    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
+                                    src_end, err_desc)) != 0)
         return ret;
     switch (frame.type) {
     case H2O_HTTP3_FRAME_TYPE_HEADERS:
@@ -1376,8 +1395,15 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     size_t header_ack_len;
 
     /* read the HEADERS frame (or a frame that precedes that) */
-    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0)
-        return ret;
+    if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
+                                    src_end, err_desc)) != 0) {
+        if (*err_desc == h2o_http3_err_frame_too_large && frame.type == H2O_HTTP3_FRAME_TYPE_HEADERS) {
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 0);
+            return 0;
+        } else {
+            return ret;
+        }
+    }
     if (frame.type != H2O_HTTP3_FRAME_TYPE_HEADERS) {
         switch (frame.type) {
         case H2O_HTTP3_FRAME_TYPE_DATA:
@@ -1576,12 +1602,19 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     switch (stream->state) {
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
         h2o_iovec_t datagram_flow_id;
+        ssize_t priority_header_index;
         if (!finalize_do_send_setup_udp_tunnel(stream, send_state, &datagram_flow_id))
             return;
         stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         write_response(stream, datagram_flow_id);
         h2o_probe_log_response(&stream->req, stream->quic->stream_id);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, 1);
+        if ((priority_header_index = h2o_find_header(&stream->req.res.headers, H2O_TOKEN_PRIORITY, -1)) != -1) {
+            const h2o_header_t *header = &stream->req.res.headers.entries[priority_header_index];
+            handle_priority_change(
+                stream, header->value.base, header->value.len,
+                stream->scheduler.priority /* omission of a parameter is disinterest to change (RFC 9218 Section 8) */);
+        }
         break;
     }
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY:
@@ -1657,13 +1690,9 @@ static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn,
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     assert(stream != NULL);
     stream->received_priority_update = 1;
-    if (h2o_linklist_is_linked(&stream->scheduler.link)) {
-        req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
-        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
-        req_scheduler_activate(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
-    } else {
-        stream->scheduler.priority = frame->priority; /* TODO apply only the delta? */
-    }
+
+    handle_priority_change(stream, frame->value.base, frame->value.len,
+                           h2o_absprio_default /* the frame communicates a complete set of parameters; RFC 9218 Section 7 */);
 
     return 0;
 }
@@ -2069,7 +2098,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
 
-    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack);
+    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack, H2O_MAX_REQLEN);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
     h2o_linklist_init_anchor(&conn->delayed_streams.req_streaming);
@@ -2127,7 +2156,8 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->transport_params.max_data =
         conf->http3.active_stream_window_size; /* set to a size that does not block the unblocked request stream */
     quic->transport_params.max_streams_uni = 10;
-    quic->transport_params.max_stream_data.bidi_remote = H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE;
+    quic->transport_params.max_stream_data.bidi_remote = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
+    quic->transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     quic->transport_params.max_idle_timeout = conf->http3.idle_timeout;
     quic->transport_params.min_ack_delay_usec = conf->http3.allow_delayed_ack ? 0 : UINT64_MAX;
     quic->ack_frequency = conf->http3.ack_frequency;
