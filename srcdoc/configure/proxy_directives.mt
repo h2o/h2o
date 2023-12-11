@@ -324,7 +324,7 @@ $ctx->{directive}->(
     name     => "proxy.max-spare-pipes",
     levels   => [ qw(global) ],
     desc     => q{This setting specifies the maximum number of pipes retained for reuse, when <code>proxy.zerocopy</code> is used.},
-    default  => 64,
+    default  => 0,
     see_also => render_mt(<<'EOT'),
 <a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
 EOT
