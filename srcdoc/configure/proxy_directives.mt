@@ -333,6 +333,7 @@ EOT
 <p>
 This maximum is applied per each worker thread.
 The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
+When this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
 </p>
 <p>
 Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
