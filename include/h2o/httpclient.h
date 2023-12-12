@@ -424,7 +424,7 @@ inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status,
             if (status == 101)
                 return 1;
         } else {
-            if (200 <= status && status <= 299 && strcmp(client->upgrade_to, "connect-udp") == 0)
+            if (200 <= status && status <= 299)
                 return 1;
         }
     }
