@@ -922,6 +922,13 @@ struct st_ptls_context_t {
      * (optional) list of supported tls12 cipher-suites terminated by NULL
      */
     ptls_cipher_suite_t **tls12_cipher_suites;
+    /**
+     * (optional) session ID Context to segment resumption
+     */
+    struct {
+        uint8_t bytes[PTLS_SHA256_DIGEST_SIZE];
+        uint8_t is_set : 1;
+    } ticket_context;
 };
 
 typedef struct st_ptls_raw_extension_t {
