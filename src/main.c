@@ -1399,6 +1399,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         pctx->ctx.emit_certificate = NULL;
     }
 
+    /* setup session ticket context so that resumption will succeed only against the same certificate */
+    assert(sizeof(pctx->ctx.ticket_context.bytes) == PTLS_SHA256_DIGEST_SIZE);
+    ptls_calc_hash(&ptls_openssl_sha256, pctx->ctx.ticket_context.bytes, pctx->ctx.certificates.list[0].base,
+                   pctx->ctx.certificates.list[0].len);
+    pctx->ctx.ticket_context.is_set = 1;
+
     if (listener->quic.ctx != NULL) {
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
@@ -1580,6 +1586,18 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
          * callback of picotls for incoming TLS 1.3 connections. */
         X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
         int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
+    }
+
+    /* set session resumption context so that resumption will succeed only against the same certificate */
+    if (raw_pubkey_count == 0) {
+        uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
+        unsigned session_ctx_len;
+        H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
+        int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
+        assert(ret == 1);
+        assert(session_ctx_len == sizeof(session_ctx));
+        ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
 
@@ -2067,7 +2085,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 #endif
 
-        SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         setup_ecc_key(identity->ossl);
         if (cipher_suite != NULL && SSL_CTX_set_cipher_list(identity->ossl, (*cipher_suite)->data.scalar) != 1) {
             h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
@@ -2778,14 +2795,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets;
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
                     if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
                                                        "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                                                        "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s",
+                                                       "max-initial-handshake-packets:s,ecn:s",
                                                        &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
                                                        &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets) != 0)
+                                                       &max_initial_handshake_packets, &ecn) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2837,6 +2854,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
+                    }
+                    if (ecn != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->enable_ecn = !!on;
                     }
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)

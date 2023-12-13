@@ -138,9 +138,6 @@ struct st_h2o_qpack_flatten_context_t {
     int64_t largest_ref;
 };
 
-#define MAX_HEADER_NAME_LENGTH 128
-#define MAX_HEADER_VALUE_LENGTH 4096
-
 const char *h2o_qpack_err_header_name_too_long = "header name too long";
 const char *h2o_qpack_err_header_value_too_long = "header value too long";
 const char *h2o_qpack_err_header_exceeds_table_size = "header exceeds table size";
@@ -347,11 +344,6 @@ static int64_t qpack_table_total_inserts(struct st_h2o_qpack_header_table_t *tab
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
                                       const uint8_t *value, int64_t value_len, const char **err_desc)
 {
-    if (value_len >= MAX_HEADER_VALUE_LENGTH) {
-        *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
-
     if (name_is_static) {
         const h2o_qpack_static_table_entry_t *ref;
         if ((ref = resolve_static_abs(name_index, err_desc)) == NULL)
@@ -380,15 +372,6 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
 {
     h2o_iovec_t name;
     unsigned soft_errors = 0;
-
-    if (qnlen >= MAX_HEADER_NAME_LENGTH) {
-        *err_desc = h2o_qpack_err_header_name_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
-    if (qvlen >= MAX_HEADER_VALUE_LENGTH) {
-        *err_desc = h2o_qpack_err_header_value_too_long;
-        return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
-    }
 
     if (qnhuff) {
         name.base = alloca(qnlen * 2);
@@ -589,7 +572,7 @@ static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, unsigned *s
 
     /* obtain flags and length */
     is_huff = (**src >> prefix_bits) & 1;
-    if (decode_int(&len, src, src_end, prefix_bits) != 0 || len > MAX_HEADER_NAME_LENGTH) {
+    if (decode_int(&len, src, src_end, prefix_bits) != 0) {
         *err_desc = h2o_qpack_err_header_name_too_long;
         goto Fail;
     }
@@ -634,7 +617,7 @@ static h2o_iovec_t decode_header_value_literal(h2o_mem_pool_t *pool, unsigned *s
         goto Fail;
     int is_huff = (**src & 0x80) != 0;
 
-    if (decode_int(&len, src, src_end, 7) != 0 || len > MAX_HEADER_VALUE_LENGTH) {
+    if (decode_int(&len, src, src_end, 7) != 0) {
         *err_desc = h2o_qpack_err_header_value_too_long;
         goto Fail;
     }

@@ -397,6 +397,21 @@ EOT
 ?>
 ? })
 
+<?
+$ctx->{directive}->(
+    name    => "http2-dos-delay",
+    levels  => [ qw(global) ],
+    default => 'http2-dos-delay: 100',
+    desc    => << 'EOT',
+HTTP request processing delay to be applied when the client behavior is suspicious, in the unit of milliseconds.
+EOT
+)->(sub {
+?>
+<p>
+When the client behavior is suspicious and there is a concern of Denial-of-Service attack, h2o stops processing requests arriving on the suspicious connection for specified amount of time.
+</p>
+? })
+
 ? })
 
 ? })

@@ -24,6 +24,10 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED /* we'd like to use HMAC_Init_ex while it exists, to minimize code divergence between          \
+                                     * different TLS stacks. */
+#endif
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -136,7 +140,6 @@ static void setup_cache_enable(SSL_CTX **contexts, size_t num_contexts, int asyn
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
         SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_AUTO_CLEAR);
-        SSL_CTX_set_session_id_context(contexts[i], H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         SSL_CTX_set_timeout(contexts[i], conf.lifetime);
         if (async_resumption)
             h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);

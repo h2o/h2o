@@ -698,6 +698,7 @@
 		0821950F2685262B00E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
 		0829879326E1F3530053638F /* rate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80resume-context.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -709,6 +710,8 @@
 		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
+		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		085BDAE72B1DB4C2002851EA /* 40http3-priority.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-priority.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-selective-tracing.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-corrupted-scid-initial.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001C02730B6E30043886F /* forever_ticket.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = forever_ticket.yaml; sourceTree = "<group>"; };
@@ -2242,6 +2245,7 @@
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
+				085BDAE72B1DB4C2002851EA /* 40http3-priority.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
@@ -2376,6 +2380,7 @@
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
+				08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
 				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
 				109EEFE21D77B350001F11D1 /* 80invalid-h2-chars-in-headers.t */,
@@ -2385,6 +2390,7 @@
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
+				082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */,
 				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
 				E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
