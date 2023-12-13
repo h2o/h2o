@@ -578,7 +578,7 @@ static void usage(const char *progname)
             "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
             "  --connect-udp-draft03\n"
             "               Create draft03 style CONNECT-UDP tunnels instead of RFC 9298\n"
-            "  --initial-udp-payload-ize <bytes>\n"
+            "  --initial-udp-payload-size <bytes>\n"
             "               specifies the udp payload size of the initial message (default:\n"
             "               %" PRIu16 ")\n"
             "  --max-udp-payload-size <bytes>\n"
