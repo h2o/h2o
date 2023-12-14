@@ -251,7 +251,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
         udp_write(client, &datagram, 1);
     } else {
         /* append UDP chunk to the input buffer of stdin read socket! */
-        uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
+        uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)(context_id_len + rret));
         h2o_buffer_append(&std_in.sock->input, header, header_end - header);
         h2o_buffer_append(&std_in.sock->input, buf, context_id_len + rret);
         /* pretend as if we read from stdin */
