@@ -58,7 +58,9 @@ typedef struct st_h2o_httpclient_properties_t {
     int *chunked;
     /**
      * When the value is a non-NULL pointer (at the moment, only happens with the HTTP/1 client), the application MAY set it to the
-     * value of the connection header field to be sent to the server. This can be used for upgrading an HTTP/1.1 connection.
+     * value of the connection header field to be sent to the server. This value is advisory in sense that 1) the server might
+     * decide to close the connection even if the client sent `keep-alive` and 2) the field may be rewritten to `upgrade` if the
+     * client requested upgrade (extended CONNECT).
      */
     h2o_iovec_t *connection_header;
     /**
