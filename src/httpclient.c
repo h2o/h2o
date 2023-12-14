@@ -891,11 +891,33 @@ int main(int argc, char **argv)
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0) {
+
+    int is_connect = 0;
+    if ((strcmp(req.method, "CONNECT") == 0 && udp_sock == NULL) || strcmp(req.method, "CONNECT-UDP") == 0) {
+        /* traditional CONNECT */
         if (req.connect_to == NULL) {
             fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
             exit(EXIT_FAILURE);
         }
+        is_connect = 1;
+    } else if (udp_sock != NULL) {
+        /* masque using extended CONNECT (RFC 9298) */
+        if (strcmp(req.method, "GET") == 0) {
+            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0) {
+                fprintf(stderr, "extended CONNECT with GET cannot be used on H2/H3; specify `-2 0 -3 0`\n");
+                exit(EXIT_FAILURE);
+            }
+        } else if (strcmp(req.method, "CONNECT") == 0) {
+            if (ctx.protocol_selector.ratio.http2 < 0 ||
+                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
+                fprintf(stderr,
+                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        is_connect = 1;
+    }
+    if (is_connect) {
 #if H2O_USE_LIBUV
         std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
 #else
