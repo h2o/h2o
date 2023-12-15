@@ -272,7 +272,8 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
             /* Skip datagrams with context id != 0, rfc9298 section 5. TODO: error-close the connection upon decoding failure? */
             if (ptls_decode_quicint(&src, src + datagrams[i].len) != 0)
                 continue;
-            udp_payload = (struct iovec){.iov_base = (void *)src, .iov_len = src - (const uint8_t *)datagrams[i].base};
+            udp_payload =
+                (struct iovec){.iov_base = (void *)src, .iov_len = datagrams[i].len - (src - (const uint8_t *)datagrams[i].base)};
         }
         struct msghdr mess = {.msg_name = &udp_sock_remote_addr,
                               .msg_namelen = sizeof(udp_sock_remote_addr),
