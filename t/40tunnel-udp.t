@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
@@ -9,6 +10,8 @@ use t::Util;
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
+
+my $tempdir = tempdir(CLEANUP => 1);
 
 # setup UDP echo server to which the client would talk to
 my $udp_server = do {
@@ -68,40 +71,65 @@ subtest "udp-draft03" => sub {
     ) {
         my ($name, $args) = @$_;
         my $cmd = "$client_prog -k -m CONNECT-UDP -X $tunnel_port $args 127.0.0.1:@{[$udp_server->{port}]}";
-        doit($name, $cmd);
+        doit($name, $cmd, 200, sub {
+            my $payload = shift;
+            "\0". chr(length $payload) . $payload; # only supports payload up to 63 bytes
+        });
     }
 };
 
 subtest "udp-rfc9298" => sub {
     for (
-        ["h1", "-2 0 -m GET http://127.0.0.1:@{[$tunnel_server->{port}]}"],
-        ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
-        ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
-        ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
+        ["h1", "-2 0 -m GET http://127.0.0.1:@{[$tunnel_server->{port}]}", 101],
+        ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 101],
+        ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 200],
+        ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 200],
     ) {
-        my ($name, $args_url_prefix) = @$_;
+        my ($name, $args_url_prefix, $status_expected) = @$_;
         my $cmd = "$client_prog -k -X $tunnel_port $args_url_prefix/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
-        doit($name, $cmd);
+        doit($name, $cmd, $status_expected, sub {
+            my $payload = shift;
+            "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
+        });
     }
 };
 
 sub doit {
-    my ($name, $cmd) = @_;
+    my ($name, $cmd, $status_expected, $to_capsule) = @_;
 
     subtest $name => sub {
-        my $tunnel = spawn_forked(sub {
-            exec $cmd or die "got spawn error ($?) for command: $cmd";
-        });
+        open my $client, "|-", "$cmd > $tempdir/out 2>&1"
+            or die "spawn error ($?) for command: $cmd";
         sleep 0.5;
-        for (1..5) {
-            my $mess = "" . int(100000 * rand);
-            open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
-            or die "failed to spawn nc:$?";
+
+        local $SIG{PIPE} = sub {}; # $client may exit early but we do not want to get killed by SIGPIPE when writing to it
+
+        if ($name eq 'h3') {
+            # H3: test exchange using the UDP socket
+            for my $mess ("hello", "world") {
+                open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
+                    or die "failed to spawn nc:$?";
+                my $resp = do {
+                    local $/;
+                    <$fh>;
+                };
+                is $resp, "$mess\n", "got UDP echo";
+            }
+        } else {
+            # H1,H2: write from both stdin and UDP socket, but all the responses are sent to the stream
+            print $client $to_capsule->("hello");
+            print $client $to_capsule->("world");
+            flush $client;
+            sleep 0.5;
+            undef $client;
             my $resp = do {
+                open my $fh, "<", "$tempdir/out"
+                    or die "failed to open file:$tempdir/out:$!";
                 local $/;
                 <$fh>;
             };
-            is $resp, "$mess\n", "got UDP echo";
+            my $resp_expected = $to_capsule->("hello") . $to_capsule->("world");
+            like $resp, qr{^HTTP/[0-9.]+ $status_expected.*\n\n$resp_expected$}s, "got capsule echos";
         }
     };
 }
