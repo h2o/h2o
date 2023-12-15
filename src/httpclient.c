@@ -261,17 +261,23 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    size_t context_id_len = strcmp(req.method, "CONNECT-UDP") == 0 ? 0 : 1;
+    int is_draft03 = strcmp(req.method, "CONNECT-UDP") == 0;
+
     for (size_t i = 0; i != num_datagrams; ++i) {
-        const h2o_iovec_t *src = datagrams + i;
-        if (context_id_len == 1) {
-            // Skip datagrams with context id != 0, rfc9298 section 5.
-            if (src->base[0] != 0)
+        struct iovec udp_payload;
+        if (is_draft03) {
+            udp_payload = (struct iovec){datagrams[i].base, datagrams[i].len};
+        } else {
+            const uint8_t *src = (uint8_t *)datagrams[i].base;
+            /* Skip datagrams with context id != 0, rfc9298 section 5. TODO: error-close the connection upon decoding failure? */
+            if (ptls_decode_quicint(&src, src + datagrams[i].len) != 0)
                 continue;
+            udp_payload = (struct iovec){.iov_base = (void *)src, .iov_len = src - (const uint8_t *)datagrams[i].base};
         }
-        struct iovec vec = {.iov_base = src->base + context_id_len, .iov_len = src->len - context_id_len};
-        struct msghdr mess = {
-            .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
+        struct msghdr mess = {.msg_name = &udp_sock_remote_addr,
+                              .msg_namelen = sizeof(udp_sock_remote_addr),
+                              .msg_iov = &udp_payload,
+                              .msg_iovlen = 1};
         sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
     }
 }
