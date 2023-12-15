@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
 use t::Util;
 use Time::HiRes qw(sleep);
@@ -122,44 +122,11 @@ sub cleanup_test {
     $test->{server} = undef;
 }
 
-sub wait_for_ports {
-    my $kind = shift;
-    my @need_ports = @_;
-
-    diag("Checking port(s) [".join(', ', @need_ports)."]");
-
-    # Make 30 attempts with a 1 second sleep between them.
-    my $attempt = 0;
-    for (; $attempt < 30; ++$attempt) {
-        my @found = ();
-        open my $f, '<', "/proc/net/$kind" or die $!;
-        while (my $line = <$f>) {
-            next unless $line =~ /^\s*\d+: [0-9A-F]{8}:([0-9A-F]{4}) /;
-            push @found, hex($1);
-        }
-        close $f;
-
-        my @missing = ();
-        foreach my $need_port (@need_ports) {
-            unless (grep { $_ == $need_port } @found) {
-                push @missing, $need_port;
-            }
-        }
-        if (scalar(@missing) == 0) {
-            diag("Found port(s) [".join(', ', @need_ports)."]");
-            return;
-        }
-        diag("Waiting for $kind port(s) [".join(', ', @missing)."] (existing: [".join(', ', @found)."])");
-        sleep(1);
-    }
-    fail("waiting for $kind ports ($attempt attempts)");
-}
-
-
 subtest "udp-draft03" => sub {
     my $test = setup_test();
 
-    wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
+    wait_port({port => $test->{origin_quic_port}, proto => 'udp'});
+    wait_port({port => $test->{proxy_quic_port}, proto => 'udp'});
     my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "--connect-udp-draft03");
     foreach my $i (1..5) {
         test_udp_exchange($tunnel->{port});
@@ -170,7 +137,8 @@ subtest "udp-draft03" => sub {
 subtest "udp-rfc9298" => sub {
     my $test = setup_test();
 
-    wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
+    wait_port({port => $test->{origin_quic_port}, proto => 'udp'});
+    wait_port({port => $test->{proxy_quic_port}, proto => 'udp'});
     my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "");
     foreach my $i (1..5) {
         test_udp_exchange($tunnel->{port});
