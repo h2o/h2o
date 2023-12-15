@@ -60,54 +60,50 @@ my $tunnel_port = empty_port({
 });
 
 subtest "udp-draft03" => sub {
-    for my $opts (
+    for (
         ["h1", "-2 0 -x http://127.0.0.1:@{[$tunnel_server->{port}]}"],
         ["h1s", "-2 0 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
         ["h2", "-2 100 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
         ["h3", "-3 100 -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
     ) {
-        subtest $opts->[0] => sub {
-            my $tunnel = spawn_forked(sub {
-                my $cmd = "$client_prog -k -m CONNECT-UDP -X $tunnel_port @{[$opts->[1]]} 127.0.0.1:@{[$udp_server->{port}]}";
-                exec $cmd or die "failed to spawn $client_prog:$?";
-            });
-            sleep 0.5;
-            foreach my $i (1..5) {
-                test_udp_exchange();
-            }
-        };
+        my ($name, $args) = @$_;
+        my $cmd = "$client_prog -k -m CONNECT-UDP -X $tunnel_port $args 127.0.0.1:@{[$udp_server->{port}]}";
+        doit($name, $cmd);
     }
 };
 
 subtest "udp-rfc9298" => sub {
-    for my $opts (
+    for (
         ["h1", "-2 0 -m GET http://127.0.0.1:@{[$tunnel_server->{port}]}"],
         ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
         ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
         ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
     ) {
-        subtest $opts->[0] => sub {
-            my $tunnel = spawn_forked(sub {
-                my $cmd = "$client_prog -k -X $tunnel_port @{[$opts->[1]]}/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
-                exec $cmd or die "failed to spawn $client_prog:$?";
-            });
-            sleep 0.5;
-            foreach my $i (1..5) {
-                test_udp_exchange();
-            }
-        };
+        my ($name, $args_url_prefix) = @$_;
+        my $cmd = "$client_prog -k -X $tunnel_port $args_url_prefix/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
+        doit($name, $cmd);
     }
 };
 
-sub test_udp_exchange {
-    my $mess = "" . int(100000 * rand);
-    open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
-        or die "failed to spawn nc:$?";
-    my $resp = do {
-        local $/;
-        <$fh>;
+sub doit {
+    my ($name, $cmd) = @_;
+
+    subtest $name => sub {
+        my $tunnel = spawn_forked(sub {
+            exec $cmd or die "got spawn error ($?) for command: $cmd";
+        });
+        sleep 0.5;
+        for (1..5) {
+            my $mess = "" . int(100000 * rand);
+            open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
+            or die "failed to spawn nc:$?";
+            my $resp = do {
+                local $/;
+                <$fh>;
+            };
+            is $resp, "$mess\n", "got UDP echo";
+        }
     };
-    is $resp, "$mess\n", "got UDP echo";
 }
 
 done_testing;
