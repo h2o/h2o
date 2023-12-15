@@ -90,8 +90,8 @@ sub create_tunnel {
 }
 
 sub test_udp_exchange {
-    my $resp = `$client_prog -o /dev/null -3 100 https://127.0.0.1:$tunnel_port/echo-query 2>&1`;
-    like $resp, qr{^HTTP/3 200}s, "200 response";
+    my $resp = `$client_prog -3 100 https://127.0.0.1:$tunnel_port/index.txt 2>&1`;
+    like $resp, qr{^HTTP/3 200.*\nhello\n$}s, "200 response";
 }
 
 done_testing;
