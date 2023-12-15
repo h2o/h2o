@@ -1104,7 +1104,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
                               stream->stream_id, conn->peer_settings.max_frame_size, method, &url,
-                              stream->super.upgrade_to != NULL
+                              stream->super.upgrade_to != NULL && stream->super.upgrade_to != h2o_httpclient_upgrade_to_connect
                                   ? h2o_iovec_init(stream->super.upgrade_to, strlen(stream->super.upgrade_to))
                                   : h2o_iovec_init(NULL, 0),
                               headers, num_headers, stream->state.req == STREAM_STATE_CLOSED);
