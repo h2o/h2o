@@ -27,13 +27,9 @@ sub create_tunnel {
     return +{ tunnel => $tunnel, port => $tunnel_port,};
 }
 
-sub issue_one_request {
-    my ($proto, $tunnel_port) = @_;
-
-    if ($proto eq "2") {
-        $proto = "2 100";
-    }
-    my $resp = `$client_prog -o /dev/null -$proto https://127.0.0.1:$tunnel_port/echo-query 2>&1`;
+sub test_udp_exchange {
+    my $tunnel_port = shift;
+    my $resp = `$client_prog -o /dev/null -3 100 https://127.0.0.1:$tunnel_port/echo-query 2>&1`;
     like $resp, qr{^HTTP/3 200}s, "200 response";
 }
 
@@ -166,7 +162,7 @@ subtest "udp-draft03" => sub {
     wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
     my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "--connect-udp-draft03");
     foreach my $i (1..5) {
-        issue_one_request("3", $tunnel->{port});
+        test_udp_exchange($tunnel->{port});
     }
     cleanup_test($test);
 };
@@ -177,7 +173,7 @@ subtest "udp-rfc9298" => sub {
     wait_for_ports('udp', $test->{origin_quic_port}, $test->{proxy_quic_port});
     my $tunnel = create_tunnel("3", $test->{origin_quic_port}, $test->{proxy_quic_port}, "");
     foreach my $i (1..5) {
-        issue_one_request("3", $tunnel->{port});
+        test_udp_exchange($tunnel->{port});
     }
     cleanup_test($test);
 };
