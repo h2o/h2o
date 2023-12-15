@@ -669,7 +669,8 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
     stream = get_stream(conn, frame->stream_id);
     if (stream != NULL) {
         /* reset the stream */
-        call_callback_with_error(stream, h2o_httpclient_error_refused_stream);
+        call_callback_with_error(stream, payload.error_code == -H2O_HTTP2_ERROR_REFUSED_STREAM ? h2o_httpclient_error_refused_stream
+                                                                                               : h2o_httpclient_error_io);
         close_stream(stream);
     }
 

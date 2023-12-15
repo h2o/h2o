@@ -53,6 +53,8 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
                             int64_t now, uint32_t max_udp_payload_size)
 {
+    quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
+
     /* Nothing to do if loss is in recovery window. */
     if (lost_pn < cc->recovery_end)
         return;

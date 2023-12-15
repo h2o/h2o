@@ -777,7 +777,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     h2o_url_t url;
 
     /* parse the location URL */
-    if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
+    if (h2o_url_parse_relative(&req->pool, url_str, url_len, &url) != 0) {
         /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
         h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
@@ -878,7 +878,7 @@ int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_
     h2o_url_t input;
 
     /* resolve the URL */
-    if (h2o_url_parse_relative(dest.base, dest.len, &input) != 0) {
+    if (h2o_url_parse_relative(&req->pool, dest.base, dest.len, &input) != 0) {
         return -1;
     }
     if (input.scheme != NULL && input.authority.base != NULL) {

@@ -359,7 +359,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
@@ -446,7 +446,8 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         /* otherwise, read the frame */
         h2o_http3_read_frame_t frame;
         int ret;
-        if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
+        if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, req->conn->super.max_frame_payload_size, src,
+                                        src_end, err_desc)) != 0) {
             /* incomplete */
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
                 return ret;
@@ -485,7 +486,8 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     int ret, frame_is_eos;
 
     /* read HEADERS frame */
-    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
+    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, req->conn->super.max_frame_payload_size, src, src_end,
+                                    err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
             if (err != 0) {
                 notify_response_error(req, h2o_httpclient_error_io);

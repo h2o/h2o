@@ -19,7 +19,7 @@
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd><?= join(", ", @{$args->{levels}}) ?></dd>
-? if ($args->{default}) {
+? if (defined $args->{default}) {
 <dt>Default:</dt>
 <dd><code><pre><?= $args->{default} ?></pre></code>
 ? }

@@ -1350,7 +1350,6 @@ int h2o_socket_compare_address(struct sockaddr *x, struct sockaddr *y, int check
             return r;
         if (check_port)
             CMP(ntohs(xin6->sin6_port), ntohs(yin6->sin6_port));
-        CMP(xin6->sin6_flowinfo, yin6->sin6_flowinfo);
         CMP(xin6->sin6_scope_id, yin6->sin6_scope_id);
     } else {
         assert(!"unknown sa_family");

@@ -1706,10 +1706,13 @@ static int encode_session_identifier(ptls_context_t *ctx, ptls_buffer_t *buf, ui
         ptls_buffer_push16(buf, csid);
         /* ticket_age_add */
         ptls_buffer_push32(buf, ticket_age_add);
-        /* server-name */
+        /* session ID context */
         ptls_buffer_push_block(buf, 2, {
-            if (server_name != NULL)
+            if (ctx->ticket_context.is_set) {
+                ptls_buffer_pushv(buf, ctx->ticket_context.bytes, sizeof(ctx->ticket_context.bytes));
+            } else if (server_name != NULL) {
                 ptls_buffer_pushv(buf, server_name, strlen(server_name));
+            }
         });
         /* alpn */
         ptls_buffer_push_block(buf, 1, {
@@ -1722,7 +1725,7 @@ Exit:
     return ret;
 }
 
-int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *ticket_age_add, ptls_iovec_t *server_name,
+int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *ticket_age_add, ptls_iovec_t *ticket_ctx,
                               uint16_t *key_exchange_id, uint16_t *csid, ptls_iovec_t *negotiated_protocol, const uint8_t *src,
                               const uint8_t *const end)
 {
@@ -1748,7 +1751,7 @@ int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *
         if ((ret = ptls_decode32(ticket_age_add, &src, end)) != 0)
             goto Exit;
         ptls_decode_open_block(src, end, 2, {
-            *server_name = ptls_iovec_init(src, end - src);
+            *ticket_ctx = ptls_iovec_init(src, end - src);
             src = end;
         });
         ptls_decode_open_block(src, end, 1, {
@@ -3570,10 +3573,10 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
         src = end;
     });
 
-    /* CH defined in TLS versions below 1.2 might not have extensions (or they might, see what OpenSSL 1.0.0 sends); so bail out
-     * after parsing the main variables. Zero is returned as it is a valid ClientHello. However `ptls_t::selected_version` remains
-     * zero indicating that no compatible version were found. */
-    if (ch->legacy_version < 0x0303 && src == end) {
+    /* In TLS versions 1.2 and earlier CH might not have an extensions block (or they might, see what OpenSSL 1.0.0 sends); so bail
+     * out if that is the case after parsing the main variables. Zero is returned as it is a valid ClientHello. However
+     * `ptls_t::selected_version` remains zero indicating that no compatible version were found. */
+    if (src == end) {
         ret = 0;
         goto Exit;
     }
@@ -4006,7 +4009,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
                              ptls_iovec_t ch_trunc)
 {
     ptls_buffer_t decbuf;
-    ptls_iovec_t ticket_psk, ticket_server_name, ticket_negotiated_protocol;
+    ptls_iovec_t ticket_psk, ticket_ctx, ticket_negotiated_protocol;
     uint64_t issue_at, now = tls->ctx->get_time->cb(tls->ctx->get_time);
     uint32_t age_add;
     uint16_t ticket_key_exchange_id, ticket_csid;
@@ -4029,7 +4032,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         default: /* decryption failure */
             continue;
         }
-        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_key_exchange_id, &ticket_csid,
+        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_ctx, &ticket_key_exchange_id, &ticket_csid,
                                       &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
         /* check age */
@@ -4046,15 +4049,22 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
             if (tls->ctx->max_early_data_size != 0 && delta <= PTLS_EARLY_DATA_MAX_DELAY)
                 *accept_early_data = 1;
         }
-        /* check server-name */
-        if (ticket_server_name.len != 0) {
-            if (tls->server_name == NULL)
-                continue;
-            if (!vec_is_string(ticket_server_name, tls->server_name))
+        /* check ticket context */
+        if (tls->ctx->ticket_context.is_set) {
+            if (!(ticket_ctx.len == sizeof(tls->ctx->ticket_context.bytes) &&
+                  memcmp(ticket_ctx.base, tls->ctx->ticket_context.bytes, ticket_ctx.len) == 0))
                 continue;
         } else {
-            if (tls->server_name != NULL)
-                continue;
+            /* check server-name */
+            if (ticket_ctx.len != 0) {
+                if (tls->server_name == NULL)
+                    continue;
+                if (!vec_is_string(ticket_ctx, tls->server_name))
+                    continue;
+            } else {
+                if (tls->server_name != NULL)
+                    continue;
+            }
         }
         { /* check key-exchange */
             ptls_key_exchange_algorithm_t **a;

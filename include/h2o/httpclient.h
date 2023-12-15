@@ -184,6 +184,7 @@ struct st_h2o_http3client_ctx_t {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
+    uint64_t max_frame_payload_size;
     /**
      * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
      * connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be freed by

@@ -77,13 +77,14 @@ int h2o_url_init_with_sun_path(h2o_url_t *url, h2o_mem_pool_t *pool, const h2o_u
                                h2o_iovec_t path);
 
 /**
- * parses absolute URL (either http or https)
+ * Parses absolute URL (either http or https). Upon successful return, `path` attribute of the returned object is guaranteed to be
+ * in absolute form (i.e., starts with `/`) so that it can be passed directly to HTTP clients.
  */
-int h2o_url_parse(const char *url, size_t url_len, h2o_url_t *result);
+int h2o_url_parse(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *result);
 /**
  * parses relative URL
  */
-int h2o_url_parse_relative(const char *url, size_t url_len, h2o_url_t *result);
+int h2o_url_parse_relative(h2o_mem_pool_t *pool, const char *url, size_t url_len, h2o_url_t *result);
 /**
  * parses the authority and returns the next position (i.e. start of path)
  * @return pointer to the end of hostport if successful, or NULL if failed.  *port becomes the specified port number or 65535 if not

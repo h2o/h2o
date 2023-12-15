@@ -93,6 +93,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
+    .max_frame_payload_size = 16384,
 };
 static const char *progname; /* refers to argv[0] */
 
@@ -332,7 +333,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             upgrade_to = h2o_httpclient_upgrade_to_connect;
         }
     } else {
-        if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
+        if (h2o_url_parse(pool, req.target, SIZE_MAX, url_parsed) != 0) {
             on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
             return;
         }
@@ -705,6 +706,7 @@ int main(int argc, char **argv)
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
+        OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_CONNECT_UDP_DRAFT03,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -712,6 +714,7 @@ int main(int argc, char **argv)
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"connect-udp-draft03", no_argument, NULL, OPT_CONNECT_UDP_DRAFT03},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
@@ -744,13 +747,16 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'x':
+        case 'x': {
+            h2o_mem_pool_t pool;
+            h2o_mem_init_pool(&pool);
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
-            if (h2o_url_parse(optarg, strlen(optarg), req.connect_to) != 0) {
+            /* we can leak pool and `req.connect_to`, as they are globals allocated only once in `main` */
+            if (h2o_url_parse(&pool, optarg, strlen(optarg), req.connect_to) != 0) {
                 fprintf(stderr, "invalid server URL specified for -x\n");
                 exit(EXIT_FAILURE);
             }
-            break;
+        } break;
         case 'X': {
 #if H2O_USE_LIBUV
             fprintf(stderr, "-X is not supported by the libuv backend\n");
@@ -878,6 +884,12 @@ int main(int argc, char **argv)
         case OPT_IO_TIMEOUT:
             if (sscanf(optarg, "%" SCNu64, &io_timeout) != 1) {
                 fprintf(stderr, "failed to parse --io-timeout\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+                fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
                 exit(EXIT_FAILURE);
             }
             break;
