@@ -1012,20 +1012,21 @@ static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t typ
 }
 
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
-                               uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url,
+                               uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_iovec_t protocol,
                                const h2o_header_t *headers, size_t num_headers, int is_end_stream)
 {
-    int is_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"));
+    int old_style_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")) && protocol.base == NULL;
 
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE;
     capacity += DYNAMIC_TABLE_SIZE_UPDATE_MAX_SIZE;
     capacity += calc_capacity(H2O_TOKEN_METHOD->buf.len, method.len);
-    if (!is_connect)
+    if (!old_style_connect)
         capacity += calc_capacity(H2O_TOKEN_SCHEME->buf.len, url->scheme->name.len);
     capacity += calc_capacity(H2O_TOKEN_AUTHORITY->buf.len, url->authority.len);
-    if (!is_connect)
+    if (!old_style_connect)
         capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, url->path.len);
+    capacity += calc_capacity(H2O_TOKEN_PROTOCOL->buf.len, protocol.len);
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
@@ -1033,11 +1034,15 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     /* encode */
     dst = header_table_adjust_size(header_table, hpack_capacity, dst);
     dst = encode_method(header_table, dst, method);
-    if (!is_connect)
+    if (!old_style_connect)
         dst = encode_scheme(header_table, dst, url->scheme);
     dst = encode_header_token(header_table, dst, H2O_TOKEN_AUTHORITY, &url->authority);
-    if (!is_connect)
+    if (!old_style_connect)
         dst = encode_path(header_table, dst, url->path);
+    if (protocol.base != NULL) {
+        h2o_header_t h = {&H2O_TOKEN_PROTOCOL->buf, NULL, protocol};
+        dst = encode_header(header_table, dst, &h);
+    }
     for (size_t i = 0; i != num_headers; ++i) {
         const h2o_header_t *header = headers + i;
         if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&
