@@ -107,15 +107,6 @@ EOT
     return $ret;
 }
 
-# Speed up h2o shutdown.
-sub cleanup_test {
-    my $test = shift;
-    kill 'KILL', $test->{origin}->{pid};
-    kill 'KILL', $test->{server}->{pid};
-    $test->{origin} = undef;
-    $test->{server} = undef;
-}
-
 subtest "udp-draft03" => sub {
     my $test = setup_test();
 
@@ -125,7 +116,6 @@ subtest "udp-draft03" => sub {
     foreach my $i (1..5) {
         test_udp_exchange($tunnel->{port});
     }
-    cleanup_test($test);
 };
 
 subtest "udp-rfc9298" => sub {
@@ -137,7 +127,6 @@ subtest "udp-rfc9298" => sub {
     foreach my $i (1..5) {
         test_udp_exchange($tunnel->{port});
     }
-    cleanup_test($test);
 };
 
 # TODO cover proxying of CONNECT-UDP over HTTP2 (create_tunnel with HTTP2 as first argument)
