@@ -1219,8 +1219,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:
-        fprintf(stderr, "quicly_send returned %d\n", ret);
-        abort();
+        h2o_fatal("quicly_send returned %d", ret);
     }
 
     h2o_quic_schedule_timer(conn);
