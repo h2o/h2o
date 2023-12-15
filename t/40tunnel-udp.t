@@ -1,35 +1,29 @@
 use strict;
 use warnings;
+use IO::Socket::INET;
 use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
+use Time::HiRes qw(sleep);
 use t::Util;
 
 my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
-# setup UDP server to which the client would talk to
+# setup UDP echo server to which the client would talk to
 my $udp_server = do {
-    my $quic_port = empty_port({
-        host  => "127.0.0.1",
-        proto => "udp",
+    my $sock = IO::Socket::INET->new(
+        LocalHost => "127.0.0.1",
+        LocalPort => 0,
+        Proto     => "udp",
+    ) or die "failed to open UDP socket:$!";
+    my $guard = spawn_forked(sub {
+        while (my $peer = $sock->recv(my $datagram, 1500)) {
+            $sock->send($datagram, 0, $peer);
+        }
     });
-    my $udp_server = spawn_h2o(<< "EOT");
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
-hosts:
-  default:
-    paths:
-      /:
-        file.dir: t/assets/doc_root
-EOT
-    wait_port({port => $quic_port, proto => 'udp'});
-    $udp_server->{quic_port} = $quic_port;
-    $udp_server;
+    $guard->{port} = $sock->sockport;
+    $guard;
 };
 
 # setup H2O that acts as a UDP tunnel
@@ -66,32 +60,54 @@ my $tunnel_port = empty_port({
 });
 
 subtest "udp-draft03" => sub {
-    my $tunnel = create_tunnel("3", "--connect-udp-draft03");
-    foreach my $i (1..5) {
-        test_udp_exchange();
+    for my $opts (
+        ["h1", "-2 0 -x http://127.0.0.1:@{[$tunnel_server->{port}]}"],
+        ["h1s", "-2 0 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
+        ["h2", "-2 100 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
+        ["h3", "-3 100 -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
+    ) {
+        subtest $opts->[0] => sub {
+            my $tunnel = spawn_forked(sub {
+                my $cmd = "$client_prog -k -m CONNECT-UDP -X $tunnel_port @{[$opts->[1]]} 127.0.0.1:@{[$udp_server->{port}]}";
+                exec $cmd or die "failed to spawn $client_prog:$?";
+            });
+            sleep 0.5;
+            foreach my $i (1..5) {
+                test_udp_exchange();
+            }
+        };
     }
 };
 
 subtest "udp-rfc9298" => sub {
-    my $tunnel = create_tunnel("3", "");
-    foreach my $i (1..5) {
-        test_udp_exchange();
+    for my $opts (
+        ["h1", "-2 0 -m GET http://127.0.0.1:@{[$tunnel_server->{port}]}"],
+        ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
+        ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
+        ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
+    ) {
+        subtest $opts->[0] => sub {
+            my $tunnel = spawn_forked(sub {
+                my $cmd = "$client_prog -k -X $tunnel_port @{[$opts->[1]]}/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
+                exec $cmd or die "failed to spawn $client_prog:$?";
+            });
+            sleep 0.5;
+            foreach my $i (1..5) {
+                test_udp_exchange();
+            }
+        };
     }
 };
 
-# TODO cover proxying of CONNECT-UDP over HTTP2 (create_tunnel with HTTP2 as first argument)
-
-sub create_tunnel {
-    my ($proto, $extra_args) = @_;
-    spawn_forked(sub {
-        exec "$client_prog -k -$proto 100 $extra_args -X $tunnel_port -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]} 127.0.0.1:@{[$udp_server->{quic_port}]}"
-            or die "failed to exec:$?";
-    });
-}
-
 sub test_udp_exchange {
-    my $resp = `$client_prog -3 100 https://127.0.0.1:$tunnel_port/index.txt 2>&1`;
-    like $resp, qr{^HTTP/3 200.*\nhello\n$}s, "200 response";
+    my $mess = "" . int(100000 * rand);
+    open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
+        or die "failed to spawn nc:$?";
+    my $resp = do {
+        local $/;
+        <$fh>;
+    };
+    is $resp, "$mess\n", "got UDP echo";
 }
 
 done_testing;
