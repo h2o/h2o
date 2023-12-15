@@ -1,10 +1,8 @@
 use strict;
 use warnings;
-use File::Temp qw(tempdir);
 use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
 use t::Util;
-use Time::HiRes qw(sleep);
 
 plan skip_all => 'plackup not found'
     unless prog_exists('plackup');
@@ -34,7 +32,6 @@ sub test_udp_exchange {
 }
 
 sub setup_test {
-    my $tempdir = tempdir(CLEANUP => 1);
     my $quic_port = empty_port({
             host  => "127.0.0.1",
             proto => "udp",
@@ -44,8 +41,6 @@ sub setup_test {
             host  => "127.0.0.1",
             proto => "udp",
         });
-    my $sock_path = "$tempdir/prot.sock";
-
 
     my $upstream_port = empty_port();
     my $upstream = spawn_server(
@@ -105,7 +100,6 @@ EOT
         origin_tls_port => $origin->{tls_port},
         proxy_tls_port => $tls_port,
         proxy_quic_port => $quic_port,
-        tempdir => $tempdir,
         origin => $origin,
         server => $server,
         upstream => $upstream,
