@@ -349,10 +349,9 @@ static void parse_and_compare_request(h2o_hpack_header_table_t *ht, const char *
     int pseudo_header_exists_map = 0;
     size_t content_length = SIZE_MAX;
     const char *err_desc = NULL;
-    int r =
-        h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, ht, &req.input.method, &req.input.scheme, &req.input.authority,
-                                &req.input.path, &req.upgrade, &req.headers, &pseudo_header_exists_map, &content_length,
-                                NULL, NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
+    int r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, ht, &req.input.method, &req.input.scheme,
+                                    &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_header_exists_map,
+                                    &content_length, NULL, NULL, (void *)(promise_base + 13), promise_len - 13, &err_desc);
     ok(r == 0);
     ok(h2o_memis(req.input.method.base, req.input.method.len, expected_method.base, expected_method.len));
     ok(req.input.scheme == expected_scheme);

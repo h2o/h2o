@@ -318,12 +318,11 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
                 upgrade_to = "connect-udp";
 
                 char *pathbuf = h2o_mem_alloc_pool(pool, char, 1000);
-                size_t pathbuf_len =
-                    sprintf(pathbuf, "/.well-known/masque/udp/%.*s/%u/",
-                            (int)url_parsed->host.len, url_parsed->host.base, url_parsed->_port);
+                size_t pathbuf_len = sprintf(pathbuf, "/.well-known/masque/udp/%.*s/%u/", (int)url_parsed->host.len,
+                                             url_parsed->host.base, url_parsed->_port);
 
                 // TODO(antonio.vicente) What authority should we send for this request?
-                const char* authority = "example.org";
+                const char *authority = "example.org";
                 url_parsed->host = h2o_iovec_init(authority, strlen(authority));
                 url_parsed->path = h2o_iovec_init(pathbuf, pathbuf_len);
                 url_parsed->scheme = &H2O_URL_SCHEME_HTTPS;
