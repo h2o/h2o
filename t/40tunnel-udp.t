@@ -17,24 +17,19 @@ plan skip_all => "$client_prog not found"
 
 
 sub create_tunnel {
-    my $proto = shift;
-    my $origin_port = shift;
-    my $proxy_port = shift;
-    my $extra_args = shift;
+    my ($proto, $origin_port, $proxy_port, $extra_args) = @_;
 
     my ($tunnel_port) = empty_ports(1, { host  => "127.0.0.1", proto => "udp"});
     my $tunnel = spawn_forked(sub {
         exec("$client_prog -k -$proto 100 $extra_args -X $tunnel_port -x https://127.0.0.1:$proxy_port 127.0.0.1:$origin_port") or die "Failed to exec";
     });
 
-    my $ret;
-    $ret = +{ tunnel => $tunnel, port => $tunnel_port,};
-    return $ret;
+    return +{ tunnel => $tunnel, port => $tunnel_port,};
 }
 
 sub issue_one_request {
-    my $proto = shift;
-    my $tunnel_port = shift;
+    my ($proto, $tunnel_port) = @_;
+
     if ($proto eq "2") {
         $proto = "2 100";
     }
