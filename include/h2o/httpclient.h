@@ -255,7 +255,7 @@ struct st_h2o_httpclient_t {
     /**
      * If the stream is to be converted to convey some other protocol, this value should be set to the name of the protocol, which
      * will be indicated by the `upgrade` request header field. Additionally, intent to create a CONNECT tunnel is indicated by a
-     * special label called `h2o_httpclient_req_upgrade_connect`.
+     * special label called `h2o_httpclient_upgrade_to_connect`.
      */
     const char *upgrade_to;
 
@@ -411,17 +411,22 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool,
 /**
  * internal API for checking if the stream is to be turned into a tunnel
  */
-static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status);
+static int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status, int http_version);
 
 /* inline definitions */
 
-inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status)
+inline int h2o_httpclient__tunnel_is_ready(h2o_httpclient_t *client, int status, int http_version)
 {
     if (client->upgrade_to != NULL) {
         if (client->upgrade_to == h2o_httpclient_upgrade_to_connect && 200 <= status && status <= 299)
             return 1;
-        if (status == 101)
-            return 1;
+        if (http_version < 0x200) {
+            if (status == 101)
+                return 1;
+        } else {
+            if (200 <= status && status <= 299 && strcmp(client->upgrade_to, "connect-udp") == 0)
+                return 1;
+        }
     }
     return 0;
 }
