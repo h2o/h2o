@@ -752,7 +752,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
-    } else if (req->super.upgrade_to != NULL) {
+    } else if (req->super.upgrade_to != NULL && req->super.upgrade_to != h2o_httpclient_upgrade_to_connect) {
         protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
     h2o_iovec_t headers_frame =
