@@ -74,8 +74,6 @@ static uint64_t io_timeout = DEFAULT_IO_TIMEOUT;
 static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
-// Use rfc9298 syntax if false.
-static int connect_udp_is_draft03 = 0;
 static h2o_socket_t *udp_sock = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
@@ -221,7 +219,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     ssize_t rret;
 
     size_t context_id_len;
-    if (connect_udp_is_draft03) {
+    if (strcmp(req.method, "CONNECT-UDP") == 0) {
         // No context id for draft03.
         context_id_len = 0;
     } else {
@@ -263,7 +261,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    size_t context_id_len = connect_udp_is_draft03 ? 0 : 1;
+    size_t context_id_len = strcmp(req.method, "CONNECT-UDP") == 0 ? 0 : 1;
     for (size_t i = 0; i != num_datagrams; ++i) {
         const h2o_iovec_t *src = datagrams + i;
         if (context_id_len == 1) {
@@ -290,59 +288,47 @@ static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_mem_pool_t *pool;
-    h2o_url_t *url_parsed;
+    h2o_url_t *target_uri;
     const char *upgrade_to = NULL;
-    int is_connect = strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0;
 
     /* allocate memory pool */
     pool = h2o_mem_alloc(sizeof(*pool));
     h2o_mem_init_pool(pool);
 
     /* parse URL, or host:port if CONNECT */
-    url_parsed = h2o_mem_alloc_pool(pool, *url_parsed, 1);
-    if (is_connect) {
-        if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
-            url_parsed->_port == 0 || url_parsed->_port == 65535) {
+    target_uri = h2o_mem_alloc_pool(pool, *target_uri, 1);
+    *target_uri = (h2o_url_t){};
+
+    if (strcmp(req.method, "CONNECT-UDP") == 0 || (strcmp(req.method, "CONNECT") == 0 && udp_sock == NULL)) {
+        /* Traditional CONNECT, either creating a TCP tunnel or a UDP tunnel in the style of masque draft-03).
+         * Authority section of target is set to host:port, and `upgrade_to` specifies traditional CONNECT. When masque is used,
+         * scheme and path are set accordingly. */
+        if (h2o_url_init(target_uri, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
+            target_uri->_port == 0 || target_uri->_port == 65535) {
             on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
         }
-        if (udp_sock != NULL) {
-            // CONNECT UDP
-            if (connect_udp_is_draft03) {
-                // Draft03
-                upgrade_to = h2o_httpclient_upgrade_to_connect;
-                url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
-                url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
-            } else {
-                // RFC 9298
-                upgrade_to = "connect-udp";
-
-                char *pathbuf = h2o_mem_alloc_pool(pool, char, 1000);
-                size_t pathbuf_len = sprintf(pathbuf, "/.well-known/masque/udp/%.*s/%u/", (int)url_parsed->host.len,
-                                             url_parsed->host.base, url_parsed->_port);
-
-                // TODO(antonio.vicente) What authority should we send for this request?
-                const char *authority = "example.org";
-                url_parsed->host = h2o_iovec_init(authority, strlen(authority));
-                url_parsed->path = h2o_iovec_init(pathbuf, pathbuf_len);
-                url_parsed->scheme = &H2O_URL_SCHEME_HTTPS;
-                add_header(h2o_iovec_init(H2O_STRLIT("capsule-protocol")), h2o_iovec_init(H2O_STRLIT("?1")));
-            }
-        } else if (strcmp(req.method, "CONNECT") == 0) {
-            upgrade_to = h2o_httpclient_upgrade_to_connect;
+        if (strcmp(req.method, "CONNECT-UDP") == 0) {
+            target_uri->scheme = &H2O_URL_SCHEME_MASQUE;
+            target_uri->path = h2o_iovec_init(H2O_STRLIT("/"));
         }
+        upgrade_to = h2o_httpclient_upgrade_to_connect;
     } else {
-        if (h2o_url_parse(pool, req.target, SIZE_MAX, url_parsed) != 0) {
+        /* An ordinary request or extended CONNECT. Both of them talks to origin specified by the target URI */
+        if (h2o_url_parse(pool, req.target, SIZE_MAX, target_uri) != 0) {
             on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
             return;
         }
+        /* to detect use of RFC 9298, we can rely on only `udp_sock`; method is GET if H1, CONNECT if H2/H3 */
+        if (udp_sock != NULL)
+            upgrade_to = "connect-udp";
     }
 
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : target_uri, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, io_timeout);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -367,8 +353,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, url_parsed, ctx, connpool,
-                           url_parsed, upgrade_to, on_connect);
+    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, target_uri, ctx, connpool,
+                           target_uri, upgrade_to, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -576,8 +562,6 @@ static void usage(const char *progname)
             "               verification\n"
             "  -X <local-udp-port>\n"
             "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
-            "  --connect-udp-draft03\n"
-            "               Create draft03 style CONNECT-UDP tunnels instead of RFC 9298\n"
             "  --initial-udp-payload-size <bytes>\n"
             "               specifies the udp payload size of the initial message (default:\n"
             "               %" PRIu16 ")\n"
@@ -706,7 +690,6 @@ int main(int argc, char **argv)
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
-        OPT_CONNECT_UDP_DRAFT03,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -714,7 +697,6 @@ int main(int argc, char **argv)
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
-                                {"connect-udp-draft03", no_argument, NULL, OPT_CONNECT_UDP_DRAFT03},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -892,14 +874,6 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case OPT_CONNECT_UDP_DRAFT03: {
-#if H2O_USE_LIBUV
-            fprintf(stderr, "-connect-udp-draft03 is not supported by the libuv backend\n");
-            exit(EXIT_FAILURE);
-#else
-            connect_udp_is_draft03 = 1;
-#endif
-        } break;
         default:
             exit(EXIT_FAILURE);
             break;
@@ -913,10 +887,6 @@ int main(int argc, char **argv)
     ctx.first_byte_timeout = io_timeout;
     ctx.keepalive_timeout = io_timeout;
 
-    if (udp_sock != NULL) {
-        // Handling connect udp.  Override method based on requested version.
-        req.method = connect_udp_is_draft03 ? "CONNECT-UDP" : "CONNECT";
-    }
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
