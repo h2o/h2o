@@ -46,10 +46,13 @@ hosts:
   default:
     paths:
       "/":
-        proxy.connect:
+        proxy.connect:     # classic CONNECT incl. CONNECT-UDP
           - "+*"
-        proxy.timeout.io: 30000
-    access-log: /dev/stdout
+      "/rfc9298":
+        proxy.connect-udp: # RFC9298
+          - "+*"
+proxy.timeout.io: 30000
+access-log: /dev/stdout
 EOT
     wait_port({port => $quic_port, proto => 'udp'});
     $tunnel_server->{quic_port} = $quic_port;
@@ -86,7 +89,7 @@ subtest "udp-rfc9298" => sub {
         ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 200],
     ) {
         my ($name, $args_url_prefix, $status_expected) = @$_;
-        my $cmd = "$client_prog -k -X $tunnel_port $args_url_prefix/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
+        my $cmd = "$client_prog -k -X $tunnel_port $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
         doit($name, $cmd, $status_expected, sub {
             my $payload = shift;
             "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes

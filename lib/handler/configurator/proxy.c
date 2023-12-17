@@ -453,7 +453,8 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
-static int on_config_connect_proxy(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+static int config_connect_core(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node,
+                               void (*registrar)(h2o_pathconf_t *, h2o_proxy_config_vars_t *, h2o_connect_acl_entry_t *, size_t))
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
@@ -471,8 +472,18 @@ static int on_config_connect_proxy(h2o_configurator_command_t *cmd, h2o_configur
         }
     }
 
-    h2o_connect_register(ctx->pathconf, &self->vars->conf, acl_entries, node->data.sequence.size);
+    registrar(ctx->pathconf, &self->vars->conf, acl_entries, node->data.sequence.size);
     return 0;
+}
+
+static int on_config_classic_connect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_connect_core(cmd, ctx, node, h2o_connect_register);
+}
+
+static int on_config_connect_udp(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return config_connect_core(cmd, ctx, node, h2o_connect_udp_register);
 }
 
 static int on_config_emit_x_forwarded_headers(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -699,7 +710,10 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.connect",
                                     H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |
                                         H2O_CONFIGURATOR_FLAG_DEFERRED,
-                                    on_config_connect_proxy);
+                                    on_config_classic_connect);
+    h2o_configurator_define_command(
+        &c->super, "proxy.connect-udp",
+        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_DEFERRED, on_config_connect_udp);
     h2o_configurator_define_command(&c->super, "proxy.connect.emit-proxy-status",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_connect_proxy_status);

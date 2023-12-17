@@ -942,12 +942,15 @@ static void on_generator_dispose(void *_self)
 }
 
 /**
- * expects "/host/port/" as input
+ * expects "/host/port/" as input, where the preceding slash is optional
  */
 static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t _len, h2o_iovec_t *host, uint16_t *port)
 {
     char *src = (char *)_src; /* h2o_strtosizefwd takes non-const arg, so ... */
     const char *end = src + _len;
+
+    if (src < end && src[0] == '/')
+        ++src;
 
     { /* extract host */
         size_t host_len;
@@ -970,51 +973,9 @@ static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t
     return 1;
 }
 
-static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
+static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o_iovec_t host, uint16_t port, int is_tcp,
+                       int is_masque_draft03)
 {
-    static const h2o_iovec_t well_known_masque_prefix = {H2O_STRLIT("/.well-known/masque/udp/")};
-    struct st_connect_handler_t *handler = (void *)_handler;
-    h2o_iovec_t host = {};
-    uint16_t port;
-    int is_tcp, is_masque_draft03 = 0;
-
-    if ((req->version < 0x200 ? h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
-                              : h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) &&
-        req->upgrade.base != NULL) {
-        /* extended CONNECT */
-        if (!h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp")))
-            return -1; /* unknown protocol */
-        if (!(req->path.len > well_known_masque_prefix.len &&
-              memcmp(req->path.base, well_known_masque_prefix.base, well_known_masque_prefix.len) == 0))
-            return -1; /* unknown path */
-        /* masque (RFC 9298); check that the upgrade token is as expected then extract the host and port from the well-known URI
-         * defined in RFC 9298 section 3.4 */
-        if (!masque_decode_hostport(&req->pool, req->path.base + well_known_masque_prefix.len,
-                                    req->path.len - well_known_masque_prefix.len, &host, &port)) {
-            h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-            return 0;
-        }
-        is_tcp = 0;
-    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT")) && req->upgrade.base == NULL) {
-        /* old-style CONNECT */
-        is_tcp = 1;
-    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        /* masque (draft 03); host and port are stored the same way as ordinary CONNECT */
-        is_tcp = 0;
-        is_masque_draft03 = 1;
-    } else {
-        /* it is not the task of this handler to handle non-CONNECT requests */
-        return -1;
-    }
-
-    /* parse host and port from authority, unless it is handled above in the case of extended connect */
-    if (host.base == NULL) {
-        if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
-            h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-            return 0;
-        }
-    }
-
     struct st_connect_generator_t *self;
     size_t sizeof_self = offsetof(struct st_connect_generator_t, tcp) + (is_tcp ? sizeof(self->tcp) : sizeof(self->udp));
     self = h2o_mem_alloc_shared(&req->pool, sizeof_self, on_generator_dispose);
@@ -1053,8 +1014,64 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
-                          size_t num_acl_entries)
+static int on_req_classic_connect(h2o_handler_t *handler, h2o_req_t *req)
+{
+    h2o_iovec_t host;
+    uint16_t port;
+    int is_tcp;
+
+    if (req->upgrade.base != NULL) {
+        return -1;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
+        /* old-style CONNECT */
+        is_tcp = 1;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        /* masque (draft 03); host and port are stored the same way as ordinary CONNECT
+         * TODO remove code once we drop support for draft-03 */
+        is_tcp = 0;
+    } else {
+        /* it is not the task of this handler to handle non-CONNECT requests */
+        return -1;
+    }
+
+    /* parse host and port from authority, unless it is handled above in the case of extended connect */
+    if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
+        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
+    }
+
+    return on_req_core((void *)handler, req, host, port, is_tcp, 1);
+}
+
+/**
+ * handles RFC9298 requests
+ */
+static int on_req_connect_udp(h2o_handler_t *handler, h2o_req_t *req)
+{
+    h2o_iovec_t host;
+    uint16_t port;
+
+    /* reject requests wo. upgrade: connect-udp */
+    if (!(req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))))
+        return -1;
+
+    /* check method */
+    if (!(req->version < 0x200 ? h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+                               : h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))))
+        return -1;
+
+    /* masque (RFC 9298); parse host/port */
+    if (!masque_decode_hostport(&req->pool, req->path_normalized.base + req->pathconf->path.len,
+                                req->path_normalized.len - req->pathconf->path.len, &host, &port)) {
+        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
+    }
+
+    return on_req_core((void *)handler, req, host, port, 0, 0);
+}
+
+static void do_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                        size_t num_acl_entries, int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req))
 {
     assert(config->max_buffer_size != 0);
 
@@ -1066,6 +1083,18 @@ void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *con
     self->config = *config;
     self->acl.count = num_acl_entries;
     memcpy(self->acl.entries, acl_entries, sizeof(self->acl.entries[0]) * num_acl_entries);
+}
+
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries)
+{
+    do_register(pathconf, config, acl_entries, num_acl_entries, on_req_classic_connect);
+}
+
+void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                              size_t num_acl_entries)
+{
+    do_register(pathconf, config, acl_entries, num_acl_entries, on_req_connect_udp);
 }
 
 const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)

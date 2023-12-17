@@ -2271,10 +2271,15 @@ typedef struct st_h2o_connect_acl_entry_t {
 } h2o_connect_acl_entry_t;
 
 /**
- * registers the connect handler to the context
+ * registers the classic connect handler to the context
  */
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
                           size_t num_acl_entries);
+/**
+ * registers the connect-udp handler (RFC 9298) to the context
+ */
+void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                              size_t num_acl_entries);
 /**
  * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
  * being returned.
