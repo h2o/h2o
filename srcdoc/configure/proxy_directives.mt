@@ -83,7 +83,6 @@ $ctx->{directive}->(
     name         => "proxy.connect",
     levels       => [ qw(path) ],
     desc         => q{Setup a CONNECT proxy, taking an access control list as the argument.},
-    experimental => 1,
 )->(sub {
 ?>
 <p>
@@ -105,6 +104,24 @@ EOT
 ?>
 <p>
 Note: The precise syntax of the access control list element is <code>address:port/netmask</code>. This is because the URL parser is reused.
+</p>
+<p>
+The directive can only be used for the root path (i.e., <code>/</code>), as the classic CONNECT does not specify the path.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "proxy.connect-udp",
+    levels => [ qw(path) ],
+    desc   => q{Setup a CONNECT-UDP gateway defined by <a href="https://datatracker.ietf.org/doc/rfc9298/" target=_blank>RFC 9298</a>.},
+)->(sub {
+?>
+<p>
+Supplied argument is an access control list, using the same format as that of <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>.
+</p>
+<p>
+Support for draft-03 of the protocol is controlled separately; see TBD.
 </p>
 ? })
 
