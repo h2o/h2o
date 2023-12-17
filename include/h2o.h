@@ -2205,6 +2205,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;
+    unsigned support_masque_draft_03 : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */

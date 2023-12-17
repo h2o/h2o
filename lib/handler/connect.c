@@ -1014,8 +1014,9 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     return 0;
 }
 
-static int on_req_classic_connect(h2o_handler_t *handler, h2o_req_t *req)
+static int on_req_classic_connect(h2o_handler_t *_handler, h2o_req_t *req)
 {
+    struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
     uint16_t port;
     int is_tcp;
@@ -1028,6 +1029,10 @@ static int on_req_classic_connect(h2o_handler_t *handler, h2o_req_t *req)
     } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
         /* masque (draft 03); host and port are stored the same way as ordinary CONNECT
          * TODO remove code once we drop support for draft-03 */
+        if (!handler->config.support_masque_draft_03) {
+            h2o_send_error_405(req, "Method Not Allowed", "Method Not Allowed", H2O_SEND_ERROR_KEEP_HEADERS);
+            return 0;
+        }
         is_tcp = 0;
     } else {
         /* it is not the task of this handler to handle non-CONNECT requests */

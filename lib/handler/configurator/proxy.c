@@ -129,6 +129,16 @@ static int on_config_connect_proxy_status(h2o_configurator_command_t *cmd, h2o_c
     return 0;
 }
 
+static int on_config_connect_proxy_masque_draft_03(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    self->vars->conf.support_masque_draft_03 = (int)ret;
+    return 0;
+}
+
 static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     warn_deprecation(cmd, node, "proxy.proxy-status.identity", "");
@@ -720,6 +730,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.connect.proxy-status",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_connect_proxy_status);
+    h2o_configurator_define_command(&c->super, "proxy.connect.masque-draft-03",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_connect_proxy_masque_draft_03);
     h2o_configurator_define_command(&c->super, "proxy.proxy-status.identity",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_proxy_status_identity);
