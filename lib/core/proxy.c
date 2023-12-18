@@ -161,8 +161,17 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
     }
 
-    /* method */
+    /* copy method (if it is an extended CONNECT switching versions, convert as appropriate) */
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
+    if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
+        if (req->version >= 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("CONNECT")) &&
+            props->connection_header != NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("GET"));
+        } else if (req->version < 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("GET")) &&
+                   props->connection_header == NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("CONNECT"));
+        }
+    }
 
     /* url */
     if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
@@ -680,9 +689,16 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (req->upgrade.base != NULL && req->res.status == 101) {
+    /* extended CONNECT: adjust response based on the HTTP versions being used (TODO proper check of status code based on upstream
+     * HTTP version) */
+    if (req->upgrade.base != NULL && (req->res.status == 101 || (200 <= req->res.status && req->res.status <= 299))) {
         assert(req->is_tunnel_req);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        if (req->version < 0x200) {
+            req->res.status = 101;
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        } else {
+            req->res.status = 200;
+        }
     }
 
     /* declare the start of the response */
