@@ -62,6 +62,40 @@ EOT
     $tunnel_server;
 };
 
+# setup H2O that acts as a reverse proxy to the UDP tunnel server
+my $proxy_server = do {
+    my $quic_port = empty_port({
+        host  => "127.0.0.1",
+        proto => "udp",
+    });
+    my $proxy_server = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+hosts:
+  default:
+    paths:
+      "/h1/":
+        proxy.reverse.url: http://127.0.0.1:@{[$tunnel_server->{port}]}
+      "/h1s/":
+        proxy.reverse.url: https://127.0.0.1:@{[$tunnel_server->{tls_port}]}
+      "/h2/":
+        proxy.reverse.url: https://127.0.0.1:@{[$tunnel_server->{tls_port}]}
+        proxy.http2.ratio: 100
+      "/h3/":
+        proxy.reverse.url: https://127.0.0.1:@{[$tunnel_server->{quic_port}]}
+        proxy.http3.ratio: 100
+proxy.ssl.verify-peer: OFF
+proxy.tunnel: ON
+EOT
+    wait_port({port => $quic_port, proto => 'udp'});
+    $proxy_server->{quic_port} = $quic_port;
+    $proxy_server;
+};
+
 # determine UDP port to be used by h2o-httpclient
 my $tunnel_port = empty_port({
     host  => "127.0.0.1",
@@ -70,11 +104,11 @@ my $tunnel_port = empty_port({
 
 subtest "udp-draft03" => sub {
     for (
-        ["h1", "-2 0 -x http://127.0.0.1:@{[$tunnel_server->{port}]}"],
-        ["h1s", "-2 0 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
-        ["h2", "-2 100 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}"],
-        ["h3", "-3 100 -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
-        ["h3+-X", "-3 100 -X $tunnel_port -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}"],
+        ["h1", "-2 0 -x http://127.0.0.1:@{[$tunnel_server->{port}]}", 0],
+        ["h1s", "-2 0 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 0],
+        ["h2", "-2 100 -x https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 0],
+        ["h3", "-3 100 -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 0],
+        ["h3+-X", "-3 100 -X $tunnel_port -x https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 1],
     ) {
         my ($name, $args) = @$_;
         my $cmd = "$client_prog -k -m CONNECT-UDP $args 127.0.0.1:@{[$udp_server->{port}]}";
@@ -86,20 +120,38 @@ subtest "udp-draft03" => sub {
 };
 
 subtest "udp-rfc9298" => sub {
-    for (
-        ["h1", "-2 0 -m GET http://127.0.0.1:@{[$tunnel_server->{port}]}", 101],
-        ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 101],
-        ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{tls_port}]}", 200],
-        ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 200],
-        ["h3+-X", "-3 100 -X $tunnel_port -m CONNECT https://127.0.0.1:@{[$tunnel_server->{quic_port}]}", 200],
-    ) {
-        my ($name, $args_url_prefix, $status_expected) = @$_;
-        my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
-        doit($name, $cmd, $status_expected, sub {
-            my $payload = shift;
-            "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
-        });
-    }
+    my $build_set = sub {
+        my ($server, $path_prefix) = @_;
+        return +(
+            ["h1", "-2 0 -m GET http://127.0.0.1:@{[$server->{port}]}$path_prefix", 101],
+            ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$server->{tls_port}]}$path_prefix", 101],
+            ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$server->{tls_port}]}$path_prefix", 200],
+            ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$server->{quic_port}]}$path_prefix", 200],
+            ["h3+-X", "-3 100 -X $tunnel_port -m CONNECT https://127.0.0.1:@{[$server->{quic_port}]}$path_prefix", 200],
+        );
+    };
+    subtest "direct" => sub {
+        for ($build_set->($tunnel_server, "")) {
+            my ($name, $args_url_prefix, $status_expected) = @$_;
+            my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+            doit($name, $cmd, $status_expected, sub {
+                my $payload = shift;
+                "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
+            });
+        }
+    };
+    subtest "via-proxy" => sub {
+        for my $path_prefix (qw(/h1 /h1s /h2 /h3)) {
+            for ($build_set->($proxy_server, $path_prefix)) {
+                my ($name, $args_url_prefix, $status_expected) = @$_;
+                my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+                doit($name, $cmd, $status_expected, sub {
+                    my $payload = shift;
+                    "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
+                });
+            }
+        }
+    };
 };
 
 sub doit {
