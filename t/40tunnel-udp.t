@@ -52,6 +52,7 @@ hosts:
         proxy.connect-udp: # RFC9298
           - "+*"
 proxy.timeout.io: 30000
+proxy.connect.masque-draft-03: ON
 access-log: /dev/stdout
 EOT
     wait_port({port => $quic_port, proto => 'udp'});
