@@ -53,7 +53,9 @@ hosts:
           - "+*"
 proxy.timeout.io: 30000
 proxy.connect.masque-draft-03: ON
-access-log: /dev/stdout
+access-log:
+  path: /dev/stdout
+  format: '\%h \%l \%u \%t \"\%r\" \%s \%b \%{upgrade}i'
 EOT
     wait_port({port => $quic_port, proto => 'udp'});
     $tunnel_server->{quic_port} = $quic_port;
