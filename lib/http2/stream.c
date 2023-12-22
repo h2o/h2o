@@ -357,8 +357,10 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
             return;
         if (is_end_stream) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
+            h2o_http2_scheduler_deactivate(&stream->_scheduler);
+            if (!h2o_linklist_is_linked(&stream->_link))
+                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
             h2o_http2_conn_request_write(conn);
-            h2o_http2_stream_close(conn, stream);
             return;
         }
     /* fallthru */
