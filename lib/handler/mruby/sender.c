@@ -32,6 +32,7 @@ struct st_h2o_mruby_callback_sender_t {
     h2o_doublebuffer_t sending;
     h2o_buffer_t *receiving;
     unsigned has_error : 1;
+    int *disposed;
 };
 
 void h2o_mruby_sender_do_send(h2o_mruby_generator_t *generator, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state)
@@ -121,11 +122,16 @@ static void do_callback_sender_start(h2o_mruby_generator_t *generator)
     mrb_value input = mrb_ary_new_capa(mrb, 2);
     mrb_ary_set(mrb, input, 0, sender->super.body_obj);
     mrb_ary_set(mrb, input, 1, generator->refs.generator);
+    int disposed = 0;
+    sender->disposed = &disposed;
     h2o_mruby_run_fiber(generator->ctx, proc, input, 0);
 
-    if (!sender->super.final_sent && !sender->sending.inflight) {
-        h2o_doublebuffer_prepare_empty(&sender->sending);
-        h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+    if (!disposed) {
+        sender->disposed = NULL;
+        if (!sender->super.final_sent && !sender->sending.inflight) {
+            h2o_doublebuffer_prepare_empty(&sender->sending);
+            h2o_mruby_sender_do_send(generator, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+        }
     }
 }
 
@@ -152,6 +158,8 @@ static void do_callback_sender_dispose(h2o_mruby_generator_t *generator)
     h2o_doublebuffer_dispose(&sender->sending);
     h2o_buffer_dispose(&sender->receiving);
     h2o_mruby_sender_close_body(generator);
+    if (sender->disposed != NULL)
+        *sender->disposed = 1;
 }
 
 h2o_mruby_sender_t *callback_sender_create(h2o_mruby_generator_t *generator, mrb_value body)
@@ -257,9 +265,14 @@ static mrb_value send_chunk_eos_callback(h2o_mruby_context_t *mctx, mrb_value in
     }
 
     struct st_h2o_mruby_callback_sender_t *sender = (void *)generator->sender;
+    int disposed = 0;
+    generator->disposed = &disposed;
     if (!sender->super.final_sent && !sender->sending.inflight)
         h2o_mruby_sender_do_send_buffer(generator, &sender->sending, &sender->receiving, 1);
-    h2o_mruby_sender_close_body(generator);
+    if (!disposed) {
+        generator->disposed = NULL;
+        h2o_mruby_sender_close_body(generator);
+    }
 
     return mrb_nil_value();
 }
