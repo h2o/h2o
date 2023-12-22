@@ -945,9 +945,6 @@ static void on_generator_dispose(void *_generator)
 
     if (generator->sender != NULL)
         generator->sender->dispose(generator);
-
-    if (generator->disposed != NULL)
-        *generator->disposed = 1;
 }
 
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
@@ -965,7 +962,6 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     generator->ctx = ctx;
     generator->rack_input = mrb_nil_value();
     generator->sender = NULL;
-    generator->disposed = NULL;
 
     generator->error_stream = h2o_mem_alloc(sizeof(*generator->error_stream));
     generator->error_stream->ctx = ctx;

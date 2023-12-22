@@ -174,7 +174,6 @@ struct st_h2o_mruby_generator_t {
         mrb_value generator;
         mrb_value error_stream;
     } refs;
-    int *disposed;
 };
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
