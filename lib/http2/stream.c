@@ -357,7 +357,9 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
             return;
         if (is_end_stream) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-            break;
+            h2o_http2_conn_request_write(conn);
+            h2o_http2_stream_close(conn, stream);
+            return;
         }
     /* fallthru */
     case H2O_HTTP2_STREAM_STATE_SEND_BODY:
