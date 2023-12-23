@@ -106,6 +106,13 @@ void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, 
     h2o_memcpy(dst, additional_data.base, additional_data.len);
 }
 
+void h2o_http2_encode_settings_frame(h2o_buffer_t **buf, uint16_t key, uint32_t value)
+{
+    uint8_t *dst = allocate_frame(buf, 6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0);
+    dst = h2o_http2_encode16u(dst, key);
+    dst = h2o_http2_encode32u(dst, value);
+}
+
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment)
 {
     uint8_t *dst = allocate_frame(buf, 4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, stream_id);
