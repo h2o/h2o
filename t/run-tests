@@ -31,6 +31,10 @@ while (@scripts or %pids) {
 
     # wait for tasks to exit
     my $kid = do {
+        print "# Waiting for tests to finish\n";
+        for my $t (sort values %pids) {
+            print "#   $t\n";
+        }
         local $SIG{ALRM} = sub { die };
         alarm(600);
         my $kid = eval { wait };
