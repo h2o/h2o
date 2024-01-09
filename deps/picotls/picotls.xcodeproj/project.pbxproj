@@ -205,7 +205,14 @@
 		081F00CC291A358800534A86 /* asn1.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = asn1.h; sourceTree = "<group>"; };
 		081F00CD291A358800534A86 /* pembase64.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pembase64.h; sourceTree = "<group>"; };
 		081F00CE291A358800534A86 /* ptlsbcrypt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ptlsbcrypt.h; sourceTree = "<group>"; };
+		085BDAE52B1D618E002851EA /* libaegis.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = libaegis.c; sourceTree = "<group>"; };
+		085BDAE62B1D6238002851EA /* libaegis.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = libaegis.h; sourceTree = "<group>"; };
+		087F1A732B034AEB00E81AC1 /* FindMbedTLS.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindMbedTLS.cmake; sourceTree = "<group>"; };
 		0883D3272AEF8F2500B711CC /* fusion.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = fusion.cmake; sourceTree = "<group>"; };
+		0883D32A2AF601A700B711CC /* mbedtls.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = mbedtls.c; sourceTree = "<group>"; };
+		0883D32B2AF601B900B711CC /* mbedtls.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = mbedtls.c; sourceTree = "<group>"; };
+		0883D32C2AF601CB00B711CC /* mbedtls.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = mbedtls.h; sourceTree = "<group>"; };
+		0883D32D2AF6020300B711CC /* ptlsbench.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = ptlsbench.c; sourceTree = "<group>"; };
 		08A835E12995E04100D872CE /* chacha20poly1305.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = chacha20poly1305.h; sourceTree = "<group>"; };
 		08A835EB2996971300D872CE /* boringssl-adjust.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = "boringssl-adjust.cmake"; sourceTree = "<group>"; };
 		08B3298229419DFC009D6766 /* ech-live.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "ech-live.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -403,7 +410,6 @@
 				106530BD1D998624005B2C60 /* lib */,
 				E95EBCC2227E82BA0022C32D /* misc */,
 				E95EBCC0227B71170022C32D /* picotls-probes.d */,
-				E992F79920E99A080008154D /* src */,
 				106530C41D9B1A0E005B2C60 /* t */,
 				106530B31D9985E0005B2C60 /* Products */,
 				E973651D246E37300039AA49 /* Frameworks */,
@@ -444,6 +450,8 @@
 				E97577022212405D00D1EF74 /* ffx.c */,
 				E9B43DBF24619D1700824E51 /* fusion.c */,
 				08F0FDF52910F67A00EE657D /* hpke.c */,
+				085BDAE62B1D6238002851EA /* libaegis.h */,
+				0883D32B2AF601B900B711CC /* mbedtls.c */,
 				E949EF272073629300511ECA /* minicrypto-pem.c */,
 				106530C21D9B004B005B2C60 /* openssl.c */,
 				E99B75DF1F5CDDB500CF503E /* pembase64.c */,
@@ -462,9 +470,11 @@
 				08B3298229419DFC009D6766 /* ech-live.t */,
 				E9B43DE224619D7E00824E51 /* fusion.c */,
 				081F00C92918823200534A86 /* hpke.c */,
+				0883D32A2AF601A700B711CC /* mbedtls.c */,
 				1059003D1DC8D4E300FB4085 /* minicrypto.c */,
 				106530C51D9B1A98005B2C60 /* openssl.c */,
 				106530E91D9B7C13005B2C60 /* picotls.c */,
+				0883D32D2AF6020300B711CC /* ptlsbench.c */,
 				106530E61D9B7AF6005B2C60 /* test.h */,
 				E9E3849C1F0748DD00D50990 /* util.h */,
 			);
@@ -497,6 +507,7 @@
 				E9E4B1292180514000514B47 /* certificate_compression.h */,
 				E97577002212405300D1EF74 /* ffx.h */,
 				E9B43DE62461A06800824E51 /* fusion.h */,
+				0883D32C2AF601CB00B711CC /* mbedtls.h */,
 				1059004F1DC8D64E00FB4085 /* minicrypto.h */,
 				106530ED1D9CEFF7005B2C60 /* openssl.h */,
 				081F00CD291A358800534A86 /* pembase64.h */,
@@ -528,6 +539,7 @@
 			children = (
 				08A835EB2996971300D872CE /* boringssl-adjust.cmake */,
 				E95EBCCA227EA0180022C32D /* dtrace-utils.cmake */,
+				087F1A732B034AEB00E81AC1 /* FindMbedTLS.cmake */,
 				0883D3272AEF8F2500B711CC /* fusion.cmake */,
 			);
 			path = cmake;
@@ -540,13 +552,6 @@
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		E992F79920E99A080008154D /* src */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = src;
-			sourceTree = "<group>";
-		};
 		E9F20BDF22E34B210018D260 /* cifra */ = {
 			isa = PBXGroup;
 			children = (
@@ -554,6 +559,7 @@
 				E9F20BE222E34B340018D260 /* aes128.c */,
 				E9F20BE022E34B340018D260 /* aes256.c */,
 				E9F20BE422E34B340018D260 /* chacha20.c */,
+				085BDAE52B1D618E002851EA /* libaegis.c */,
 				E9F20BF922E34C110018D260 /* random.c */,
 				E9F20BE122E34B340018D260 /* x25519.c */,
 			);

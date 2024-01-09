@@ -130,8 +130,8 @@ extern "C" {
 #define PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384 "TLS_AES_256_GCM_SHA384"
 #define PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256 0x1303
 #define PTLS_CIPHER_SUITE_NAME_CHACHA20_POLY1305_SHA256 "TLS_CHACHA20_POLY1305_SHA256"
-#define PTLS_CIPHER_SUITE_AEGIS256_SHA384 0x1306
-#define PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA384 "TLS_AEGIS_256_SHA384"
+#define PTLS_CIPHER_SUITE_AEGIS256_SHA512 0x1306
+#define PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA512 "TLS_AEGIS_256_SHA512"
 #define PTLS_CIPHER_SUITE_AEGIS128L_SHA256 0x1307
 #define PTLS_CIPHER_SUITE_NAME_AEGIS128L_SHA256 "TLS_AEGIS_128L_SHA256"
 
@@ -248,6 +248,7 @@ extern "C" {
 #define PTLS_ERROR_REJECT_EARLY_DATA (PTLS_ERROR_CLASS_INTERNAL + 9)
 #define PTLS_ERROR_DELEGATE (PTLS_ERROR_CLASS_INTERNAL + 10)
 #define PTLS_ERROR_ASYNC_OPERATION (PTLS_ERROR_CLASS_INTERNAL + 11)
+#define PTLS_ERROR_BLOCK_OVERFLOW (PTLS_ERROR_CLASS_INTERNAL + 12)
 
 #define PTLS_ERROR_INCORRECT_BASE64 (PTLS_ERROR_CLASS_INTERNAL + 50)
 #define PTLS_ERROR_PEM_LABEL_NOT_FOUND (PTLS_ERROR_CLASS_INTERNAL + 51)
@@ -338,11 +339,14 @@ typedef struct st_ptls_key_exchange_context_t {
      */
     const struct st_ptls_key_exchange_algorithm_t *algo;
     /**
-     * the public key
+     * public key of this context
      */
     ptls_iovec_t pubkey;
     /**
-     * If `release` is set, the callee frees resources allocated to the context and set *keyex to NULL
+     * This function can be used for deriving a shared secret or for destroying the context.
+     * When `secret` is non-NULL, this callback derives the shared secret using the public key of the context and the peer key being
+     * given, and sets the value in `secret`. The memory pointed to by `secret->base` must be freed by the caller by calling `free`.
+     * When `release` is set, the callee frees resources allocated to the context and set *keyex to NULL.
      */
     int (*on_exchange)(struct st_ptls_key_exchange_context_t **keyex, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey);
 } ptls_key_exchange_context_t;
@@ -356,12 +360,14 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      */
     uint16_t id;
     /**
-     * creates a context for asynchronous key exchange. The function is called when ClientHello is generated. The on_exchange
+     * Creates a context for asynchronous key exchange. The function is called when ClientHello is generated. The on_exchange
      * callback of the created context is called when the client receives ServerHello.
      */
     int (*create)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **ctx);
     /**
-     * implements synchronous key exchange. Called when receiving a ServerHello.
+     * Implements synchronous key exchange. Called when receiving a ServerHello.
+     * Given a public key provided by the peer (`peerkey`), this callback returns a empheral public key (`pubkey`) and a secret
+     * (`secret) `derived from the two public keys.
      */
     int (*exchange)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *pubkey, ptls_iovec_t *secret,
                     ptls_iovec_t peerkey);
@@ -398,31 +404,81 @@ typedef const struct st_ptls_cipher_algorithm_t {
     int (*setup_crypto)(ptls_cipher_context_t *ctx, int is_enc, const void *key);
 } ptls_cipher_algorithm_t;
 
+/**
+ * This object specifies symmetric cipher to be calculated alongside the AEAD encryption.
+ * QUIC stacks can use this object to apply QUIC header protection and AEAD encryption in one shot.
+ */
 typedef struct st_ptls_aead_supplementary_encryption_t {
+    /**
+     * Cipher context to be used.
+     */
     ptls_cipher_context_t *ctx;
+    /**
+     * Input to the cipher.
+     * This field may point to the output of AEAD encryption, in which case the input will be read after AEAD encryption is
+     * complete.
+     */
     const void *input;
+    /**
+     * Output.
+     */
     uint8_t output[16];
 } ptls_aead_supplementary_encryption_t;
 
 /**
- * AEAD context. AEAD implementations are allowed to stuff data at the end of the struct. The size of the memory allocated for the
- * struct is governed by ptls_aead_algorithm_t::context_size.
- * Ciphers for TLS over TCP MUST implement `do_encrypt`, `do_encrypt_v`, `do_decrypt`. `do_encrypt_init`, `~update`, `~final` are
- * obsolete, and therefore may not be available.
+ * AEAD context.
+ * AEAD implementations are allowed to stuff data at the end of the struct; see `ptls_aead_algorithm_t::setup_crypto`.
+ * Ciphers for TLS over TCP MUST implement `do_encrypt`, `do_encrypt_v`, `do_decrypt`.
+ * `do_encrypt_init`, `~update`, `~final` are obsolete, and therefore may not be available.
  */
 typedef struct st_ptls_aead_context_t {
+    /**
+     * Points to the algorithm. This field is governed by picotls core; backends must not alter.
+     */
     const struct st_ptls_aead_algorithm_t *algo;
-    /* field above this line must not be altered by the crypto binding */
+    /**
+     * Mandatory callback that disposes of all the backend-specific data.
+     */
     void (*dispose_crypto)(struct st_ptls_aead_context_t *ctx);
+    /**
+     * Mandatory callback that returns the static IV. The size of IV is available as `ptls_aead_algorithm_t::iv_size`.
+     */
     void (*do_get_iv)(struct st_ptls_aead_context_t *ctx, void *iv);
+    /**
+     * Mandatory callback that sets the static IV. The size of IV is available as `ptls_aead_algorithm_t::iv_size`.
+     */
     void (*do_set_iv)(struct st_ptls_aead_context_t *ctx, const void *iv);
+    /**
+     * Deprecated.
+     */
     void (*do_encrypt_init)(struct st_ptls_aead_context_t *ctx, uint64_t seq, const void *aad, size_t aadlen);
+    /**
+     * Deprecated.
+     */
     size_t (*do_encrypt_update)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen);
+    /**
+     * Deprecated.
+     */
     size_t (*do_encrypt_final)(struct st_ptls_aead_context_t *ctx, void *output);
+    /**
+     * Mandatory callback that does "one-shot" encryption of an AEAD block.
+     * When `supp` is set to non-NULL, the callback must also encrypt the supplementary block.
+     * Backends may set this field to `ptls_aead__do_encrypt` that calls `do_encrypt_v` and `ptls_cipher_*` functions for handling
+     * the supplimentary block.
+     */
     void (*do_encrypt)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                        const void *aad, size_t aadlen, ptls_aead_supplementary_encryption_t *supp);
+    /**
+     * Variant of `do_encrypt` that gathers input from multiple blocks. Support for this callback is also mandatory.
+     * Legacy backends may set this field to `ptls_aead__do_encrypt_v` that calls `do_encrypt_init`, `do_encrypt_update`,
+     * `do_encrypt_final`.
+     */
     void (*do_encrypt_v)(struct st_ptls_aead_context_t *ctx, void *output, ptls_iovec_t *input, size_t incnt, uint64_t seq,
                          const void *aad, size_t aadlen);
+    /**
+     * Mandatory callback for decrypting an AEAD block.
+     * If successful, returns the amount of cleartext bytes being written to output. Otherwise, returns SIZE_MAX.
+     */
     size_t (*do_decrypt)(struct st_ptls_aead_context_t *ctx, void *output, const void *input, size_t inlen, uint64_t seq,
                          const void *aad, size_t aadlen);
 } ptls_aead_context_t;
@@ -479,12 +535,16 @@ typedef const struct st_ptls_aead_algorithm_t {
      */
     uint8_t align_bits;
     /**
-     * size of memory allocated for ptls_aead_context_t. AEAD implementations can set this value to something greater than
-     * sizeof(ptls_aead_context_t) and stuff additional data at the bottom of the struct.
+     * size of memory allocated for `ptls_aead_context_t`
      */
     size_t context_size;
     /**
-     * callback that sets up the crypto
+     * Backend callback called to setup `ptls_aead_context_t`.
+     * Backends are allowed to stuff arbitrary data at the end of `ptls_aead_context_t`; actual size of the memory chunk being
+     * allocated is that specified by `ptls_aead_algorithm_t::context_size`. When the `setup_crypto` callback is called, all the
+     * fields outside of `ptls_aead_context_t` will be in undefined state; it is the responsibility of the callback to initialize
+     * them, as well as the callbacks of `ptls_aead_context_t` that the backend supports.
+     * A non-zero return value indicates failure, in which case the error will propagate as `ptls_aead_new` returning NULL.
      */
     int (*setup_crypto)(ptls_aead_context_t *ctx, int is_enc, const void *key, const void *iv);
 } ptls_aead_algorithm_t;
@@ -860,8 +920,7 @@ struct st_ptls_context_t {
      */
     unsigned send_change_cipher_spec : 1;
     /**
-     * if set, the server requests client certificates
-     * to authenticate the client.
+     * if set, the server requests client certificates to authenticate the client
      */
     unsigned require_client_authentication : 1;
     /**
@@ -929,6 +988,14 @@ struct st_ptls_context_t {
         uint8_t bytes[PTLS_SHA256_DIGEST_SIZE];
         uint8_t is_set : 1;
     } ticket_context;
+    /**
+     * (optional) list of CAs advertised to clients as supported in the CertificateRequest message; each item must be DNs in DER
+     * format. The values are sent to the client only when `ptls_context_t::require_client_authentication` is set to true.
+     */
+    struct {
+        const ptls_iovec_t *list;
+        size_t count;
+    } client_ca_names;
 };
 
 typedef struct st_ptls_raw_extension_t {
@@ -1151,6 +1218,10 @@ static uint8_t *ptls_encode_quicint(uint8_t *p, uint64_t v);
         } while (0);                                                                                                               \
         size_t body_size = (buf)->off - body_start;                                                                                \
         if (capacity != -1) {                                                                                                      \
+            if (capacity < sizeof(size_t) && body_size >= (size_t)1 << (capacity * 8)) {                                           \
+                ret = PTLS_ERROR_BLOCK_OVERFLOW;                                                                                   \
+                goto Exit;                                                                                                         \
+            }                                                                                                                      \
             for (; capacity != 0; --capacity)                                                                                      \
                 (buf)->base[body_start - capacity] = (uint8_t)(body_size >> (8 * (capacity - 1)));                                 \
         } else {                                                                                                                   \
@@ -1770,6 +1841,10 @@ char *ptls_jsonescape(char *buf, const char *s, size_t len);
  * the default get_time callback
  */
 extern ptls_get_time_t ptls_get_time;
+/**
+ * default hash clone function that calls memcpy
+ */
+static void ptls_hash_clone_memcpy(void *dst, const void *src, size_t size);
 #if defined(PICOTLS_USE_DTRACE) && PICOTLS_USE_DTRACE
 /**
  *
@@ -1926,7 +2001,14 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
     return ctx->do_decrypt(ctx, output, input, inlen, seq, aad, aadlen);
 }
 
+inline void ptls_hash_clone_memcpy(void *dst, const void *src, size_t size)
+{
+    memcpy(dst, src, size);
+}
+
 #define ptls_define_hash(name, ctx_type, init_func, update_func, final_func)                                                       \
+    ptls_define_hash6(name, ctx_type, init_func, update_func, final_func, ptls_hash_clone_memcpy)
+#define ptls_define_hash6(name, ctx_type, init_func, update_func, final_func, clone_func)                                          \
                                                                                                                                    \
     struct name##_context_t {                                                                                                      \
         ptls_hash_context_t super;                                                                                                 \
@@ -1969,7 +2051,8 @@ inline size_t ptls_aead_decrypt(ptls_aead_context_t *ctx, void *output, const vo
         struct name##_context_t *dst, *src = (struct name##_context_t *)_src;                                                      \
         if ((dst = malloc(sizeof(*dst))) == NULL)                                                                                  \
             return NULL;                                                                                                           \
-        *dst = *src;                                                                                                               \
+        dst->super = src->super;                                                                                                   \
+        clone_func(&dst->ctx, &src->ctx, sizeof(dst->ctx));                                                                        \
         return &dst->super;                                                                                                        \
     }                                                                                                                              \
                                                                                                                                    \

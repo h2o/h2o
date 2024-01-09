@@ -51,11 +51,11 @@ extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm, ptls_minicrypto_aes256gc
 extern ptls_aead_algorithm_t ptls_minicrypto_aegis128l;
 extern ptls_aead_algorithm_t ptls_minicrypto_aegis256;
 #endif
-extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384;
+extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384, ptls_minicrypto_sha512;
 extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256, ptls_minicrypto_aes256gcmsha384, ptls_minicrypto_chacha20poly1305sha256;
 #ifdef PTLS_HAVE_AEGIS
 extern ptls_cipher_suite_t ptls_minicrypto_aegis128lsha256;
-extern ptls_cipher_suite_t ptls_minicrypto_aegis256sha384;
+extern ptls_cipher_suite_t ptls_minicrypto_aegis256sha512;
 #endif
 extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[];
 extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites_all[];
