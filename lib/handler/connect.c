@@ -877,6 +877,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
 {
     int fd;
 
+    assert(self->udp.egress.buf->size == 0); /* the handler does not call `proceed_req` until the connection becomes ready */
+
     H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
     /* connect */
     if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
@@ -905,8 +907,6 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->src_req->write_req.cb = udp_write_stream;
     self->src_req->forward_datagram.write_ = udp_write_datagrams;
     self->src_req->write_req.ctx = self;
-    if (self->udp.egress.buf->size != 0 || self->write_closed)
-        udp_do_write_stream(self, h2o_iovec_init(NULL, 0));
 
     record_connect_success(self);
 
@@ -924,6 +924,9 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
                               H2O_STRLIT("?1"));
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+
+    /* ask the app to provide data to send */
+    h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
 
     return 1;
 }
@@ -997,7 +1000,7 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     h2o_timer_link(get_loop(self), handler->config.connect_timeout, &self->timeout);
 
     /* setup write_req now, so that the protocol handler would not provide additional data until we call `proceed_req` */
-    assert(req->entity.len == 0 && "the handler is incapable of accepting input via `write_req.cb` while writing req->entity");
+    assert(req->entity.base != NULL && req->entity.len == 0 && "CONNECT uses request streaming starting with a zero-byte chunk");
     self->src_req->write_req.cb = is_tcp ? tcp_write : udp_write_stream;
     self->src_req->write_req.ctx = self;
 
