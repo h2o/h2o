@@ -693,6 +693,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
         /* handle the request */
         stream->req.is_tunnel_req = 1;
+        stream->req.entity = h2o_iovec_init("", 0); /* setting to non-NULL pointer indicates the presence of HTTP payload */
         stream->req.proceed_req = proceed_request;
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
@@ -924,7 +925,6 @@ void proceed_request(h2o_req_t *req, const char *errstr)
 
     switch (stream->req_body.state) {
     case H2O_HTTP2_REQ_BODY_OPEN:
-        assert(written != 0);
         update_stream_input_window(conn, stream, written);
         if (stream->blocked_by_server && h2o_http2_window_get_avail(&stream->input_window.window) > 0) {
             h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
