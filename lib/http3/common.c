@@ -55,6 +55,8 @@ struct st_h2o_http3_ingress_unistream_t {
                          const uint8_t *src_end, int is_eos);
 };
 
+const char h2o_http3_err_frame_too_large[] = "HTTP/3 frame is too large";
+
 const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
 static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
@@ -298,8 +300,8 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
         int ret;
         const char *err_desc = NULL;
 
-        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
-                                        &err_desc)) != 0) {
+        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL,
+                                        conn->max_frame_payload_size, src, src_end, &err_desc)) != 0) {
             if (ret != H2O_HTTP3_ERROR_INCOMPLETE)
                 h2o_quic_close_connection(&conn->super, ret, err_desc);
             break;
@@ -907,8 +909,8 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_quic_send(conn);
 }
 
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
-                         const uint8_t *src_end, const char **err_desc)
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, size_t max_frame_payload_size,
+                         const uint8_t **_src, const uint8_t *src_end, const char **err_desc)
 {
     const uint8_t *src = *_src;
 
@@ -921,9 +923,9 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     /* read the content of the frame (unless it's a DATA frame) */
     frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
-        if (frame->length > H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE) {
+        if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
-            *err_desc = "H3 frame too large";
+            *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
         if (src_end - src < frame->length)
@@ -1116,11 +1118,12 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
 }
 
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
-                         const h2o_http3_qpack_context_t *qpack_ctx)
+                         const h2o_http3_qpack_context_t *qpack_ctx, size_t max_frame_payload_size)
 {
     h2o_quic_init_conn(&conn->super, ctx, &callbacks->super);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->qpack.ctx = qpack_ctx;
+    conn->max_frame_payload_size = max_frame_payload_size;
 }
 
 void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
@@ -1216,8 +1219,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:
-        fprintf(stderr, "quicly_send returned %d\n", ret);
-        abort();
+        h2o_fatal("quicly_send returned %d", ret);
     }
 
     h2o_quic_schedule_timer(conn);

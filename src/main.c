@@ -396,8 +396,8 @@ static char **cmd_argv;
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
-        perror("failed to set FD_CLOEXEC");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to set FD_CLOEXEC: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 }
 
@@ -512,16 +512,16 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
     // set fd to blocking for synchronous I/O
     if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
-        perror("fcntl");
-        abort();
+        char buf[256];
+        h2o_fatal("fcntl: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 
     transaction_cb(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
-        perror("fcntl");
-        abort();
+        char buf[256];
+        h2o_fatal("fcntl: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 }
 
@@ -573,16 +573,16 @@ static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
 
 #if ASYNC_NB_USE_EVENTFD
     if (eventfd_write(transaction->notify_fd, 1) != 0) {
-        perror("eventfd_write");
-        abort();
+        char buf[256];
+        h2o_fatal("eventfd_write: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #else
     ssize_t ret;
     while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
         ;
     if (ret != 1) {
-        perror("write");
-        abort();
+        char buf[256];
+        h2o_fatal("write: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #endif
 }
@@ -1426,6 +1426,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         pctx->ctx.emit_certificate = NULL;
     }
 
+    /* setup session ticket context so that resumption will succeed only against the same certificate */
+    assert(sizeof(pctx->ctx.ticket_context.bytes) == PTLS_SHA256_DIGEST_SIZE);
+    ptls_calc_hash(&ptls_openssl_sha256, pctx->ctx.ticket_context.bytes, pctx->ctx.certificates.list[0].base,
+                   pctx->ctx.certificates.list[0].len);
+    pctx->ctx.ticket_context.is_set = 1;
+
     if (listener->quic.ctx != NULL) {
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
@@ -1576,8 +1582,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
-                fprintf(stderr, "%s\n", errbuf);
-                abort();
+                h2o_fatal("%s", errbuf);
             }
             neverbleed_transaction_cb = async_nb_transaction;
         }
@@ -1607,6 +1612,18 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
          * callback of picotls for incoming TLS 1.3 connections. */
         X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
         int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
+    }
+
+    /* set session resumption context so that resumption will succeed only against the same certificate */
+    if (raw_pubkey_count == 0) {
+        uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
+        unsigned session_ctx_len;
+        H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
+        int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
+        assert(ret == 1);
+        assert(session_ctx_len == sizeof(session_ctx));
+        ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
 
@@ -2094,7 +2111,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 #endif
 
-        SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         setup_ecc_key(identity->ossl);
         if (cipher_suite != NULL && SSL_CTX_set_cipher_list(identity->ossl, (*cipher_suite)->data.scalar) != 1) {
             h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
@@ -4110,8 +4126,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {
-                perror("socketpair(AF_UNIX, SOCK_DGRAM) failed");
-                abort();
+                char buf[256];
+                h2o_fatal("socketpair(AF_UNIX, SOCK_DGRAM) failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
             }
             set_cloexec(fds[0]);
             set_cloexec(fds[1]);
@@ -4511,8 +4527,8 @@ static int dup_listener(struct listener_config_t *config)
 #if H2O_USE_REUSEPORT
     socklen_t reuseportlen = sizeof(reuseport);
     if (getsockopt(config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
-        perror("gestockopt(SO_REUSEPORT) failed");
-        abort();
+        char buf[256];
+        h2o_fatal("gestockopt(SO_REUSEPORT) failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     assert(reuseportlen == sizeof(reuseport));
 #endif
@@ -4525,27 +4541,27 @@ static int dup_listener(struct listener_config_t *config)
         struct sockaddr_storage ss;
         socklen_t sslen = sizeof(ss);
         if (getsockopt(config->fds.entries[0], SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
-            perror("failed to obtain the type of a listening socket");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to obtain the type of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         assert(type == SOCK_DGRAM || type == SOCK_STREAM);
         if (getsockname(config->fds.entries[0], (struct sockaddr *)&ss, &sslen) != 0) {
-            perror("failed to obtain local address of a listening socket");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to obtain local address of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
                 set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
-            perror("failed to bind additional listener");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to bind additional listener: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
     }
 #endif
     if (!reuseport && (fd = dup(config->fds.entries[0])) == -1) {
-        perror("failed to dup listening socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to dup listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     set_cloexec(fd);
     return fd;

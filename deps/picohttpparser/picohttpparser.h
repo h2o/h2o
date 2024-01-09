@@ -33,8 +33,6 @@
 #define ssize_t intptr_t
 #endif
 
-/* $Id$ */
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -74,8 +72,8 @@ struct phr_chunked_decoder {
  * repeatedly call the function while it returns -2 (incomplete) every time
  * supplying newly arrived data.  If the end of the chunked-encoded data is
  * found, the function returns a non-negative number indicating the number of
- * octets left undecoded at the tail of the supplied buffer.  Returns -1 on
- * error.
+ * octets left undecoded, that starts from the offset returned by `*bufsz`.
+ * Returns -1 on error.
  */
 ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_t *bufsz);
 

@@ -98,7 +98,7 @@ extern ptls_cipher_suite_t ptls_openssl_chacha20poly1305sha256;
 extern ptls_aead_algorithm_t ptls_openssl_aegis128l;
 extern ptls_aead_algorithm_t ptls_openssl_aegis256;
 extern ptls_cipher_suite_t ptls_openssl_aegis128lsha256;
-extern ptls_cipher_suite_t ptls_openssl_aegis256sha384;
+extern ptls_cipher_suite_t ptls_openssl_aegis256sha512;
 #endif
 
 extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256;

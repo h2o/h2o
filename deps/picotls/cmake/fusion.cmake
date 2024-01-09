@@ -14,6 +14,7 @@ FUNCTION (CHECK_FUSION_PREREQUISITES)
         ord0 = _mm256_aesenc_epi128(ord1, ord2);
         ord3 = _mm256_aesenclast_epi128(ord0, ord1);
         ord1 = _mm256_clmulepi64_epi128(ord3, ord2, 0x00);
+        _mm_insert_epi64(_mm_setr_epi32(0, 1, 2, 3), 0, 0);
         return 0;
     }
     " CC_HAS_AESNI256)
