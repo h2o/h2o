@@ -90,6 +90,7 @@ hosts:
         proxy.http3.ratio: 100
 proxy.ssl.verify-peer: OFF
 proxy.tunnel: ON
+access-log: /dev/stdout
 EOT
     wait_port({port => $quic_port, proto => 'udp'});
     $proxy_server->{quic_port} = $quic_port;
@@ -120,18 +121,15 @@ subtest "udp-draft03" => sub {
 };
 
 subtest "udp-rfc9298" => sub {
-    my $build_set = sub {
+    my $doit = sub {
         my ($server, $path_prefix) = @_;
-        return +(
+        for (
             ["h1", "-2 0 -m GET http://127.0.0.1:@{[$server->{port}]}$path_prefix", 101],
             ["h1s", "-2 0 -m GET https://127.0.0.1:@{[$server->{tls_port}]}$path_prefix", 101],
             ["h2", "-2 100 -m CONNECT https://127.0.0.1:@{[$server->{tls_port}]}$path_prefix", 200],
             ["h3", "-3 100 -m CONNECT https://127.0.0.1:@{[$server->{quic_port}]}$path_prefix", 200],
             ["h3+-X", "-3 100 -X $tunnel_port -m CONNECT https://127.0.0.1:@{[$server->{quic_port}]}$path_prefix", 200],
-        );
-    };
-    subtest "direct" => sub {
-        for ($build_set->($tunnel_server, "")) {
+        ) {
             my ($name, $args_url_prefix, $status_expected) = @$_;
             my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
             doit($name, $cmd, $status_expected, sub {
@@ -140,16 +138,14 @@ subtest "udp-rfc9298" => sub {
             });
         }
     };
+    subtest "direct" => sub {
+        $doit->($tunnel_server, "");
+    };
     subtest "via-proxy" => sub {
         for my $path_prefix (qw(/h1 /h1s /h2 /h3)) {
-            for ($build_set->($proxy_server, $path_prefix)) {
-                my ($name, $args_url_prefix, $status_expected) = @$_;
-                my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
-                doit($name, $cmd, $status_expected, sub {
-                    my $payload = shift;
-                    "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
-                });
-            }
+            subtest $path_prefix => sub {
+                $doit->($proxy_server, $path_prefix);
+            };
         }
     };
 };
