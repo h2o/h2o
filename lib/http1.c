@@ -700,13 +700,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             conn->_unconsumed_request_size = 0;
             h2o_buffer_consume(&conn->sock->input, reqlen);
+            h2o_socket_read_stop(conn->sock);
             h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
             conn->req.write_req.cb = write_req_connect_first;
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
             conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
             h2o_process_request(&conn->req);
-            conn->_req_entity_reader->handle_incoming_entity(conn);
         } else {
             /* Ordinary request without request body. */
             clear_timeouts(conn);
