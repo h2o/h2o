@@ -928,8 +928,8 @@ void h2o__proxy_process_request(h2o_req_t *req)
     const char *upgrade_to = NULL;
     if (req->is_tunnel_req) {
         if (req->upgrade.base != NULL) {
-            /* upgrade requests (e.g. websocket) are either tunnelled or converted to a normal request (by omitting the Upgrade
-             * header field)  depending on the configuration */
+            /* Upgrade requests (e.g. websocket) are either tunnelled, rejected, or converted to an ordinary request depending on
+             * the configuration. */
             if (client_ctx->tunnel_enabled) {
                 /* Support for H3_DATAGRAM is advertised by the HTTP/3 handler but the proxy handler does not support forwarding
                  * datagrams nor conversion to/from capsules. Hence we send 421 to let the client retry using a different version of
@@ -939,6 +939,13 @@ void h2o__proxy_process_request(h2o_req_t *req)
                     return;
                 }
                 upgrade_to = h2o_strdup(&req->pool, req->upgrade.base, req->upgrade.len).base;
+            } else {
+                /* When recieving a websocket request over HTTP/1.x but tunneling is disabled, convert the request to an ordinary
+                 * HTTP request, as we have always done. Otherwise, refuse the request. */
+                if (!(req->version < 0x200 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")))) {
+                    h2o_send_error_403(req, "Forbidden", "The proxy act as a gateway.", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    return;
+                }
             }
         } else {
             /* CONNECT request; process as a CONNECT upgrade or reject */
