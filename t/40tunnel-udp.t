@@ -150,6 +150,20 @@ subtest "udp-rfc9298" => sub {
             };
         }
     };
+    subtest "h3-proxy-rejection" => sub {
+        my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -m CONNECT https://127.0.0.1:@{[$proxy_server->{quic_port}]}/h1/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+        open my $fh, "|-", "$cmd > $tempdir/out 2>&1"
+            or die "spawn error ($?) for command: $cmd";
+        sleep 0.5;
+        undef $fh;
+        my $resp = do {
+            open my $fh, "<", "$tempdir/out"
+                or die "failed to open file:$tempdir/out:$!";
+            local $/;
+            <$fh>;
+        };
+        like $resp, qr{^HTTP/3 421}, "got 421";
+    };
 };
 
 sub doit {
