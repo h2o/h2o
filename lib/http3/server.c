@@ -1556,7 +1556,12 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
 {
     *datagram_flow_id = h2o_iovec_init(NULL, 0);
 
-    /* Bail out if we cannot receive or send datagrams. */
+    /* TODO Convert H3_DATAGRAMs to capsules either here or inside the proxy handler. At the moment, the connect handler provides
+     * `h2o_req_t::forward_datagram` callbacks but the proxy handler does not. As support for H3_DATAGRAMs are advertised at the
+     * connection level, we need to support forwarding datagrams also when the proxy handler in use.
+     * Until then, connect-udp requests on H3 are refused to be tunneled by the proxy handler, see `h2o__proxy_process_request`.
+     * Also, as an abundance of caution, we drop the datagrams associated to requests that do not provide the forwarding hooks, by
+     * not registering such streams to `datagram_flows`. */
     if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL) ||
         send_state != H2O_SEND_STATE_IN_PROGRESS) {
         stream->datagram_flow_id = UINT64_MAX;

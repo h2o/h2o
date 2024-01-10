@@ -930,8 +930,16 @@ void h2o__proxy_process_request(h2o_req_t *req)
         if (req->upgrade.base != NULL) {
             /* upgrade requests (e.g. websocket) are either tunnelled or converted to a normal request (by omitting the Upgrade
              * header field)  depending on the configuration */
-            if (client_ctx->tunnel_enabled)
+            if (client_ctx->tunnel_enabled) {
+                /* Support for H3_DATAGRAM is advertised by the HTTP/3 handler but the proxy handler does not support forwarding
+                 * datagrams nor conversion to/from capsules. Hence we send 421 to let the client retry using a different version of
+                 * HTTP. */
+                if (req->version == 0x300 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))) {
+                    h2o_send_error_421(req, "Misdirected Request", "connect-udp tunneling is only supported in HTTP/1 and 2", 0);
+                    return;
+                }
                 upgrade_to = h2o_strdup(&req->pool, req->upgrade.base, req->upgrade.len).base;
+            }
         } else {
             /* CONNECT request; process as a CONNECT upgrade or reject */
             if (client_ctx->tunnel_enabled) {
