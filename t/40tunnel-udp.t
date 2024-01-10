@@ -131,6 +131,8 @@ subtest "udp-rfc9298" => sub {
             ["h3+-X", "-3 100 -X $tunnel_port -m CONNECT https://127.0.0.1:@{[$server->{quic_port}]}$path_prefix", 200],
         ) {
             my ($name, $args_url_prefix, $status_expected) = @$_;
+            plan skip_all => "proxy cannot forward connect-udp over H3"
+                if $path_prefix ne '' && $args_url_prefix =~ /^-3 /;
             my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
             doit($name, $cmd, $status_expected, sub {
                 my $payload = shift;
