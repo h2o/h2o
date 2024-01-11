@@ -654,9 +654,9 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
-    /* start the write if there's data to be sent */
-    if (self->tcp.sendbuf->size != 0 || self->write_closed)
-        tcp_do_write(self);
+    /* Start write. Once write is complete (or if there is nothing to write), `proceed_req` will be called or the socket would be
+     * closed if `write_closed` is set. */
+    tcp_do_write(self);
 
     record_connect_success(self);
 
