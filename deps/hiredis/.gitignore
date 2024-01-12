@@ -5,3 +5,6 @@
 /*.dylib
 /*.a
 /*.pc
+*.dSYM
+tags
+compile_commands.json
