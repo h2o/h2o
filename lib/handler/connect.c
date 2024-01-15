@@ -925,6 +925,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
+    /* FIXME invoke udp_write_stream if there is any data to be sent? */
+
     /* ask the app to provide data to send */
     h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
 
@@ -1000,7 +1002,7 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     h2o_timer_link(get_loop(self), handler->config.connect_timeout, &self->timeout);
 
     /* setup write_req now, so that the protocol handler would not provide additional data until we call `proceed_req` */
-    assert(req->entity.base != NULL && req->entity.len == 0 && "CONNECT uses request streaming starting with a zero-byte chunk");
+    assert(req->entity.base != NULL && "CONNECT must indicate existence of payload");
     self->src_req->write_req.cb = is_tcp ? tcp_write : udp_write_stream;
     self->src_req->write_req.ctx = self;
 

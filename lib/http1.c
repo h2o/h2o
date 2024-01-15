@@ -686,11 +686,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
         } else if (conn->req.is_tunnel_req) {
-            /* Is a CONNECT request or a upgrade that uses our stream API (e.g., websocket tunnelling), therefore:
-             * * the request is submitted immediately for processing,
-             * * input is read and provided to the request handler using the request streaming API,
-             * * but the timeout is stopped as the client might wait for the server to send 200 before sending anything. */
-            clear_timeouts(conn);
+            /* Is a CONNECT request or an upgrade (e.g., WebSocket). Request is submitted immediately and body is streamed. */
             if (!h2o_req_can_stream_request(&conn->req) &&
                 h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
                 h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
@@ -700,12 +696,16 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 return;
             conn->_unconsumed_request_size = 0;
             h2o_buffer_consume(&conn->sock->input, reqlen);
-            h2o_socket_read_stop(conn->sock);
             h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
             conn->req.write_req.cb = write_req_connect_first;
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
-            conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
+            conn->_req_entity_reader->handle_incoming_entity(conn); /* read payload received early before submitting the request */
+            if (conn->req.entity.base == NULL)
+                conn->req.entity = h2o_iovec_init("", 0); /* if nothing was read, still indicate that body exists */
+            /* stop reading (this might or might not be done by `handle_incoming_entity`) until HTTP response is given */
+            h2o_socket_read_stop(conn->sock);
+            clear_timeouts(conn);
             h2o_process_request(&conn->req);
         } else {
             /* Ordinary request without request body. */
