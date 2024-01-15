@@ -593,6 +593,8 @@ static int tcp_write(void *_self, int is_end_stream)
     if (self->socket_closed)
         return 1;
 
+    assert(self->sock != NULL && "write_req called before proceed_req is called?");
+
     /* buffer input */
     h2o_buffer_append(&self->tcp.sendbuf, chunk.base, chunk.len);
     if (is_end_stream)
@@ -791,6 +793,8 @@ static int udp_write_stream(void *_self, int is_end_stream)
     /* the socket might have been closed tue to a read error */
     if (self->socket_closed)
         return 1;
+
+    assert(self->sock != NULL && "write_req called before proceed_req is called?");
 
     if (is_end_stream)
         self->write_closed = 1;
