@@ -81,6 +81,10 @@ struct st_connect_generator_t {
      */
     unsigned pick_v4 : 1;
     /**
+     * `h2o_process_request` was called without request streaming; all data that have to be sent is inside `h2o_req_t::entity`
+     */
+    unsigned no_req_streaming : 1;
+    /**
      * set when the send-side is closed by the user
      */
     unsigned write_closed : 1;
@@ -656,7 +660,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
     /* Start write. Once write is complete (or if there is nothing to write), `proceed_req` will be called or the socket would be
      * closed if `write_closed` is set. */
-    tcp_do_write(self);
+    self->src_req->write_req.cb(self, self->no_req_streaming);
 
     record_connect_success(self);
 
@@ -926,7 +930,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
     /* write any data if provided, or just call the proceed_req callback */
-    self->src_req->write_req.cb(self, self->src_req->proceed_req == NULL);
+    self->src_req->write_req.cb(self, self->no_req_streaming);
 
     return 1;
 }
@@ -1003,6 +1007,8 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     assert(req->entity.base != NULL && "CONNECT must indicate existence of payload");
     self->src_req->write_req.cb = is_tcp ? tcp_write : udp_write_stream;
     self->src_req->write_req.ctx = self;
+    if (self->src_req->proceed_req == NULL)
+        self->no_req_streaming = 1;
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
