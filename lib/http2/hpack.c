@@ -1089,7 +1089,7 @@ void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t
 
 size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
                                   uint32_t stream_id, size_t max_frame_size, int status, const h2o_header_t *headers,
-                                  size_t num_headers, const h2o_iovec_t *server_name, size_t content_length)
+                                  size_t num_headers, const h2o_iovec_t *server_name, size_t content_length, int is_end_stream)
 {
     size_t capacity = calc_headers_capacity(headers, num_headers);
     capacity += H2O_HTTP2_FRAME_HEADER_SIZE; /* for the first header */
@@ -1123,7 +1123,8 @@ size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *
     size_t headers_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, 0);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size,
+                        is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
 
     return headers_size;
 }

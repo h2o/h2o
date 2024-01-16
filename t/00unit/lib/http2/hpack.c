@@ -104,7 +104,7 @@ static void check_flatten(h2o_hpack_header_table_t *header_table, h2o_res_t *res
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
     h2o_hpack_flatten_response(&buf, header_table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
                                H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res->status, res->headers.entries, res->headers.size,
-                               NULL, SIZE_MAX);
+                               NULL, SIZE_MAX, 0);
 
     ok(h2o_http2_decode_frame(&frame, (uint8_t *)buf->bytes, buf->size, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, &err_desc) > 0);
     ok(h2o_memis(frame.payload, frame.length, expected, expected_len));
@@ -502,7 +502,7 @@ static void test_token_wo_hpack_id(void)
 
     h2o_hpack_flatten_response(&buf, &table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
                                H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries, res.headers.size, NULL,
-                               SIZE_MAX);
+                               SIZE_MAX, 0);
     ok(h2o_memis(buf->bytes + 9, buf->size - 9,
                  H2O_STRLIT("\x88"     /* :status:200 */
                             "\x40\x02" /* literal header w. incremental indexing, raw, TE */
@@ -512,7 +512,7 @@ static void test_token_wo_hpack_id(void)
     h2o_buffer_consume(&buf, buf->size);
     h2o_hpack_flatten_response(&buf, &table, H2O_HTTP2_SETTINGS_DEFAULT.header_table_size, 1,
                                H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, res.status, res.headers.entries, res.headers.size, NULL,
-                               SIZE_MAX);
+                               SIZE_MAX, 0);
     ok(h2o_memis(buf->bytes + 9, buf->size - 9,
                  H2O_STRLIT("\x88" /* :status:200 */
                             "\xbe" /* te: test, indexed */)));
@@ -629,7 +629,7 @@ static void test_dynamic_table_size_update(void)
     int status, ret;
 
     /* first response */
-    h2o_hpack_flatten_response(&buf, &encoder, 1024, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, 200, NULL, 0, NULL, 12345);
+    h2o_hpack_flatten_response(&buf, &encoder, 1024, 1, H2O_HTTP2_SETTINGS_DEFAULT.max_frame_size, 200, NULL, 0, NULL, 12345, 0);
     ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &decoder, &status, &headers, NULL, (uint8_t *)buf->bytes + 9,
                                    buf->size - 9, &err_desc);
     ok(ret == 0);

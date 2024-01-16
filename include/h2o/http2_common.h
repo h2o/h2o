@@ -107,7 +107,7 @@ void h2o_hpack_flatten_push_promise(h2o_buffer_t **buf, h2o_hpack_header_table_t
                                     size_t num_headers, uint32_t parent_stream_id);
 size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
                                   uint32_t stream_id, size_t max_frame_size, int status, const h2o_header_t *headers,
-                                  size_t num_headers, const h2o_iovec_t *server_name, size_t content_length);
+                                  size_t num_headers, const h2o_iovec_t *server_name, size_t content_length, int is_end_stream);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
                                uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url,
                                const h2o_header_t *headers, size_t num_headers, int is_end_stream);
