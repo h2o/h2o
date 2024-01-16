@@ -23,10 +23,6 @@
 #include "h2o/configurator.h"
 #include "yoml-parser.h"
 
-struct st_h2olog_configurator {
-    h2o_configurator_t super;
-};
-
 static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     assert(node->type == YOML_TYPE_SCALAR);
@@ -49,7 +45,7 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
 
 void h2o_log_register_configurator(h2o_globalconf_t *conf)
 {
-    struct st_h2olog_configurator *c = (void *)h2o_configurator_create(conf, sizeof(*c));
-    h2o_configurator_define_command(&c->super, "h2olog", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_t *c = h2o_configurator_create(conf, sizeof(*c));
+    h2o_configurator_define_command(c, "h2olog", H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_h2olog);
 }
