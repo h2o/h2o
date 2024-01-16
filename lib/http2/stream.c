@@ -189,14 +189,19 @@ static int is_blocking_asset(h2o_req_t *req)
     return req->res.mime_attr->priority == H2O_MIME_ATTRIBUTE_PRIORITY_HIGHEST;
 }
 
-static void send_refused_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+static void request_write_and_close(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
 {
-    h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_REFUSED_STREAM);
     h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
     h2o_http2_scheduler_deactivate(&stream->_scheduler);
     if (!h2o_linklist_is_linked(&stream->_link))
         h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
     h2o_http2_conn_request_write(conn);
+}
+
+static void send_refused_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
+{
+    h2o_http2_encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, -H2O_HTTP2_ERROR_REFUSED_STREAM);
+    request_write_and_close(conn, stream);
 }
 
 static int send_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, int is_end_stream)
@@ -359,11 +364,7 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
         if (send_headers(conn, stream, is_end_stream) != 0)
             return;
         if (is_end_stream) {
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-            h2o_http2_scheduler_deactivate(&stream->_scheduler);
-            if (!h2o_linklist_is_linked(&stream->_link))
-                h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
-            h2o_http2_conn_request_write(conn);
+            request_write_and_close(conn, stream);
             return;
         }
     /* fallthru */
