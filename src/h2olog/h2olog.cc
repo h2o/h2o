@@ -261,26 +261,19 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-enum resp_error_t {
-    ERROR_NONE,
-    ERROR_IO,
-    ERROR_PARSE,
-    ERROR_RESPONSE_HEADER_TOO_LARGE,
-};
-
 static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
     };
+    int fd = -1, ret = EXIT_FAILURE;
+
+    /* connect */
     if (strlen(unix_socket_path) >= sizeof(sa.sun_path)) {
         fprintf(stderr, "'%s' is too long as the name of a unix domain socket.\n", unix_socket_path);
-        return EXIT_FAILURE;
+        goto Exit;
     }
     strcpy(sa.sun_path, unix_socket_path);
-
-    int fd;
-    int ret = EXIT_FAILURE;
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("failed to create a socket");
         goto Exit;
@@ -292,10 +285,11 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
 
     setvbuf(outfp, NULL, _IOLBF, 0);
 
+    /* drop root privileges once the connection has been established */
     if (!preserve_root)
         drop_root_privilege();
 
-    {
+    { /* send request */
         static const char req[] = "GET " H2O_LOG_URI_PATH " HTTP/1.0\r\n\r\n";
         (void)write(fd, req, sizeof(req) - 1);
     }
@@ -303,90 +297,52 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
     if (debug)
         infof("Attaching %s", unix_socket_path);
 
-    // parse response status & headers
-    {
-        char buf[4096];
-        const char *msg;
-        int pret, status;
-        size_t buflen = 0, msg_len;
-        enum resp_error_t error = ERROR_NONE;
-
-        // headers
-        while (1) {
-            struct phr_header headers[100];
-            size_t num_headers = sizeof(headers) / sizeof(headers[0]);
-            int minor_version;
-            ssize_t rret;
-            while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
-                ;
-            if (rret <= 0) {
-                error = ERROR_IO;
-                break;
-            }
-
-            buflen += rret;
-
-            num_headers = sizeof(headers) / sizeof(headers[0]);
-            pret = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers, 0);
-            if (pret > 0) {
-                break; /* successfully parsed the response */
-            } else if (pret == -1) {
-                error = ERROR_PARSE;
-                break;
-            }
-            /* request is incomplete, continue the loop */
-            assert(pret == -2);
-            if (buflen == sizeof(buf)) {
-                error = ERROR_RESPONSE_HEADER_TOO_LARGE;
-                break;
-            }
-        }
-
-        if (error) {
-            fprintf(stderr, "Failed to parse the response: ");
-            switch (error) {
-            case ERROR_IO:
-                fprintf(stderr, "I/O error");
-                break;
-            case ERROR_PARSE:
-                fprintf(stderr, "invalid HTTP response");
-                break;
-            case ERROR_RESPONSE_HEADER_TOO_LARGE:
-                fprintf(stderr, "response header is too large");
-                break;
-            default:
-                h2o_fatal("unreachable");
-            }
-            fprintf(stderr, "\n");
-            goto Exit;
-        }
-
-        if (status != 200) {
-            fprintf(stderr, "Failed to request: %d %.*s\n", status, (int)msg_len, msg);
-            goto Exit;
-        }
-
-        /* response content */
-        (void)fwrite(buf + pret, 1, buflen - pret, outfp);
-    }
-
-    // process streaming contents
-    {
-        char buf[4096];
+    /* read and process */
+    char buf[4096];
+    size_t buflen = 0;
+    while (1) {
         ssize_t rret;
-        while ((rret = read(fd, buf, sizeof(buf))) != -1 || errno == EINTR) {
-            if (rret > 0) {
-                (void)fwrite(buf, 1, rret, outfp);
-            } else {
-                if (debug)
-                    infof("Connection closed\n");
-                // disconnected
-                break;
-            }
+        while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0) {
+            if (ret != EXIT_SUCCESS)
+                fprintf(stderr, "Invalid HTTP response\n");
+            break;
         }
+        buflen += rret;
+
+        /* parse HTTP response if not yet being done, and retry until that's done */
+        if (ret != EXIT_SUCCESS) {
+            int minor_version, status;
+            const char *msg;
+            struct phr_header headers[100];
+            size_t msg_len, num_headers = sizeof(headers) / sizeof(headers[0]);
+            int http_headers_len = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers,
+                                                      buflen - rret);
+            if (http_headers_len >= 0) {
+                /* entire HTTP headers section has been received */
+                if (status == 200) {
+                    ret = EXIT_SUCCESS;
+                } else {
+                    fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
+                    goto Exit;
+                }
+            } else if (http_headers_len == -1 || buflen == sizeof(buf)) {
+                fprintf(stderr, "Invalid HTTP response\n");
+                goto Exit;
+            }
+            assert(http_headers_len == -2 && "HTTP response is partial");
+            continue;
+        }
+
+        /* print response content and reset the buffer */
+        (void)fwrite(buf + http_headers_len, 1, buflen - http_headers_len, outfp);
+        buflen = 0;
     }
 
-    ret = EXIT_SUCCESS;
+    if (debug)
+        infof("Connection closed\n");
+
 Exit:
     if (fd != -1)
         close(fd);
