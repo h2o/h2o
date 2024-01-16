@@ -425,7 +425,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/h2olog.c
     lib/handler/headers.c
+    lib/handler/headers_util.c
+    lib/handler/http2_debug_state.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/connect.c
@@ -440,16 +443,16 @@ SET(LIB_SOURCE_FILES
     lib/handler/status/requests.c
     lib/handler/status/ssl.c
     lib/handler/status/durations.c
-    lib/handler/headers_util.c
-    lib/handler/http2_debug_state.c
-    lib/handler/h2olog.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/h2olog.c
     lib/handler/configurator/headers.c
+    lib/handler/configurator/headers_util.c
+    lib/handler/configurator/http2_debug_state.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
@@ -457,9 +460,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
-    lib/handler/configurator/http2_debug_state.c
-    lib/handler/configurator/headers_util.c
-    lib/handler/configurator/h2olog.c
 
     lib/http1.c
 
