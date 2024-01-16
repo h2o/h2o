@@ -267,6 +267,8 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         .sun_family = AF_UNIX,
     };
     int fd = -1, ret = EXIT_FAILURE;
+    char buf[4096];
+    size_t buflen = 0;
 
     /* connect */
     if (strlen(unix_socket_path) >= sizeof(sa.sun_path)) {
@@ -295,8 +297,6 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
     }
 
     /* read and process */
-    char buf[4096];
-    size_t buflen = 0;
     while (1) {
         ssize_t rret;
         while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
@@ -320,6 +320,8 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                 /* entire HTTP headers section has been received */
                 if (status == 200) {
                     ret = EXIT_SUCCESS;
+                    memmove(buf, buf + http_headers_len, buflen - http_headers_len);
+                    buflen -= http_headers_len;
                 } else {
                     fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
                     goto Exit;
@@ -333,7 +335,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         }
 
         /* print response content and reset the buffer */
-        (void)fwrite(buf + http_headers_len, 1, buflen - http_headers_len, outfp);
+        (void)fwrite(buf, 1, buflen, outfp);
         buflen = 0;
     }
 
