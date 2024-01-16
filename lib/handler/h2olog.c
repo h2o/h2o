@@ -52,7 +52,7 @@ Error:
 
 void h2o_log_register(h2o_hostconf_t *hostconf)
 {
-    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, H2O_LOG_ENDPOINT, 0);
+    h2o_pathconf_t *pathconf = h2o_config_register_path(hostconf, H2O_LOG_URI_PATH, 0);
     struct st_h2o_log_handler_t *self = (void *)h2o_create_handler(pathconf, sizeof(*self));
     self->super.on_req = on_req;
 }

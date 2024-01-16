@@ -99,7 +99,7 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
 
-#define H2O_LOG_ENDPOINT "/.well-known/h2olog"
+#define H2O_LOG_URI_PATH "/.well-known/h2olog"
 
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
