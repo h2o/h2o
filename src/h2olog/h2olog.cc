@@ -296,8 +296,8 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         drop_root_privilege();
 
     {
-        std::string req = "GET " H2O_LOG_ENDPOINT " HTTP/1.0\r\n\r\n";
-        (void)write(fd, req.c_str(), req.size());
+        static const char req[] = "GET " H2O_LOG_URI_PATH " HTTP/1.0\r\n\r\n";
+        (void)write(fd, req, sizeof(req) - 1);
     }
 
     if (debug)
