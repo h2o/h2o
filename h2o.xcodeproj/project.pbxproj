@@ -49,6 +49,10 @@
 		08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08DAFA08289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
 		08DAFA09289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
+		08E86F3F2B5666A800F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F3E2B5666A700F7211C /* h2olog.c */; };
+		08E86F422B5666C000F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F412B5666C000F7211C /* h2olog.c */; };
+		08E86F432B5666C000F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F412B5666C000F7211C /* h2olog.c */; };
+		08E86F442B56675900F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F3E2B5666A700F7211C /* h2olog.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08EFC4E027FE9F96004C532C /* throttle_resp.c in Sources */ = {isa = PBXBuildFile; fileRef = 08EFC4DF27FE9F96004C532C /* throttle_resp.c */; };
 		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
@@ -760,6 +764,8 @@
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
+		08E86F3E2B5666A700F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
+		08E86F412B5666C000F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
 		08E8FBF32A84DB5B00CF8FF3 /* 50reverse-proxy-http2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-http2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1599,6 +1605,7 @@
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
+				08E86F3E2B5666A700F7211C /* h2olog.c */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				E90A95F21E30795100483D6C /* headers_util.c */,
 				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
@@ -1722,17 +1729,18 @@
 				106C23001C0544CE00405689 /* errordoc.c */,
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
+				08E86F412B5666C000F7211C /* h2olog.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
 				E90A95F41E30797D00483D6C /* headers_util.c */,
+				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				10B38A731B8D3544007DC191 /* mruby.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
 				10835E041C9B3C6200197E59 /* status.c */,
-				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
-				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				7D937301202AC7BA005FE6AB /* server_timing.c */,
 				08CEA9DA267B0E3B00B4BB6B /* self_trace.c */,
+				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -3340,9 +3348,11 @@
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
+				08E86F3F2B5666A800F7211C /* h2olog.c in Sources */,
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
 				08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
+				08E86F422B5666C000F7211C /* h2olog.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
@@ -3705,6 +3715,7 @@
 				E9708B7A1E52C83D0029E0A5 /* redirect.c in Sources */,
 				E9316EEB24417EAA00C9C127 /* huffman.c in Sources */,
 				E9708B4D1E52C7DF0029E0A5 /* socket.c in Sources */,
+				08E86F442B56675900F7211C /* h2olog.c in Sources */,
 				E987E5DC1FD7BEB500DE4346 /* dictionary_hash.c in Sources */,
 				E98403D12485172E00E3A6B1 /* retire_cid.c in Sources */,
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
@@ -3747,6 +3758,7 @@
 				08CEA9D326701D7600B4BB6B /* rand.c in Sources */,
 				107E34131C7FAC2000AEF5F8 /* brotli.c in Sources */,
 				E9708B4F1E52C7E50029E0A5 /* string.c in Sources */,
+				08E86F432B5666C000F7211C /* h2olog.c in Sources */,
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
 				108DD0861BA22E46004167DC /* mruby.c in Sources */,
 				E9708B5B1E52C7F30029E0A5 /* util.c in Sources */,
