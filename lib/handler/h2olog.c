@@ -23,26 +23,20 @@
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
-    if (req->conn->callbacks->steal_socket == NULL)
-        goto Error;
+    h2o_socket_t *sock;
+    h2o_socket_export_t export_info;
 
-    h2o_socket_t *sock = req->conn->callbacks->steal_socket(req->conn);
-    if (sock == NULL)
-        goto Error;
-
-    int ret;
-    if ((ret = ptls_log_add_fd(h2o_socket_get_fd(sock))) != 0) {
-        h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
-        goto Error;
+    if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
+        h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
+        return 0;
     }
 
-    h2o_socket_export_t export_info;
-    h2o_socket_export(sock, &export_info);
-    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
-    return 0;
+    if (h2o_socket_export(sock, &export_info) != 0)
+        h2o_fatal("h2o_socket_export failed");
+    if (ptls_log_add_fd(export_info.fd) != 0)
+        h2o_fatal("failed to add fd to h2olog");
 
-Error:
-    h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
+    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
     return 0;
 }
 
