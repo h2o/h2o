@@ -486,9 +486,14 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
     async_nb_submit_write_pending();
 }
 
+#define NEVERBLEED_MAX_IN_FLIGHT_TX 200
+
 static void async_nb_submit_write_pending(void)
 {
     struct async_nb_transaction_t *transaction;
+
+    if (async_nb.read_queue.len >= NEVERBLEED_MAX_IN_FLIGHT_TX)
+        return;
 
     if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
@@ -522,15 +527,37 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
-    assert(transaction != NULL);
+    // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
+    // read responses until the neverbleed fd is no longer read ready
+    while (async_nb.read_queue.len > 0) {
+        struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
+        assert(transaction != NULL);
 
-    async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+        async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+        transaction->on_read_complete(transaction);
+
+        // if the neverleed fd is read ready, continue reading transactions
+        if (async_nb.read_queue.len > 0) {
+            int ret;
+            struct pollfd poll_fd;
+            poll_fd.fd = neverbleed_get_fd(neverbleed);
+            poll_fd.events = POLLIN;
+            while ((ret = poll(&poll_fd, 1, 0)) == -1 && (errno == EAGAIN || errno == EINTR))
+                ;
+            if (ret == -1)
+                h2o_fatal("poll(2):%d\n", errno);
+
+            if (ret == 0)
+                break;
+        }
+    }
+
+    // resume writing if there's room
+    if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX)
+        async_nb_submit_write_pending();
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
-
-    transaction->on_read_complete(transaction);
 }
 
 #if H2O_CAN_OSSL_ASYNC
