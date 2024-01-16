@@ -1029,7 +1029,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
     { /* Process contiguous bytes in the receive buffer until one of the following conditions are reached:
        * a) connection- or stream-level error (i.e., state advanced to CLOSE_WAIT) is detected - in which case we exit,
        * b) incomplete frame is detected - wait for more (if the stream is open) or raise a connection error, or
-       * c) all bytes are processed - exit the loop. */
+       * c) all bytes are processed or read_blocked flag is set synchronously (due to receiving CONNECT request) - exit the loop. */
         size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
         assert(bytes_available <= stream->recvbuf.buf->size);
         if (bytes_available != 0) {
@@ -1049,11 +1049,13 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
                     return;
                 }
-            } while (src != src_end);
+            } while (src != src_end && !stream->read_blocked);
             /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
             size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
             h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
             quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
+            if (stream->read_blocked)
+                return;
         }
     }
 
@@ -1353,6 +1355,7 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
     stream->req.is_tunnel_req = 1;
     h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
     stream->req.entity = h2o_iovec_init("", 0);
+    stream->read_blocked = 1;
     stream->req.proceed_req = proceed_request_streaming;
     stream->datagram_flow_id = datagram_flow_id;
     ++get_conn(stream)->num_streams_tunnelling;
