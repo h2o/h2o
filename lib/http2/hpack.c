@@ -1123,7 +1123,8 @@ size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *
     size_t headers_size = (*buf)->size - start_at - H2O_HTTP2_FRAME_HEADER_SIZE;
 
     /* setup the frame headers */
-    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size, is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
+    fixup_frame_headers(buf, start_at, H2O_HTTP2_FRAME_TYPE_HEADERS, stream_id, max_frame_size,
+                        is_end_stream ? H2O_HTTP2_FRAME_FLAG_END_STREAM : 0);
 
     return headers_size;
 }
