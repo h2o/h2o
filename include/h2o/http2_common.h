@@ -219,6 +219,7 @@ static h2o_hpack_header_table_entry_t *h2o_hpack_header_table_get(h2o_hpack_head
 static uint16_t h2o_http2_decode16u(const uint8_t *src);
 static uint32_t h2o_http2_decode24u(const uint8_t *src);
 static uint32_t h2o_http2_decode32u(const uint8_t *src);
+static uint8_t *h2o_http2_encode16u(uint8_t *dst, uint16_t value);
 static uint8_t *h2o_http2_encode24u(uint8_t *dst, uint32_t value);
 static uint8_t *h2o_http2_encode32u(uint8_t *dst, uint32_t value);
 
