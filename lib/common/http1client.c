@@ -461,8 +461,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         if (http_status == 100 && client->_expect_100_continue) {
             client->_expect_100_continue = 0;
             req_body_send(client);
-        }
-        if (client->super.informational_cb != NULL &&
+        } else if (client->super.informational_cb != NULL &&
             client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
             close_client(client);
