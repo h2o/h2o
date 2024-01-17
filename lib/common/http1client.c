@@ -462,14 +462,14 @@ static void on_head(h2o_socket_t *sock, const char *err)
             client->_expect_100_continue = 0;
             req_body_send(client);
         } else if (client->super.informational_cb != NULL &&
-            client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
-                                           num_headers) != 0) {
+                   client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
+                                                  num_headers) != 0) {
             close_client(client);
             return;
         }
         h2o_buffer_consume(&client->sock->input, rlen);
         if (client->sock->input->size == 0) {
-            if (! h2o_timer_is_linked(&client->super._timeout)) {
+            if (!h2o_timer_is_linked(&client->super._timeout)) {
                 h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             }
             return;
