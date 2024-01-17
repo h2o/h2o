@@ -175,6 +175,11 @@ typedef struct st_h2o_http2_window_update_payload_t {
     uint32_t window_size_increment;
 } h2o_http2_window_update_payload_t;
 
+typedef struct st_h2o_settings_kvpair {
+    uint16_t key;
+    uint32_t value;
+} h2o_settings_kvpair_t;
+
 uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
 
 #define h2o_http2_encode_rst_stream_frame(buf, stream_id, errnum)                                                                  \
@@ -183,7 +188,7 @@ uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type
 void h2o_http2__encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum);
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data);
 void h2o_http2_encode_goaway_frame(h2o_buffer_t **buf, uint32_t last_stream_id, int errnum, h2o_iovec_t additional_data);
-void h2o_http2_encode_settings_frame(h2o_buffer_t **buf, uint16_t key, uint32_t value);
+void h2o_http2_encode_settings_frame(h2o_buffer_t **buf, h2o_settings_kvpair_t *settings, size_t num_settings);
 void h2o_http2_encode_window_update_frame(h2o_buffer_t **buf, uint32_t stream_id, int32_t window_size_increment);
 void h2o_http2_encode_origin_frame(h2o_buffer_t **buf, h2o_iovec_t payload);
 ssize_t h2o_http2_decode_frame(h2o_http2_frame_t *frame, const uint8_t *src, size_t len, size_t max_frame_size,

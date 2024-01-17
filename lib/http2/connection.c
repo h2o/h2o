@@ -61,6 +61,15 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
+static void enqueue_server_preface(h2o_http2_conn_t *conn)
+{
+    /* Send settings and initial window update */
+    h2o_settings_kvpair_t settings[] = {
+        {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams}};
+    h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
+    h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+}
+
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
 {
     h2o_http2_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_http2_conn_t, _graceful_shutdown_timeout, entry);
@@ -1265,9 +1274,8 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
-    { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_http2_encode_settings_frame(&conn->_write.buf, H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams);
-        h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    {
+        enqueue_server_preface(conn);
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
@@ -1355,9 +1363,7 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     conn->_http1_req_input = sock->input;
     h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
 
-    /* Send settings and initial window update */
-    h2o_http2_encode_settings_frame(&conn->_write.buf, H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams);
-    h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    enqueue_server_preface(conn);
     h2o_http2_conn_request_write(conn);
 
     /* setup inbound */
