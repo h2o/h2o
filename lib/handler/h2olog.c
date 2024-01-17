@@ -33,10 +33,13 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     if (h2o_socket_export(sock, &export_info) != 0)
         h2o_fatal("h2o_socket_export failed");
+
+    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
+
+    /* register log fd after writing HTTP response, as log is written by multiple threads */
     if (ptls_log_add_fd(export_info.fd) != 0)
         h2o_fatal("failed to add fd to h2olog");
 
-    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
     return 0;
 }
 
