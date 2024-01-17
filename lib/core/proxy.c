@@ -227,10 +227,6 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                 } else if (token == H2O_TOKEN_EARLY_DATA) {
                     found_early_data = 1;
                     goto AddHeader;
-                } else if (token == H2O_TOKEN_EXPECT) {
-                    /* this never happens as protocol handlers should have consumed expect header */
-                    h2o_error_printf("[WARN] expect header unexpectedly found on http %x\n", req->version);
-                    continue;
                 }
             }
             if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
