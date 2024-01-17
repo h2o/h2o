@@ -459,6 +459,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
             break;
 
         if (http_status == 100 && client->_expect_100_continue) {
+            client->_expect_100_continue = 0;
+
             /* start sending request body */
             if (client->proceed_req != NULL) {
                 if (client->body_buf.buf->size != 0) {
