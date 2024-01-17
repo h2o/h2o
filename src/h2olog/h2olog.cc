@@ -322,6 +322,7 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                     ret = EXIT_SUCCESS;
                     memmove(buf, buf + http_headers_len, buflen - http_headers_len);
                     buflen -= http_headers_len;
+                    break;
                 } else {
                     fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
                     goto Exit;
