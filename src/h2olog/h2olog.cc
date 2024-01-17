@@ -261,7 +261,7 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool preserve_root)
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
@@ -295,6 +295,9 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         static const char req[] = "GET " H2O_LOG_URI_PATH " HTTP/1.0\r\n\r\n";
         (void)write(fd, req, sizeof(req) - 1);
     }
+
+    if (debug)
+        infof("Attaching %s", unix_socket_path);
 
     /* read and process */
     while (1) {
@@ -339,6 +342,9 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         (void)fwrite(buf, 1, buflen, outfp);
         buflen = 0;
     }
+
+    if (debug)
+        infof("Connection closed\n");
 
 Exit:
     if (fd != -1)
@@ -473,7 +479,7 @@ int main(int argc, char **argv)
     }
 
     if (unix_socket_path != NULL) {
-        return read_from_unix_socket(unix_socket_path, outfp, preserve_root);
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
     }
 
     if (list_usdts) {
