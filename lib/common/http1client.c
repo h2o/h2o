@@ -602,7 +602,7 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     }
 }
 
-static void on_header_sent(h2o_socket_t *sock, const char *err)
+static void on_header_sent_wait_100(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
 
@@ -834,7 +834,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             return;
         }
         if (client->_expect_100_continue) {
-            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent);
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
         } else {
             size_t bytes_written;
             reqbufcnt += req_body_send_prepare(client, reqbufs + reqbufcnt, &bytes_written);
@@ -849,7 +849,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
                 on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
                 return;
             }
-            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent);
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
         } else {
             reqbufs[reqbufcnt++] = body;
             client->super.bytes_written.body = body.len;
