@@ -313,29 +313,30 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
 
         /* parse HTTP response if not yet being done, and retry until that's done */
         if (ret != EXIT_SUCCESS) {
-            int minor_version, status;
+            int minor_version, status, http_headers_len;
             const char *msg;
             struct phr_header headers[100];
             size_t msg_len, num_headers = sizeof(headers) / sizeof(headers[0]);
-            int http_headers_len = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers,
-                                                      buflen - rret);
-            if (http_headers_len >= 0) {
-                /* entire HTTP headers section has been received */
-                if (status != 200) {
-                    fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
+            /* parse HTTP response, handle error */
+            if ((http_headers_len = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers,
+                                                       buflen - rret)) < 0) {
+                if (http_headers_len == -1 || buflen == sizeof(buf)) {
+                    fprintf(stderr, "Invalid HTTP response\n");
                     goto Exit;
+                } else {
+                    assert(http_headers_len == -2 && "HTTP response is partial");
+                    continue;
                 }
-                /* success */
-                ret = EXIT_SUCCESS;
-                memmove(buf, buf + http_headers_len, buflen - http_headers_len);
-                buflen -= http_headers_len;
-                break;
-            } else if (http_headers_len == -1 || buflen == sizeof(buf)) {
-                fprintf(stderr, "Invalid HTTP response\n");
+            }
+            /* entire HTTP headers section has been received */
+            if (status != 200) {
+                fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
                 goto Exit;
             }
-            assert(http_headers_len == -2 && "HTTP response is partial");
-            continue;
+            /* success */
+            ret = EXIT_SUCCESS;
+            memmove(buf, buf + http_headers_len, buflen - http_headers_len);
+            buflen -= http_headers_len;
         }
 
         /* print response content and reset the buffer */
