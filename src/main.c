@@ -4104,8 +4104,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* wait for all threads to become ready */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
 
-    /* now that all worker threads are ready, the main thread does the following:
-     * i) set signal handler for graceful shutdown / or exit immediately */
+    /* now that all worker threads are ready, in main thread, set signal handler for graceful shutdown / or exit immediately */
     if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
