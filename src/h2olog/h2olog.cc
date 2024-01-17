@@ -36,9 +36,9 @@ extern "C" {
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include "h2o/memory.h"
+#include "h2o.h"
 #include "h2o/version.h"
-#include "h2o/ebpf.h"
+#include "picohttpparser.h"
 }
 #include "h2olog.h"
 
@@ -261,19 +261,21 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
-static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool preserve_root)
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
 {
     struct sockaddr_un sa = {
         .sun_family = AF_UNIX,
     };
+    int fd = -1, ret = EXIT_FAILURE;
+    char buf[4096];
+    size_t buflen = 0;
+
+    /* connect */
     if (strlen(unix_socket_path) >= sizeof(sa.sun_path)) {
         fprintf(stderr, "'%s' is too long as the name of a unix domain socket.\n", unix_socket_path);
-        return EXIT_FAILURE;
+        goto Exit;
     }
     strcpy(sa.sun_path, unix_socket_path);
-
-    int fd;
-    int ret = EXIT_FAILURE;
     if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
         perror("failed to create a socket");
         goto Exit;
@@ -285,28 +287,66 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
 
     setvbuf(outfp, NULL, _IOLBF, 0);
 
+    /* drop root privileges once the connection has been established */
     if (!preserve_root)
         drop_root_privilege();
 
-    fd_set fds;
-    FD_ZERO(&fds);
-    FD_SET(fd, &fds);
-
-    while (select(fd + 1, &fds, NULL, NULL, NULL) > 0) {
-        char buf[4096];
-        ssize_t ret = read(fd, buf, sizeof(buf));
-        if (ret == -1) {
-            if (ret != EINTR)
-                break;
-        } else if (ret > 0) {
-            fwrite(buf, 1, ret, outfp);
-        } else {
-            // disconnected
-            break;
-        }
+    { /* send request */
+        static const char req[] = "GET " H2O_LOG_URI_PATH " HTTP/1.0\r\n\r\n";
+        (void)write(fd, req, sizeof(req) - 1);
     }
 
-    ret = EXIT_SUCCESS;
+    if (debug)
+        infof("Attaching %s", unix_socket_path);
+
+    /* read and process */
+    while (1) {
+        ssize_t rret;
+        while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0) {
+            if (ret != EXIT_SUCCESS)
+                fprintf(stderr, "Invalid HTTP response\n");
+            break;
+        }
+        buflen += rret;
+
+        /* parse HTTP response if not yet being done, and retry until that's done */
+        if (ret != EXIT_SUCCESS) {
+            int minor_version, status, http_headers_len;
+            const char *msg;
+            struct phr_header headers[100];
+            size_t msg_len, num_headers = sizeof(headers) / sizeof(headers[0]);
+            /* parse HTTP response, handle error */
+            if ((http_headers_len = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers,
+                                                       buflen - rret)) < 0) {
+                if (http_headers_len == -1 || buflen == sizeof(buf)) {
+                    fprintf(stderr, "Invalid HTTP response\n");
+                    goto Exit;
+                } else {
+                    assert(http_headers_len == -2 && "HTTP response is partial");
+                    continue;
+                }
+            }
+            /* entire HTTP headers section has been received */
+            if (status != 200) {
+                fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
+                goto Exit;
+            }
+            /* success */
+            ret = EXIT_SUCCESS;
+            memmove(buf, buf + http_headers_len, buflen - http_headers_len);
+            buflen -= http_headers_len;
+        }
+
+        /* print response content and reset the buffer */
+        (void)fwrite(buf, 1, buflen, outfp);
+        buflen = 0;
+    }
+
+    if (debug)
+        infof("Connection closed\n");
+
 Exit:
     if (fd != -1)
         close(fd);
@@ -440,9 +480,7 @@ int main(int argc, char **argv)
     }
 
     if (unix_socket_path != NULL) {
-        if (debug)
-            infof("Attaching %s\n", unix_socket_path);
-        return read_from_unix_socket(unix_socket_path, outfp, preserve_root);
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
     }
 
     if (list_usdts) {

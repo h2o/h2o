@@ -269,10 +269,6 @@ static struct {
     size_t num_listeners;
     char *pid_file;
     char *error_log;
-    struct {
-        int listen_fd;
-        unsigned sndbuf;
-    } h2olog;
     int max_connections;
     /**
      * In addition to max_connections, maximum number of H3 connections can be further capped by this configuration variable.
@@ -340,11 +336,6 @@ static struct {
     .num_listeners = 0,
     .pid_file = NULL,
     .error_log = NULL,
-    .h2olog =
-        {
-            .listen_fd = -1,
-            .sndbuf = 0,
-        },
     .max_connections = 1024,
     .max_quic_connections = INT_MAX, /* (INT_MAX = i.e., allow up to max_connections) */
     .soft_connection_limit = INT_MAX,
@@ -3019,44 +3010,6 @@ static int on_config_error_log(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
-static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    yoml_t **path_node, **owner_node, **group_node, **permission_node, **sndbuf_node, **appdata_node;
-
-    if (h2o_configurator_parse_mapping(cmd, node, "path:s", "owner:s,group:s,permission:s,sndbuf:s,appdata:s", &path_node,
-                                       &owner_node, &group_node, &permission_node, &sndbuf_node, &appdata_node) != 0)
-        return -1;
-
-    const char *path = (*path_node)->data.scalar;
-    struct sockaddr_un sa;
-    int fd;
-    unsigned sndbuf = 0;
-
-    if (strlen(path) >= sizeof(sa.sun_path)) {
-        h2o_configurator_errprintf(cmd, node, "path:%s is too long as a unix socket name", path);
-        return -1;
-    }
-    sa = (struct sockaddr_un){.sun_family = AF_UNIX};
-    strcpy(sa.sun_path, path);
-
-    if ((fd = open_unix_listener(cmd, node, &sa, owner_node, group_node, permission_node)) == -1)
-        return -1;
-
-    if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &sndbuf) != 0)
-        return -1;
-
-    if (appdata_node != NULL) {
-        ssize_t v;
-        if ((v = h2o_configurator_get_one_of(cmd, *appdata_node, "OFF,ON")) == -1)
-            return -1;
-        ptls_log.include_appdata = (unsigned)v;
-    }
-
-    conf.h2olog.listen_fd = fd;
-    conf.h2olog.sndbuf = sndbuf;
-    return 0;
-}
-
 static int on_config_max_connections(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return h2o_configurator_scanf(cmd, node, "%d", &conf.max_connections);
@@ -3872,36 +3825,6 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-static void on_h2olog_accept(h2o_socket_t *listener, const char *err)
-{
-    if (err != NULL) {
-        return;
-    }
-
-    int fd;
-    if ((fd = cloexec_accept(h2o_socket_get_fd(listener), NULL, NULL)) == -1) {
-        h2o_perror("failed to accept a connection to h2olog");
-        return;
-    }
-    if (fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-        h2o_perror("failed to set O_NONBLOCK");
-        close(fd);
-        return;
-    }
-
-    if (conf.h2olog.sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &conf.h2olog.sndbuf, sizeof(conf.h2olog.sndbuf)) != 0) {
-        h2o_perror("failed to set SO_SNDBUF");
-        close(fd);
-        return;
-    }
-
-    int ret;
-    if ((ret = ptls_log_add_fd(fd)) != 0) {
-        h2o_error_printf("failed to add fd to h2olog: %d\n", ret);
-        close(fd);
-    }
-}
-
 struct init_ebpf_key_info_t {
     struct sockaddr *local, *remote;
 };
@@ -4182,17 +4105,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
 
     /* now that all worker threads are ready, the main thread does the following:
-     * i) set signal handler for graceful shutdown / or exit immediately
-     * ii) start listening to h2olog clients */
+     * i) set signal handler for graceful shutdown / or exit immediately */
     if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
-        if (conf.h2olog.listen_fd != -1) {
-            h2o_socket_t *sock =
-                h2o_evloop_socket_create(conf.threads[0].ctx.loop, conf.h2olog.listen_fd, H2O_SOCKET_FLAG_DONT_READ);
-            h2o_socket_read_start(sock, on_h2olog_accept);
-        }
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
 
@@ -4509,8 +4426,6 @@ static void setup_configurators(void)
                                         on_config_pid_file);
         h2o_configurator_define_command(c, "error-log", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_error_log);
-        h2o_configurator_define_command(c, "h2olog", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
-                                        on_config_h2olog);
         h2o_configurator_define_command(c, "max-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_connections);
         h2o_configurator_define_command(c, "max-quic-connections", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_max_quic_connections);
         h2o_configurator_define_command(c, "soft-connection-limit", H2O_CONFIGURATOR_FLAG_GLOBAL, on_config_soft_connection_limit);
@@ -4563,6 +4478,7 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
     h2o_self_trace_register_configurator(&conf.globalconf);
+    h2o_log_register_configurator(&conf.globalconf);
 
     static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);

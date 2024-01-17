@@ -23,18 +23,14 @@ my $quic_port = empty_port({
 });
 
 
-subtest "read socket", sub {
+subtest "h2olog via unix socket", sub {
   my $server = spawn_h2o({ conf => <<"EOT" });
-h2olog:
-  path: $h2olog_socket
-  permission: 666
-  appdata: ON
 listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
+  - type: quic
+    port: $quic_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
 hosts:
   "*":
     paths:
@@ -42,6 +38,12 @@ hosts:
         file.dir: examples/doc_root
       "/status":
         status: ON
+  "h2olog":
+    h2olog: appdata
+    listen:
+      - type: unix
+        port: $h2olog_socket
+    paths: {}
 EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
@@ -67,7 +69,7 @@ EOT
     is $receive_request->{http_version}, 768, "h2o:receive_request ($i)";
 
     # Test events to cover all the necessary usecases of ptlslog.
-    # appdata are emitted as well by setting `h2olog-socket.appdata: ON`
+    # appdata are emitted as well by setting either `h2olog.appdata: ON` or `h2olog -a`.
     my (@req_headers) = find_event(\@events, { module => "h2o", type => "receive_request_header" });
     is $req_headers[0]->{name}, ":authority", ":authority";
     is $req_headers[0]->{value}, "127.0.0.1:$quic_port", ":authority value";
@@ -103,22 +105,25 @@ EOT
     for my $tracer(@tracers) {
       my $logs = '';
       until (($logs .= $tracer->get_trace()) =~ m{"type":"h3s_destroy"}) {}
-      push @logs, $logs;
+      # Removes first some lines until HTTP/3 has been started.
+      # THis is because connecting h2olog produces a "h2o:receive_request" and some succeeding events.
+      push @logs, $logs =~ s/\A.+?"module":"picotls","type":"new"[^\n]+//xmsr;
     }
 
     for (my $i = 1; $i < @tracers; $i++) {
-      is $logs[$i], $logs[0], "same logs (0 vs $i)";
+      if ($logs[$i] ne $logs[0]) {
+        fail "The outputs of multiple h2olog clients differ in #0 vs #$i";
+        system("diff -U10 $tracers[0]->{output_file} $tracers[$i]->{output_file}") == 0;
+        next;
+      }
+      cmp_ok length($logs[$i]), ">", 0, "The logs of #$i is not empty";
+      is $logs[$i], $logs[0], "same logs (#0 vs #$i)";
     }
   };
 };
 
 subtest "lost messages", sub {
   my $server = spawn_h2o({ conf => <<"EOT" });
-h2olog:
-  path: $h2olog_socket
-  permission: 666
-  # Set the min value (it's doubled. See socket(7)) to trigger the event lost
-  sndbuf: 1024
 listen:
   type: quic
   port: $quic_port
@@ -132,33 +137,29 @@ hosts:
         file.dir: examples/doc_root
       "/status":
         status: ON
+  "h2olog":
+    h2olog: appdata
+    listen:
+      - type: unix
+        port: $h2olog_socket
+        # Set the min value (it's doubled. See socket(7)) to trigger the event lost
+        sndbuf: 1024
+    paths: {}
 EOT
 
   wait_port({ port => $quic_port, proto => "udp" });
 
-  # use a hand-written client to read socket with timeouts.
+
+  # A client connects to h2o's h2olog endpoint, but reads nothing.
   my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM,
-      Peer => $h2olog_socket,
+    Type => SOCK_STREAM,
+    Peer => $h2olog_socket,
   ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
+  $client->syswrite("GET /.well-known/h2olog HTTP/1.0\r\n\r\n");
 
   system($client_prog, "-3", "100", "https://127.0.0.1:$quic_port/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
-
-  # make sure event lost does not break the output structure
-
-  my $pid = fork;
-  die "Cannot fork: $!" unless defined $pid;
-  if ($pid == 0) {
-    # child
-    sleep 0.1;
-    exec($client_prog, "-t", "2", "-3", "100", "https://127.0.0.1:$quic_port/");
-    die "Cannot exec $client_prog: $!";
-  }
-  # parent
-  my $logs = slurp_h2olog_socket($h2olog_socket, { timeout => 2 });
-  ok scalar(parse_json_lines($logs)), "valid JSON Lines are written to h2olog socket '$h2olog_socket' even if some events are lost";
 };
 
 sub find_event {
@@ -198,31 +199,6 @@ sub get_status {
     BAIL_OUT "h2o does not respond to /status/json";
   }
   return decode_json($status_json);
-}
-
-sub slurp_h2olog_socket {
-  my($path, $opts) = @_;
-  my $timeout = $opts->{timeout} or croak "timeout is not specified";
-
-  my $client = IO::Socket::UNIX->new(
-      Type => SOCK_STREAM,
-      Peer => $path,
-  ) or croak "Cannot connect to a unix domain socket '$path': $!";
-
-  my $t0 = Time::HiRes::time();
-  my $select = IO::Select->new($client);
-  my $logs = '';
-  while ($select->can_read($timeout)) {
-    $timeout -= Time::HiRes::time() - $t0;
-    diag "timeout remains: $timeout";
-    $client->sysread(my $buf, 4096) or last;
-    $logs .= $buf;
-
-    last if $timeout <= 0;
-  }
-  $client->close;
-
-  return $logs;
 }
 
 done_testing;
