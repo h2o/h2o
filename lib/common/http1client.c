@@ -610,6 +610,15 @@ static void on_header_sent_wait_100(h2o_socket_t *sock, const char *err)
 
     if (err != NULL) {
         on_error(client, h2o_httpclient_error_io);
+        return;
+    }
+
+    if (client->state.res == STREAM_STATE_HEAD) {
+        client->super._timeout.cb = on_head_first_byte_timeout;
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
+    } else if (client->_expect_100_continue) {
+        /* we already received response headers, and it didn't contain expect header. */
+        /* TODO: What should we do in this case? */
     }
 }
 
