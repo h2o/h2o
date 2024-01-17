@@ -318,15 +318,15 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
                                                       buflen - rret);
             if (http_headers_len >= 0) {
                 /* entire HTTP headers section has been received */
-                if (status == 200) {
-                    ret = EXIT_SUCCESS;
-                    memmove(buf, buf + http_headers_len, buflen - http_headers_len);
-                    buflen -= http_headers_len;
-                    break;
-                } else {
+                if (status != 200) {
                     fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
                     goto Exit;
                 }
+                /* success */
+                ret = EXIT_SUCCESS;
+                memmove(buf, buf + http_headers_len, buflen - http_headers_len);
+                buflen -= http_headers_len;
+                break;
             } else if (http_headers_len == -1 || buflen == sizeof(buf)) {
                 fprintf(stderr, "Invalid HTTP response\n");
                 goto Exit;
