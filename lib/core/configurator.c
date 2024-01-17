@@ -444,7 +444,7 @@ static int on_config_http2_graceful_shutdown_timeout(h2o_configurator_command_t 
 
 static int on_config_http2_max_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http2.max_streams);
+    return h2o_configurator_scanf(cmd, node, "%" PRIu32, &ctx->globalconf->http2.max_streams);
 }
 
 static int on_config_http2_max_concurrent_requests_per_connection(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,

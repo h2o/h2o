@@ -413,7 +413,7 @@ struct st_h2o_globalconf_t {
          * See max_concurrent_requests_per_connection and max_concurrent_streaming_requests_per_connection below for more info on the
          * actual number of requests that h2o is willing to process concurrently.
          */
-        size_t max_streams;
+        uint32_t max_streams;
         /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
          * H2O accepts at most `max_streams` requests over HTTP/2, but internally limits the number of in-flight requests to the value
