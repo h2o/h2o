@@ -32,23 +32,6 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-#define LIT16(x) ((uint32_t)(x) >> 8) & 0xff, (x)&0xff
-#define LIT24(x) LIT16((x) >> 8), (x)&0xff
-#define LIT32(x) LIT24((x) >> 8), (x)&0xff
-#define LIT_FRAME_HEADER(size, type, flags, stream_id) LIT24(size), (type), (flags), LIT32(stream_id)
-static const uint8_t SERVER_PREFACE_BIN[] = {
-    /* settings frame */
-    LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
-    /* window_update frame */
-    LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
-    LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
-#undef LIT16
-#undef LIT24
-#undef LIT32
-#undef LIT_FRAME_HEADER
-
-static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
-
 h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
@@ -76,6 +59,15 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
         h2o_http2_conn_request_write(conn);
         conn->state = H2O_HTTP2_CONN_STATE_HALF_CLOSED;
     }
+}
+
+static void enqueue_server_preface(h2o_http2_conn_t *conn)
+{
+    /* Send settings and initial window update */
+    h2o_http2_settings_kvpair_t settings[] = {
+        {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams}};
+    h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
+    h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
@@ -648,7 +640,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         goto SendRSTStream;
     }
 
-    if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
+    if (conn->num_streams.pull.open > conn->super.ctx->globalconf->http2.max_streams) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
     }
@@ -1282,10 +1274,8 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
-    { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
-        memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
-        conn->_write.buf->size += SERVER_PREFACE.len;
+    {
+        enqueue_server_preface(conn);
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
@@ -1372,6 +1362,9 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     sock->data = conn;
     conn->_http1_req_input = sock->input;
     h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
+
+    enqueue_server_preface(conn);
+    h2o_http2_conn_request_write(conn);
 
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);
@@ -1961,7 +1954,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req, (h2o_iovec_t *)&SERVER_PREFACE, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req, NULL, 0, on_upgrade_complete, http2conn);
 
     return 0;
 Error:
