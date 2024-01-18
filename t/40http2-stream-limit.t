@@ -94,6 +94,6 @@ my @logs = do {
 };
 debug(join "\n", map { join " ", @$_ } @logs);
 
-cmp_ok scalar(grep { $_->[0] == 200 } @logs), "==", 1000, "accepted all requests";
+is scalar(grep { $_->[0] == 200 } @logs), 1000, "accepted all requests";
 
 done_testing();

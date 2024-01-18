@@ -64,7 +64,7 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
 static void enqueue_server_preface(h2o_http2_conn_t *conn)
 {
     /* Send settings and initial window update */
-    h2o_settings_kvpair_t settings[] = {
+    h2o_http2_settings_kvpair_t settings[] = {
         {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams}};
     h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
     h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
