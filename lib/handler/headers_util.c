@@ -119,7 +119,7 @@ static void dispose_h2o_headers_command(void *_cmds)
     h2o_headers_command_t *cmds = _cmds;
     size_t i;
     for (i = 0; cmds[i].cmd != H2O_HEADERS_CMD_NULL; ++i)
-        free(cmds[i].args);
+        h2o_mem_release_shared(cmds[i].args);
 }
 
 void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_headers_command_arg_t *args, size_t num_args,
@@ -137,12 +137,14 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_heade
 
     /* as `*cmds` is a shared object, clone and create a new instance with the new command being added */
     new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), dispose_h2o_headers_command);
-    if (*cmds != NULL)
-        memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
+    for (size_t i = 0; i < cnt; ++i) {
+        new_cmds[i] = (*cmds)[i];
+        h2o_mem_addref_shared(new_cmds[i].args);
+    }
     new_cmds[cnt] = (h2o_headers_command_t){};
     new_cmds[cnt].cmd = cmd;
     new_cmds[cnt].when = when;
-    new_cmds[cnt].args = h2o_mem_alloc(sizeof(*new_cmds->args) * num_args);
+    new_cmds[cnt].args = h2o_mem_alloc_shared(NULL, sizeof(*new_cmds->args) * num_args, NULL);
     for (i = 0; i < num_args; i++)
         new_cmds[cnt].args[i] = args[i];
     new_cmds[cnt].num_args = num_args;
