@@ -761,6 +761,7 @@
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
+		08E86F452B5F7F6800F7211C /* 80headers-override.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80headers-override.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E8FBF32A84DB5B00CF8FF3 /* 50reverse-proxy-http2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-http2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2380,6 +2381,7 @@
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
+				08E86F452B5F7F6800F7211C /* 80headers-override.t */,
 				08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
 				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
