@@ -135,6 +135,7 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_heade
         cnt = 0;
     }
 
+    /* as `*cmds` is a shared object, clone and create a new instance with the new command being added */
     new_cmds = h2o_mem_alloc_shared(NULL, (cnt + 2) * sizeof(*new_cmds), dispose_h2o_headers_command);
     if (*cmds != NULL)
         memcpy(new_cmds, *cmds, cnt * sizeof(*new_cmds));
@@ -147,10 +148,9 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_heade
     new_cmds[cnt].num_args = num_args;
     new_cmds[cnt + 1] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
 
-    if (*cmds != NULL) {
-        (*cmds)[0] = (h2o_headers_command_t){H2O_HEADERS_CMD_NULL};
+    /* release the original shared object and replace the reference with our own */
+    if (*cmds != NULL)
         h2o_mem_release_shared(*cmds);
-    }
     *cmds = new_cmds;
 }
 
