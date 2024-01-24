@@ -261,6 +261,37 @@ static void test_uri_escape(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_uri_unescape(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_mem_init_pool(&pool);
+
+#define TEST(src, block)                                                                                                           \
+    do {                                                                                                                           \
+        h2o_iovec_t actual = h2o_uri_unescape(&pool, H2O_STRLIT(src));                                                             \
+        {                                                                                                                          \
+            block                                                                                                                  \
+        }                                                                                                                          \
+    } while (0)
+
+    TEST("abc", { ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("abc"))); });
+    TEST("a%0ac", { ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("a\nc"))); });
+    TEST("a%xc", {
+        ok(actual.base == NULL);
+        ok(actual.len == 0);
+    });
+    TEST("a%0xc", {
+        ok(actual.base == NULL);
+        ok(actual.len == 0);
+    });
+    TEST("a%00c", {
+        ok(actual.base == NULL);
+        ok(actual.len == 0);
+    });
+
+#undef TEST
+}
+
 static void test_at_position(void)
 {
     char buf[160];
@@ -371,6 +402,7 @@ void test_lib__common__string_c(void)
     subtest("decode_base64", test_decode_base64);
     subtest("htmlescape", test_htmlescape);
     subtest("uri_escape", test_uri_escape);
+    subtest("uri_unescape", test_uri_unescape);
     subtest("at_position", test_at_position);
     subtest("join_list", test_join_list);
     subtest("split", test_split);
