@@ -371,7 +371,7 @@ h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *str, size_t len)
                 goto fail;
             int hi = decode_hex(str[i + 1]);
             int lo = decode_hex(str[i + 2]);
-            if (hi < 0 || lo < 0)
+            if (hi < 0 || lo < 0 || (hi == 0 && lo == 0))
                 goto fail;
             decoded.base[j] = (hi << 4) | lo;
             i += 2;
