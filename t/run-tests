@@ -40,6 +40,7 @@ while (@scripts or %pids) {
     if ($@) {
         for my $kid (keys %pids) {
             my $script = delete $pids{$kid};
+            kill 'TERM', $kid or kill 'KILL', $kid;
             commit_test($script, 0, 'timeout');
         }
     } elsif ($pids{$kid}) {
@@ -63,6 +64,7 @@ sub spawn_script {
     my $logfn = get_logfn($script);
     open my $logfh, ">", $logfn
         or die "failed to create log file:$logfn:$!";
+    flock($logfh, LOCK_EX) or die "failed to lock the file $logfn:$!";
     autoflush $logfh 1;
 
     my $pid = fork;
@@ -110,6 +112,7 @@ sub commit_test {
     my $logfn = get_logfn($script);
     open my $logfh, "<", $logfn
         or die "failed to open script:$logfn:$!";
+    flock($logfh, LOCK_SH) or die "failed to obtain shared lock on $logfn:$!";
     unlink $logfn;
     print do { local $/; <$logfh> };
 

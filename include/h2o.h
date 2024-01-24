@@ -408,8 +408,15 @@ struct st_h2o_globalconf_t {
          */
         uint64_t graceful_shutdown_timeout;
         /**
+         * maximum number of HTTP2 streams to accept and advertise via HTTP2 SETTINGS.
+         *
+         * See max_concurrent_requests_per_connection and max_concurrent_streaming_requests_per_connection below for more info on the
+         * actual number of requests that h2o is willing to process concurrently.
+         */
+        uint32_t max_streams;
+        /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-         * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
+         * H2O accepts at most `max_streams` requests over HTTP/2, but internally limits the number of in-flight requests to the value
          * specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;

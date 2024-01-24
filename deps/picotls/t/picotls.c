@@ -225,12 +225,8 @@ static void test_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *cs2)
     /* encrypt */
     c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
     assert(c != NULL);
-    ptls_aead_encrypt_init(c, 0, NULL, 0);
-    enc1len = ptls_aead_encrypt_update(c, enc1, src1, strlen(src1));
-    enc1len += ptls_aead_encrypt_final(c, enc1 + enc1len);
-    ptls_aead_encrypt_init(c, 1, NULL, 0);
-    enc2len = ptls_aead_encrypt_update(c, enc2, src2, strlen(src2));
-    enc2len += ptls_aead_encrypt_final(c, enc2 + enc2len);
+    enc1len = ptls_aead_encrypt(c, enc1, src1, strlen(src1), 0, NULL, 0);
+    enc2len = ptls_aead_encrypt(c, enc2, src2, strlen(src2), 1, NULL, 0);
     ptls_aead_free(c);
 
     c = ptls_aead_new(cs2->aead, cs2->hash, 0, traffic_secret, NULL);
@@ -275,6 +271,10 @@ static void test_ciphersuite_stream(ptls_cipher_suite_t *cs1, ptls_cipher_suite_
     /* encrypt */
     c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
     assert(c != NULL);
+    if (c->do_encrypt_init == NULL) {
+        note("new ciphers may omit support for init-update-final");
+        return;
+    }
     ptls_aead_encrypt_init(c, 0, NULL, 0);
     enclen = 0;
     for (size_t i = 0; text[i] != NULL; ++i)
@@ -311,9 +311,7 @@ static void test_aad_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t *
     /* encrypt */
     c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
     assert(c != NULL);
-    ptls_aead_encrypt_init(c, 123, aad, strlen(aad));
-    enclen = ptls_aead_encrypt_update(c, enc, src, strlen(src));
-    enclen += ptls_aead_encrypt_final(c, enc + enclen);
+    enclen = ptls_aead_encrypt(c, enc, src, strlen(src), 123, aad, strlen(aad));
     ptls_aead_free(c);
 
     /* decrypt */
@@ -340,9 +338,7 @@ static void test_aad96_ciphersuite(ptls_cipher_suite_t *cs1, ptls_cipher_suite_t
     c = ptls_aead_new(cs1->aead, cs1->hash, 1, traffic_secret, NULL);
     assert(c != NULL);
     ptls_aead_xor_iv(c, seq32, sizeof(seq32));
-    ptls_aead_encrypt_init(c, 123, aad, strlen(aad));
-    enclen = ptls_aead_encrypt_update(c, enc, src, strlen(src));
-    enclen += ptls_aead_encrypt_final(c, enc + enclen);
+    enclen = ptls_aead_encrypt(c, enc, src, strlen(src), 123, aad, strlen(aad));
     ptls_aead_free(c);
 
     /* decrypt */
@@ -510,8 +506,8 @@ static void test_aegis128l(void)
 
 static void test_aegis256(void)
 {
-    ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AEGIS256_SHA384),
-                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AEGIS256_SHA384);
+    ptls_cipher_suite_t *cs = find_cipher(ctx, PTLS_CIPHER_SUITE_AEGIS256_SHA512),
+                        *cs_peer = find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AEGIS256_SHA512);
 
     if (cs != NULL && cs_peer != NULL) {
         test_ciphersuite(cs, cs_peer);
@@ -1905,6 +1901,60 @@ static void test_all_handshakes(void)
         ctx->sign_certificate = second_sc_orig;
 }
 
+static void do_test_tlsblock(size_t len_encoded, size_t max_bytes)
+{
+    ptls_buffer_t buf;
+    const uint8_t *src, *end;
+    int expect_overflow = 0, ret;
+
+    /* block that fits in */
+    ptls_buffer_init(&buf, "", 0);
+    ptls_buffer_push_block(&buf, len_encoded, {
+        for (size_t i = 0; i < max_bytes; ++i)
+            ptls_buffer_push(&buf, (uint8_t)i);
+    });
+    src = buf.base;
+    end = buf.base + buf.off;
+    ptls_decode_block(src, end, len_encoded, {
+        ok(end - src == max_bytes);
+        int bytes_eq = 1;
+        for (size_t i = 0; i < max_bytes; ++i) {
+            if (src[i] != (uint8_t)i)
+                bytes_eq = 0;
+        }
+        ok(bytes_eq);
+        src = end;
+    });
+
+    /* block that does not fit in */
+    ptls_buffer_push_block(&buf, len_encoded, {
+        for (size_t i = 0; i < max_bytes + 1; i++)
+            ptls_buffer_push(&buf, 1);
+        expect_overflow = 1;
+    });
+    ok(!"fail");
+
+Exit:
+    if (ret != 0) {
+        if (expect_overflow) {
+            ok(ret == PTLS_ERROR_BLOCK_OVERFLOW);
+        } else {
+            ok(!"fail");
+        }
+    }
+    ptls_buffer_dispose(&buf);
+}
+
+static void test_tlsblock8(void)
+{
+    do_test_tlsblock(1, 255);
+}
+
+static void test_tlsblock16(void)
+{
+    do_test_tlsblock(2, 65535);
+}
+
 static void test_quicint(void)
 {
 #define CHECK_PATTERN(output, ...)                                                                                                 \
@@ -2165,6 +2215,8 @@ void test_picotls(void)
     subtest("chacha20", test_chacha20);
     subtest("ffx", test_ffx);
     subtest("base64-decode", test_base64_decode);
+    subtest("tls-block8", test_tlsblock8);
+    subtest("tls-block16", test_tlsblock16);
     subtest("ech", test_ech);
     subtest("fragmented-message", test_fragmented_message);
     subtest("handshake", test_all_handshakes);
