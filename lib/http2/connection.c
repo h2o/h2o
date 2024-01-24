@@ -68,7 +68,8 @@ static void enqueue_server_preface(h2o_http2_conn_t *conn)
         {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams},
         {H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL, 1}};
     h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
-    h2o_http2_encode_window_update_frame(&conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    h2o_http2_encode_window_update_frame(
+        &conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
@@ -1239,8 +1240,7 @@ static int handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fr
     /* setup process delay if we've just ran out of reset budget */
     if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
         !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
-        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay,
-                       &conn->dos_mitigation.process_delay);
+        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay, &conn->dos_mitigation.process_delay);
 
     /* TODO log */
 

@@ -125,7 +125,8 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
  * @param pool memory pool (must not be NULL)
  * @param s source string
  * @param l length of source string
- * @return a decoded string allocated from pool if the source string contains '%', {s,l} unchanged if it does not, {NULL,0} if invalid
+ * @return a decoded string allocated from pool if the source string contains '%', {s,l} unchanged if it does not, {NULL,0} if
+ * invalid
  */
 h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *s, size_t l);
 /**
