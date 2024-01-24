@@ -354,18 +354,11 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
 
 h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *str, size_t len)
 {
-    /* count number of chars encoded */
-    size_t num_encoded = 0;
-    for (size_t i = 0; i < len; ++i)
-        if (str[i] == '%')
-            ++num_encoded;
+    h2o_iovec_t decoded;
 
-    /* return the original if no encoded chars */
-    if (num_encoded == 0)
-        return h2o_iovec_init(str, len);
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, len + 1) : h2o_mem_alloc(len + 1);
+    decoded.len = 0;
 
-    /* allocate memory and generate decoded string */
-    h2o_iovec_t decoded = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, len - 2 * num_encoded), 0);
     for (size_t i = 0; i < len; ++i) {
         if (str[i] == '%') {
             if (i + 2 >= len)
@@ -380,9 +373,12 @@ h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *str, size_t len)
             decoded.base[decoded.len++] = str[i];
         }
     }
+    decoded.base[decoded.len] = '\0';
     return decoded;
 
 Fail:
+    if (pool == NULL)
+        free(decoded.base);
     return h2o_iovec_init(NULL, 0);
 }
 

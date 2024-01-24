@@ -274,8 +274,14 @@ static void test_uri_unescape(void)
         }                                                                                                                          \
     } while (0)
 
-    TEST("abc", { ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("abc"))); });
-    TEST("a%0ac", { ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("a\nc"))); });
+    TEST("abc", {
+        ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("abc")));
+        ok(actual.base[actual.len] == '\0');
+    });
+    TEST("a%0ac", {
+        ok(h2o_memis(actual.base, actual.len, H2O_STRLIT("a\nc")));
+        ok(actual.base[actual.len] == '\0');
+    });
     TEST("a%xc", {
         ok(actual.base == NULL);
         ok(actual.len == 0);
