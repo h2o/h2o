@@ -354,33 +354,35 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
 
 h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *str, size_t len)
 {
-    h2o_iovec_t decoded;
-    size_t n = 0;
+    /* count number of chars encoded */
+    size_t num_encoded = 0;
     for (size_t i = 0; i < len; ++i)
         if (str[i] == '%')
-            ++n;
-    if (n == 0)
+            ++num_encoded;
+
+    /* return the original if no encoded chars */
+    if (num_encoded == 0)
         return h2o_iovec_init(str, len);
-    if (2 * n >= len)
-        goto fail;
-    decoded.len = len - 2 * n;
-    decoded.base = h2o_mem_alloc_pool(pool, char, decoded.len);
-    for (size_t i = 0, j = 0; i < len; ++i, ++j) {
+
+    /* allocate memory and generate decoded string */
+    h2o_iovec_t decoded = h2o_iovec_init(h2o_mem_alloc_pool(pool, char, len - 2 * num_encoded), 0);
+    for (size_t i = 0; i < len; ++i) {
         if (str[i] == '%') {
             if (i + 2 >= len)
-                goto fail;
+                goto Fail;
             int hi = decode_hex(str[i + 1]);
             int lo = decode_hex(str[i + 2]);
             if (hi < 0 || lo < 0 || (hi == 0 && lo == 0))
-                goto fail;
-            decoded.base[j] = (hi << 4) | lo;
+                goto Fail;
+            decoded.base[decoded.len++] = (hi << 4) | lo;
             i += 2;
         } else {
-            decoded.base[j] = str[i];
+            decoded.base[decoded.len++] = str[i];
         }
     }
     return decoded;
-fail:
+
+Fail:
     return h2o_iovec_init(NULL, 0);
 }
 
