@@ -91,6 +91,10 @@ struct st_h2o_http2client_stream_t {
         h2o_buffer_t *buf;
         h2o_linklist_t sending_link;
         h2o_httpclient_proceed_req_cb proceed_req; /* set to NULL once entire request body is provided to http2client */
+        struct {
+            h2o_header_t *entries;
+            size_t size;
+        } trailers;
     } output;
 
     struct {
@@ -980,7 +984,7 @@ static void enqueue_goaway(struct st_h2o_http2client_conn_t *conn, int errnum, h
 static void on_connect_error(struct st_h2o_http2client_stream_t *stream, const char *errstr)
 {
     assert(errstr != NULL);
-    stream->super._cb.on_connect(&stream->super, errstr, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL);
+    stream->super._cb.on_connect(&stream->super, errstr, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
     close_stream(stream);
 }
 
@@ -1074,13 +1078,17 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
     h2o_header_t *headers;
     size_t num_headers;
     h2o_iovec_t body;
+    h2o_header_t *trailers;
+    size_t num_trailers;
     h2o_httpclient_properties_t props = (h2o_httpclient_properties_t){NULL};
 
     register_stream(stream, conn);
 
     stream->super._cb.on_head =
-        stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers, &body,
-                                     &stream->output.proceed_req, &props, &conn->super.origin_url);
+        stream->super._cb.on_connect(&stream->super, NULL, &method, &url, (const h2o_header_t **)&headers, &num_headers,
+                                     &body, &stream->output.proceed_req,
+                                     (const h2o_header_t **)&trailers, &num_trailers,
+                                     &props, &conn->super.origin_url);
     if (stream->super._cb.on_head == NULL) {
         close_stream(stream);
         return;
@@ -1101,16 +1109,26 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
         stream->input.message_body_forbidden = 1;
     }
 
-    /* send headers */
+    /* headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
                               stream->stream_id, conn->peer_settings.max_frame_size, method, &url, headers, num_headers,
                               stream->state.req == STREAM_STATE_CLOSED);
 
+    /* body */
     if (stream->state.req == STREAM_STATE_BODY) {
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
         h2o_buffer_append(&stream->output.buf, body.base, body.len);
     }
     h2o_linklist_insert(&conn->output.sending_streams, &stream->output.sending_link);
+
+    /* trailers */
+    if (trailers != NULL && num_trailers != 0) {
+        assert(stream->output.proceed_req == NULL);
+        stream->output.trailers.entries = h2o_mem_alloc_pool(stream->super.pool, h2o_header_t, num_trailers);
+        stream->output.trailers.size = num_trailers;
+        h2o_memcpy(stream->output.trailers.entries, trailers, sizeof(*trailers) * num_trailers);
+    }
+
     request_write(conn);
 }
 
@@ -1213,7 +1231,7 @@ static void stream_emit_pending_data(struct st_h2o_http2client_stream_t *stream)
 {
     size_t max_payload_size = calc_max_payload_size(stream);
     size_t payload_size = sz_min(max_payload_size, stream->output.buf->size);
-    int end_stream = stream->output.proceed_req == NULL && payload_size == stream->output.buf->size;
+    int end_stream = stream->output.proceed_req == NULL && stream->output.trailers.entries == NULL && payload_size == stream->output.buf->size;
     if (payload_size == 0 && !end_stream)
         return;
     char *dst = h2o_buffer_reserve(&stream->conn->output.buf, H2O_HTTP2_FRAME_HEADER_SIZE + payload_size).base;
@@ -1244,6 +1262,11 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
             stream_emit_pending_data(stream);
 
         if (stream->output.buf == NULL || stream->output.buf->size == 0) {
+            if (stream->output.trailers.entries != NULL) {
+                h2o_hpack_flatten_trailers(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
+                                           stream->stream_id, conn->peer_settings.max_frame_size,
+                                           stream->output.trailers.entries, stream->output.trailers.size);
+            }
             h2o_linklist_insert(&conn->output.sent_streams, &stream->output.sending_link);
         } else if (h2o_http2_window_get_avail(&stream->output.window) > 0) {
             /* re-insert to tail so that streams would be sent round-robin */
@@ -1359,20 +1382,28 @@ static void do_update_window(h2o_httpclient_t *_client)
     enqueue_window_update(stream->conn, stream->stream_id, &stream->input.window, max - bufsize);
 }
 
-static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
+static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, h2o_header_t *trailers, size_t num_trailers)
 {
     struct st_h2o_http2client_stream_t *stream = (void *)_client;
     assert(stream->output.proceed_req != NULL);
     assert(!h2o_linklist_is_linked(&stream->output.sending_link));
-
-    if (is_end_stream)
-        stream->output.proceed_req = NULL;
 
     if (stream->output.buf == NULL)
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
 
     if (chunk.len != 0)
         h2o_buffer_append(&stream->output.buf, chunk.base, chunk.len);
+
+    if (trailers != NULL) {
+        // end stream
+        stream->output.proceed_req = NULL;
+
+        if (num_trailers != 0) {
+            stream->output.trailers.entries = h2o_mem_alloc_pool(stream->super.pool, h2o_header_t, num_trailers);
+            stream->output.trailers.size = num_trailers;
+            h2o_memcpy(stream->output.trailers.entries, trailers, sizeof(*trailers) * num_trailers);
+        }
+    }
 
     h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
     request_write(stream->conn);

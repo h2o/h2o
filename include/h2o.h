@@ -1257,6 +1257,10 @@ struct st_h2o_req_t {
      */
     h2o_headers_t headers;
     /**
+     * list of request trailers; `trailers.entries` is non-NULL only when the list is non-empty
+     */
+    h2o_headers_t trailers;
+    /**
      * the request entity (base == NULL if none), can't be used if the handler is streaming the body
      */
     h2o_iovec_t entity;

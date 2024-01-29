@@ -100,6 +100,7 @@ typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *clien
 typedef h2o_httpclient_head_cb (*h2o_httpclient_connect_cb)(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method,
                                                             h2o_url_t *url, const h2o_header_t **headers, size_t *num_headers,
                                                             h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                                            const h2o_header_t **trailers, size_t *num_trailers,
                                                             h2o_httpclient_properties_t *props, h2o_url_t *origin);
 typedef int (*h2o_httpclient_informational_cb)(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg,
                                                h2o_header_t *headers, size_t num_headers);
@@ -293,7 +294,7 @@ struct st_h2o_httpclient_t {
      * Function for writing request body. `proceed_req_cb` supplied through the `on_connect` callback will be called when the
      * given data is sent to the server. Regarding the usage, refer to the doc-comment of `h2o_write_req_cb`.
      */
-    int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, int is_end_stream);
+    int (*write_req)(h2o_httpclient_t *client, h2o_iovec_t chunk, h2o_header_t *trailers, size_t num_trailers);
 
     h2o_timer_t _timeout;
     h2o_socketpool_connect_request_t *_connect_req;

@@ -32,9 +32,8 @@ EOT
     my $client_log = `$client_command`;
     like $client_log, qr/recv DATA frame.+x-backend-trailer: bar/s;
 
-    # TODO: uncomment after þtps://github.com/h2o/h2o/pull/3241 gets merged
-    # my ($backend_log) = $backend->{kill}->();
-    # like $backend_log, qr/recv DATA frame.+x-client-trailer: foo/s;
+    my ($backend_log) = $backend->{kill}->();
+    like $backend_log, qr/recv DATA frame.+x-client-trailer: foo/s;
 };
 
 done_testing;

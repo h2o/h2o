@@ -95,9 +95,10 @@ static h2o_http3client_ctx_t h3ctx = {
 static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                         h2o_url_t *origin);
+                                         const h2o_header_t **headers, size_t *num_headers,
+                                         h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                         const h2o_header_t **trailers, size_t *num_trailers,
+                                         h2o_httpclient_properties_t *props, h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
 
 static struct {
@@ -191,7 +192,8 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     if (client == NULL || client->write_req == NULL)
         return;
 
-    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
+    h2o_header_t dummy;
+    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed ? &dummy : NULL, 0) != 0) {
         fprintf(stderr, "write_req error\n");
         exit(1);
     }
@@ -441,7 +443,8 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
     if (vec.len > *filler_remaining_bytes(client))
         vec.len = *filler_remaining_bytes(client);
     *filler_remaining_bytes(client) -= vec.len;
-    client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
+    h2o_header_t dummy;
+    client->write_req(client, vec, *filler_remaining_bytes(client) == 0 ? &dummy : NULL, 0);
 }
 
 static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
@@ -455,8 +458,10 @@ static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
-                                  const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                  h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                  const h2o_header_t **headers, size_t *num_headers,
+                                  h2o_iovec_t *body, h2o_httpclient_proceed_req_cb *proceed_req_cb,
+                                  const h2o_header_t **trailers, size_t *num_trailers,
+                                  h2o_httpclient_properties_t *props,
                                   h2o_url_t *origin)
 {
     h2o_headers_t headers_vec = {NULL};
@@ -492,6 +497,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
+    if (trailers) {
+        *trailers = NULL;
+        *num_trailers = 0;
+    }
     client->informational_cb = on_informational;
     return on_head;
 }
