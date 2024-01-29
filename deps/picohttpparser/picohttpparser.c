@@ -545,6 +545,8 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
     size_t dst = 0, src = 0, bufsz = *_bufsz;
     ssize_t ret = -2; /* incomplete */
 
+    decoder->_total_read += bufsz;
+
     while (1) {
         switch (decoder->_state) {
         case CHUNKED_IN_CHUNK_SIZE:
@@ -664,6 +666,12 @@ Exit:
     if (dst != src)
         memmove(buf + dst, buf + src, bufsz - src);
     *_bufsz = dst;
+    /* if incomplete but the overhead of the chunked encoding is >=100KB and >80%, signal an error */
+    if (ret == -2) {
+        decoder->_total_overhead += bufsz - dst;
+        if (decoder->_total_overhead >= 100 * 1024 && decoder->_total_read - decoder->_total_overhead < decoder->_total_read / 4)
+            ret = -1;
+    }
     return ret;
 }
 
