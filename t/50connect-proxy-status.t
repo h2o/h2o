@@ -67,4 +67,11 @@ subtest "refused" => sub {
     });
 };
 
+subtest "broken request" => sub {
+    plan skip_all => "nc not found"
+        unless prog_exists("nc");
+    my $resp = `echo "CONNECT abc HTTP/1.1\r\n\r\n" | nc 127.0.0.1 $server->{port} 2>&1`;
+    like $resp, qr{^HTTP/1\.1 400 .*\nproxy-status: h2o/test; error=http_request_error; details="invalid host:port"}s;
+};
+
 done_testing;

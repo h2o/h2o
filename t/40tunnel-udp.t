@@ -53,6 +53,7 @@ hosts:
           - "+*"
 proxy.timeout.io: 30000
 proxy.connect.masque-draft-03: ON
+proxy.connect.emit-proxy-status: ON
 access-log:
   path: /dev/stdout
   format: '\%h \%l \%u \%t \"\%r\" \%s \%b \%{upgrade}i'
@@ -163,6 +164,13 @@ subtest "udp-rfc9298" => sub {
             <$fh>;
         };
         like $resp, qr{^HTTP/3 421}, "got 421";
+    };
+    subtest "broken-request" => sub {
+        # just test h1 and call it a day
+        plan skip_all => "nc not found"
+            unless prog_exists("nc");
+        my $resp = `echo "GET /rfc9298/host/invalid-port/ HTTP/1.1\r\nConnection: upgrade\r\nUpgrade: connect-udp\r\n\r\n" | nc 127.0.0.1 $tunnel_server->{port} 2>&1`;
+        like $resp, qr{HTTP/1\.1 400 .*\r\nproxy-status: h2o; error=http_request_error; details="invalid URI"}s;
     };
 };
 
