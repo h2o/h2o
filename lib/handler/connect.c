@@ -1053,6 +1053,7 @@ static int on_req_classic_connect(h2o_handler_t *_handler, h2o_req_t *req)
 
     /* parse host and port from authority, unless it is handled above in the case of extended connect */
     if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
+        record_error(handler, req, NULL, "http_request_error", "invalid host:port", NULL);
         h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
     }
@@ -1063,8 +1064,9 @@ static int on_req_classic_connect(h2o_handler_t *_handler, h2o_req_t *req)
 /**
  * handles RFC9298 requests
  */
-static int on_req_connect_udp(h2o_handler_t *handler, h2o_req_t *req)
+static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
 {
+    struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
     uint16_t port;
 
@@ -1080,6 +1082,7 @@ static int on_req_connect_udp(h2o_handler_t *handler, h2o_req_t *req)
     /* masque (RFC 9298); parse host/port */
     if (!masque_decode_hostport(&req->pool, req->path_normalized.base + req->pathconf->path.len,
                                 req->path_normalized.len - req->pathconf->path.len, &host, &port)) {
+        record_error(handler, req, NULL, "http_request_error", "invalid URI", NULL);
         h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
     }
