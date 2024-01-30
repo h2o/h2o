@@ -124,9 +124,9 @@ struct st_connect_generator_t {
     };
 };
 
-static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self)
+static h2o_iovec_t get_proxy_status_identity(h2o_req_t *req)
 {
-    h2o_iovec_t identity = self->src_req->conn->ctx->globalconf->proxy_status_identity;
+    h2o_iovec_t identity = req->conn->ctx->globalconf->proxy_status_identity;
     if (identity.base == NULL)
         identity = h2o_iovec_init(H2O_STRLIT("h2o"));
     return identity;
@@ -141,15 +141,15 @@ static const struct st_server_address_t *get_dest_addr(struct st_connect_generat
     }
 }
 
-static void add_proxy_status_header(struct st_connect_generator_t *self, const char *error_type, const char *details,
-                                    const char *rcode, h2o_iovec_t dest_addr_str)
+static void add_proxy_status_header(struct st_connect_handler_t *handler, h2o_req_t *req, const char *error_type,
+                                    const char *details, const char *rcode, h2o_iovec_t dest_addr_str)
 {
-    if (!self->handler->config.connect_proxy_status_enabled)
+    if (!handler->config.connect_proxy_status_enabled)
         return;
 
-    h2o_mem_pool_t *pool = &self->src_req->pool;
+    h2o_mem_pool_t *pool = &req->pool;
     h2o_iovec_t parts[9] = {
-        get_proxy_status_identity(self),
+        get_proxy_status_identity(req),
     };
     size_t nparts = 1;
     if (error_type != NULL) {
@@ -170,18 +170,18 @@ static void add_proxy_status_header(struct st_connect_generator_t *self, const c
     }
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
-    h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
+    h2o_add_header_by_str(pool, &req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
 #define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
+static void record_error(struct st_connect_handler_t *handler, h2o_req_t *req, const struct st_server_address_t *addr,
+                         const char *error_type, const char *details, const char *rcode)
 {
-    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
+    H2O_PROBE_REQUEST(CONNECT_ERROR, req, error_type, details, rcode);
 
     char dest_addr_strbuf[NI_MAXHOST];
     h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
-    const struct st_server_address_t *addr = get_dest_addr(self);
     if (addr != NULL) {
         size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
         if (len != SIZE_MAX) {
@@ -189,11 +189,10 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
         }
     }
 
-    h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
-                      rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
-                      dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
+    h2o_req_log_error(req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type, rcode != NULL ? rcode : "(null)",
+                      details != NULL ? details : "(null)", dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
 
-    add_proxy_status_header(self, error_type, details, rcode, dest_addr_str);
+    add_proxy_status_header(handler, req, error_type, details, rcode, dest_addr_str);
 }
 
 static void record_connect_success(struct st_connect_generator_t *self)
@@ -207,7 +206,7 @@ static void record_connect_success(struct st_connect_generator_t *self)
     char dest_addr_strbuf[NI_MAXHOST];
     size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
     if (len != SIZE_MAX) {
-        add_proxy_status_header(self, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
+        add_proxy_status_header(self->handler, self->src_req, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
     }
 }
 
@@ -225,7 +224,7 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
         error_type = "proxy_internal_error";
         details = err;
     }
-    record_error(self, error_type, details, NULL);
+    record_error(self->handler, self->src_req, get_dest_addr(self), error_type, details, NULL);
 }
 
 static void try_connect(struct st_connect_generator_t *self);
@@ -359,9 +358,9 @@ static void on_connect_timeout(h2o_timer_t *entry)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, timeout, entry);
     if (self->server_addresses.size > 0) {
-        record_error(self, "connection_timeout", NULL, NULL);
+        record_error(self->handler, self->src_req, get_dest_addr(self), "connection_timeout", NULL, NULL);
     } else {
-        record_error(self, "dns_timeout", NULL, NULL);
+        record_error(self->handler, self->src_req, NULL, "dns_timeout", NULL, NULL);
     }
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
@@ -462,7 +461,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         /* In case no addresses are available, send HTTP error. */
         if (self->server_addresses.size == 0) {
             if (self->last_error.class == ERROR_CLASS_ACCESS_PROHIBITED) {
-                record_error(self, self->last_error.str, NULL, NULL);
+                record_error(self->handler, self->src_req, NULL, self->last_error.str, NULL, NULL);
                 send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
             } else {
                 const char *rcode;
@@ -477,7 +476,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
                 } else {
                     rcode = NULL;
                 }
-                record_error(self, "dns_error", self->last_error.str, rcode);
+                record_error(self->handler, self->src_req, NULL, "dns_error", self->last_error.str, rcode);
                 on_connect_error(self, self->last_error.str);
             }
             return;
