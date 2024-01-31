@@ -863,6 +863,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
         assert(!client->_is_chunked);
         if (client->_use_expect) {
             h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
+            client->body_buf.is_end_stream = 1;
             if (!h2o_buffer_try_append(&client->body_buf.buf, body.base, body.len)) {
                 on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
                 return;
