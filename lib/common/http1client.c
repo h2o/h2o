@@ -728,7 +728,7 @@ static void on_send_timeout(h2o_timer_t *entry)
 }
 
 static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
-                                 const h2o_httpclient_properties_t *props, const h2o_header_t *headers, size_t num_headers)
+                                 h2o_iovec_t connection, const h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
@@ -791,12 +791,12 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
                           h2o_iovec_init(client->super.upgrade_to, strlen(client->super.upgrade_to))};
         APPEND_HEADER(&c);
         APPEND_HEADER(&u);
-    } else if (props->connection_header->base != NULL) {
-        h2o_header_t h = {&H2O_TOKEN_CONNECTION->buf, NULL, *props->connection_header};
+    } else if (connection.base != NULL) {
+        h2o_header_t h = {&H2O_TOKEN_CONNECTION->buf, NULL, connection};
         APPEND_HEADER(&h);
     }
 
-    if (props->use_expect) {
+    if (client->_use_expect) {
         h2o_header_t h = {&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
         APPEND_HEADER(&h);
     }
@@ -827,12 +827,6 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     size_t reqbufcnt = 0;
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, props, headers, num_headers);
-    reqbufs[reqbufcnt++] = header;
-    client->super.bytes_written.header = header.len;
-
-    client->_is_chunked = *props->chunked;
-    client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
     if (props->use_expect) {
         if (client->proceed_req == NULL && body.len == 0) {
@@ -840,8 +834,15 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
             return;
         }
-        client->_use_expect = 1;
+        client->_use_expect = 1; /* this must be set before calling build_request */
     }
+
+    h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
+    reqbufs[reqbufcnt++] = header;
+    client->super.bytes_written.header = header.len;
+
+    client->_is_chunked = *props->chunked;
+    client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
     assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* req_body_send_prepare could write to 4 additional elements */
     if (client->proceed_req != NULL) {
