@@ -1110,7 +1110,7 @@ typedef struct st_h2o_req_overrides_t {
      */
     unsigned proxy_preserve_host : 1;
     /**
-     * whether the proxied request send expect: 100-continue and wait 100 response before sending request body
+     * whether the proxied request sends expect: 100-continue and wait 100 response before sending request body
      */
     unsigned proxy_use_expect : 1;
     /**
