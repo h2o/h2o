@@ -194,6 +194,16 @@ $ctx->{directive}->(
 
 <?
 $ctx->{directive}->(
+    name    => "proxy.expect-100-continue",
+    levels  => [ qw(global) ],
+    since   => "2.3",
+    default => q{proxy.expect-100-continue: OFF},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should send <code>expect: 100-continue</code> header to the request, and postpone sending request body until it receives 100 response",
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
     name    => "proxy.forward.close-connection",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.forward.close-connection: OFF},
