@@ -913,6 +913,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->body_bytes_sent = 0;
     self->pipe_reader.fds[0] = -1;
     self->pipe_inflight = 0;
+    self->expect_100_continue = 0;
     self->req_done = 0;
     self->res_done = 0;
 
