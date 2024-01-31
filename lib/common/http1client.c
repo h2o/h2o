@@ -86,7 +86,7 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
     unsigned _app_prefers_pipe_reader : 1;
-    unsigned _expect_100_continue : 1;
+    unsigned _use_expect : 1;
 };
 
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
@@ -458,8 +458,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         if (!(100 <= http_status && http_status <= 199 && http_status != 101))
             break;
 
-        if (http_status == 100 && client->_expect_100_continue) {
-            client->_expect_100_continue = 0;
+        if (http_status == 100 && client->_use_expect) {
+            client->_use_expect = 0;
             req_body_send(client);
         } else if (client->super.informational_cb != NULL &&
                    client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
@@ -556,11 +556,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_buffer_consume(&sock->input, rlen);
     client->_socket_bytes_processed = client->sock->bytes_read - client->sock->input->size;
 
-    if (client->_expect_100_continue) {
+    if (client->_use_expect) {
         /* we have suspended request body, let's start sending it.
          * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634
          */
-        client->_expect_100_continue = 0;
+        client->_use_expect = 0;
         req_body_send(client);
     }
 
@@ -796,7 +796,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         APPEND_HEADER(&h);
     }
 
-    if (props->expect_100_continue) {
+    if (props->use_expect) {
         h2o_header_t h = {&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
         APPEND_HEADER(&h);
     }
@@ -834,13 +834,13 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     client->_is_chunked = *props->chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
-    if (props->expect_100_continue) {
+    if (props->use_expect) {
         if (client->proceed_req == NULL && body.len == 0) {
             /* no body */
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
             return;
         }
-        client->_expect_100_continue = 1;
+        client->_use_expect = 1;
     }
 
     assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* req_body_send_prepare could write to 4 additional elements */
@@ -850,7 +850,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
             return;
         }
-        if (client->_expect_100_continue) {
+        if (client->_use_expect) {
             h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
         } else {
             size_t bytes_written;
@@ -860,7 +860,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
         }
     } else if (body.len != 0) {
         assert(!client->_is_chunked);
-        if (client->_expect_100_continue) {
+        if (client->_use_expect) {
             h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
             if (!h2o_buffer_try_append(&client->body_buf.buf, body.base, body.len)) {
                 on_whole_request_sent(client->sock, h2o_httpclient_error_internal);

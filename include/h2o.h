@@ -1112,7 +1112,7 @@ typedef struct st_h2o_req_overrides_t {
     /**
      * whether the proxied request send expect: 100-continue and wait 100 response before sending request body
      */
-    unsigned proxy_expect_100_continue : 1;
+    unsigned proxy_use_expect : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */
@@ -2213,7 +2213,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t connection_attempt_delay;
     } happy_eyeballs;
     unsigned preserve_host : 1;
-    unsigned expect_100_continue : 1;
+    unsigned use_expect : 1;
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;

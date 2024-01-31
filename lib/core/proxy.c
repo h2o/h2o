@@ -48,7 +48,7 @@ struct rp_generator_t {
     unsigned req_done : 1;
     unsigned res_done : 1;
     unsigned pipe_inflight : 1;
-    unsigned expect_100_continue : 1;
+    unsigned use_expect : 1;
     int *generator_disposed;
 };
 
@@ -142,7 +142,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
                           h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to,
-                          int use_proxy_protocol, int expect_100_continue,
+                          int use_proxy_protocol, int use_expect,
                           int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
@@ -253,8 +253,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
     }
 
-    if (expect_100_continue) {
-        props->expect_100_continue = 1;
+    if (use_expect) {
+        props->use_expect = 1;
     }
 
     if (cookie_values.size == 1) {
@@ -820,7 +820,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
-        self->expect_100_continue = req->overrides->proxy_expect_100_continue;
+        self->use_expect = req->overrides->proxy_use_expect;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -840,7 +840,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
                   !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
-                  use_proxy_protocol, self->expect_100_continue, &reprocess_if_too_early, origin);
+                  use_proxy_protocol, self->use_expect, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 
@@ -913,7 +913,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->body_bytes_sent = 0;
     self->pipe_reader.fds[0] = -1;
     self->pipe_inflight = 0;
-    self->expect_100_continue = 0;
+    self->use_expect = 0;
     self->req_done = 0;
     self->res_done = 0;
 
