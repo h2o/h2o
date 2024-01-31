@@ -203,9 +203,6 @@ The following describes the configuration directives for controlling the HTTP/2 
 <li><a href="configure/http2_directives.html#http2-input-window-size">
 <code>http2-input-window-size</code>
 </a></li>
-<li><a href="configure/http2_directives.html#http2-max-streams">
-<code>http2-max-streams</code>
-</a></li>
 <li><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection">
 <code>http2-max-concurrent-requests-per-connection</code>
 </a></li>
@@ -381,28 +378,6 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>16777216</pre></code>
-</dl>
-
-<div id="http2-max-streams" class="directive-head">
-<h3><a href="configure/http2_directives.html#http2-max-streams"><code>"http2-max-streams"</code></a></h3>
-</div>
-
-<dl class="directive-desc">
-<dt>Description:</dt>
-<dd>
-<p>
-  Maximum number of streams to advertise via HTTP2 <a href="https://www.rfc-editor.org/rfc/rfc7540#section-6.5.2" target="_blank"><code>SETTINGS_MAX_CONCURRENT_STREAMS</code></a>.
-</p>
-
-<p>
- Limits the number of active requests that the proxy will accept on a client connection.  Also see <a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a> which controls the number of requests that the proxy will process concurrently.
-</p>
-
-</dd>
-<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global</dd>
-<dt>Default:</dt>
-<dd><code><pre>http2-max-streams: 100</pre></code>
 </dl>
 
 <div id="http2-max-concurrent-requests-per-connection" class="directive-head">

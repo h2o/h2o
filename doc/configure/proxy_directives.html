@@ -107,6 +107,9 @@ Following sections describe the configuration directives defined for the module.
 <li><a href="configure/proxy_directives.html#proxy.emit-missing-date-header">
 <code>proxy.emit-missing-date-header</code>
 </a></li>
+<li><a href="configure/proxy_directives.html#proxy.expect-100-continue">
+<code>proxy.expect-100-continue</code>
+</a></li>
 <li><a href="configure/proxy_directives.html#proxy.forward.close-connection">
 <code>proxy.forward.close-connection</code>
 </a></li>
@@ -446,6 +449,26 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should ad
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>proxy.emit-missing-date-header: ON</pre></code>
+</dl>
+
+
+<div id="proxy.expect-100-continue" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/proxy_directives.html#proxy.expect-100-continue"><code>"proxy.expect-100-continue"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should send <code>expect: 100-continue</code> header to the request, and postpone sending request body until it receives 100 response
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.expect-100-continue: OFF</pre></code>
 </dl>
 
 
