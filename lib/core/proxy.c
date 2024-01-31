@@ -65,7 +65,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 {
     h2o_url_t loc_parsed;
 
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0)
+    if (h2o_url_parse(pool, location, location_len, &loc_parsed) != 0)
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
@@ -163,18 +163,24 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
     }
 
-    /* method */
+    /* copy method (if it is an extended CONNECT switching versions, convert as appropriate) */
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
+    if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
+        if (req->version >= 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("CONNECT")) &&
+            props->connection_header != NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("GET"));
+        } else if (req->version < 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("GET")) &&
+                   props->connection_header == NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("CONNECT"));
+        }
+    }
 
     /* url */
     if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
         h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
-        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
-        } else if (keepalive) {
+        if (keepalive) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
@@ -689,9 +695,16 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (req->upgrade.base != NULL && req->res.status == 101) {
+    /* extended CONNECT: adjust response based on the HTTP versions being used (TODO proper check of status code based on upstream
+     * HTTP version) */
+    if (req->upgrade.base != NULL && (req->res.status == 101 || (200 <= req->res.status && req->res.status <= 299))) {
         assert(req->is_tunnel_req);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        if (req->version < 0x200) {
+            req->res.status = 101;
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        } else {
+            req->res.status = 200;
+        }
     }
 
     /* declare the start of the response */
@@ -926,10 +939,25 @@ void h2o__proxy_process_request(h2o_req_t *req)
     const char *upgrade_to = NULL;
     if (req->is_tunnel_req) {
         if (req->upgrade.base != NULL) {
-            /* upgrade requests (e.g. websocket) are either tunnelled or converted to a normal request (by omitting the Upgrade
-             * header field)  depending on the configuration */
-            if (client_ctx->tunnel_enabled)
+            /* Upgrade requests (e.g. websocket) are either tunnelled, rejected, or converted to an ordinary request depending on
+             * the configuration. */
+            if (client_ctx->tunnel_enabled) {
+                /* Support for H3_DATAGRAM is advertised by the HTTP/3 handler but the proxy handler does not support forwarding
+                 * datagrams nor conversion to/from capsules. Hence we send 421 to let the client retry using a different version of
+                 * HTTP. */
+                if (req->version == 0x300 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))) {
+                    h2o_send_error_421(req, "Misdirected Request", "connect-udp tunneling is only supported in HTTP/1 and 2", 0);
+                    return;
+                }
                 upgrade_to = h2o_strdup(&req->pool, req->upgrade.base, req->upgrade.len).base;
+            } else {
+                /* When recieving a websocket request over HTTP/1.x but tunneling is disabled, convert the request to an ordinary
+                 * HTTP request, as we have always done. Otherwise, refuse the request. */
+                if (!(req->version < 0x200 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")))) {
+                    h2o_send_error_403(req, "Forbidden", "The proxy act as a gateway.", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    return;
+                }
+            }
         } else {
             /* CONNECT request; process as a CONNECT upgrade or reject */
             if (client_ctx->tunnel_enabled) {

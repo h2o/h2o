@@ -478,7 +478,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     /* recognize hop-by-hop response headers */
     reader = on_body_until_close;
-    if (!h2o_httpclient__tunnel_is_ready(&client->super, http_status)) {
+    if (!h2o_httpclient__tunnel_is_ready(&client->super, http_status, version)) {
         client->_do_keepalive = minor_version >= 1;
         for (i = 0; i != num_headers; ++i) {
             if (headers[i].name == &H2O_TOKEN_CONNECTION->buf) {
@@ -784,12 +784,20 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
 
-    if (props->connection_header->base != NULL) {
-        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_CONNECTION->buf, NULL, *props->connection_header};
+    /* append supplied connection header, or "connection: upgrade" and upgrade header when request an upgrade */
+    if (client->super.upgrade_to != NULL && client->super.upgrade_to != h2o_httpclient_upgrade_to_connect) {
+        h2o_header_t c = {&H2O_TOKEN_CONNECTION->buf, NULL, h2o_iovec_init(H2O_STRLIT("upgrade"))},
+                     u = {&H2O_TOKEN_UPGRADE->buf, NULL,
+                          h2o_iovec_init(client->super.upgrade_to, strlen(client->super.upgrade_to))};
+        APPEND_HEADER(&c);
+        APPEND_HEADER(&u);
+    } else if (props->connection_header->base != NULL) {
+        h2o_header_t h = {&H2O_TOKEN_CONNECTION->buf, NULL, *props->connection_header};
         APPEND_HEADER(&h);
     }
+
     if (props->expect_100_continue) {
-        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
+        h2o_header_t h = {&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
         APPEND_HEADER(&h);
     }
 

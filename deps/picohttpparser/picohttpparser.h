@@ -27,13 +27,12 @@
 #ifndef picohttpparser_h
 #define picohttpparser_h
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #ifdef _MSC_VER
 #define ssize_t intptr_t
 #endif
-
-/* $Id$ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,6 +65,8 @@ struct phr_chunked_decoder {
     char consume_trailer;       /* if trailing headers should be consumed */
     char _hex_count;
     char _state;
+    uint64_t _total_read;
+    uint64_t _total_overhead;
 };
 
 /* the function rewrites the buffer given as (buf, bufsz) removing the chunked-
@@ -74,8 +75,8 @@ struct phr_chunked_decoder {
  * repeatedly call the function while it returns -2 (incomplete) every time
  * supplying newly arrived data.  If the end of the chunked-encoded data is
  * found, the function returns a non-negative number indicating the number of
- * octets left undecoded at the tail of the supplied buffer.  Returns -1 on
- * error.
+ * octets left undecoded, that starts from the offset returned by `*bufsz`.
+ * Returns -1 on error.
  */
 ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_t *bufsz);
 

@@ -37,7 +37,7 @@ struct st_connect_handler_t {
 };
 
 #define MAX_ADDRESSES_PER_FAMILY 4
-#define UDP_CHUNK_OVERHEAD 3
+#define UDP_CHUNK_OVERHEAD 10 /* sufficient space to hold DATAGRAM capsule header (RFC 9297) and context ID of zero (RFC 9298) */
 
 struct st_server_address_t {
     struct sockaddr *sa;
@@ -81,6 +81,10 @@ struct st_connect_generator_t {
      */
     unsigned pick_v4 : 1;
     /**
+     * `h2o_process_request` was called without request streaming; all data that have to be sent is inside `h2o_req_t::entity`
+     */
+    unsigned no_req_streaming : 1;
+    /**
      * set when the send-side is closed by the user
      */
     unsigned write_closed : 1;
@@ -110,15 +114,19 @@ struct st_connect_generator_t {
                 h2o_timer_t delayed;
             } egress;
             struct {
-                uint8_t buf[UDP_CHUNK_OVERHEAD + 1500];
+                char buf[UDP_CHUNK_OVERHEAD + 1500];
             } ingress;
+            /**
+             * if using draft-03 style encoding rather than RFC 9298
+             */
+            unsigned is_draft03 : 1;
         } udp;
     };
 };
 
-static h2o_iovec_t get_proxy_status_identity(struct st_connect_generator_t *self)
+static h2o_iovec_t get_proxy_status_identity(h2o_req_t *req)
 {
-    h2o_iovec_t identity = self->src_req->conn->ctx->globalconf->proxy_status_identity;
+    h2o_iovec_t identity = req->conn->ctx->globalconf->proxy_status_identity;
     if (identity.base == NULL)
         identity = h2o_iovec_init(H2O_STRLIT("h2o"));
     return identity;
@@ -133,15 +141,15 @@ static const struct st_server_address_t *get_dest_addr(struct st_connect_generat
     }
 }
 
-static void add_proxy_status_header(struct st_connect_generator_t *self, const char *error_type, const char *details,
-                                    const char *rcode, h2o_iovec_t dest_addr_str)
+static void add_proxy_status_header(struct st_connect_handler_t *handler, h2o_req_t *req, const char *error_type,
+                                    const char *details, const char *rcode, h2o_iovec_t dest_addr_str)
 {
-    if (!self->handler->config.connect_proxy_status_enabled)
+    if (!handler->config.connect_proxy_status_enabled)
         return;
 
-    h2o_mem_pool_t *pool = &self->src_req->pool;
+    h2o_mem_pool_t *pool = &req->pool;
     h2o_iovec_t parts[9] = {
-        get_proxy_status_identity(self),
+        get_proxy_status_identity(req),
     };
     size_t nparts = 1;
     if (error_type != NULL) {
@@ -162,18 +170,18 @@ static void add_proxy_status_header(struct st_connect_generator_t *self, const c
     }
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
-    h2o_add_header_by_str(pool, &self->src_req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
+    h2o_add_header_by_str(pool, &req->res.headers, H2O_STRLIT("proxy-status"), 0, NULL, hval.base, hval.len);
 }
 
 #define TO_BITMASK(type, len) ((type) ~(((type)1 << (sizeof(type) * 8 - (len))) - 1))
 
-static void record_error(struct st_connect_generator_t *self, const char *error_type, const char *details, const char *rcode)
+static void record_error(struct st_connect_handler_t *handler, h2o_req_t *req, const struct st_server_address_t *addr,
+                         const char *error_type, const char *details, const char *rcode)
 {
-    H2O_PROBE_REQUEST(CONNECT_ERROR, self->src_req, error_type, details, rcode);
+    H2O_PROBE_REQUEST(CONNECT_ERROR, req, error_type, details, rcode);
 
     char dest_addr_strbuf[NI_MAXHOST];
     h2o_iovec_t dest_addr_str = h2o_iovec_init(NULL, 0);
-    const struct st_server_address_t *addr = get_dest_addr(self);
     if (addr != NULL) {
         size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
         if (len != SIZE_MAX) {
@@ -181,11 +189,10 @@ static void record_error(struct st_connect_generator_t *self, const char *error_
         }
     }
 
-    h2o_req_log_error(self->src_req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type,
-                      rcode != NULL ? rcode : "(null)", details != NULL ? details : "(null)",
-                      dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
+    h2o_req_log_error(req, MODULE_NAME, "%s; rcode=%s; details=%s; next-hop=%s", error_type, rcode != NULL ? rcode : "(null)",
+                      details != NULL ? details : "(null)", dest_addr_str.base != NULL ? dest_addr_str.base : "(null)");
 
-    add_proxy_status_header(self, error_type, details, rcode, dest_addr_str);
+    add_proxy_status_header(handler, req, error_type, details, rcode, dest_addr_str);
 }
 
 static void record_connect_success(struct st_connect_generator_t *self)
@@ -199,7 +206,7 @@ static void record_connect_success(struct st_connect_generator_t *self)
     char dest_addr_strbuf[NI_MAXHOST];
     size_t len = h2o_socket_getnumerichost(addr->sa, addr->salen, dest_addr_strbuf);
     if (len != SIZE_MAX) {
-        add_proxy_status_header(self, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
+        add_proxy_status_header(self->handler, self->src_req, NULL, NULL, NULL, h2o_iovec_init(dest_addr_strbuf, len));
     }
 }
 
@@ -217,7 +224,7 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
         error_type = "proxy_internal_error";
         details = err;
     }
-    record_error(self, error_type, details, NULL);
+    record_error(self->handler, self->src_req, get_dest_addr(self), error_type, details, NULL);
 }
 
 static void try_connect(struct st_connect_generator_t *self);
@@ -351,9 +358,9 @@ static void on_connect_timeout(h2o_timer_t *entry)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, timeout, entry);
     if (self->server_addresses.size > 0) {
-        record_error(self, "connection_timeout", NULL, NULL);
+        record_error(self->handler, self->src_req, get_dest_addr(self), "connection_timeout", NULL, NULL);
     } else {
-        record_error(self, "dns_timeout", NULL, NULL);
+        record_error(self->handler, self->src_req, NULL, "dns_timeout", NULL, NULL);
     }
     on_connect_error(self, h2o_httpclient_error_io_timeout);
 }
@@ -454,7 +461,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         /* In case no addresses are available, send HTTP error. */
         if (self->server_addresses.size == 0) {
             if (self->last_error.class == ERROR_CLASS_ACCESS_PROHIBITED) {
-                record_error(self, self->last_error.str, NULL, NULL);
+                record_error(self->handler, self->src_req, NULL, self->last_error.str, NULL, NULL);
                 send_connect_error(self, 403, "Destination IP Prohibited", "Destination IP Prohibited");
             } else {
                 const char *rcode;
@@ -469,7 +476,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
                 } else {
                     rcode = NULL;
                 }
-                record_error(self, "dns_error", self->last_error.str, rcode);
+                record_error(self->handler, self->src_req, NULL, "dns_error", self->last_error.str, rcode);
                 on_connect_error(self, self->last_error.str);
             }
             return;
@@ -585,6 +592,8 @@ static int tcp_write(void *_self, int is_end_stream)
     if (self->socket_closed)
         return 1;
 
+    assert(self->sock != NULL && "write_req called before proceed_req is called?");
+
     /* buffer input */
     h2o_buffer_append(&self->tcp.sendbuf, chunk.base, chunk.len);
     if (is_end_stream)
@@ -650,9 +659,9 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
-    /* start the write if there's data to be sent */
-    if (self->tcp.sendbuf->size != 0 || self->write_closed)
-        tcp_do_write(self);
+    /* Start write. Once write is complete (or if there is nothing to write), `proceed_req` will be called or the socket would be
+     * closed if `write_closed` is set. */
+    self->src_req->write_req.cb(self, self->no_req_streaming);
 
     record_connect_success(self);
 
@@ -715,8 +724,15 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
 
 static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
 {
-    H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, datagram.len);
-    while (send(h2o_socket_get_fd(self->sock), datagram.base, datagram.len, 0) == -1 && errno == EINTR)
+    const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
+
+    /* When using RFC 9298, the payload starts with a Context ID; drop anything other than UDP packets.
+     * TODO: propagate error when decoding fails? */
+    if (!self->udp.is_draft03 && (ptls_decode_quicint(&src, end)) != 0)
+        return;
+
+    H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
+    while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
         ;
 }
 
@@ -777,6 +793,8 @@ static int udp_write_stream(void *_self, int is_end_stream)
     if (self->socket_closed)
         return 1;
 
+    assert(self->sock != NULL && "write_req called before proceed_req is called?");
+
     if (is_end_stream)
         self->write_closed = 1;
 
@@ -803,38 +821,48 @@ static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t 
 static void udp_on_read(h2o_socket_t *_sock, const char *err)
 {
     struct st_connect_generator_t *self = _sock->data;
+    h2o_iovec_t payload =
+        h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, sizeof(self->udp.ingress.buf) - UDP_CHUNK_OVERHEAD);
 
     if (err != NULL) {
         close_readwrite(self);
         return;
     }
 
-    /* read UDP packet, or return */
-    ssize_t rret;
-    while ((rret = recv(h2o_socket_get_fd(self->sock), self->udp.ingress.buf + UDP_CHUNK_OVERHEAD,
-                        sizeof(self->udp.ingress.buf) - UDP_CHUNK_OVERHEAD, 0)) == -1 &&
-           errno == EINTR)
-        ;
-    if (rret == -1)
-        return;
-    H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, (size_t)rret);
+    { /* read UDP packet, or return */
+        ssize_t rret;
+        while ((rret = recv(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
+            ;
+        if (rret == -1)
+            return;
+        payload.len = rret;
+    }
+    H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, payload.len);
+
+    /* prepend Context ID (of zero, indicating UDP packet) if RFC 9298 */
+    if (!self->udp.is_draft03) {
+        *--payload.base = 0;
+        payload.len += 1;
+    }
 
     /* forward UDP datagram as is; note that it might be zero-sized */
     if (self->src_req->forward_datagram.read_ != NULL) {
-        h2o_iovec_t vec = h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, rret);
-        self->src_req->forward_datagram.read_(self->src_req, &vec, 1);
+        self->src_req->forward_datagram.read_(self->src_req, &payload, 1);
     } else {
         h2o_socket_read_stop(self->sock);
         h2o_timer_unlink(&self->timeout);
-        size_t off = 0;
-        self->udp.ingress.buf[off++] = 0; /* chunk type = UDP_PACKET */
-        off = quicly_encodev(self->udp.ingress.buf + off, (uint64_t)rret) - self->udp.ingress.buf;
-        assert(off <= UDP_CHUNK_OVERHEAD);
-        if (off < UDP_CHUNK_OVERHEAD)
-            memmove(self->udp.ingress.buf + off, self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, rret);
-        off += rret;
-        h2o_iovec_t vec = h2o_iovec_init(self->udp.ingress.buf, off);
-        h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
+        { /* prepend Datagram Capsule length */
+            uint8_t length_buf[8];
+            size_t length_len = quicly_encodev(length_buf, payload.len) - length_buf;
+            memcpy(payload.base - length_len, length_buf, length_len);
+            payload.base -= length_len;
+            payload.len += length_len;
+        }
+        /* prepend Datagram Capsule Type */
+        *--payload.base = 0;
+        payload.len += 1;
+        assert(payload.base >= self->udp.ingress.buf);
+        h2o_send(self->src_req, &payload, 1, H2O_SEND_STATE_IN_PROGRESS);
     }
 }
 
@@ -855,6 +883,8 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
     int fd;
+
+    assert(self->udp.egress.buf->size == 0); /* the handler does not call `proceed_req` until the connection becomes ready */
 
     H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
     /* connect */
@@ -884,15 +914,26 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->src_req->write_req.cb = udp_write_stream;
     self->src_req->forward_datagram.write_ = udp_write_datagrams;
     self->src_req->write_req.ctx = self;
-    if (self->udp.egress.buf->size != 0 || self->write_closed)
-        udp_do_write_stream(self, h2o_iovec_init(NULL, 0));
 
     record_connect_success(self);
 
-    /* build and submit 200 response */
-    self->src_req->res.status = 200;
+    /* build and submit success */
+    if (self->src_req->version < 0x200 && !self->udp.is_draft03) {
+        assert(self->src_req->upgrade.base != NULL);
+        self->src_req->res.status = 101;
+        self->src_req->res.reason = "Switching Protocols";
+        h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("connect-udp"));
+    } else {
+        self->src_req->res.status = 200;
+    }
+    if (!self->udp.is_draft03)
+        h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
+                              H2O_STRLIT("?1"));
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+
+    /* write any data if provided, or just call the proceed_req callback */
+    self->src_req->write_req.cb(self, self->no_req_streaming);
 
     return 1;
 }
@@ -910,26 +951,41 @@ static void on_generator_dispose(void *_self)
     dispose_generator(self);
 }
 
-static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
+/**
+ * expects "/host/port/" as input, where the preceding slash is optional
+ */
+static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t _len, h2o_iovec_t *host, uint16_t *port)
 {
-    struct st_connect_handler_t *handler = (void *)_handler;
-    h2o_iovec_t host;
-    uint16_t port;
-    int is_tcp;
+    char *src = (char *)_src; /* h2o_strtosizefwd takes non-const arg, so ... */
+    const char *end = src + _len;
 
-    if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT"))) {
-        is_tcp = 1;
-    } else if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        is_tcp = 0;
-    } else {
-        return -1;
+    if (src < end && src[0] == '/')
+        ++src;
+
+    { /* extract host */
+        size_t host_len;
+        if ((host_len = h2o_strstr(src, end - src, H2O_STRLIT("/"))) == SIZE_MAX || host_len == 0)
+            return 0;
+        if ((*host = h2o_uri_unescape(pool, src, host_len)).base == NULL)
+            return 0;
+        src += host_len + 1;
     }
 
-    if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
-        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-        return 0;
+    { /* parse port */
+        size_t v;
+        if ((v = h2o_strtosizefwd(&src, end - src)) >= 65535)
+            return 0;
+        if (src == end || *src != '/')
+            return 0;
+        *port = (uint16_t)v;
     }
 
+    return 1;
+}
+
+static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o_iovec_t host, uint16_t port, int is_tcp,
+                       int is_masque_draft03)
+{
     struct st_connect_generator_t *self;
     size_t sizeof_self = offsetof(struct st_connect_generator_t, tcp) + (is_tcp ? sizeof(self->tcp) : sizeof(self->udp));
     self = h2o_mem_alloc_shared(&req->pool, sizeof_self, on_generator_dispose);
@@ -946,13 +1002,16 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
         self->super.proceed = udp_on_proceed;
         h2o_buffer_init(&self->udp.egress.buf, &h2o_socket_buffer_prototype);
         self->udp.egress.delayed = (h2o_timer_t){.cb = udp_write_stream_complete_delayed};
+        self->udp.is_draft03 = is_masque_draft03;
     }
     h2o_timer_link(get_loop(self), handler->config.connect_timeout, &self->timeout);
 
     /* setup write_req now, so that the protocol handler would not provide additional data until we call `proceed_req` */
-    assert(req->entity.len == 0 && "the handler is incapable of accepting input via `write_req.cb` while writing req->entity");
+    assert(req->entity.base != NULL && "CONNECT must indicate existence of payload");
     self->src_req->write_req.cb = is_tcp ? tcp_write : udp_write_stream;
     self->src_req->write_req.ctx = self;
+    if (self->src_req->proceed_req == NULL)
+        self->no_req_streaming = 1;
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
@@ -967,8 +1026,72 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
-void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
-                          size_t num_acl_entries)
+static int on_req_classic_connect(h2o_handler_t *_handler, h2o_req_t *req)
+{
+    struct st_connect_handler_t *handler = (void *)_handler;
+    h2o_iovec_t host;
+    uint16_t port;
+    int is_tcp;
+
+    if (req->upgrade.base != NULL) {
+        return -1;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))) {
+        /* old-style CONNECT */
+        is_tcp = 1;
+    } else if (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        /* masque (draft 03); host and port are stored the same way as ordinary CONNECT
+         * TODO remove code once we drop support for draft-03 */
+        if (!handler->config.support_masque_draft_03) {
+            h2o_send_error_405(req, "Method Not Allowed", "Method Not Allowed", H2O_SEND_ERROR_KEEP_HEADERS);
+            return 0;
+        }
+        is_tcp = 0;
+    } else {
+        /* it is not the task of this handler to handle non-CONNECT requests */
+        return -1;
+    }
+
+    /* parse host and port from authority, unless it is handled above in the case of extended connect */
+    if (h2o_url_parse_hostport(req->authority.base, req->authority.len, &host, &port) == NULL || port == 0 || port == 65535) {
+        record_error(handler, req, NULL, "http_request_error", "invalid host:port", NULL);
+        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
+    }
+
+    return on_req_core((void *)handler, req, host, port, is_tcp, 1);
+}
+
+/**
+ * handles RFC9298 requests
+ */
+static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
+{
+    struct st_connect_handler_t *handler = (void *)_handler;
+    h2o_iovec_t host;
+    uint16_t port;
+
+    /* reject requests wo. upgrade: connect-udp */
+    if (!(req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))))
+        return -1;
+
+    /* check method */
+    if (!(req->version < 0x200 ? h2o_memis(req->method.base, req->method.len, H2O_STRLIT("GET"))
+                               : h2o_memis(req->method.base, req->method.len, H2O_STRLIT("CONNECT"))))
+        return -1;
+
+    /* masque (RFC 9298); parse host/port */
+    if (!masque_decode_hostport(&req->pool, req->path_normalized.base + req->pathconf->path.len,
+                                req->path_normalized.len - req->pathconf->path.len, &host, &port)) {
+        record_error(handler, req, NULL, "http_request_error", "invalid URI", NULL);
+        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
+    }
+
+    return on_req_core((void *)handler, req, host, port, 0, 0);
+}
+
+static void do_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                        size_t num_acl_entries, int (*on_req)(struct st_h2o_handler_t *self, h2o_req_t *req))
 {
     assert(config->max_buffer_size != 0);
 
@@ -980,6 +1103,18 @@ void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *con
     self->config = *config;
     self->acl.count = num_acl_entries;
     memcpy(self->acl.entries, acl_entries, sizeof(self->acl.entries[0]) * num_acl_entries);
+}
+
+void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                          size_t num_acl_entries)
+{
+    do_register(pathconf, config, acl_entries, num_acl_entries, on_req_classic_connect);
+}
+
+void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                              size_t num_acl_entries)
+{
+    do_register(pathconf, config, acl_entries, num_acl_entries, on_req_connect_udp);
 }
 
 const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)

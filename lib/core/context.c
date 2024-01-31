@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -110,6 +111,17 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
     ctx->proxy.spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->proxy.spare_pipes.pipes[0]) * config->proxy.max_spare_pipes);
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
+
+#ifdef __linux__
+    /* pre-fill the pipe cache at context init */
+    for (i = 0; i < config->proxy.max_spare_pipes; ++i) {
+        if (pipe2(ctx->proxy.spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        ctx->proxy.spare_pipes.count++;
+    }
+#endif
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);

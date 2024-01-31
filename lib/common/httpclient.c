@@ -243,8 +243,9 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     /* adjust selected protocol if the attempt is to create a tunnel */
     if (upgrade_to != NULL) {
-        /* upgrade other than to a CONNECT tunnel is supported only by H1 */
-        if (upgrade_to != h2o_httpclient_upgrade_to_connect)
+        /* TODO provide a knob to map each upgrade token to some, all, or no HTTP version. Until that is done, upgrade other than to
+         * a CONNECT and CONNECT-UDP tunnel is directed to H1. */
+        if (upgrade_to != h2o_httpclient_upgrade_to_connect && strcmp(upgrade_to, "connect-udp") != 0)
             selected_protocol = PROTOCOL_SELECTOR_H1;
     }
 

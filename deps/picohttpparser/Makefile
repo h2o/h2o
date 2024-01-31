@@ -25,14 +25,16 @@
 
 CC?=gcc
 PROVE?=prove
+CFLAGS=-Wall -fsanitize=address,undefined
+TEST_ENV="UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
 
 all:
 
 test: test-bin
-	$(PROVE) -v ./test-bin
+	env $(TEST_ENV) $(PROVE) -v ./test-bin
 
 test-bin: picohttpparser.c picotest/picotest.c test.c
-	$(CC) -Wall $(CFLAGS) $(LDFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 clean:
 	rm -f test-bin

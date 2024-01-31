@@ -52,6 +52,7 @@ enum {
     ELEMENT_TYPE_HOSTCONF,                      /* %v */
     ELEMENT_TYPE_IN_HEADER_TOKEN,               /* %{data.header_token}i */
     ELEMENT_TYPE_IN_HEADER_STRING,              /* %{data.name}i */
+    ELEMENT_TYPE_IN_HEADER_UPGRADE,             /* %{upgrade}i */
     ELEMENT_TYPE_OUT_HEADER_TOKEN,              /* %{data.header_token}o */
     ELEMENT_TYPE_OUT_HEADER_STRING,             /* %{data.name}o */
     ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED, /* %{data.header_token}o */
@@ -198,7 +199,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     token = h2o_lookup_token(name.base, name.len);
                     if (token != NULL) {
                         free(name.base);
-                        if (modifier == 'o' && token == H2O_TOKEN_SET_COOKIE) {
+                        if (modifier == 'i' && token == H2O_TOKEN_UPGRADE) {
+                            NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_UPGRADE);
+                        } else if (modifier == 'o' && token == H2O_TOKEN_SET_COOKIE) {
                             NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED);
                             LAST_ELEMENT()->data.header_token = token;
                         } else {
@@ -758,6 +761,12 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_IN_HEADER_STRING:
             EMIT_HEADER(&req->headers, 0, h2o_find_header_by_str, element->data.name.base, element->data.name.len);
+            break;
+        case ELEMENT_TYPE_IN_HEADER_UPGRADE:
+            if (req->upgrade.base == NULL)
+                goto EmitNull;
+            RESERVE(req->upgrade.len * unsafe_factor);
+            pos = append_unsafe_string(pos, req->upgrade.base, req->upgrade.len);
             break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN:
             EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 0, h2o_find_header,
