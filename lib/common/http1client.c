@@ -556,6 +556,14 @@ static void on_head(h2o_socket_t *sock, const char *err)
     h2o_buffer_consume(&sock->input, rlen);
     client->_socket_bytes_processed = client->sock->bytes_read - client->sock->input->size;
 
+    if (client->_expect_100_continue) {
+        /* we have suspended request body, let's start sending it.
+         * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634
+         */
+        client->_expect_100_continue = 0;
+        req_body_send(client);
+    }
+
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
     reader(client->sock, 0);
@@ -615,9 +623,6 @@ static void on_header_sent_wait_100(h2o_socket_t *sock, const char *err)
     if (client->state.res == STREAM_STATE_HEAD) {
         client->super._timeout.cb = on_head_first_byte_timeout;
         h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
-    } else if (client->_expect_100_continue) {
-        /* we already received response headers, and it didn't contain expect header. */
-        /* TODO: What should we do in this case? */
     }
 }
 
