@@ -590,7 +590,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                             return H2O_HTTP2_ERROR_PROTOCOL;
                         }
                         goto Next;
-                    } else if (token == H2O_TOKEN_HOST) {
+                    } else if (token == H2O_TOKEN_HOST && authority != NULL) {
                         /* HTTP2 allows the use of host header (in place of :authority) */
                         if (authority->base == NULL)
                             *authority = value;
