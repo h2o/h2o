@@ -835,11 +835,12 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
     if (props->expect_100_continue) {
-        if (client->proceed_req != NULL || body.len != 0) {
-            client->_expect_100_continue = 1;
-        } else {
+        if (client->proceed_req == NULL && body.len == 0) {
+            /* no body */
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
+            return;
         }
+        client->_expect_100_continue = 1;
     }
 
     assert(PTLS_ELEMENTSOF(reqbufs) - reqbufcnt >= 4); /* req_body_send_prepare could write to 4 additional elements */
