@@ -810,10 +810,10 @@ static int normalize_error_code(int err)
 }
 
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            h2o_iovec_t *datagram_flow_id, uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len,
-                            const char **err_desc)
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length,
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint8_t *outbuf, size_t *outbufsize,
+                            const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
@@ -821,9 +821,9 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
 
     if ((ret = parse_decode_context(qpack, &ctx, stream_id, &src, src_end)) != 0)
         return ret;
-    if ((ret =
-             h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, headers, pseudo_header_exists_map,
-                                     content_length, digests, datagram_flow_id, src, src_end - src, err_desc)) != 0) {
+    if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, protocol, headers,
+                                       pseudo_header_exists_map, content_length, digests, datagram_flow_id, src, src_end - src,
+                                       err_desc)) != 0) {
         /* bail out if the error is a hard error, otherwise build header ack then return */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return normalize_error_code(ret);
@@ -1274,8 +1274,8 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
 
 h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                       h2o_byte_vector_t *_encoder_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
-                                      h2o_iovec_t authority, h2o_iovec_t path, const h2o_header_t *headers, size_t num_headers,
-                                      h2o_iovec_t datagram_flow_id)
+                                      h2o_iovec_t authority, h2o_iovec_t path, h2o_iovec_t protocol, const h2o_header_t *headers,
+                                      size_t num_headers, h2o_iovec_t datagram_flow_id)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1283,8 +1283,9 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 
     /* pseudo headers */
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_method, H2O_TOKEN_METHOD, method);
-    int is_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT"));
-    if (!is_connect) {
+    /* CONNECT request that is not an RFC 9220 extended connect */
+    int old_style_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")) && protocol.base == NULL;
+    if (!old_style_connect) {
         if (scheme == &H2O_URL_SCHEME_HTTP) {
             flatten_static_indexed(&ctx, 22);
         } else if (scheme == &H2O_URL_SCHEME_HTTPS) {
@@ -1294,8 +1295,10 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
         }
     }
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_authority, H2O_TOKEN_AUTHORITY, authority);
-    if (!is_connect)
+    if (!old_style_connect)
         flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_path, H2O_TOKEN_PATH, path);
+    if (protocol.base != NULL)
+        flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_protocol, H2O_TOKEN_PROTOCOL, protocol);
 
     /* flatten headers */
     size_t i;

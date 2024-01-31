@@ -410,14 +410,14 @@ struct st_h2o_globalconf_t {
         /**
          * maximum number of HTTP2 streams to accept and advertise via HTTP2 SETTINGS.
          *
-         * See max_concurrent_requests_per_connection and max_concurrent_streaming_requests_per_connection below for more info on the
-         * actual number of requests that h2o is willing to process concurrently.
+         * See max_concurrent_requests_per_connection and max_concurrent_streaming_requests_per_connection below for more info on
+         * the actual number of requests that h2o is willing to process concurrently.
          */
         uint32_t max_streams;
         /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-         * H2O accepts at most `max_streams` requests over HTTP/2, but internally limits the number of in-flight requests to the value
-         * specified by this property in order to limit the resources allocated to a single connection.
+         * H2O accepts at most `max_streams` requests over HTTP/2, but internally limits the number of in-flight requests to the
+         * value specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;
         /**
@@ -1403,7 +1403,9 @@ struct st_h2o_req_t {
     h2o_proceed_req_cb proceed_req;
 
     /**
-     * Callbacks used for forwarding datagrams. Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
+     * Callbacks for forwarding HTTP/3 Datagrams (RFC 9297).
+     * As these callbacks act at the RFC 9297 layer, masque Context IDs (RFC 9298) will be part of the *payload* being exchanged.
+     * Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
      */
     struct {
         h2o_forward_datagram_cb write_, read_;
@@ -2210,6 +2212,7 @@ typedef struct st_h2o_proxy_config_vars_t {
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;
+    unsigned support_masque_draft_03 : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */
@@ -2276,10 +2279,15 @@ typedef struct st_h2o_connect_acl_entry_t {
 } h2o_connect_acl_entry_t;
 
 /**
- * registers the connect handler to the context
+ * registers the classic connect handler to the context
  */
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
                           size_t num_acl_entries);
+/**
+ * registers the connect-udp handler (RFC 9298) to the context
+ */
+void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                              size_t num_acl_entries);
 /**
  * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
  * being returned.

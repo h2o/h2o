@@ -34,6 +34,7 @@
 #define H2O_HTTP2_SETTINGS_INITIAL_WINDOW_SIZE 4
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
+#define H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
@@ -109,7 +110,7 @@ size_t h2o_hpack_flatten_response(h2o_buffer_t **buf, h2o_hpack_header_table_t *
                                   uint32_t stream_id, size_t max_frame_size, int status, const h2o_header_t *headers,
                                   size_t num_headers, const h2o_iovec_t *server_name, size_t content_length, int is_end_stream);
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
-                               uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url,
+                               uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_iovec_t protocol,
                                const h2o_header_t *headers, size_t num_headers, int is_end_stream);
 void h2o_hpack_flatten_trailers(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
                                 uint32_t stream_id, size_t max_frame_size, const h2o_header_t *headers, size_t num_headers);

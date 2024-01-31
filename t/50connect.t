@@ -124,7 +124,10 @@ subtest "h2o-httpclient" => sub {
             or die "failed to open $tempdir/out:$!";
         do { local $/; <$fh> };
     };
-    for (['h1', 'http', $server->{port}, ''], ['h1s', 'https', $server->{tls_port}, ''], ['h3', 'https', $quic_port, '-3 100']) {
+    for (['h1', 'http', $server->{port}, ''],
+         ['h1s', 'https', $server->{tls_port}, ''],
+         ['h2', 'https', $server->{tls_port}, '-2 100'],
+         ['h3', 'https', $quic_port, '-3 100']) {
         my ($name, $scheme, $port, $opts) = @$_;
         subtest $name => sub {
             subtest "basic" => sub {

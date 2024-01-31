@@ -342,7 +342,8 @@ void h2o_dispose_request(h2o_req_t *req)
 int h2o_req_validate_pseudo_headers(h2o_req_t *req)
 {
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE)
+        /* The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
+        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE && req->input.scheme != &H2O_URL_SCHEME_HTTPS)
             return 0;
         if (!h2o_memis(req->input.path.base, req->input.path.len, H2O_STRLIT("/")))
             return 0;

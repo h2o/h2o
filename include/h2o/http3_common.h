@@ -49,7 +49,9 @@
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
-#define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x276
+#define H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
+#define H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03 0x276
+#define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x33
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -529,7 +531,8 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
  */
 static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
 /**
- * sends out H3 datagrams
+ * Sends H3 datagrams (RFC 9297).
+ * To send RFC 9298-style UDP packets, callers should set Context ID (0) as part of the payload.
  */
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams);
 /**
