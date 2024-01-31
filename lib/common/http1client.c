@@ -723,7 +723,7 @@ static void on_send_timeout(h2o_timer_t *entry)
 }
 
 static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_t method, const h2o_url_t *url,
-                                 h2o_iovec_t connection, const h2o_header_t *headers, size_t num_headers)
+                                 const h2o_httpclient_properties_t *props, const h2o_header_t *headers, size_t num_headers)
 {
     h2o_iovec_t buf;
     size_t offset = 0;
@@ -779,8 +779,12 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
     buf.base[offset++] = '\n';
     assert(offset <= buf.len);
 
-    if (connection.base != NULL) {
-        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_CONNECTION->buf, NULL, connection};
+    if (props->connection_header->base != NULL) {
+        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_CONNECTION->buf, NULL, *props->connection_header};
+        APPEND_HEADER(&h);
+    }
+    if (props->expect_100_continue) {
+        h2o_header_t h = (h2o_header_t){&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
         APPEND_HEADER(&h);
     }
 
@@ -810,27 +814,18 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     size_t reqbufcnt = 0;
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
-    h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
+    h2o_iovec_t header = build_request(client, method, url, props, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
     client->super.bytes_written.header = header.len;
 
     client->_is_chunked = *props->chunked;
     client->_method_is_head = h2o_memis(method.base, method.len, H2O_STRLIT("HEAD"));
 
-    if (client->proceed_req != NULL || body.len != 0) {
-        /* try to find expect: 100-continue */
-        for (const h2o_header_t *h = headers, *h_end = h + num_headers; h != h_end; ++h) {
-            if (h2o_iovec_is_token(h->name)) {
-                const h2o_token_t *token = (void *)h->name;
-                if (token == H2O_TOKEN_EXPECT) {
-                    if (h2o_lcstris(h->value.base, h->value.len, H2O_STRLIT("100-continue"))) {
-                        client->_expect_100_continue = 1;
-                    } else {
-                        // just ignore instead of erroring out
-                    }
-                    break;
-                }
-            }
+    if (props->expect_100_continue) {
+        if (client->proceed_req != NULL || body.len != 0) {
+            client->_expect_100_continue = 1;
+        } else {
+            on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
         }
     }
 

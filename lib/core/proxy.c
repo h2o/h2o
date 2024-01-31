@@ -248,7 +248,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     }
 
     if (expect_100_continue) {
-        h2o_add_header(&req->pool, headers, H2O_TOKEN_EXPECT, NULL, H2O_STRLIT("100-continue"));
+        props->expect_100_continue = 1;
     }
 
     if (cookie_values.size == 1) {
