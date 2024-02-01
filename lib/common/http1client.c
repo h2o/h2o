@@ -458,9 +458,13 @@ static void on_head(h2o_socket_t *sock, const char *err)
         if (!(100 <= http_status && http_status <= 199 && http_status != 101))
             break;
 
-        if (http_status == 100 && client->_use_expect) {
-            client->_use_expect = 0;
-            req_body_send(client);
+        }
+
+        if (http_status == 100) {
+            if (client->_use_expect) {
+                client->_use_expect = 0;
+                req_body_send(client);
+            }
         } else if (client->super.informational_cb != NULL &&
                    client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                                   num_headers) != 0) {
