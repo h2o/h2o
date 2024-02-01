@@ -68,8 +68,8 @@ typedef struct st_h2o_httpclient_properties_t {
      */
     unsigned prefer_pipe_reader : 1;
     /**
-     * When the value is 1, httpclient sends 'expect: 100-continue' header and suspend sending request body
-     * until it sees 100 continue response
+     * When the value is 1, httpclient sends 'expect: 100-continue' header and suspends sending request body
+     * until it sees 100-continue response
      */
     unsigned use_expect : 1;
 } h2o_httpclient_properties_t;
