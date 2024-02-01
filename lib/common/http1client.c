@@ -468,7 +468,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
             }
             if (http_status >= 200)
                 break;
-        } else if (client->super.informational_cb != NULL &&
+        }
+        if (client->super.informational_cb != NULL &&
                    client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                                   num_headers) != 0) {
             close_client(client);
