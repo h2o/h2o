@@ -16,7 +16,7 @@ hosts:
   default:
     paths:
       /h1:
-        proxy.expect-100-continue: ON
+        proxy.expect: ON
         proxy.reverse.url: http://127.0.0.1:$h1_upstream_port
 EOT
 
