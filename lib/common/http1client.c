@@ -455,22 +455,26 @@ static void on_head(h2o_socket_t *sock, const char *err)
             headers[i].flags = (h2o_header_flags_t){0};
         }
 
-        if (!(100 <= http_status && http_status <= 199 && http_status != 101))
+        if (http_status == 101)
             break;
 
-        }
-
-        if (http_status == 100) {
+        if (http_status == 100 || http_status >= 200) {
             if (client->_use_expect) {
+                /* we have suspended request body, let's start sending it.
+                 * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634
+                 */
                 client->_use_expect = 0;
                 req_body_send(client);
             }
+            if (http_status >= 200)
+                break;
         } else if (client->super.informational_cb != NULL &&
                    client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                                   num_headers) != 0) {
             close_client(client);
             return;
         }
+
         h2o_buffer_consume(&client->sock->input, rlen);
         if (client->sock->input->size == 0) {
             if (!h2o_timer_is_linked(&client->super._timeout)) {
@@ -559,14 +563,6 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     h2o_buffer_consume(&sock->input, rlen);
     client->_socket_bytes_processed = client->sock->bytes_read - client->sock->input->size;
-
-    if (client->_use_expect) {
-        /* we have suspended request body, let's start sending it.
-         * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634
-         */
-        client->_use_expect = 0;
-        req_body_send(client);
-    }
 
     client->super._timeout.cb = on_body_timeout;
     h2o_socket_read_start(sock, reader);
