@@ -48,7 +48,6 @@ struct rp_generator_t {
     unsigned req_done : 1;
     unsigned res_done : 1;
     unsigned pipe_inflight : 1;
-    unsigned use_expect : 1;
     int *generator_disposed;
 };
 
@@ -805,7 +804,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
-    int use_proxy_protocol = 0, reprocess_if_too_early = 0;
+    int use_proxy_protocol = 0, use_expect = 0, reprocess_if_too_early = 0;
 
     copy_stats(self);
 
@@ -820,7 +819,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
-        self->use_expect = req->overrides->proxy_use_expect;
+        use_expect = req->overrides->proxy_use_expect;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -840,7 +839,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
                   !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
-                  use_proxy_protocol, self->use_expect, &reprocess_if_too_early, origin);
+                  use_proxy_protocol, use_expect, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 
@@ -913,7 +912,6 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->body_bytes_sent = 0;
     self->pipe_reader.fds[0] = -1;
     self->pipe_inflight = 0;
-    self->use_expect = 0;
     self->req_done = 0;
     self->res_done = 0;
 
