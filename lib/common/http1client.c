@@ -828,12 +828,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
 
-    if (props->use_expect) {
-        if (client->proceed_req == NULL && body.len == 0) {
-            /* no body */
-            on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
-            return;
-        }
+    if (props->use_expect && (client->proceed_req != NULL || body.len != 0)) {
         client->_use_expect = 1; /* this must be set before calling build_request */
     }
 

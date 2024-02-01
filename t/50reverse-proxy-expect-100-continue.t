@@ -108,6 +108,35 @@ subtest 'h1 upstream' => sub {
         
         is $cout, $content;
     };
+
+    subtest 'no body' => sub {
+        my $c = spawn_forked(sub {
+            print `curl -X GET -s http://127.0.0.1:$server->{port}/h1`;
+        });
+
+        my $client = $upstream->accept;
+        my $chunk;
+
+        note 'read header';
+        my $header = '';
+        while ($client->sysread($chunk, 1) > 0) {
+            $header .= $chunk;
+            last if $header =~ /\r\n\r\n$/;
+        }
+        unlike $header, qr/expect: *100-continue/i;
+
+        my $content = "Hello, you sent no body";
+        $client->syswrite(join("\r\n", (
+            "HTTP/1.1 200 OK",
+            "Content-Length: @{[length($content)]}",
+            "", ""
+        )) . $content);
+
+        my ($cout) = $c->{wait}->();
+
+        is $cout, $content;
+    };
+
 };
 
 subtest 'h2 upstream' => sub {
