@@ -141,7 +141,7 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
                           h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to, int use_proxy_protocol,
-                          int use_expect, int *reprocess_if_too_early, h2o_url_t *origin)
+                          int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
     char remote_addr[NI_MAXHOST];
@@ -249,10 +249,6 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         *reprocess_if_too_early = 0;
     } else if (*reprocess_if_too_early) {
         h2o_add_header(&req->pool, headers, H2O_TOKEN_EARLY_DATA, NULL, H2O_STRLIT("1"));
-    }
-
-    if (use_expect) {
-        props->use_expect = 1;
     }
 
     if (cookie_values.size == 1) {
@@ -803,7 +799,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 {
     struct rp_generator_t *self = client->data;
     h2o_req_t *req = self->src_req;
-    int use_proxy_protocol = 0, use_expect = 0, reprocess_if_too_early = 0;
+    int use_proxy_protocol = 0, reprocess_if_too_early = 0;
 
     copy_stats(self);
 
@@ -818,7 +814,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
-        use_expect = req->overrides->proxy_use_expect;
+        props->use_expect = req->overrides->proxy_use_expect;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -838,7 +834,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
     h2o_headers_t headers_vec = (h2o_headers_t){NULL};
     build_request(req, method, url, &headers_vec, props,
                   !use_proxy_protocol && h2o_socketpool_can_keepalive(client->connpool->socketpool), self->client->upgrade_to,
-                  use_proxy_protocol, use_expect, &reprocess_if_too_early, origin);
+                  use_proxy_protocol, &reprocess_if_too_early, origin);
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
 
