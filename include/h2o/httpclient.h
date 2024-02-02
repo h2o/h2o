@@ -252,7 +252,7 @@ struct st_h2o_httpclient_t {
      */
     void *data;
     /**
-     * optional callback to receive informational response(s)
+     * optional callback to receive informational response(s); 101 is considered final and is never delivered through this callback
      */
     h2o_httpclient_informational_cb informational_cb;
     /**
