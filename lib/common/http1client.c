@@ -455,23 +455,23 @@ static void on_head(h2o_socket_t *sock, const char *err)
             headers[i].flags = (h2o_header_flags_t){0};
         }
 
-        if (http_status == 101)
+        if (http_status == 101) {
+            assert(!client->_use_expect);
             break;
-
-        if (http_status == 100 || http_status >= 200) {
+        } else if (http_status == 100 || http_status >= 200) {
+            /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
+             * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634. */
             if (client->_use_expect) {
-                /* we have suspended request body, let's start sending it.
-                 * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634
-                 */
                 client->_use_expect = 0;
                 req_body_send(client);
             }
             if (http_status >= 200)
                 break;
         }
+        assert(http_status <= 199);
         if (client->super.informational_cb != NULL &&
-                   client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
-                                                  num_headers) != 0) {
+            client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
+                                           num_headers) != 0) {
             close_client(client);
             return;
         }
