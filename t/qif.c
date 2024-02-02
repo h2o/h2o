@@ -237,8 +237,8 @@ static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
             const char *err_desc = NULL;
             if ((ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &headers,
-                                               &pseudo_header_exists_map, &content_length, &expect, NULL, header_ack, &header_ack_len, buf,
-                                               chunk_size, &err_desc)) != 0) {
+                                               &pseudo_header_exists_map, &content_length, &expect, NULL, header_ack,
+                                               &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
                 fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
                 return 1;
             }

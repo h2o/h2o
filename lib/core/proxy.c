@@ -140,9 +140,8 @@ static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
 }
 
 static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h2o_headers_t *headers,
-                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to,
-                          int use_proxy_protocol, int use_expect,
-                          int *reprocess_if_too_early, h2o_url_t *origin)
+                          h2o_httpclient_properties_t *props, int keepalive, const char *upgrade_to, int use_proxy_protocol,
+                          int use_expect, int *reprocess_if_too_early, h2o_url_t *origin)
 {
     size_t remote_addr_len = SIZE_MAX;
     char remote_addr[NI_MAXHOST];
