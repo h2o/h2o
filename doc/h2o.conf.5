@@ -1947,6 +1947,19 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 .RE
 .RE
 
+.SS http2-max-streams
+  Maximum number of streams to advertise via HTTP2 SETTINGS_MAX_CONCURRENT_STREAMS.
+
+
+.PP
+
+
+ Limits the number of active requests that the proxy will accept on a client connection.  Also see "http2-max-concurrent-requests-per-connection" which controls the number of requests that the proxy will process concurrently.
+
+
+.RE
+.RE
+
 .SS http2-max-concurrent-requests-per-connection
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
 
