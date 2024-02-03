@@ -833,9 +833,8 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
 
-    if (props->use_expect && (client->proceed_req != NULL || body.len != 0)) {
+    if (props->use_expect && (client->proceed_req != NULL || body.len != 0) && client->super.upgrade_to == NULL)
         client->_use_expect = 1; /* this must be set before calling build_request */
-    }
 
     h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
