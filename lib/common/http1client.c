@@ -456,7 +456,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
 
         if (http_status == 101) {
-            assert(!client->_use_expect);
+            if (client->_use_expect) {
+                /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
+                on_error(client, h2o_httpclient_error_unexpected_101);
+                return;
+            }
             break;
         } else if (http_status == 100 || http_status >= 200) {
             /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
