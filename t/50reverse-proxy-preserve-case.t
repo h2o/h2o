@@ -48,7 +48,7 @@ EOT
 
 run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
-        open(CURL, "$curl -HUpper-Case:TheValue -kv $proto://127.0.0.1:$port/ 2>&1 |");
+        open(CURL, "$curl -HUpper-Case:TheValue -sSfkv $proto://127.0.0.1:$port/ 2>&1 |");
         my $forwarded = handler_curl($upstream);
         my @lines;
         while (<CURL>) {
