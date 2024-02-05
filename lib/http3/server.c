@@ -896,8 +896,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     size_t i;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK ||
-           stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     assert(delta != 0);
     assert(stream->sendbuf.vecs.size != 0);
 
@@ -930,8 +930,9 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK ||
-                   stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
+            assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+                       stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS ||
+                   stream->proceed_requested);
         } else {
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
@@ -944,8 +945,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK ||
-           stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     uint8_t *dst = _dst, *dst_end = dst + *len;
     size_t vec_index = 0;
@@ -1506,6 +1507,9 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (is_connect)
         return handle_input_expect_headers_process_connect(stream, datagram_flow_id, err_desc);
 
+    /* change state */
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK, 0);
+
     /* handle expect: 100-continue */
     if (expect.base != NULL) {
         if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
@@ -1515,9 +1519,6 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         stream->req.res.status = 100;
         h2o_send_informational(&stream->req);
     }
-
-    /* change state */
-    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK, 0);
 
     return 0;
 }
