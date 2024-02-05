@@ -154,10 +154,10 @@ hosts:
           end
 EOT
     });
-    
+
     run_with_curl($server, sub {
         my ($proto, $port, $curl_cmd) = @_;
-        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+        $curl_cmd .= ' --silent --show-error --dump-header /dev/stderr';
         subtest "connection-error" => sub {
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/index.txt");
             like $headers, qr{HTTP/[^ ]+ 500\s}is;
@@ -197,29 +197,34 @@ EOT
                 for my $i (0..15) {
                     subtest "cl=$i" => sub {
                         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
+                        like $headers, qr{^HTTP/[^ ]+ 200\b}ims;
+                        like $headers, qr{^content-length:\s*$i\b}ims;
                         is $body, substr "abcdefghijklmno", 0, $i;
                     }
                 };
                 for my $i (16..30) {
                     subtest "cl=$i" => sub {
                         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i");
-                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*15\r}is;
+                        like $headers, qr{^HTTP/[^ ]+ 200\b}ims;
+                        like $headers, qr{^content-length:\s*15\b}ims;
                         is $body, "abcdefghijklmno";
                     }
                 };
             };
             subtest "chunked" => sub {
+                local $TODO = "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
                 for my $i (0..30) {
                     subtest "cl=$i" => sub {
                         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
-                        like $headers, qr{^HTTP/[^ ]+ 200\s.*\ncontent-length:\s*$i\r}is;
+                        like $headers, qr{^HTTP/[^ ]+ 200\b}ims;
+                        like $headers, qr{^content-length:\s*$i\b}ims;
                         is $body, substr "abcdefghijklmno", 0, $i;
                     }
                 };
             };
         };
         subtest "esi" => sub {
+            local $TODO = "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "Hello to the world, from H2O!\n";
@@ -375,7 +380,7 @@ EOT
 
     run_with_curl($server, sub {
         my ($proto, $port, $curl_cmd) = @_;
-        $curl_cmd .= ' --silent --dump-header /dev/stderr';
+        $curl_cmd .= ' --silent --show-error --dump-header /dev/stderr';
 
         subtest "no content" => sub {
             my ($headers, $body) = run_prog("$curl_cmd -m 1 $proto://127.0.0.1:$port/no-content");
@@ -411,7 +416,7 @@ hosts:
           }
 EOT
     };
-    my $curl = 'curl --silent --dump-header /dev/stderr';
+    my $curl = 'curl --silent --show-error --dump-header /dev/stderr';
 
     subtest 'on' => sub {
         subtest "default" => sub {
@@ -513,7 +518,7 @@ EOT
 
         my $query = $chunked ? '?chunked' : '';
         my $url = "http://127.0.0.1:$server->{port}$path$query";
-        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr $url $url");
+        my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr $url $url");
         undef $server->{guard}; # wait until the log gets emitted
         my @log = do {
             open my $fh, "<", "$tempdir/access_log" or die "failed to open access_log:$!";
@@ -562,7 +567,7 @@ hosts:
           }
 EOT
 
-        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         like $headers, qr{HTTP/[^ ]+ 504\s}is;
         is $body, 'client warning: connection timeout';
     };
@@ -587,7 +592,7 @@ hosts:
           }
 EOT
 
-        my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+        my ($headers, $body) = run_prog("curl --silent --show-error --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
         like $headers, qr{HTTP/[^ ]+ 504\s}is;
         is $body, 'client warning: first byte timeout';
     };
