@@ -191,14 +191,14 @@ EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status&link=$link'`;
-            if ($curl =~ /http2/) {
+            if ($curl =~ /--http[23]/) {
                 like $resp, qr{^HTTP/[\d.]+ $status}mi;
             } else {
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
             }
         });
     };
-    
+
     subtest 'none' => sub {
         my $server = spawn_h2o(<< "EOT");
 send-informational: none
