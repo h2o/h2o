@@ -116,7 +116,8 @@ my $server;
 
 sub spawn_with {
     my ($opts, $cb) = @_;
-    $server = spawn_h2o(<< "EOT");
+    # FIXME server stalls if H3 is enabled and ticket encryption key cannot be read from file?
+    $server = spawn_h2o({conf => << "EOT", disable_quic => 1});
 ssl-session-resumption:
 $opts
 hosts:
