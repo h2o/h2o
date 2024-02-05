@@ -46,6 +46,7 @@ our @EXPORT = qw(
     openssl_can_negotiate
     openssl_supports_tls13
     curl_supports_http2
+    curl_supports_http3
     run_with_curl
     h2get_exists
     run_with_h2get
@@ -478,6 +479,10 @@ sub curl_supports_http2 {
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
 }
 
+sub curl_supports_http3 {
+    return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
+}
+
 sub run_with_curl {
     my ($server, $cb) = @_;
     plan skip_all => "curl not found"
@@ -495,6 +500,13 @@ sub run_with_curl {
         plan skip_all => "curl does not support HTTP/2"
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
+    };
+    subtest "https/3" => sub {
+        plan skip_all => "curl does not support HTTP/3"
+            unless curl_supports_http3();
+        plan skip_all => "\$server does not have quic_port set"
+            unless $server->{quic_port};
+        $cb->("https", $server->{quic_port}, "curl --insecure --http3", 768);
     };
 }
 
