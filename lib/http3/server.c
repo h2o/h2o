@@ -930,8 +930,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
-                       stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS ||
+            assert((H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+                    stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) ||
                    stream->proceed_requested);
         } else {
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
