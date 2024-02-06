@@ -87,6 +87,7 @@ hosts:
                 end
                 def each(&b)
                   \@a.each(&b)
+                  sleep 0.1
                 end
               end
               body = T.new(body)
@@ -212,7 +213,6 @@ EOT
                 };
             };
             subtest "chunked" => sub {
-                local $TODO = "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
                 for my $i (0..30) {
                     subtest "cl=$i" => sub {
                         my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/cl/$i/chunked");
