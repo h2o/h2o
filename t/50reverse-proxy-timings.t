@@ -95,8 +95,12 @@ run_with_curl($server, sub {
         within_eps($st, 'proxy.connect', 0, 10);
         within_eps($st, 'proxy.request', 0);
         within_eps($st, 'proxy.process', 100);
-        within_eps($st, 'proxy.response', 100);
-        within_eps($st, 'proxy.total', 200);
+        subtest "trailer" => sub {
+            plan skip_all => "no support for trailers with server-timing in h3 (yet)"
+                if $curl =~ /--http3/;
+            within_eps($st, 'proxy.response', 100);
+            within_eps($st, 'proxy.total', 200);
+        };
     };
 });
 
