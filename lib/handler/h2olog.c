@@ -23,8 +23,14 @@
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
+    struct sockaddr_storage local;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
+
+    if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX)) {
+        h2o_send_error_403(req, "Access Forbidden", "h2olog is only accessible via UNIX socket", 0);
+        return 0;
+    }
 
     if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
