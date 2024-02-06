@@ -36,6 +36,8 @@ my $curl_fail = sub {
 subtest "basic", sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
+        plan skip_all => "curl does not support proxying over HTTP/3"
+            if $curl =~ /--http3/;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error http://127.0.0.1:$origin_port/echo 2>&1`;
         like $content, $curl_success, "Connect got a 200 response to CONNECT";
         like $content, qr{proxy-status: h2o/test; next-hop=127\.0\.0\.1}i;
@@ -47,6 +49,8 @@ subtest "basic", sub {
 subtest "acl" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
+        plan skip_all => "curl does not support proxying over HTTP/3"
+            if $curl =~ /--http3/;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://8.8.8.8/ 2>&1`;
         like $content, qr{proxy-status: h2o/test; error=destination_ip_prohibited}i;
         like $content, $curl_fail->(403);
@@ -56,6 +60,8 @@ subtest "acl" => sub {
 subtest "nxdomain" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
+        plan skip_all => "curl does not support proxying over HTTP/3"
+            if $curl =~ /--http3/;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.example.org/ 2>&1`;
         like $content, qr{proxy-status: h2o/test; error=dns_error; rcode=NXDOMAIN}i;
         like $content, $curl_fail->(502);
@@ -66,6 +72,8 @@ subtest "nxdomain" => sub {
 subtest "refused" => sub {
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
+        plan skip_all => "curl does not support proxying over HTTP/3"
+            if $curl =~ /--http3/;
         my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://127.0.0.1:1/ 2>&1`;
         like $content, qr{proxy-status: h2o/test; error=connection_refused; next-hop=127\.0\.0\.1}i;
         like $content, $curl_fail->(502);

@@ -32,9 +32,9 @@ EOT
                 is($data->{streams}->{1}->{state}, 'HALF_CLOSED_REMOTE');
             };
         } else {
-            subtest "return_404_when_http1" => sub {
+            subtest "return_404_unless_h2" => sub {
                 my ($headers, $body) = run_prog("$curl_cmd --dump-header /dev/stderr $url");
-                like($headers, qr!^HTTP/1.1 404!);
+                like($headers, qr!^HTTP/[\d\.]+ 404!);
             };
         }
     });

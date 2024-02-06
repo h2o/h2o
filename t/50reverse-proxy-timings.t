@@ -64,6 +64,8 @@ EOT
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
 
+    local $TODO = "HTTP/3 is not yet supported" if $curl =~ /--http3/;
+
     open(CURL, "$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/ |");
 
     do_upstream($upstream);

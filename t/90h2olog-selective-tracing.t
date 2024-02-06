@@ -32,7 +32,6 @@ unless ($ENV{DTRACE_TESTS})  {
 unlink("/sys/fs/bpf/h2o_return");
 
 sub spawn_my_h2o {
-  my($quic_port) = @_;
   return spawn_h2o({
     opts => [qw(--mode=worker)],
     user => scalar(getpwuid($ENV{SUDO_UID})),
@@ -44,12 +43,6 @@ num-threads: 1
 capabilities:
   - CAP_SYS_ADMIN
 usdt-selective-tracing: ON
-listen:
-  type: quic
-  port: $quic_port
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -81,13 +74,7 @@ EOT
   pass "h2olog has startded successfully";
 };
 
-
-my $quic_port = empty_port({
-    host  => "127.0.0.1",
-    proto => "udp",
-});
-
-my $server = spawn_my_h2o($quic_port);
+my $server = spawn_my_h2o();
 
 subtest "h2olog -S=1.00", sub {
   my $tracer = H2ologTracer->new({
@@ -107,7 +94,7 @@ subtest "h2olog -S=1.00", sub {
     ok scalar(grep { $_->{type} eq "h1-accept" } @logs), "h1-accept has been logged";
   };
   subtest "QUIC", sub {
-    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
     my $trace;
@@ -141,7 +128,7 @@ subtest "h2olog -S=0.00", sub {
   };
 
   subtest "QUIC", sub {
-    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -174,7 +161,7 @@ subtest "h2olog -A=127.0.0.2", sub {
   });
 
   subtest "with non-matched IP address", sub {
-    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -236,7 +223,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
   });
 
   subtest "with non-matched domain name", sub {
-    my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -262,7 +249,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
   };
 
   subtest "with matched domain name", sub {
-    my ($headers) = run_prog("$client_prog -3 https://localhost.examp1e.net:$quic_port/");
+    my ($headers) = run_prog("$client_prog -3 100 https://localhost.examp1e.net:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -293,7 +280,7 @@ subtest "multiple h2olog with sampling filters", sub {
     args => ["-S", "0.0"],
   });
 
-  my ($headers) = run_prog("$client_prog -3 https://127.0.0.1:$quic_port/");
+  my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my($trace1, $trace2);
@@ -315,14 +302,14 @@ undef $server;
 subtest "h2o_return exists", sub {
   ok -f "/sys/fs/bpf/h2o_return", "h2o_return does exist";
 
-  my $server = spawn_my_h2o($quic_port);
+  my $server = spawn_my_h2o();
 
   my $tracer = H2ologTracer->new({
     pid => $server->{pid},
     args => ["-S", "0.0"],
   });
 
-  my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$quic_port/");
+  my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
   my $trace;
