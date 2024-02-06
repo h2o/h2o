@@ -67,6 +67,11 @@ typedef struct st_h2o_httpclient_properties_t {
      * defaults to false
      */
     unsigned prefer_pipe_reader : 1;
+    /**
+     * When the value is 1, httpclient sends 'expect: 100-continue' header and suspends sending request body
+     * until it sees 100-continue response
+     */
+    unsigned use_expect : 1;
 } h2o_httpclient_properties_t;
 
 typedef struct st_h2o_httpclient_pipe_reader_t h2o_httpclient_pipe_reader_t;
@@ -247,7 +252,7 @@ struct st_h2o_httpclient_t {
      */
     void *data;
     /**
-     * optional callback to receive informational response(s)
+     * optional callback to receive informational response(s); 101 is considered final and is never delivered through this callback
      */
     h2o_httpclient_informational_cb informational_cb;
     /**
@@ -378,6 +383,8 @@ extern const char h2o_httpclient_error_http1_parse_failed[];
 extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 extern const char h2o_httpclient_error_malformed_frame[];
+extern const char h2o_httpclient_error_unexpected_101[];
+
 
 extern const char h2o_httpclient_upgrade_to_connect[];
 

@@ -52,6 +52,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->client_ctx = handler_ctx->client_ctx;
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
+    overrides->proxy_use_expect = self->config.use_expect;
     overrides->forward_close_connection = self->config.forward_close_connection;
 
     /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be

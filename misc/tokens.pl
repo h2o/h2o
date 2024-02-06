@@ -253,7 +253,7 @@ __DATA__
 32 0 0 0 0 0 1 0 cookie
 33 0 0 0 0 0 0 1 date
 34 0 0 0 0 0 0 0 etag
-35 0 0 1 0 0 0 1 expect
+35 0 0 1 1 0 0 1 expect
 36 0 0 0 0 0 0 0 expires
 37 0 0 0 0 0 0 1 from
 38 0 0 1 1 0 0 0 host

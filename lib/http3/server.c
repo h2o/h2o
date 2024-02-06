@@ -896,7 +896,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     size_t i;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     assert(delta != 0);
     assert(stream->sendbuf.vecs.size != 0);
 
@@ -929,7 +930,9 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
+            assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+                       stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS ||
+                   stream->proceed_requested);
         } else {
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
@@ -942,7 +945,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     uint8_t *dst = _dst, *dst_end = dst + *len;
     size_t vec_index = 0;
@@ -1374,6 +1378,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
     int header_exists_map = 0, ret;
+    h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
     h2o_iovec_t datagram_flow_id_field = {};
     uint64_t datagram_flow_id = UINT64_MAX;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
@@ -1405,7 +1410,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, &datagram_flow_id_field,
+                                       &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
                                        header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
@@ -1504,6 +1509,16 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     /* change state */
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK, 0);
+
+    /* handle expect: 100-continue */
+    if (expect.base != NULL) {
+        if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
+            return handle_input_expect_headers_send_http_error(stream, h2o_send_error_417, "Expectation Failed",
+                                                               "unknown expectation", err_desc);
+        }
+        stream->req.res.status = 100;
+        h2o_send_informational(&stream->req);
+    }
 
     return 0;
 }
