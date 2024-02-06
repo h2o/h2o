@@ -64,8 +64,6 @@ EOT
 run_with_curl($server, sub {
     my ($proto, $port, $curl) = @_;
 
-    local $TODO = "HTTP/3 is not yet supported" if $curl =~ /--http3/;
-
     open(CURL, "$curl --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/ |");
 
     do_upstream($upstream);
@@ -88,7 +86,10 @@ run_with_curl($server, sub {
     };
 
     subtest 'server-timing' => sub {
-        like $resp, qr/^trailer: server-timing/mi;
+        my $has_trailers = $curl !~ /--http3/;
+        if ($has_trailers) {
+            like $resp, qr/^trailer: server-timing/mi;
+        }
         my $st = +{};
         while ($resp =~ /^server-timing: ([^\r\n]+)/mig) {
             $st = +{ %$st, map { split ('; dur=', $_) } split(', ', $1) };
@@ -97,8 +98,10 @@ run_with_curl($server, sub {
         within_eps($st, 'proxy.connect', 0, 10);
         within_eps($st, 'proxy.request', 0);
         within_eps($st, 'proxy.process', 100);
-        within_eps($st, 'proxy.response', 100);
-        within_eps($st, 'proxy.total', 200);
+        if ($has_trailers) {
+            within_eps($st, 'proxy.response', 100);
+            within_eps($st, 'proxy.total', 200);
+        }
     };
 });
 
