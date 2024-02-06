@@ -856,27 +856,23 @@ error-log
 .RE
 
 .SS h2olog
-Settings for h2olog(1).
+Registers a h2olog handler for given host, under path /.well-known/h2olog. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.
 
 .PP
 
-.PP
-.BR Example:\ 
-Configure a UNIX domain socket for h2olog
-.PP
-.nf
-.RS
-h2olog:
-  path: /path/to/h2olog.sock # required
-  appdata: ON # optional
-  owner: h2o # optional
-  group: h2o # optional
-  permission: 666 # optional
-  sndbuf: 65536 # optional
 
-.RE
-.fi
-.PP
+Users can use the h2olog command to gather information through this endpoint.
+
+
+This directive takes one of the following three arguments:
+
+off
+The h2olog endpoint is disabled.
+on
+The h2olog endpoint is enabled, but only information to gather performance data will be emitted.
+appdata
+The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).
+
 
 
 .RE

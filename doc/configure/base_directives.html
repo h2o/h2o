@@ -658,25 +658,29 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 <dt>Description:</dt>
 <dd>
 <p>
-Settings for h2olog(1).
+Registers a h2olog handler for given host, under path <code>/.well-known/h2olog</code>. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.
 </p>
 
-<div class="example">
-<div class="caption">Example. Configure a UNIX domain socket for h2olog</div>
-<pre><code>h2olog:
-  path: /path/to/h2olog.sock # required
-  appdata: ON # optional
-  owner: h2o # optional
-  group: h2o # optional
-  permission: 666 # optional
-  sndbuf: 65536 # optional
-</code></pre>
-</div>
-
+<p>
+Users can use the <code>h2olog</code> command to gather information through this endpoint.
+</p>
+<p>
+This directive takes one of the following three arguments:
+<dl>
+<dt>off</dt>
+<dd>The h2olog endpoint is disabled.</dt>
+<dt>on</dt>
+<dd>The h2olog endpoint is enabled, but only information to gather performance data will be emitted.</dd>
+<dt>appdata</dt>
+<dd>The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).</dd>
+</dl>
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global</dd>
+<dd>host</dd>
+<dt>Default:</dt>
+<dd><code><pre>h2olog: OFF</pre></code>
 </dl>
 
 <div id="handshake-timeout" class="directive-head">
