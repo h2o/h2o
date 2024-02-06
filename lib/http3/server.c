@@ -174,6 +174,8 @@ struct st_h2o_http3_server_conn_t {
     } scheduler;
     /**
      * stream map used for datagram flows
+     * TODO: Get rid of this structure once we drop support for masque draft-03; RFC 9297 uses quater stream ID instead of
+     * dynamically mapping streams with flow IDs.
      */
     khash_t(stream) * datagram_flows;
     /**
@@ -894,7 +896,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     size_t i;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
     assert(delta != 0);
     assert(stream->sendbuf.vecs.size != 0);
 
@@ -927,7 +930,9 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
 
     if (stream->sendbuf.vecs.size == 0) {
         if (quicly_sendstate_is_open(&stream->quic->sendstate)) {
-            assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->proceed_requested);
+            assert((H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+                    stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) ||
+                   stream->proceed_requested);
         } else {
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
@@ -940,7 +945,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
-    assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
+    assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
+           stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
     uint8_t *dst = _dst, *dst_end = dst + *len;
     size_t vec_index = 0;
@@ -1027,7 +1033,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
     { /* Process contiguous bytes in the receive buffer until one of the following conditions are reached:
        * a) connection- or stream-level error (i.e., state advanced to CLOSE_WAIT) is detected - in which case we exit,
        * b) incomplete frame is detected - wait for more (if the stream is open) or raise a connection error, or
-       * c) all bytes are processed - exit the loop. */
+       * c) all bytes are processed or read_blocked flag is set synchronously (due to receiving CONNECT request) - exit the loop. */
         size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
         assert(bytes_available <= stream->recvbuf.buf->size);
         if (bytes_available != 0) {
@@ -1047,11 +1053,13 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
                     return;
                 }
-            } while (src != src_end);
+            } while (src != src_end && !stream->read_blocked);
             /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
             size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
             h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
             quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
+            if (stream->read_blocked)
+                return;
         }
     }
 
@@ -1341,37 +1349,17 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
     return 0;
 }
 
-static int handle_input_expect_headers_process_connect(struct st_h2o_http3_server_stream_t *stream,
-                                                       h2o_iovec_t *datagram_flow_id_field, const char **err_desc)
+static int handle_input_expect_headers_process_connect(struct st_h2o_http3_server_stream_t *stream, uint64_t datagram_flow_id,
+                                                       const char **err_desc)
 {
     if (stream->req.content_length != SIZE_MAX)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                            "CONNECT request cannot have request body", err_desc);
 
-    uint64_t datagram_flow_id = UINT64_MAX;
-    if (datagram_flow_id_field != NULL) {
-        /* CONNECT-UDP */
-        if (datagram_flow_id_field->base != NULL) {
-            /* check if the peer is permitted to send datagram frames, by consulting our SETTINGS.H3_DATAGRAM parameter */
-            quicly_context_t *qctx = quicly_get_context(get_conn(stream)->h3.super.quic);
-            if (qctx->transport_params.max_datagram_frame_size == 0) {
-                *err_desc = "unexpected h3 datagram";
-                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
-            }
-            /* TODO implement proper parsing */
-            datagram_flow_id = 0;
-            for (const char *p = datagram_flow_id_field->base; p != datagram_flow_id_field->base + datagram_flow_id_field->len;
-                 ++p) {
-                if (!('0' <= *p && *p <= '9'))
-                    break;
-                datagram_flow_id = datagram_flow_id * 10 + *p - '0';
-            }
-        }
-    }
-
     stream->req.is_tunnel_req = 1;
     h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
     stream->req.entity = h2o_iovec_init("", 0);
+    stream->read_blocked = 1;
     stream->req.proceed_req = proceed_request_streaming;
     stream->datagram_flow_id = datagram_flow_id;
     ++get_conn(stream)->num_streams_tunnelling;
@@ -1390,7 +1378,9 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
     int header_exists_map = 0, ret;
-    h2o_iovec_t datagram_flow_id = {};
+    h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
+    h2o_iovec_t datagram_flow_id_field = {};
+    uint64_t datagram_flow_id = UINT64_MAX;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
 
@@ -1419,9 +1409,9 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     /* parse the headers, and ack */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, NULL /* TODO cache-digests */, &datagram_flow_id, header_ack,
-                                       &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
+                                       &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
+                                       &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
+                                       header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
     if (header_ack_len != 0)
@@ -1432,24 +1422,58 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = &H2O_URL_SCHEME_HTTPS;
 
-    int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
-    int is_connect_udp = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"));
-
-    /* check if existence and non-existence of pseudo headers are correct */
-    int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
-    if (!is_connect && !is_connect_udp)
-        expected_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
-    if (is_connect_udp) {
-        /* only require method and authority for connect-udp for now, ignore if the others are set */
-        if ((header_exists_map & expected_map) != expected_map) {
+    int is_connect, must_exist_map, may_exist_map;
+    const int can_receive_datagrams =
+        quicly_get_context(get_conn(stream)->h3.super.quic)->transport_params.max_datagram_frame_size != 0;
+    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        is_connect = 1;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+        may_exist_map = 0;
+        /* extended connect looks like an ordinary request plus an upgrade token (:protocol) */
+        if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0) {
+            must_exist_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS |
+                              H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
+            if (can_receive_datagrams)
+                datagram_flow_id = stream->quic->stream_id / 4;
+        }
+    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        /* Handling of masque draft-03. Method is CONNECT-UDP and :protocol is not used, so we set `:protocol` to "connect-udp" to
+         * make it look like an upgrade. The method is preserved and can be used to distinguish between RFC 9298 version which uses
+         * "CONNECT". The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
+        if (!((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) == 0 &&
+              h2o_memis(stream->req.input.path.base, stream->req.input.path.len, H2O_STRLIT("/")))) {
             shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
             return 0;
         }
+        if (datagram_flow_id_field.base != NULL) {
+            if (!can_receive_datagrams) {
+                *err_desc = "unexpected h3 datagram";
+                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+            }
+            datagram_flow_id = 0;
+            for (const char *p = datagram_flow_id_field.base; p != datagram_flow_id_field.base + datagram_flow_id_field.len; ++p) {
+                if (!('0' <= *p && *p <= '9'))
+                    break;
+                datagram_flow_id = datagram_flow_id * 10 + *p - '0';
+            }
+        }
+        assert(stream->req.upgrade.base == NULL); /* otherwise PROTOCOL_EXISTS will be set */
+        is_connect = 1;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |
+                         H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = 0;
     } else {
-        if (header_exists_map != expected_map) {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
-            return 0;
-        }
+        /* normal request */
+        is_connect = 0;
+        must_exist_map =
+            H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+    }
+
+    /* check that all MUST pseudo headers exist, and that there are no other pseudo headers than MUST or MAY */
+    if (!((header_exists_map & must_exist_map) == must_exist_map && (header_exists_map & ~(must_exist_map | may_exist_map)) == 0)) {
+        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0);
+        return 0;
     }
 
     /* send a 400 error when observing an invalid header character */
@@ -1480,14 +1504,21 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* special handling of CONNECT method */
-    if (is_connect) {
-        return handle_input_expect_headers_process_connect(stream, NULL, err_desc);
-    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        return handle_input_expect_headers_process_connect(stream, &datagram_flow_id, err_desc);
-    }
+    if (is_connect)
+        return handle_input_expect_headers_process_connect(stream, datagram_flow_id, err_desc);
 
     /* change state */
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK, 0);
+
+    /* handle expect: 100-continue */
+    if (expect.base != NULL) {
+        if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
+            return handle_input_expect_headers_send_http_error(stream, h2o_send_error_417, "Expectation Failed",
+                                                               "unknown expectation", err_desc);
+        }
+        stream->req.res.status = 100;
+        h2o_send_informational(&stream->req);
+    }
 
     return 0;
 }
@@ -1543,7 +1574,12 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
 {
     *datagram_flow_id = h2o_iovec_init(NULL, 0);
 
-    /* Bail out if we cannot receive or send datagrams. */
+    /* TODO Convert H3_DATAGRAMs to capsules either here or inside the proxy handler. At the moment, the connect handler provides
+     * `h2o_req_t::forward_datagram` callbacks but the proxy handler does not. As support for H3_DATAGRAMs are advertised at the
+     * connection level, we need to support forwarding datagrams also when the proxy handler in use.
+     * Until then, connect-udp requests on H3 are refused to be tunneled by the proxy handler, see `h2o__proxy_process_request`.
+     * Also, as an abundance of caution, we drop the datagrams associated to requests that do not provide the forwarding hooks, by
+     * not registering such streams to `datagram_flows`. */
     if (!((200 <= stream->req.res.status && stream->req.res.status <= 299) && stream->req.forward_datagram.write_ != NULL) ||
         send_state != H2O_SEND_STATE_IN_PROGRESS) {
         stream->datagram_flow_id = UINT64_MAX;
@@ -1575,9 +1611,11 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
         if (conn->h3.peer_settings.h3_datagram) {
             /* register the route that would be used by the CONNECT handler for forwarding datagrams */
             stream->req.forward_datagram.read_ = tunnel_on_udp_read;
-            /* build and return the value of datagram-flow-id header field */
-            datagram_flow_id->base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-            datagram_flow_id->len = sprintf(datagram_flow_id->base, "%" PRIu64, stream->datagram_flow_id);
+            /* if the request type is draft-03, build and return the value of datagram-flow-id header field */
+            if (stream->req.input.method.len == sizeof("CONNECT-UDP") - 1) {
+                datagram_flow_id->base = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
+                datagram_flow_id->len = sprintf(datagram_flow_id->base, "%" PRIu64, stream->datagram_flow_id);
+            }
         }
     }
 
@@ -1603,6 +1641,9 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
         h2o_iovec_t datagram_flow_id;
         ssize_t priority_header_index;
+        if (stream->req.send_server_timing != 0)
+            h2o_add_server_timing_header(&stream->req, 0 /* TODO add support for trailers; it's going to be a little complex as we
+                                                          * need to build trailers the moment they are emitted onto wire */);
         if (!finalize_do_send_setup_udp_tunnel(stream, send_state, &datagram_flow_id))
             return;
         stream->req.timestamps.response_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
@@ -1769,7 +1810,9 @@ static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
     stream->state = H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS;
     stream->link = (h2o_linklist_t){NULL};
     stream->link_resp_settings_blocked = (h2o_linklist_t){NULL};
-    stream->ostr_final = (h2o_ostream_t){NULL, do_send, NULL, do_send_informational};
+    stream->ostr_final = (h2o_ostream_t){
+        NULL, do_send, NULL,
+        conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE ? NULL : do_send_informational};
     stream->scheduler.link = (h2o_linklist_t){NULL};
     stream->scheduler.priority = h2o_absprio_default;
     stream->scheduler.call_cnt = 0;

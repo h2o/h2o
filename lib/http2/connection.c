@@ -32,23 +32,6 @@
 
 static const h2o_iovec_t CONNECTION_PREFACE = {H2O_STRLIT("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n")};
 
-#define LIT16(x) ((uint32_t)(x) >> 8) & 0xff, (x)&0xff
-#define LIT24(x) LIT16((x) >> 8), (x)&0xff
-#define LIT32(x) LIT24((x) >> 8), (x)&0xff
-#define LIT_FRAME_HEADER(size, type, flags, stream_id) LIT24(size), (type), (flags), LIT32(stream_id)
-static const uint8_t SERVER_PREFACE_BIN[] = {
-    /* settings frame */
-    LIT_FRAME_HEADER(6, H2O_HTTP2_FRAME_TYPE_SETTINGS, 0, 0), LIT16(H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS), LIT32(100),
-    /* window_update frame */
-    LIT_FRAME_HEADER(4, H2O_HTTP2_FRAME_TYPE_WINDOW_UPDATE, 0, 0),
-    LIT32(H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE)};
-#undef LIT16
-#undef LIT24
-#undef LIT32
-#undef LIT_FRAME_HEADER
-
-static const h2o_iovec_t SERVER_PREFACE = {(char *)SERVER_PREFACE_BIN, sizeof(SERVER_PREFACE_BIN)};
-
 h2o_buffer_prototype_t h2o_http2_wbuf_buffer_prototype = {{H2O_HTTP2_DEFAULT_OUTBUF_SIZE}};
 
 static void update_stream_input_window(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream, size_t bytes);
@@ -76,6 +59,17 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
         h2o_http2_conn_request_write(conn);
         conn->state = H2O_HTTP2_CONN_STATE_HALF_CLOSED;
     }
+}
+
+static void enqueue_server_preface(h2o_http2_conn_t *conn)
+{
+    /* Send settings and initial window update */
+    h2o_http2_settings_kvpair_t settings[] = {
+        {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams},
+        {H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL, 1}};
+    h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
+    h2o_http2_encode_window_update_frame(
+        &conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
@@ -618,13 +612,15 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                    const char **err_desc)
 {
     int ret, header_exists_map = 0;
+    h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &stream->cache_digests, NULL, src, len, err_desc)) != 0) {
+                                       &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
+                                       &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
+        0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -636,19 +632,44 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if (stream->req.input.scheme == NULL)
         stream->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
 
-    int is_connect = h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"));
-
-    /* check existence of pseudo-headers */
-    int expected_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
-    if (!is_connect)
-        expected_map =
+    int is_connect, must_exist_map, may_exist_map;
+    if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+        is_connect = 1;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+        may_exist_map = 0;
+        /* extended connect looks like an ordinary request plus an upgrade token (:protocol) */
+        if ((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) != 0)
+            must_exist_map |= H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS |
+                              H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS;
+    } else if (h2o_memis(stream->req.input.method.base, stream->req.input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
+        /* Handling of masque draft-03. Method is CONNECT-UDP and :protocol is not used, so we set `:protocol` to "connect-udp" to
+         * make it look like an upgrade. The method is preserved and can be used to distinguish between RFC 9298 version which uses
+         * "CONNECT". The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
+        if (!((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) == 0 &&
+              h2o_memis(stream->req.input.path.base, stream->req.input.path.len, H2O_STRLIT("/")))) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto SendRSTStream;
+        }
+        assert(stream->req.upgrade.base == NULL); /* otherwise PROTOCOL_EXISTS will be set */
+        is_connect = 1;
+        must_exist_map = H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS |
+                         H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
+        may_exist_map = 0;
+    } else {
+        /* normal request */
+        is_connect = 0;
+        must_exist_map =
             H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_PATH_EXISTS;
-    if ((header_exists_map & expected_map) != expected_map) {
+        may_exist_map = H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS;
+    }
+
+    /* check that all MUST pseudo headers exist, and that there are no other pseudo headers than MUST or MAY */
+    if (!((header_exists_map & must_exist_map) == must_exist_map && (header_exists_map & ~(must_exist_map | may_exist_map)) == 0)) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
         goto SendRSTStream;
     }
 
-    if (conn->num_streams.pull.open > H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS) {
+    if (conn->num_streams.pull.open > conn->super.ctx->globalconf->http2.max_streams) {
         ret = H2O_HTTP2_ERROR_REFUSED_STREAM;
         goto SendRSTStream;
     }
@@ -666,11 +687,24 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
         /* handle the request */
         stream->req.is_tunnel_req = 1;
+        stream->req.entity = h2o_iovec_init("", 0); /* setting to non-NULL pointer indicates the presence of HTTP payload */
         stream->req.proceed_req = proceed_request;
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
         process_request(conn, stream);
         return 0;
+    }
+
+    /* handle expect: 100-continue */
+    if (expect.base != NULL) {
+        if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+            h2o_send_error_417(&stream->req, "Expectation Failed", "unknown expectation", 0);
+            return 0;
+        }
+        stream->req.res.status = 100;
+        h2o_send_informational(&stream->req);
     }
 
     /* handle the request */
@@ -692,12 +726,12 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                    const char **err_desc)
 {
     size_t dummy_content_length;
+    h2o_iovec_t dummy_expect = h2o_iovec_init(NULL, 0);
     int ret;
 
-    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.headers, NULL, &dummy_content_length, NULL, NULL, src,
-                                       len, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
+                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, NULL,
+                                       src, len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -898,7 +932,6 @@ void proceed_request(h2o_req_t *req, const char *errstr)
 
     switch (stream->req_body.state) {
     case H2O_HTTP2_REQ_BODY_OPEN:
-        assert(written != 0);
         update_stream_input_window(conn, stream, written);
         if (stream->blocked_by_server && h2o_http2_window_get_avail(&stream->input_window.window) > 0) {
             h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
@@ -1222,8 +1255,7 @@ static int handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fr
     /* setup process delay if we've just ran out of reset budget */
     if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
         !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
-        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay,
-                       &conn->dos_mitigation.process_delay);
+        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay, &conn->dos_mitigation.process_delay);
 
     /* TODO log */
 
@@ -1282,10 +1314,8 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
         return H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY;
     }
 
-    { /* send SETTINGS and connection-level WINDOW_UPDATE */
-        h2o_iovec_t vec = h2o_buffer_reserve(&conn->_write.buf, SERVER_PREFACE.len);
-        memcpy(vec.base, SERVER_PREFACE.base, SERVER_PREFACE.len);
-        conn->_write.buf->size += SERVER_PREFACE.len;
+    {
+        enqueue_server_preface(conn);
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
@@ -1372,6 +1402,9 @@ static void on_upgrade_complete(void *_conn, h2o_socket_t *sock, size_t reqsize)
     sock->data = conn;
     conn->_http1_req_input = sock->input;
     h2o_buffer_init(&sock->input, &h2o_socket_buffer_prototype);
+
+    enqueue_server_preface(conn);
+    h2o_http2_conn_request_write(conn);
 
     /* setup inbound */
     h2o_socket_read_start(conn->sock, on_read);
@@ -1961,7 +1994,7 @@ int h2o_http2_handle_upgrade(h2o_req_t *req, struct timeval connected_at)
     req->res.status = 101;
     req->res.reason = "Switching Protocols";
     h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("h2c"));
-    h2o_http1_upgrade(req, (h2o_iovec_t *)&SERVER_PREFACE, 1, on_upgrade_complete, http2conn);
+    h2o_http1_upgrade(req, NULL, 0, on_upgrade_complete, http2conn);
 
     return 0;
 Error:

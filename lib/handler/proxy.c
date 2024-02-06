@@ -52,6 +52,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->client_ctx = handler_ctx->client_ctx;
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
+    overrides->proxy_use_expect = self->config.use_expect;
     overrides->forward_close_connection = self->config.forward_close_connection;
 
     /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be
@@ -65,8 +66,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_gso)
 {
 #if H2O_USE_LIBUV
-    fprintf(stderr, "no HTTP/3 support for libuv\n");
-    abort();
+    h2o_fatal("no HTTP/3 support for libuv");
 #else
 
     h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
@@ -98,13 +98,13 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
     /* h2o server http3 integration */
     int sockfd;
     if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("failed to open UDP socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to open UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     struct sockaddr_in sin = {};
     if (bind(sockfd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
-        perror("failed to bind default address to UDP socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to bind default address to UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     h2o_socket_t *sock = h2o_evloop_socket_create(ctx->loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
     h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, NULL,

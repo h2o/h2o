@@ -39,10 +39,6 @@
 #include "picotls-probes.h"
 #endif
 
-#ifdef PTLS_HAVE_AEGIS
-#include <aegis.h>
-#endif
-
 #define PTLS_MAX_PLAINTEXT_RECORD_SIZE 16384
 #define PTLS_MAX_ENCRYPTED_RECORD_SIZE (16384 + 256)
 
@@ -71,6 +67,7 @@
 #define PTLS_EXTENSION_TYPE_SUPPORTED_VERSIONS 43
 #define PTLS_EXTENSION_TYPE_COOKIE 44
 #define PTLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES 45
+#define PTLS_EXTENSION_TYPE_CERTIFICATE_AUTHORITIES 47
 #define PTLS_EXTENSION_TYPE_KEY_SHARE 51
 #define PTLS_EXTENSION_TYPE_ECH_OUTER_EXTENSIONS 0xfd00
 #define PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO 0xfe0d
@@ -1706,10 +1703,13 @@ static int encode_session_identifier(ptls_context_t *ctx, ptls_buffer_t *buf, ui
         ptls_buffer_push16(buf, csid);
         /* ticket_age_add */
         ptls_buffer_push32(buf, ticket_age_add);
-        /* server-name */
+        /* session ID context */
         ptls_buffer_push_block(buf, 2, {
-            if (server_name != NULL)
+            if (ctx->ticket_context.is_set) {
+                ptls_buffer_pushv(buf, ctx->ticket_context.bytes, sizeof(ctx->ticket_context.bytes));
+            } else if (server_name != NULL) {
                 ptls_buffer_pushv(buf, server_name, strlen(server_name));
+            }
         });
         /* alpn */
         ptls_buffer_push_block(buf, 1, {
@@ -1722,7 +1722,7 @@ Exit:
     return ret;
 }
 
-int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *ticket_age_add, ptls_iovec_t *server_name,
+int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *ticket_age_add, ptls_iovec_t *ticket_ctx,
                               uint16_t *key_exchange_id, uint16_t *csid, ptls_iovec_t *negotiated_protocol, const uint8_t *src,
                               const uint8_t *const end)
 {
@@ -1748,7 +1748,7 @@ int decode_session_identifier(uint64_t *issued_at, ptls_iovec_t *psk, uint32_t *
         if ((ret = ptls_decode32(ticket_age_add, &src, end)) != 0)
             goto Exit;
         ptls_decode_open_block(src, end, 2, {
-            *server_name = ptls_iovec_init(src, end - src);
+            *ticket_ctx = ptls_iovec_init(src, end - src);
             src = end;
         });
         ptls_decode_open_block(src, end, 1, {
@@ -2373,7 +2373,10 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
 
     /* initialize key schedule */
     if (!is_second_flight) {
-        tls->key_schedule = key_schedule_new(tls->cipher_suite, tls->ctx->cipher_suites, tls->ech.aead != NULL);
+        if ((tls->key_schedule = key_schedule_new(tls->cipher_suite, tls->ctx->cipher_suites, tls->ech.aead != NULL)) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
         if ((ret = key_schedule_extract(tls->key_schedule, resumption_secret)) != 0)
             goto Exit;
     }
@@ -4006,7 +4009,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
                              ptls_iovec_t ch_trunc)
 {
     ptls_buffer_t decbuf;
-    ptls_iovec_t ticket_psk, ticket_server_name, ticket_negotiated_protocol;
+    ptls_iovec_t ticket_psk, ticket_ctx, ticket_negotiated_protocol;
     uint64_t issue_at, now = tls->ctx->get_time->cb(tls->ctx->get_time);
     uint32_t age_add;
     uint16_t ticket_key_exchange_id, ticket_csid;
@@ -4029,7 +4032,7 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
         default: /* decryption failure */
             continue;
         }
-        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_server_name, &ticket_key_exchange_id, &ticket_csid,
+        if (decode_session_identifier(&issue_at, &ticket_psk, &age_add, &ticket_ctx, &ticket_key_exchange_id, &ticket_csid,
                                       &ticket_negotiated_protocol, decbuf.base, decbuf.base + decbuf.off) != 0)
             continue;
         /* check age */
@@ -4046,15 +4049,22 @@ static int try_psk_handshake(ptls_t *tls, size_t *psk_index, int *accept_early_d
             if (tls->ctx->max_early_data_size != 0 && delta <= PTLS_EARLY_DATA_MAX_DELAY)
                 *accept_early_data = 1;
         }
-        /* check server-name */
-        if (ticket_server_name.len != 0) {
-            if (tls->server_name == NULL)
-                continue;
-            if (!vec_is_string(ticket_server_name, tls->server_name))
+        /* check ticket context */
+        if (tls->ctx->ticket_context.is_set) {
+            if (!(ticket_ctx.len == sizeof(tls->ctx->ticket_context.bytes) &&
+                  memcmp(ticket_ctx.base, tls->ctx->ticket_context.bytes, ticket_ctx.len) == 0))
                 continue;
         } else {
-            if (tls->server_name != NULL)
-                continue;
+            /* check server-name */
+            if (ticket_ctx.len != 0) {
+                if (tls->server_name == NULL)
+                    continue;
+                if (!vec_is_string(ticket_ctx, tls->server_name))
+                    continue;
+            } else {
+                if (tls->server_name != NULL)
+                    continue;
+            }
         }
         { /* check key-exchange */
             ptls_key_exchange_algorithm_t **a;
@@ -4366,7 +4376,10 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             goto Exit;
         if (!is_second_flight) {
             tls->cipher_suite = cs;
-            tls->key_schedule = key_schedule_new(cs, NULL, 0);
+            if ((tls->key_schedule = key_schedule_new(cs, NULL, 0)) == NULL) {
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
         } else {
             if (tls->cipher_suite != cs) {
                 ret = PTLS_ALERT_HANDSHAKE_FAILURE;
@@ -4671,10 +4684,9 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
         /* send certificate request if client authentication is activated */
         if (tls->ctx->require_client_authentication) {
             ptls_push_message(emitter, tls->key_schedule, PTLS_HANDSHAKE_TYPE_CERTIFICATE_REQUEST, {
-                /* certificate_request_context, this field SHALL be zero length, unless the certificate
-                 * request is used for post-handshake authentication.
-                 */
                 ptls_buffer_t *sendbuf = emitter->buf;
+                /* certificate_request_context: this field SHALL be zero length, unless the certificate request is used for post-
+                 * handshake authentication. */
                 ptls_buffer_push(sendbuf, 0);
                 /* extensions */
                 ptls_buffer_push_block(sendbuf, 2, {
@@ -4682,6 +4694,19 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                         if ((ret = push_signature_algorithms(tls->ctx->verify_certificate, sendbuf)) != 0)
                             goto Exit;
                     });
+                    /* certificate authorities entension */
+                    if (tls->ctx->client_ca_names.count > 0) {
+                        buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_CERTIFICATE_AUTHORITIES, {
+                            ptls_buffer_push_block(sendbuf, 2, {
+                                for (size_t i = 0; i != tls->ctx->client_ca_names.count; ++i) {
+                                    ptls_buffer_push_block(sendbuf, 2, {
+                                        ptls_iovec_t name = tls->ctx->client_ca_names.list[i];
+                                        ptls_buffer_pushv(sendbuf, name.base, name.len);
+                                    });
+                                }
+                            });
+                        });
+                    }
                 });
             });
 

@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <sys/socket.h>
 #include "picotls/openssl.h"
+#include "h2o.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
@@ -1150,9 +1151,14 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
     ptls_buffer_push_block(&buf, -1, {
         quicly_context_t *qctx = quicly_get_context(conn->super.quic);
         if (qctx->transport_params.max_datagram_frame_size != 0) {
+            // advertise that we are prepared to receive both RFC and draft-03 datagram formats
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
             ptls_buffer_push_quicint(&buf, 1);
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
+            ptls_buffer_push_quicint(&buf, 1);
         };
+        ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
+        ptls_buffer_push_quicint(&buf, 1);
     });
 
     assert(!buf.is_allocated);
@@ -1219,8 +1225,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:
-        fprintf(stderr, "quicly_send returned %d\n", ret);
-        abort();
+        h2o_fatal("quicly_send returned %d", ret);
     }
 
     h2o_quic_schedule_timer(conn);
@@ -1280,6 +1285,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             blocked_streams = value;
             break;
         case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03:
             switch (value) {
             case 0:
                 break;

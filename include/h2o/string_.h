@@ -117,9 +117,19 @@ int h2o_hex_decode(void *dst, const char *src, size_t src_len);
  */
 void h2o_hex_encode(char *dst, const void *src, size_t src_len);
 /**
- * URI-ecsapes given string (as defined in RFC 3986)
+ * URI-escapes given string (as defined in RFC 3986)
+ * @param pool memory pool or NULL to allocate memory using malloc
+ * @return an encoded string which is NULL-terminated (NULL does not count as part of `.len`)
  */
 h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const char *preserve_chars);
+/**
+ * decodes a percent-encoded string (RFC 3986 Section 2.1)
+ * @param pool memory pool or NULL to allocate memory using malloc
+ * @param s source string
+ * @param l length of source string
+ * @return a decoded string which is NULL-terminated (NULL does not count as part of `.len`), or {NULL, 0} if failed
+ */
+h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *s, size_t l);
 /**
  * returns the extension portion of path
  */

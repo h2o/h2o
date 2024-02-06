@@ -83,7 +83,6 @@ $ctx->{directive}->(
     name         => "proxy.connect",
     levels       => [ qw(path) ],
     desc         => q{Setup a CONNECT proxy, taking an access control list as the argument.},
-    experimental => 1,
 )->(sub {
 ?>
 <p>
@@ -106,6 +105,24 @@ EOT
 <p>
 Note: The precise syntax of the access control list element is <code>address:port/netmask</code>. This is because the URL parser is reused.
 </p>
+<p>
+The directive can only be used for the root path (i.e., <code>/</code>), as the classic CONNECT does not specify the path.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "proxy.connect-udp",
+    levels => [ qw(path) ],
+    desc   => q{Setup a CONNECT-UDP gateway defined by <a href="https://datatracker.ietf.org/doc/rfc9298/" target=_blank>RFC 9298</a>.},
+)->(sub {
+?>
+<p>
+Supplied argument is an access control list, using the same format as that of <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>.
+</p>
+<p>
+Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see <a href="configure/proxy_directives.html#proxy.connect.masque-draft-03"><code>proxy.connect.masque-draft-03</code></a>.
+</p>
 ? })
 
 <?
@@ -119,6 +136,21 @@ $ctx->{directive}->(
 EOT
 )->(sub {});
 ?>
+
+<?
+$ctx->{directive}->(
+    name         => "proxy.connect.masque-draft-03",
+    levels       => [ qw(global host path extension) ],
+    desc         => q{A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if CONNECT-UDP requests conforming to <a href="https://datatracker.ietf.org/doc/draft-ietf-masque-connect-udp/03/" target=_blank>draft-ietf-masque-connect-udp-03</a> should be handled.},
+    default      => "proxy.connect.masque-draft-03: OFF",
+    experimental => 1,
+)->(sub {
+?>
+<p>
+This directive alters the behavior of <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a> because the CONNECT-UDP method defined in draft-03 followed the approach of the CONNECT method, which uses a HTTP proxy as a tunnel.
+The published RFC switched to specifying the tunnel by the target URI, and as a result, it is supported by a different directive: <a href="configure/proxy_directives.html#proxy.connect-udp"><code>proxy.connect-udp</code></a>.
+</p>
+? })
 
 <?
 $ctx->{directive}->(
@@ -157,6 +189,16 @@ $ctx->{directive}->(
     since   => "2.3",
     default => q{proxy.emit-missing-date-header: ON},
     desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should add a <code>date</code> header to the response, if that header is missing from the upstream response.",
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
+    name    => "proxy.expect",
+    levels  => [ qw(global) ],
+    since   => "2.3",
+    default => q{proxy.expect: OFF},
+    desc    => "A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if H2O should send <code>expect: 100-continue</code> header to the request, and postpone sending request body until it receives 100 response",
 )->(sub {})
 ?>
 
@@ -323,8 +365,8 @@ But if the backend server has enough concurrency, <code>proxy.max-buffer-size</c
 $ctx->{directive}->(
     name     => "proxy.max-spare-pipes",
     levels   => [ qw(global) ],
-    desc     => q{This setting specifies the maximum number of pipe file descriptors retained for reuse, when <code>proxy.zerocopy</code> is used.},
-    default  => 64,
+    desc     => q{This setting specifies the maximum number of pipes retained for reuse, when <code>proxy.zerocopy</code> is used.},
+    default  => 0,
     see_also => render_mt(<<'EOT'),
 <a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
 EOT
@@ -333,6 +375,7 @@ EOT
 <p>
 This maximum is applied per each worker thread.
 The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
+When this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
 </p>
 <p>
 Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.

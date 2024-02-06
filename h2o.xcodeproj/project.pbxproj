@@ -702,6 +702,7 @@
 		0821950F2685262B00E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
 		0829879326E1F3530053638F /* rate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80resume-context.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -714,6 +715,7 @@
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0855C4052B2BFF6300C7AE5B /* 40tunnel-udp.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tunnel-udp.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		085BDAE72B1DB4C2002851EA /* 40http3-priority.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-priority.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-selective-tracing.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-corrupted-scid-initial.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -766,6 +768,7 @@
 		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
 		08E86F3E2B5666A700F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
 		08E86F412B5666C000F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
+		08E86F462B60D94400F7211C /* 80http1-chunk-overhead.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http1-chunk-overhead.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E8FBF32A84DB5B00CF8FF3 /* 50reverse-proxy-http2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-http2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2278,6 +2281,7 @@
 				080BDCDB2AB92C630091CE31 /* 40tls13-aegis.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				106C22FB1C0413DA00405689 /* 40tunnel.t */,
+				0855C4052B2BFF6300C7AE5B /* 40tunnel-udp.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
@@ -2387,6 +2391,7 @@
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
+				08E86F462B60D94400F7211C /* 80http1-chunk-overhead.t */,
 				08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
 				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
@@ -2397,6 +2402,7 @@
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
+				082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */,
 				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
 				E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,

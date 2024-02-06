@@ -24,10 +24,13 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "picotest/picotest.h"
 #include "picohttpparser.h"
 
@@ -35,6 +38,8 @@ static int bufis(const char *s, size_t l, const char *t)
 {
     return strlen(t) == l && memcmp(s, t, l) == 0;
 }
+
+static char *inputbuf; /* point to the end of the buffer */
 
 static void test_request(void)
 {
@@ -48,10 +53,12 @@ static void test_request(void)
 
 #define PARSE(s, last_len, exp, comment)                                                                                           \
     do {                                                                                                                           \
+        size_t slen = sizeof(s) - 1;                                                                                               \
         note(comment);                                                                                                             \
         num_headers = sizeof(headers) / sizeof(headers[0]);                                                                        \
-        ok(phr_parse_request(s, sizeof(s) - 1, &method, &method_len, &path, &path_len, &minor_version, headers, &num_headers,      \
-                             last_len) == (exp == 0 ? strlen(s) : exp));                                                           \
+        memcpy(inputbuf - slen, s, slen);                                                                                          \
+        ok(phr_parse_request(inputbuf - slen, slen, &method, &method_len, &path, &path_len, &minor_version, headers, &num_headers, \
+                             last_len) == (exp == 0 ? (int)slen : exp));                                                           \
     } while (0)
 
     PARSE("GET / HTTP/1.0\r\n\r\n", 0, 0, "simple");
@@ -122,6 +129,7 @@ static void test_request(void)
 
     PARSE("G\0T / HTTP/1.0\r\n\r\n", 0, -1, "NUL in method");
     PARSE("G\tT / HTTP/1.0\r\n\r\n", 0, -1, "tab in method");
+    PARSE(":GET / HTTP/1.0\r\n\r\n", 0, -1, "invalid method");
     PARSE("GET /\x7fhello HTTP/1.0\r\n\r\n", 0, -1, "DEL in uri-path");
     PARSE("GET / HTTP/1.0\r\na\0b: c\r\n\r\n", 0, -1, "NUL in header name");
     PARSE("GET / HTTP/1.0\r\nab: c\0d\r\n\r\n", 0, -1, "NUL in header value");
@@ -146,6 +154,8 @@ static void test_request(void)
     PARSE("GET / HTTP/1.0\r\nfoo: a \t \r\n\r\n", 0, 0, "exclude leading and trailing spaces in header value");
     ok(bufis(headers[0].value, headers[0].value_len, "a"));
 
+    PARSE("GET   /   HTTP/1.0\r\n\r\n", 0, 0, "accept multiple spaces between tokens");
+
 #undef PARSE
 }
 
@@ -160,10 +170,12 @@ static void test_response(void)
 
 #define PARSE(s, last_len, exp, comment)                                                                                           \
     do {                                                                                                                           \
+        size_t slen = sizeof(s) - 1;                                                                                               \
         note(comment);                                                                                                             \
         num_headers = sizeof(headers) / sizeof(headers[0]);                                                                        \
-        ok(phr_parse_response(s, strlen(s), &minor_version, &status, &msg, &msg_len, headers, &num_headers, last_len) ==           \
-           (exp == 0 ? strlen(s) : exp));                                                                                          \
+        memcpy(inputbuf - slen, s, slen);                                                                                          \
+        ok(phr_parse_response(inputbuf - slen, slen, &minor_version, &status, &msg, &msg_len, headers, &num_headers, last_len) ==  \
+           (exp == 0 ? (int)slen : exp));                                                                                          \
     } while (0)
 
     PARSE("HTTP/1.0 200 OK\r\n\r\n", 0, 0, "simple");
@@ -236,8 +248,16 @@ static void test_response(void)
     PARSE("HTTP/1.2z 200 OK\r\n\r\n", 0, -1, "invalid http version 2");
     PARSE("HTTP/1.1  OK\r\n\r\n", 0, -1, "no status code");
 
+    PARSE("HTTP/1.1 200\r\n\r\n", 0, 0, "accept missing trailing whitespace in status-line");
+    ok(bufis(msg, msg_len, ""));
+    PARSE("HTTP/1.1 200X\r\n\r\n", 0, -1, "garbage after status 1");
+    PARSE("HTTP/1.1 200X \r\n\r\n", 0, -1, "garbage after status 2");
+    PARSE("HTTP/1.1 200X OK\r\n\r\n", 0, -1, "garbage after status 3");
+
     PARSE("HTTP/1.1 200 OK\r\nbar: \t b\t \t\r\n\r\n", 0, 0, "exclude leading and trailing spaces in header value");
     ok(bufis(headers[0].value, headers[0].value_len, "b"));
+
+    PARSE("HTTP/1.1   200   OK\r\n\r\n", 0, 0, "accept multiple spaces between tokens");
 
 #undef PARSE
 }
@@ -253,7 +273,7 @@ static void test_headers(void)
     do {                                                                                                                           \
         note(comment);                                                                                                             \
         num_headers = sizeof(headers) / sizeof(headers[0]);                                                                        \
-        ok(phr_parse_headers(s, strlen(s), headers, &num_headers, last_len) == (exp == 0 ? strlen(s) : exp));                      \
+        ok(phr_parse_headers(s, strlen(s), headers, &num_headers, last_len) == (exp == 0 ? (int)strlen(s) : exp));                 \
     } while (0)
 
     PARSE("Host: example.com\r\nCookie: \r\n\r\n", 0, 0, "simple");
@@ -390,6 +410,7 @@ static void test_chunked(void)
         chunked_test_runners[i](__LINE__, 0, "b\r\nhello world\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6;comment=hi\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
+        chunked_test_runners[i](__LINE__, 0, "6 ; comment\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 0, "6\r\nhello \r\n5\r\nworld\r\n0\r\na: b\r\nc: d\r\n\r\n", "hello world",
                                 sizeof("a: b\r\nc: d\r\n\r\n") - 1);
         chunked_test_runners[i](__LINE__, 0, "b\r\nhello world\r\n0\r\n", "hello world", 0);
@@ -401,6 +422,7 @@ static void test_chunked(void)
         test_chunked_failure(__LINE__, "6\r\nhello \r\nffffffffffffffff\r\nabcdefg", -2);
         test_chunked_failure(__LINE__, "6\r\nhello \r\nfffffffffffffffff\r\nabcdefg", -1);
     }
+    test_chunked_failure(__LINE__, "1x\r\na\r\n0\r\n", -1);
 }
 
 static void test_chunked_consume_trailer(void)
@@ -417,12 +439,91 @@ static void test_chunked_consume_trailer(void)
     }
 }
 
-int main(int argc, char **argv)
+static void test_chunked_leftdata(void)
 {
+#define NEXT_REQ "GET / HTTP/1.1\r\n\r\n"
+
+    struct phr_chunked_decoder dec = {0};
+    dec.consume_trailer = 1;
+    char buf[] = "5\r\nabcde\r\n0\r\n\r\n" NEXT_REQ;
+    size_t bufsz = sizeof(buf) - 1;
+
+    ssize_t ret = phr_decode_chunked(&dec, buf, &bufsz);
+    ok(ret >= 0);
+    ok(bufsz == 5);
+    ok(memcmp(buf, "abcde", 5) == 0);
+    ok(ret == sizeof(NEXT_REQ) - 1);
+    ok(memcmp(buf + bufsz, NEXT_REQ, sizeof(NEXT_REQ) - 1) == 0);
+
+#undef NEXT_REQ
+}
+
+static ssize_t do_test_chunked_overhead(size_t chunk_len, size_t chunk_count, const char *extra)
+{
+    struct phr_chunked_decoder dec = {0};
+    char buf[1024];
+    size_t bufsz;
+    ssize_t ret;
+
+    for (size_t i = 0; i < chunk_count; ++i) {
+        /* build and feed the chunk header */
+        bufsz = (size_t)sprintf(buf, "%zx%s\r\n", chunk_len, extra);
+        if ((ret = phr_decode_chunked(&dec, buf, &bufsz)) != -2)
+            goto Exit;
+        assert(bufsz == 0);
+        /* build and feed the chunk boby */
+        memset(buf, 'A', chunk_len);
+        bufsz = chunk_len;
+        if ((ret = phr_decode_chunked(&dec, buf, &bufsz)) != -2)
+            goto Exit;
+        assert(bufsz == chunk_len);
+        /* build and feed the chunk end (CRLF) */
+        strcpy(buf, "\r\n");
+        bufsz = 2;
+        if ((ret = phr_decode_chunked(&dec, buf, &bufsz)) != -2)
+            goto Exit;
+        assert(bufsz == 0);
+    }
+
+    /* build and feed the end chunk */
+    strcpy(buf, "0\r\n\r\n");
+    bufsz = 5;
+    ret = phr_decode_chunked(&dec, buf, &bufsz);
+    assert(bufsz == 0);
+
+Exit:
+    return ret;
+}
+
+static void test_chunked_overhead(void)
+{
+    ok(do_test_chunked_overhead(100, 10000, "") == 2 /* consume trailer is not set */);
+    ok(do_test_chunked_overhead(10, 100000, "") == 2 /* consume trailer is not set */);
+    ok(do_test_chunked_overhead(1, 1000000, "") == -1);
+
+    ok(do_test_chunked_overhead(10, 100000, "; tiny=1") == 2 /* consume trailer is not set */);
+    ok(do_test_chunked_overhead(10, 100000, "; large=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") == -1);
+}
+
+int main(void)
+{
+    long pagesize = sysconf(_SC_PAGESIZE);
+    assert(pagesize >= 1);
+
+    inputbuf = mmap(NULL, pagesize * 3, PROT_NONE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    assert(inputbuf != MAP_FAILED);
+    inputbuf += pagesize * 2;
+    ok(mprotect(inputbuf - pagesize, pagesize, PROT_READ | PROT_WRITE) == 0);
+
     subtest("request", test_request);
     subtest("response", test_response);
     subtest("headers", test_headers);
     subtest("chunked", test_chunked);
     subtest("chunked-consume-trailer", test_chunked_consume_trailer);
+    subtest("chunked-leftdata", test_chunked_leftdata);
+    subtest("chunked-overhead", test_chunked_overhead);
+
+    munmap(inputbuf - pagesize * 2, pagesize * 3);
+
     return done_testing();
 }

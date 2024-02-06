@@ -36,8 +36,6 @@
 #endif
 #include "picohttpparser.h"
 
-/* $Id$ */
-
 #if __GNUC__ >= 3
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
@@ -73,9 +71,9 @@
 #define ADVANCE_TOKEN(tok, toklen)                                                                                                 \
     do {                                                                                                                           \
         const char *tok_start = buf;                                                                                               \
-        static const char ALIGNED(16) ranges2[] = "\000\040\177\177";                                                              \
+        static const char ALIGNED(16) ranges2[16] = "\000\040\177\177";                                                            \
         int found2;                                                                                                                \
-        buf = findchar_fast(buf, buf_end, ranges2, sizeof(ranges2) - 1, &found2);                                                  \
+        buf = findchar_fast(buf, buf_end, ranges2, 4, &found2);                                                                    \
         if (!found2) {                                                                                                             \
             CHECK_EOF();                                                                                                           \
         }                                                                                                                          \
@@ -138,15 +136,11 @@ static const char *get_token_to_eol(const char *buf, const char *buf_end, const 
     const char *token_start = buf;
 
 #ifdef __SSE4_2__
-    static const char ranges1[] = "\0\010"
-                                  /* allow HT */
-                                  "\012\037"
-                                  /* allow SP and up to but not including DEL */
-                                  "\177\177"
-        /* allow chars w. MSB set */
-        ;
+    static const char ALIGNED(16) ranges1[16] = "\0\010"    /* allow HT */
+                                                "\012\037"  /* allow SP and up to but not including DEL */
+                                                "\177\177"; /* allow chars w. MSB set */
     int found;
-    buf = findchar_fast(buf, buf_end, ranges1, sizeof(ranges1) - 1, &found);
+    buf = findchar_fast(buf, buf_end, ranges1, 6, &found);
     if (found)
         goto FOUND_CTL;
 #else
@@ -248,6 +242,41 @@ static const char *is_complete(const char *buf, const char *buf_end, size_t last
     } while (0)
 
 /* returned pointer is always within [buf, buf_end), or null */
+static const char *parse_token(const char *buf, const char *buf_end, const char **token, size_t *token_len, char next_char,
+                               int *ret)
+{
+    /* We use pcmpestri to detect non-token characters. This instruction can take no more than eight character ranges (8*2*8=128
+     * bits that is the size of a SSE register). Due to this restriction, characters `|` and `~` are handled in the slow loop. */
+    static const char ALIGNED(16) ranges[] = "\x00 "  /* control chars and up to SP */
+                                             "\"\""   /* 0x22 */
+                                             "()"     /* 0x28,0x29 */
+                                             ",,"     /* 0x2c */
+                                             "//"     /* 0x2f */
+                                             ":@"     /* 0x3a-0x40 */
+                                             "[]"     /* 0x5b-0x5d */
+                                             "{\xff"; /* 0x7b-0xff */
+    const char *buf_start = buf;
+    int found;
+    buf = findchar_fast(buf, buf_end, ranges, sizeof(ranges) - 1, &found);
+    if (!found) {
+        CHECK_EOF();
+    }
+    while (1) {
+        if (*buf == next_char) {
+            break;
+        } else if (!token_char_map[(unsigned char)*buf]) {
+            *ret = -1;
+            return NULL;
+        }
+        ++buf;
+        CHECK_EOF();
+    }
+    *token = buf_start;
+    *token_len = buf - buf_start;
+    return buf;
+}
+
+/* returned pointer is always within [buf, buf_end), or null */
 static const char *parse_http_version(const char *buf, const char *buf_end, int *minor_version, int *ret)
 {
     /* we want at least [HTTP/1.<two chars>] to try to parse */
@@ -286,31 +315,10 @@ static const char *parse_headers(const char *buf, const char *buf_end, struct ph
         if (!(*num_headers != 0 && (*buf == ' ' || *buf == '\t'))) {
             /* parsing name, but do not discard SP before colon, see
              * http://www.mozilla.org/security/announce/2006/mfsa2006-33.html */
-            headers[*num_headers].name = buf;
-            static const char ALIGNED(16) ranges1[] = "\x00 "  /* control chars and up to SP */
-                                                      "\"\""   /* 0x22 */
-                                                      "()"     /* 0x28,0x29 */
-                                                      ",,"     /* 0x2c */
-                                                      "//"     /* 0x2f */
-                                                      ":@"     /* 0x3a-0x40 */
-                                                      "[]"     /* 0x5b-0x5d */
-                                                      "{\377"; /* 0x7b-0xff */
-            int found;
-            buf = findchar_fast(buf, buf_end, ranges1, sizeof(ranges1) - 1, &found);
-            if (!found) {
-                CHECK_EOF();
+            if ((buf = parse_token(buf, buf_end, &headers[*num_headers].name, &headers[*num_headers].name_len, ':', ret)) == NULL) {
+                return NULL;
             }
-            while (1) {
-                if (*buf == ':') {
-                    break;
-                } else if (!token_char_map[(unsigned char)*buf]) {
-                    *ret = -1;
-                    return NULL;
-                }
-                ++buf;
-                CHECK_EOF();
-            }
-            if ((headers[*num_headers].name_len = buf - headers[*num_headers].name) == 0) {
+            if (headers[*num_headers].name_len == 0) {
                 *ret = -1;
                 return NULL;
             }
@@ -358,10 +366,18 @@ static const char *parse_request(const char *buf, const char *buf_end, const cha
     }
 
     /* parse request line */
-    ADVANCE_TOKEN(*method, *method_len);
-    ++buf;
+    if ((buf = parse_token(buf, buf_end, method, method_len, ' ', ret)) == NULL) {
+        return NULL;
+    }
+    do {
+        ++buf;
+        CHECK_EOF();
+    } while (*buf == ' ');
     ADVANCE_TOKEN(*path, *path_len);
-    ++buf;
+    do {
+        ++buf;
+        CHECK_EOF();
+    } while (*buf == ' ');
     if (*method_len == 0 || *path_len == 0) {
         *ret = -1;
         return NULL;
@@ -418,10 +434,14 @@ static const char *parse_response(const char *buf, const char *buf_end, int *min
         return NULL;
     }
     /* skip space */
-    if (*buf++ != ' ') {
+    if (*buf != ' ') {
         *ret = -1;
         return NULL;
     }
+    do {
+        ++buf;
+        CHECK_EOF();
+    } while (*buf == ' ');
     /* parse status code, we want at least [:digit:][:digit:][:digit:]<other char> to try to parse */
     if (buf_end - buf < 4) {
         *ret = -2;
@@ -429,13 +449,22 @@ static const char *parse_response(const char *buf, const char *buf_end, int *min
     }
     PARSE_INT_3(status);
 
-    /* skip space */
-    if (*buf++ != ' ') {
-        *ret = -1;
+    /* get message including preceding space */
+    if ((buf = get_token_to_eol(buf, buf_end, msg, msg_len, ret)) == NULL) {
         return NULL;
     }
-    /* get message */
-    if ((buf = get_token_to_eol(buf, buf_end, msg, msg_len, ret)) == NULL) {
+    if (*msg_len == 0) {
+        /* ok */
+    } else if (**msg == ' ') {
+        /* Remove preceding space. Successful return from `get_token_to_eol` guarantees that we would hit something other than SP
+         * before running past the end of the given buffer. */
+        do {
+            ++*msg;
+            --*msg_len;
+        } while (**msg == ' ');
+    } else {
+        /* garbage found after status code */
+        *ret = -1;
         return NULL;
     }
 
@@ -516,6 +545,8 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
     size_t dst = 0, src = 0, bufsz = *_bufsz;
     ssize_t ret = -2; /* incomplete */
 
+    decoder->_total_read += bufsz;
+
     while (1) {
         switch (decoder->_state) {
         case CHUNKED_IN_CHUNK_SIZE:
@@ -525,6 +556,18 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
                     goto Exit;
                 if ((v = decode_hex(buf[src])) == -1) {
                     if (decoder->_hex_count == 0) {
+                        ret = -1;
+                        goto Exit;
+                    }
+                    /* the only characters that may appear after the chunk size are BWS, semicolon, or CRLF */
+                    switch (buf[src]) {
+                    case ' ':
+                    case '\011':
+                    case ';':
+                    case '\012':
+                    case '\015':
+                        break;
+                    default:
                         ret = -1;
                         goto Exit;
                     }
@@ -623,6 +666,12 @@ Exit:
     if (dst != src)
         memmove(buf + dst, buf + src, bufsz - src);
     *_bufsz = dst;
+    /* if incomplete but the overhead of the chunked encoding is >=100KB and >80%, signal an error */
+    if (ret == -2) {
+        decoder->_total_overhead += bufsz - dst;
+        if (decoder->_total_overhead >= 100 * 1024 && decoder->_total_read - decoder->_total_overhead < decoder->_total_read / 4)
+            ret = -1;
+    }
     return ret;
 }
 
