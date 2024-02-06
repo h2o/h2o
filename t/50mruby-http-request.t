@@ -117,6 +117,7 @@ hosts:
           end
           Proc.new do |env|
             resp = http_request("http://$upstream_hostport/esi.html").join
+            resp[1].delete("content-length")
             resp[2] = ESIResponse.new(resp[2].join)
             resp
           end
@@ -224,7 +225,6 @@ EOT
             };
         };
         subtest "esi" => sub {
-            local $TODO = "HTTP/3 is not yet supported" if $curl_cmd =~ /--http3/;
             my ($headers, $body) = run_prog("$curl_cmd $proto://127.0.0.1:$port/esi/");
             like $headers, qr{HTTP/[^ ]+ 200\s}is;
             is $body, "Hello to the world, from H2O!\n";
