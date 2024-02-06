@@ -86,6 +86,7 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
     unsigned _app_prefers_pipe_reader : 1;
+    unsigned _use_expect : 1;
 };
 
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
@@ -454,18 +455,36 @@ static void on_head(h2o_socket_t *sock, const char *err)
             headers[i].flags = (h2o_header_flags_t){0};
         }
 
-        if (!(100 <= http_status && http_status <= 199 && http_status != 101))
+        if (http_status == 101) {
+            if (client->_use_expect) {
+                /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
+                on_error(client, h2o_httpclient_error_unexpected_101);
+                return;
+            }
             break;
-
+        } else if (http_status == 100 || http_status >= 200) {
+            /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
+             * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634. */
+            if (client->_use_expect) {
+                client->_use_expect = 0;
+                req_body_send(client);
+            }
+            if (http_status >= 200)
+                break;
+        }
+        assert(http_status <= 199);
         if (client->super.informational_cb != NULL &&
             client->super.informational_cb(&client->super, version, http_status, h2o_iovec_init(msg, msg_len), headers,
                                            num_headers) != 0) {
             close_client(client);
             return;
         }
+
         h2o_buffer_consume(&client->sock->input, rlen);
         if (client->sock->input->size == 0) {
-            h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+            if (!h2o_timer_is_linked(&client->super._timeout)) {
+                h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+            }
             return;
         }
     }
@@ -595,6 +614,23 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
     }
 }
 
+static void on_header_sent_wait_100(h2o_socket_t *sock, const char *err)
+{
+    struct st_h2o_http1client_t *client = sock->data;
+
+    h2o_timer_unlink(&client->super._timeout);
+
+    if (err != NULL) {
+        on_error(client, h2o_httpclient_error_io);
+        return;
+    }
+
+    if (client->state.res == STREAM_STATE_HEAD) {
+        client->super._timeout.cb = on_head_first_byte_timeout;
+        h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
+    }
+}
+
 static void req_body_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1client_t *client = sock->data;
@@ -608,7 +644,9 @@ static void req_body_send_complete(h2o_socket_t *sock, const char *err)
 
     int is_end_stream = client->body_buf.is_end_stream;
 
-    call_proceed_req(client, NULL);
+    if (client->proceed_req != NULL) {
+        call_proceed_req(client, NULL);
+    }
 
     if (is_end_stream)
         on_whole_request_sent(client->sock, NULL);
@@ -763,6 +801,11 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         APPEND_HEADER(&h);
     }
 
+    if (client->_use_expect) {
+        h2o_header_t h = {&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
+        APPEND_HEADER(&h);
+    }
+
     if (num_headers != 0) {
         for (const h2o_header_t *h = headers, *h_end = h + num_headers; h != h_end; ++h)
             APPEND_HEADER(h);
@@ -789,6 +832,10 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     size_t reqbufcnt = 0;
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
+
+    if (props->use_expect && (client->proceed_req != NULL || body.len != 0) && client->super.upgrade_to == NULL)
+        client->_use_expect = 1; /* this must be set before calling build_request */
+
     h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
     client->super.bytes_written.header = header.len;
@@ -803,16 +850,31 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
             return;
         }
-        size_t bytes_written;
-        reqbufcnt += req_body_send_prepare(client, reqbufs + reqbufcnt, &bytes_written);
-        client->super.bytes_written.body = bytes_written;
-        h2o_socket_write(client->sock, reqbufs, reqbufcnt, req_body_send_complete);
-    } else {
+        if (client->_use_expect) {
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
+        } else {
+            size_t bytes_written;
+            reqbufcnt += req_body_send_prepare(client, reqbufs + reqbufcnt, &bytes_written);
+            client->super.bytes_written.body = bytes_written;
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, req_body_send_complete);
+        }
+    } else if (body.len != 0) {
         assert(!client->_is_chunked);
-        if (body.len != 0) {
+        if (client->_use_expect) {
+            h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
+            client->body_buf.is_end_stream = 1;
+            if (!h2o_buffer_try_append(&client->body_buf.buf, body.base, body.len)) {
+                on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
+                return;
+            }
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
+        } else {
             reqbufs[reqbufcnt++] = body;
             client->super.bytes_written.body = body.len;
+            h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
         }
+    } else {
+        assert(!client->_is_chunked);
         h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_whole_request_sent);
     }
     client->super.bytes_written.total = client->sock->bytes_written;

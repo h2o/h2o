@@ -612,13 +612,15 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                    const char **err_desc)
 {
     int ret, header_exists_map = 0;
+    h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
 
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &stream->cache_digests, NULL, src, len, err_desc)) != 0) {
+                                       &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
+        0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -693,6 +695,18 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         return 0;
     }
 
+    /* handle expect: 100-continue */
+    if (expect.base != NULL) {
+        if (!h2o_lcstris(expect.base, expect.len, H2O_STRLIT("100-continue"))) {
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
+            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
+            h2o_send_error_417(&stream->req, "Expectation Failed", "unknown expectation", 0);
+            return 0;
+        }
+        stream->req.res.status = 100;
+        h2o_send_informational(&stream->req);
+    }
+
     /* handle the request */
     if (stream->req_body.buf == NULL) {
         execute_or_enqueue_request(conn, stream);
@@ -712,11 +726,12 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                    const char **err_desc)
 {
     size_t dummy_content_length;
+    h2o_iovec_t dummy_expect = h2o_iovec_init(NULL, 0);
     int ret;
 
-    if ((ret =
-             h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL, NULL,
-                                     NULL, &stream->req.headers, NULL, &dummy_content_length, NULL, NULL, src, len, err_desc)) != 0)
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
+                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, NULL,
+                                       src, len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;

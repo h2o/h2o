@@ -83,8 +83,9 @@ static void do_test_simple(int use_enc_stream)
         int pseudo_header_exists_map = 0;
         h2o_headers_t headers = {NULL};
         size_t content_length = SIZE_MAX;
+        h2o_iovec_t expect = {NULL};
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, NULL, NULL, header_ack, &header_ack_len,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, header_ack, &header_ack_len,
                                       (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
@@ -127,6 +128,7 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
     h2o_headers_t headers = {};
     int pseudo_header_exists_map = 0;
     size_t content_length = SIZE_MAX;
+    h2o_iovec_t expect = {};
     const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
@@ -134,7 +136,7 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
     h2o_mem_init_pool(&pool);
 
     int ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, NULL, NULL, header_ack, &header_ack_len,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, header_ack, &header_ack_len,
                                       (const uint8_t *)input.base, input.len, &err_desc);
 
     ok(ret == expected_ret);

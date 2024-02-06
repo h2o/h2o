@@ -736,7 +736,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     return on_body;
 }
 
-static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
+static int on_informational(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
+                            size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
@@ -746,7 +747,11 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
-    if (status != 101) {
+    assert(status != 101 && "101 has to be notified as final");
+
+    if (status == 100) {
+        /* we don't need to forward 100 since protocol handlers have already done */
+    } else {
         self->src_req->res.status = status;
         self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
         h2o_send_informational(self->src_req);
@@ -810,6 +815,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
+        props->use_expect = req->overrides->proxy_use_expect;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -848,7 +854,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
             self->req_done = 0;
         }
     }
-    self->client->informational_cb = on_1xx;
+    self->client->informational_cb = on_informational;
 
     client->get_conn_properties(client, &req->proxy_stats.conn);
 

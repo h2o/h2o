@@ -26,13 +26,8 @@ my $quic_port = empty_port({
 });
 my $h3client = bindir() . "/h2o-httpclient";
 
-subtest 'forward' => sub {
-    subtest '100 Continue' => sub {
-        do_forward(100);
-    };
-    subtest '103 Early Hints' => sub {
-        do_forward(103);
-    };
+subtest 'forward 103 Early Hints' => sub {
+    do_forward(103);
 };
 
 subtest 'send 103' => sub {
