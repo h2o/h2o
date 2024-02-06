@@ -472,14 +472,17 @@ sub openssl_can_negotiate {
 }
 
 sub openssl_supports_tls13 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !!( `openssl s_client -help 2>&1` =~ /^\s*-tls1_3\s+/m);
 }
 
 sub curl_supports_http2 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
 }
 
 sub curl_supports_http3 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
 }
 
