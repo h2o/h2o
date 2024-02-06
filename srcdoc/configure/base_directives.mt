@@ -415,20 +415,25 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 <?
 $ctx->{directive}->(
     name    => "h2olog",
-    levels  => [ qw(global) ],
-    desc    => q{Settings for h2olog(1).},
+    levels  => [ qw(host) ],
+    default => "h2olog: OFF",
+    desc    => q{Registers a h2olog handler for given host, under path <code>/.well-known/h2olog</code>. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.},
 )->(sub {
 ?>
-<?= $ctx->{example}->('Configure a UNIX domain socket for h2olog', <<'EOT')
-h2olog:
-  path: /path/to/h2olog.sock # required
-  appdata: ON # optional
-  owner: h2o # optional
-  group: h2o # optional
-  permission: 666 # optional
-  sndbuf: 65536 # optional
-EOT
-?>
+<p>
+Users can use the <code>h2olog</code> command to gather information through this endpoint.
+</p>
+<p>
+This directive takes one of the following three arguments:
+<dl>
+<dt>off</dt>
+<dd>The h2olog endpoint is disabled.</dt>
+<dt>on</dt>
+<dd>The h2olog endpoint is enabled, but only information to gather performance data will be emitted.</dd>
+<dt>appdata</dt>
+<dd>The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).</dd>
+</dl>
+</p>
 ? })
 
 <?
