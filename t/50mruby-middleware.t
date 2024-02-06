@@ -216,6 +216,7 @@ EOT
             proc {|env|
               modify_env(env, '$mode')
               status, headers, body = H2O.$mode.call(env)
+              headers.delete('content-length')
               [status, headers, Class.new do
                 def each
                   yield 'mruby'
@@ -227,7 +228,6 @@ EOT
             my ($server, $tc, $mode, $file, $gopts) = @_;
             run_with_curl($server, sub {
                 my ($proto, $port, $curl) = @_;
-                local $TODO = "HTTP/3 is not yet supported" if $curl =~ /--http3/;
                 my ($status, $headers, $body) = get($proto, $port, $curl, "@{[ into_path($tc->{name})]}/$file", $gopts);
                 is $status, 200;
                 is $body, 'mruby';
