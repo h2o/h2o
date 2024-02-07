@@ -43,64 +43,102 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 access-log:
   path: $tempdir/access_log
-  format: '"%r" %s %b %{extensible-priorities}x'
+  format: '"%r" %s %b %{extensible-priorities}x %{http3.stream-id}x %{response-time}x'
 EOT
 
-my $get_last_log = sub {
+# returns the log lines that have become newly available since the last invocation
+my $get_last_log = do {
     open my $fh, "<", "$tempdir/access_log"
         or die "failed to open file:$tempdir/access_log:$!";
+    # for each invocation read whatever is available
     sub {
-        my $last = "";
-        while (my $line = <$fh>) {
-            $last = $line;
-        }
-        chomp $last;
-        $last;
-    };
-}->();
-
-my $fetch = sub {
-    my ($reqval, $respval) = @_;
-    my $opt = $reqval ? "-Hpriority:$reqval" : "";
-    my $query = $respval ? "?$respval" : "";
-    my $resp = `$client_prog -3 100 $opt https://127.0.0.1:$quic_port/$query 2>&1`;
-    sleep 0.2;
-    ($resp, $get_last_log->());
-};
-
-subtest "req-header" => sub {
-    subtest "default" => sub {
-        my ($resp, $log) = $fetch->();
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        is $log, '"GET / HTTP/3" 200 6 u=3', "logged priority";
-    };
-    subtest "u=7" => sub {
-        my ($resp, $log) = $fetch->("u=7");
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        is $log, '"GET / HTTP/3" 200 6 u=7', "logged priority";
-    };
-    subtest "i=?1,u=0" => sub {
-        my ($resp, $log) = $fetch->("i=?1,u=7");
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        is $log, '"GET / HTTP/3" 200 6 u=7,i=?1', "logged priority";
+        my $input = '';
+        sysread $fh, $input, 1048576;
+        $input;
     };
 };
+$get_last_log->();
 
-subtest "resp-header" => sub {
-    subtest "u=0" => sub {
-        my ($resp, $log) = $fetch->(undef, "u=1");
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=1}s, "logged priority";
+subtest "signalling" => sub {
+    my $fetch = sub {
+        my ($reqval, $respval) = @_;
+        my $opt = $reqval ? "-Hpriority:$reqval" : "";
+        my $query = $respval ? "?$respval" : "";
+        my $resp = `$client_prog -3 100 $opt https://127.0.0.1:$quic_port/$query 2>&1`;
+        sleep 0.2;
+        ($resp, $get_last_log->());
     };
-    subtest "change-only-i" => sub {
-        my ($resp, $log) = $fetch->("u=7", "i=?1");
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=7,i=\?1}s, "logged priority";
+
+    subtest "req-header" => sub {
+        subtest "default" => sub {
+            my ($resp, $log) = $fetch->();
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET / HTTP/3" 200 6 u=3 }, "logged priority";
+        };
+        subtest "u=7" => sub {
+            my ($resp, $log) = $fetch->("u=7");
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET / HTTP/3" 200 6 u=7 }, "logged priority";
+        };
+        subtest "i=?1,u=0" => sub {
+            my ($resp, $log) = $fetch->("i=?1,u=7");
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET / HTTP/3" 200 6 u=7,i=\?1 }, "logged priority";
+        };
     };
-    subtest "change-only-u" => sub {
-        my ($resp, $log) = $fetch->("u=6,i=?1", "u=1");
-        like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
-        like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=1,i=\?1}s, "logged priority";
+
+    subtest "resp-header" => sub {
+        subtest "u=0" => sub {
+            my ($resp, $log) = $fetch->(undef, "u=1");
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=1 }s, "logged priority";
+        };
+        subtest "change-only-i" => sub {
+            my ($resp, $log) = $fetch->("u=7", "i=?1");
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=7,i=\?1 }s, "logged priority";
+        };
+        subtest "change-only-u" => sub {
+            my ($resp, $log) = $fetch->("u=6,i=?1", "u=1");
+            like $resp, qr{^HTTP/3 200\n.*hello\n$}s, "response";
+            like $log, qr{^"GET [^ ]+ HTTP/3" 200 6 u=1,i=\?1 }s, "logged priority";
+        };
+    };
+};
+
+subtest "delivery" => sub {
+    plan skip_all => "curl not found"
+        unless prog_exists("curl");
+    plan skip_all => "curl does not support HTTP/3"
+        unless curl_supports_http3();
+    my $build_cmd = sub {
+        "curl --parallel " . join(" --next", map {
+            " --silent --insecure --http3 -H 'priority: @{[$_->[1]]}' https://127.0.0.1:@{[$server->{quic_port}]}@{[$_->[0]]}"
+        } @_);
+    };
+    subtest "same-urgency" => sub {
+        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=3"], ["/halfdome.jpg?2", "u=3"]);
+        diag $cmd;
+        system "$cmd > /dev/null";
+        my $log = $get_last_log->();
+        diag $log;
+        like $log, qr{\?1 .* 200 .* u=3 .*\?2 .* 200 .* u=3 }s;
+    };
+    subtest "in-order" => sub {
+        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=1"], ["/halfdome.jpg?2", "u=5"]);
+        diag $cmd;
+        system "$cmd > /dev/null";
+        my $log = $get_last_log->();
+        diag $log;
+        like $log, qr{\?1 .* 200 .* u=1 .*\?2 .* 200 .* u=5 }s;
+    };
+    subtest "reverse-order" => sub {
+        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=5"], ["/halfdome.jpg?2", "u=1"]);
+        diag $cmd;
+        system "$cmd > /dev/null";
+        my $log = $get_last_log->();
+        diag $log;
+        like $log, qr{\?2 .* 200 .* u=1 .*\?1 .* 200 .* u=5 }s;
     };
 };
 
