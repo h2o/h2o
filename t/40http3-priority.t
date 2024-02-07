@@ -106,6 +106,7 @@ subtest "signalling" => sub {
     };
 };
 
+# test delivery order; 120KB file is used to avoid the effect of the receive window of curl-ngtcp2 that happens to start at 128KB
 subtest "delivery" => sub {
     plan skip_all => "curl not found"
         unless prog_exists("curl");
@@ -117,7 +118,7 @@ subtest "delivery" => sub {
         } @_);
     };
     subtest "same-urgency" => sub {
-        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=3"], ["/halfdome.jpg?2", "u=3"]);
+        my $cmd = $build_cmd->(["/120k.bin?1", "u=3"], ["/120k.bin?2", "u=3"]);
         diag $cmd;
         system "$cmd > /dev/null";
         my $log = $get_last_log->();
@@ -125,7 +126,7 @@ subtest "delivery" => sub {
         like $log, qr{\?1 .* 200 .* u=3 .*\?2 .* 200 .* u=3 }s;
     };
     subtest "in-order" => sub {
-        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=1"], ["/halfdome.jpg?2", "u=5"]);
+        my $cmd = $build_cmd->(["/120k.bin?1", "u=1"], ["/120k.bin?2", "u=5"]);
         diag $cmd;
         system "$cmd > /dev/null";
         my $log = $get_last_log->();
@@ -133,7 +134,7 @@ subtest "delivery" => sub {
         like $log, qr{\?1 .* 200 .* u=1 .*\?2 .* 200 .* u=5 }s;
     };
     subtest "reverse-order" => sub {
-        my $cmd = $build_cmd->(["/halfdome.jpg?1", "u=5"], ["/halfdome.jpg?2", "u=1"]);
+        my $cmd = $build_cmd->(["/120k.bin?1", "u=5"], ["/120k.bin?2", "u=1"]);
         diag $cmd;
         system "$cmd > /dev/null";
         my $log = $get_last_log->();
