@@ -82,6 +82,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#error-log.emit-request-errors">
 <code>error-log.emit-request-errors</code>
 </a></li>
+<li><a href="configure/base_directives.html#h2olog">
+<code>h2olog</code>
+</a></li>
 <li><a href="configure/base_directives.html#handshake-timeout">
 <code>handshake-timeout</code>
 </a></li>
@@ -645,6 +648,39 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 <dd><a href="configure/access_log_directives.html#access-log"><code>access-log</code></a>
 <a href="configure/base_directives.html#error-log"><code>error-log</code></a>
 </dd>
+</dl>
+
+<div id="h2olog" class="directive-head">
+<h3><a href="configure/base_directives.html#h2olog"><code>"h2olog"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Registers a h2olog handler for given host, under path <code>/.well-known/h2olog</code>. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.
+</p>
+
+<p>
+Users can use the <code>h2olog</code> command to gather information through this endpoint.
+</p>
+<p>
+This directive takes one of the following three arguments:
+<dl>
+<dt>off</dt>
+<dd>The h2olog endpoint is disabled.</dt>
+<dt>on</dt>
+<dd>The h2olog endpoint is enabled, but only information to gather performance data will be emitted.</dd>
+<dt>appdata</dt>
+<dd>The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).</dd>
+</dl>
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>host</dd>
+<dt>Default:</dt>
+<dd><code><pre>h2olog: OFF</pre></code>
 </dl>
 
 <div id="handshake-timeout" class="directive-head">

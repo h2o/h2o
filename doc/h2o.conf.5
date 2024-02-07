@@ -855,6 +855,29 @@ error-log
 .RE
 .RE
 
+.SS h2olog
+Registers a h2olog handler for given host, under path /.well-known/h2olog. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.
+
+.PP
+
+
+Users can use the h2olog command to gather information through this endpoint.
+
+
+This directive takes one of the following three arguments:
+
+off
+The h2olog endpoint is disabled.
+on
+The h2olog endpoint is enabled, but only information to gather performance data will be emitted.
+appdata
+The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).
+
+
+
+.RE
+.RE
+
 .SS handshake-timeout
 Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.
 

@@ -33,9 +33,12 @@ extern "C" {
 #include <limits.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
-#include "h2o/memory.h"
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include "h2o.h"
 #include "h2o/version.h"
-#include "h2o/ebpf.h"
+#include "picohttpparser.h"
 }
 #include "h2olog.h"
 
@@ -67,6 +70,7 @@ Optional arguments:
   -f <flag>         Turn on a BCC debug flag (supported flag: DEBUG_LLVM_IR,
                     DEBUG_BPF, DEBUG_PREPROCESSOR, DEBUG_SOURCE,
                     DEBUG_BPF_REGISTER_STATE, DEBUG_BTF)
+  -u <unix-socket>  Path to the unix socket to connect to. Experimental.
 
 Examples:
   h2olog -p $(pgrep -o h2o) -H
@@ -257,6 +261,99 @@ static std::string build_cc_macro_str(const char *name, const std::string &str)
     return build_cc_macro_expr(name, "\"" + str + "\"");
 }
 
+static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool debug, bool preserve_root)
+{
+    struct sockaddr_un sa = {
+        .sun_family = AF_UNIX,
+    };
+    int fd = -1, ret = EXIT_FAILURE;
+    char buf[4096];
+    size_t buflen = 0;
+
+    /* connect */
+    if (strlen(unix_socket_path) >= sizeof(sa.sun_path)) {
+        fprintf(stderr, "'%s' is too long as the name of a unix domain socket.\n", unix_socket_path);
+        goto Exit;
+    }
+    strcpy(sa.sun_path, unix_socket_path);
+    if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("failed to create a socket");
+        goto Exit;
+    }
+    if (connect(fd, (const struct sockaddr *)&sa, sizeof(sa)) == -1) {
+        perror("failed to connect to the socket");
+        goto Exit;
+    }
+
+    setvbuf(outfp, NULL, _IOLBF, 0);
+
+    /* drop root privileges once the connection has been established */
+    if (!preserve_root)
+        drop_root_privilege();
+
+    { /* send request */
+        static const char req[] = "GET " H2O_LOG_URI_PATH " HTTP/1.0\r\n\r\n";
+        (void)write(fd, req, sizeof(req) - 1);
+    }
+
+    if (debug)
+        infof("Attaching %s", unix_socket_path);
+
+    /* read and process */
+    while (1) {
+        ssize_t rret;
+        while ((rret = read(fd, buf + buflen, sizeof(buf) - buflen)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0) {
+            if (ret != EXIT_SUCCESS)
+                fprintf(stderr, "Invalid HTTP response\n");
+            break;
+        }
+        buflen += rret;
+
+        /* parse HTTP response if not yet being done, and retry until that's done */
+        if (ret != EXIT_SUCCESS) {
+            int minor_version, status, http_headers_len;
+            const char *msg;
+            struct phr_header headers[100];
+            size_t msg_len, num_headers = sizeof(headers) / sizeof(headers[0]);
+            /* parse HTTP response, handle error */
+            if ((http_headers_len = phr_parse_response(buf, buflen, &minor_version, &status, &msg, &msg_len, headers, &num_headers,
+                                                       buflen - rret)) < 0) {
+                if (http_headers_len == -1 || buflen == sizeof(buf)) {
+                    fprintf(stderr, "Invalid HTTP response\n");
+                    goto Exit;
+                } else {
+                    assert(http_headers_len == -2 && "HTTP response is partial");
+                    continue;
+                }
+            }
+            /* entire HTTP headers section has been received */
+            if (status != 200) {
+                fprintf(stderr, "Got error response: %d %.*s\n", status, (int)msg_len, msg);
+                goto Exit;
+            }
+            /* success */
+            ret = EXIT_SUCCESS;
+            memmove(buf, buf + http_headers_len, buflen - http_headers_len);
+            buflen -= http_headers_len;
+        }
+
+        /* print response content and reset the buffer */
+        (void)fwrite(buf, 1, buflen, outfp);
+        buflen = 0;
+    }
+
+    if (debug)
+        infof("Connection closed\n");
+
+Exit:
+    if (fd != -1)
+        close(fd);
+
+    return ret;
+}
+
 #define CC_MACRO_EXPR(name) build_cc_macro_expr(#name, name)
 #define CC_MACRO_STR(name) build_cc_macro_str(#name, name)
 
@@ -276,7 +373,8 @@ int main(int argc, char **argv)
     double sampling_rate = 1.0;
     std::vector<std::pair<std::vector<uint8_t> /* address */, unsigned /* netmask */>> sampling_addresses;
     std::vector<std::string> sampling_snis;
-    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:")) != -1) {
+    const char *unix_socket_path = NULL; // h2olog.path in h2o conf file
+    while ((c = getopt(argc, argv, "hHdrlap:t:s:w:S:A:N:f:u:")) != -1) {
         switch (c) {
         case 'H':
             tracer.reset(create_http_tracer());
@@ -363,6 +461,9 @@ int main(int argc, char **argv)
         case 'r':
             preserve_root = true;
             break;
+        case 'u':
+            unix_socket_path = optarg;
+            break;
         case 'h':
             usage();
             exit(EXIT_SUCCESS);
@@ -376,6 +477,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "Error: too many aruments\n");
         usage();
         exit(EXIT_FAILURE);
+    }
+
+    if (unix_socket_path != NULL) {
+        return read_from_unix_socket(unix_socket_path, outfp, debug, preserve_root);
     }
 
     if (list_usdts) {

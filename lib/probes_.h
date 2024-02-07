@@ -22,6 +22,24 @@
 #ifndef h2o__probes_h
 #define h2o__probes_h
 
+#include "picotls.h"
+
+#define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
+#define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
+    do {                                                                                                                           \
+        if (!ptls_log.is_active)                                                                                                   \
+            break;                                                                                                                 \
+        h2o_conn_t *conn_ = (_conn);                                                                                               \
+        if (conn_->callbacks->skip_tracing(conn_))                                                                                 \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(h2o, _type, {                                                                                             \
+            PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
+            do {                                                                                                                   \
+                _block                                                                                                             \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
+    } while (0)
+
 /* This file is placed under lib, and must only be included from the source files of the h2o / libh2o, because H2O_USE_DTRACE is a
  * symbol available only during the build phase of h2o.  That's fine, because only h2o / libh2o has the sole right to define probes
  * belonging to the h2o namespace.
@@ -107,18 +125,32 @@ __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, u
                                                                h2o_iovec_t value)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+    H2O_LOG_CONN(receive_request_header, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
+    });
 }
 
 __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, uint64_t req_index, h2o_iovec_t name,
                                                                 h2o_iovec_t value)
 {
     H2O_PROBE_CONN(SEND_RESPONSE_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
+    H2O_LOG_CONN(send_response_header, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
+        PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
+    });
 }
 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
-    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn)) {
+    H2O_LOG_CONN(receive_request, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_SIGNED(http_version, req->version);
+    });
+    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn) || ptls_log.is_active) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -138,7 +170,11 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
-    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn)) {
+    H2O_LOG_CONN(send_response, req->conn, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
+    });
+    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn) || ptls_log.is_active) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);

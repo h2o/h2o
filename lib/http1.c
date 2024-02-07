@@ -1162,6 +1162,18 @@ static uint64_t get_req_id(h2o_req_t *req)
     return conn->_req_index;
 }
 
+static h2o_socket_t *steal_socket(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    h2o_socket_t *sock = conn->sock;
+
+    if (sock->ssl != NULL)
+        return NULL;
+
+    close_connection(conn, 0);
+    return sock;
+}
+
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1215,6 +1227,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .request_shutdown = initiate_graceful_shutdown,
     .can_zerocopy = can_zerocopy,
     .get_req_id = get_req_id,
+    .steal_socket = steal_socket,
     .log_ = {{
         .transport =
             {

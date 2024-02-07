@@ -816,14 +816,20 @@ package H2ologTracer {
 
     sub new {
         my ($class, $opts) = @_;
-        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        unless ($opts->{pid} or $opts->{path}) {
+            Carp::croak("Missing pid or path in the opts");
+        }
+        my $h2o_pid = $opts->{pid};
+        my $h2olog_socket_path = $opts->{path};
         my $h2olog_args = $opts->{args} // [];
+        my $output_dir = $opts->{output_dir} // File::Temp::tempdir(CLEANUP => 1);
+
         my $h2olog_prog = t::Util::bindir() . "/h2olog";
 
-        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
-        my $output_file = "$tempdir/h2olog.jsonl";
+        my $output_file = "$output_dir/h2olog.jsonl";
+        my $attaching_opts = $h2o_pid ? "-p $h2o_pid" : "-u $h2olog_socket_path";
 
-        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d $attaching_opts -w '$output_file' 2>&1};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
@@ -832,7 +838,7 @@ package H2ologTracer {
             Carp::confess("h2olog[$tracer_pid] died unexpectedly")
                 unless defined $errline;
             Test::More::diag("h2olog[$tracer_pid]: $errline");
-            last if $errline =~ /Attaching pid=/;
+            last if $errline =~ /\bAttaching\b/ms;
         }
 
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
@@ -864,6 +870,8 @@ package H2ologTracer {
             _guard => $guard,
             tracer_pid => $tracer_pid,
             get_trace => $get_trace,
+            output_dir => $output_dir,
+            output_file => $output_file,
         }, $class;
     }
 

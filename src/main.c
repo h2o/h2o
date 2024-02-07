@@ -3821,6 +3821,7 @@ static void close_idle_connections(h2o_context_t *ctx)
                                            conf.soft_connection_limit_min_age * 1000);
     }
 }
+
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -4139,18 +4140,22 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             conf.listeners[i]->quic.thread_fds[thread_index] = fds[1];
         }
     }
+
     /* and start listening */
     update_listener_state(listeners);
 
-    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
-     * shutdown, check (and exit) if SIGTERM has been received already. */
+    /* wait for all threads to become ready */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
+
+    /* now that all worker threads are ready, in main thread, set signal handler for graceful shutdown / or exit immediately */
     if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
+
+    /* let all worker threads start accepting connections */
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
@@ -4515,6 +4520,7 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
     h2o_self_trace_register_configurator(&conf.globalconf);
+    h2o_log_register_configurator(&conf.globalconf);
 
     static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
