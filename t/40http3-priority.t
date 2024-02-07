@@ -141,6 +141,16 @@ subtest "delivery" => sub {
         diag $log;
         like $log, qr{\?2 .* 200 .* u=1 .*\?1 .* 200 .* u=5 }s;
     };
+    subtest "incremental" => sub {
+        # first three files are u=2,i=?1 and the smallest one is delivered first; 4th file has lower urgency and is delivered last
+        # even though it is tiny
+        my $cmd = $build_cmd->(["/120k.bin?1", "u=2,i=?1"], ["/120k.bin?2", "u=2,i=?1"],  ["/alice.txt?3", "u=2,i=?1"], ["/alice.txt?4", "u=5,i=?1"]);
+        diag $cmd;
+        system "$cmd > /dev/null";
+        my $log = $get_last_log->();
+        diag $log;
+        like $log, qr{\?3 .* 200 .* u=2,i=\?1 .*\?1 .* 200 .* u=2,i=\?1 .*\?2 .* 200 .* u=2,i=\?1 .*\?4 .* 200 .* u=5,i=\?1 }s;
+    };
 };
 
 done_testing;
