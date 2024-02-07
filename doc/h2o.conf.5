@@ -856,12 +856,13 @@ error-log
 .RE
 
 .SS h2olog
-Registers a h2olog handler for given host, under path /.well-known/h2olog. As the handler emits the internals of h2o to the client, this directive should be bind only to a UNIX socket or be protected by access control.
+Under the path /.well-known/h2olog for the current host, registers a h2olog handler that emits the internals of traffic that the h2o process is handling.
 
 .PP
 
 
-Users can use the h2olog command to gather information through this endpoint.
+The h2olog command can be used to gather information through this endpoint.
+As the handler emits the internals of h2o to the client, only requests via a UNIX socket are accepted.
 
 
 This directive takes one of the following three arguments:
@@ -871,7 +872,7 @@ The h2olog endpoint is disabled.
 on
 The h2olog endpoint is enabled, but only information to gather performance data will be emitted.
 appdata
-The h2olog endpoint is enabled, and some payload of HTTP is emitted as well. This might include sensitive information (e.g., HTTP cookies).
+The h2olog endpoint is enabled, and in addition to information necessary for gathering performance data, some payload of HTTP is emitted as well. The additional information might help diagnose issues specific to certain HTTP connections but might include sensitive information (e.g., HTTP cookies).
 
 
 
