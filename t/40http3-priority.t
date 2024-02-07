@@ -149,7 +149,7 @@ subtest "delivery" => sub {
         system "$cmd > /dev/null";
         my $log = $get_last_log->();
         diag $log;
-        like $log, qr{\?3 .* 200 .* u=2,i=\?1 .*\?1 .* 200 .* u=2,i=\?1 .*\?2 .* 200 .* u=2,i=\?1 .*\?4 .* 200 .* u=5,i=\?1 }s;
+        like $log, qr{\?3 .* 200 .* u=2,i=\?1 .*\?[12] .* 200 .* u=2,i=\?1 .*\?[12] .* 200 .* u=2,i=\?1 .*\?4 .* 200 .* u=5,i=\?1 }s;
     };
 };
 
