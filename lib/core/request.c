@@ -570,12 +570,12 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
     return ostr;
 }
 
-static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
+void h2o_req_apply_env(h2o_req_t *req, h2o_envconf_t *env)
 {
     size_t i;
 
     if (env->parent != NULL)
-        apply_env(req, env->parent);
+        h2o_req_apply_env(req, env->parent);
     for (i = 0; i != env->unsets.size; ++i)
         h2o_req_unsetenv(req, env->unsets.entries[i].base, env->unsets.entries[i].len);
     for (i = 0; i != env->sets.size; i += 2)
@@ -594,7 +594,7 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
     req->num_loggers = pathconf->_loggers.size;
 
     if (pathconf->env != NULL)
-        apply_env(req, pathconf->env);
+        h2o_req_apply_env(req, pathconf->env);
 }
 
 void h2o_proceed_response_deferred(h2o_req_t *req)

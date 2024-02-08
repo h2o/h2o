@@ -608,6 +608,10 @@ static int delegate_dynamic_request(h2o_req_t *req, h2o_iovec_t script_name, h2o
     filereq->local_path = h2o_strdup(&req->pool, local_path, local_path_len);
     req->filereq = filereq;
 
+    /* apply environment */
+    if (mime_type->data.dynamic.pathconf.env != NULL)
+        h2o_req_apply_env(req, mime_type->data.dynamic.pathconf.env);
+
     /* call the dynamic handler while retaining current hostconf or pathconf; in other words, filters and loggers of current
      * path level is applied, rather than of the extension level */
     h2o_handler_t *handler = mime_type->data.dynamic.pathconf.handlers.entries[0];
