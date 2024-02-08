@@ -123,11 +123,14 @@ EOT
     my $doit = sub {
         my ($path, $expected) = @_;
         subtest $path => sub {
-            my $resp = `curl --silent http://127.0.0.1:$server->{port}$path`;
-            my $env = +{ map { split(':', $_, 2) } split(/\n/, $resp) };
-            for my $key (sort keys %$expected) {
-                is $env->{$key}, $expected->{$key}, $key;
-            }
+            run_with_curl($server, sub {
+                my ($proto, $port, $cmd) = @_;
+                my $resp = `$cmd --silent $proto://127.0.0.1:$port$path`;
+                my $env = +{ map { split(':', $_, 2) } split(/\n/, $resp) };
+                for my $key (sort keys %$expected) {
+                    is $env->{$key}, $expected->{$key}, $key;
+                }
+            });
         };
     };
 
