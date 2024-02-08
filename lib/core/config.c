@@ -334,6 +334,8 @@ h2o_handler_t *h2o_create_handler(h2o_pathconf_t *conf, size_t sz)
 
 h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 {
+    assert(conf->path.base != NULL && "filters cannot be added at the extension level");
+
     h2o_filter_t *filter = h2o_mem_alloc(sz);
 
     memset(filter, 0, sz);
@@ -349,6 +351,8 @@ h2o_filter_t *h2o_create_filter(h2o_pathconf_t *conf, size_t sz)
 
 h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz)
 {
+    assert(conf->path.base != NULL && "loggers cannot be added at the extension level");
+
     h2o_logger_t *logger = h2o_mem_alloc(sz);
 
     memset(logger, 0, sz);

@@ -600,6 +600,8 @@ static int delegate_dynamic_request(h2o_req_t *req, h2o_iovec_t script_name, h2o
     h2o_filereq_t *filereq;
 
     assert(mime_type->data.dynamic.pathconf.handlers.size == 1);
+    assert(mime_type->data.dynamic.pathconf._filters.size == 0);
+    assert(mime_type->data.dynamic.pathconf._loggers.size == 0);
 
     /* setup CGI attributes (e.g., PATH_INFO) */
     filereq = h2o_mem_alloc_pool(&req->pool, *filereq, 1);
