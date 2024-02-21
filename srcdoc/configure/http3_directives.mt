@@ -124,6 +124,22 @@ See <a href="configure/http2_directives.html#http2-input-window-size"><code>http
 </p>
 ? })
 
+<?
+$ctx->{directive}->(
+    name    => "http3-max-concurrent-streaming-requests-per-connection",
+    levels  => [ qw(global) ],
+    default => 'http3-max-concurrent-streaming-requests-per-connection: 1',
+    desc    => <<'EOT',
+Maximum number of streaming requests to be handled concurrently within a single HTTP/3 connection.
+EOT
+)->(sub {
+?>
+<p>
+The value cannot exceed 256.
+</p>
+? })
+
+
 ? })
 
 ? })
