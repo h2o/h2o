@@ -673,6 +673,7 @@ SET_TARGET_PROPERTIES(t-qif PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
 
+IF (LIBUV_FOUND)
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
 IF (WSLAY_FOUND)
     ADD_DEPENDENCIES(lib-examples examples-websocket-libuv)
@@ -681,6 +682,7 @@ ADD_EXECUTABLE(examples-httpclient-libuv src/httpclient.c)
 ADD_EXECUTABLE(examples-socket-client-libuv examples/libh2o/socket-client.c)
 ADD_EXECUTABLE(examples-simple-libuv examples/libh2o/simple.c)
 ADD_EXECUTABLE(examples-websocket-libuv lib/websocket.c examples/libh2o/websocket.c)
+ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(lib-examples-evloop DEPENDS h2o-httpclient examples-simple-evloop examples-socket-client-evloop examples-latency-optimization-evloop)
 IF (WSLAY_FOUND)
