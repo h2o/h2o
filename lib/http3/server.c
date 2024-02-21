@@ -59,9 +59,10 @@ typedef int (*h2o_http3_req_scheduler_compare_cb)(struct st_h2o_http3_req_schedu
 
 /**
  * Once the size of the request body being received exceeds thit limit, streaming mode will be used (if possible), and the
- * concurrency of such requests would be limited to one per connection.
+ * concurrency of such requests would be limited to one per connection. This is set to 1 to avoid blocking requests that send
+ * small payloads without a FIN as well as to have parity with http2.
  */
-#define H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK 10240
+#define H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK 1
 
 enum h2o_http3_server_stream_state {
     /**
@@ -431,7 +432,8 @@ static void request_run_delayed(struct st_h2o_http3_server_conn_t *conn)
 
 static void check_run_blocked(struct st_h2o_http3_server_conn_t *conn)
 {
-    if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming == 0 &&
+    if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming <
+            conn->super.ctx->globalconf->http3.max_concurrent_streaming_requests_per_connection &&
         !h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked))
         request_run_delayed(conn);
 }
@@ -1186,7 +1188,8 @@ static void run_delayed(h2o_timer_t *timer)
         made_progress = 0;
 
         /* promote blocked stream to unblocked state, if possible */
-        if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming == 0 &&
+        if (conn->num_streams.recv_body_unblocked + conn->num_streams_req_streaming <
+                conn->super.ctx->globalconf->http3.max_concurrent_streaming_requests_per_connection &&
             !h2o_linklist_is_empty(&conn->delayed_streams.recv_body_blocked)) {
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.recv_body_blocked.next);

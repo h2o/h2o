@@ -78,6 +78,8 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
+#define H2O_HTTP3_DEFAULT_MAX_CONCURRENT_STREAMING_REQUESTS 1
+
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
