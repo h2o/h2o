@@ -649,6 +649,12 @@ static int on_config_http3_gso(h2o_configurator_command_t *cmd, h2o_configurator
     return 0;
 }
 
+static int on_config_http3_max_concurrent_streaming_requests_per_connection(h2o_configurator_command_t *cmd,
+                                                                            h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->http3.max_concurrent_streaming_requests_per_connection);
+}
+
 static int assert_is_mimetype(h2o_configurator_command_t *cmd, yoml_t *node)
 {
     if (node->type != YOML_TYPE_SCALAR) {
@@ -1115,6 +1121,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
                                         on_config_http3_allow_delayed_ack);
         h2o_configurator_define_command(&c->super, "http3-gso", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_gso);
+        h2o_configurator_define_command(&c->super, "http3-max-concurrent-streaming-requests-per-connection",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http3_max_concurrent_streaming_requests_per_connection);
         h2o_configurator_define_command(&c->super, "file.mime.settypes",
                                         (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                             H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,

@@ -471,6 +471,10 @@ struct st_h2o_globalconf_t {
          * a boolean indicating if UDP GSO should be used when possible
          */
         uint8_t use_gso : 1;
+        /**
+         * maximum number of HTTP3 streaming requests (per connection) to be handled simultaneously internally.
+         */
+        size_t max_concurrent_streaming_requests_per_connection;
     } http3;
 
     struct {

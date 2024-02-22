@@ -142,6 +142,9 @@ Aside from QUIC-level properties, configuration directives listed below are prov
 <li><a href="configure/http3_directives.html#http3-input-window-size">
 <code>http3-input-window-size</code>
 </a></li>
+<li><a href="configure/http3_directives.html#http3-max-concurrent-streaming-requests-per-connection">
+<code>http3-max-concurrent-streaming-requests-per-connection</code>
+</a></li>
 </ul>
 
 
@@ -236,6 +239,27 @@ See <a href="configure/http2_directives.html#http2-input-window-size"><code>http
 <dt>Default:</dt>
 <dd><code><pre>http3-input-window-size: 16777216</pre></code>
 </dl>
+
+<div id="http3-max-concurrent-streaming-requests-per-connection" class="directive-head">
+<h3><a href="configure/http3_directives.html#http3-max-concurrent-streaming-requests-per-connection"><code>"http3-max-concurrent-streaming-requests-per-connection"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum number of streaming requests to be handled concurrently within a single HTTP/3 connection.
+
+</p>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http3-max-concurrent-streaming-requests-per-connection: 1</pre></code>
+</dl>
+
 
 
 
