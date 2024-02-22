@@ -122,7 +122,7 @@ $ctx->{directive}->(
 <p>
 See <a href="configure/http2_directives.html#http2-input-window-size"><code>http2-input-window-size</code></a>.
 </p>
-? })
+? });
 
 <?
 $ctx->{directive}->(
@@ -132,7 +132,9 @@ $ctx->{directive}->(
     desc    => <<'EOT',
 Maximum number of streaming requests to be handled concurrently within a single HTTP/3 connection.
 EOT
-)->(sub {});
+)->(sub {
+?>
+? });
 
 
 ? })
