@@ -132,12 +132,7 @@ $ctx->{directive}->(
     desc    => <<'EOT',
 Maximum number of streaming requests to be handled concurrently within a single HTTP/3 connection.
 EOT
-)->(sub {
-?>
-<p>
-The value cannot exceed 256.
-</p>
-? })
+)->(sub {});
 
 
 ? })
