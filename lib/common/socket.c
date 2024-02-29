@@ -1156,6 +1156,8 @@ h2o_iovec_t h2o_socket_log_tcp_congestion_controller(h2o_socket_t *sock, h2o_mem
             buf[CC_BUFSIZE - 1] = '\0';
             return h2o_iovec_init(buf, strlen(buf));
         }
+        if (pool == NULL)
+            free(buf);
 #undef CC_BUFSIZE
     }
 #endif
