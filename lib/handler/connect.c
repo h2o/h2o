@@ -523,10 +523,13 @@ static struct st_server_address_t *get_next_server_address_for_connect(struct st
 
     /* Fetch the next address from the list of resolved addresses. */
     for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
-        if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
+        if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET) {
             server_address = pick_and_swap(self, i);
-        else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
+            break;
+        } else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6) {
             server_address = pick_and_swap(self, i);
+            break;
+        }
     }
 
     /* If address of the preferred address family is not available, select one of the other family, if available. Otherwise,

@@ -196,7 +196,15 @@ static void test_get_next_server_address_for_connect(void)
 
     struct st_server_address_t *next_addr;
 
+    /* Verify that the picked address alternates between v6 and v4 until only 1 address family remains */
     ok(self.pick_v4 == 0);
+    next_addr = get_next_server_address_for_connect(&self);
+    assert(next_addr != NULL);
+    ok(next_addr->sa->sa_family == AF_INET6);
+    ok(get_port(next_addr) == 1);
+    ok(self.server_addresses.used == 1);
+    ok(self.pick_v4 == 1);
+
     next_addr = get_next_server_address_for_connect(&self);
     assert(next_addr != NULL);
     ok(next_addr->sa->sa_family == AF_INET);
@@ -206,10 +214,24 @@ static void test_get_next_server_address_for_connect(void)
 
     next_addr = get_next_server_address_for_connect(&self);
     assert(next_addr != NULL);
+    ok(next_addr->sa->sa_family == AF_INET6);
+    ok(get_port(next_addr) == 3);
+    ok(self.server_addresses.used == 3);
+    ok(self.pick_v4 == 1);
+
+    next_addr = get_next_server_address_for_connect(&self);
+    assert(next_addr != NULL);
     ok(next_addr->sa->sa_family == AF_INET);
     ok(get_port(next_addr) == 5);
     ok(self.server_addresses.used == 4);
     ok(self.pick_v4 == 0);
+
+    next_addr = get_next_server_address_for_connect(&self);
+    assert(next_addr != NULL);
+    ok(next_addr->sa->sa_family == AF_INET6);
+    ok(get_port(next_addr) == 2);
+    ok(self.server_addresses.used == 5);
+    ok(self.pick_v4 == 1);
 
     next_addr = get_next_server_address_for_connect(&self);
     assert(next_addr != NULL);
