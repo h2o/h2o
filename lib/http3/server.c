@@ -2161,6 +2161,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->datagram_flows = kh_init(stream);
 
     /* accept connection */
+    assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
 #if PICOTLS_USE_DTRACE
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
     ptls_default_skip_tracing = skip_tracing;
