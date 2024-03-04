@@ -217,6 +217,10 @@ struct listener_config_t {
          * QPACK settings
          */
         h2o_http3_qpack_context_t qpack;
+        /**
+         * the matching ipv6 listener for an ipv4 listener and vice versa
+         */
+        struct listener_config_t *sibling;
     } quic;
     /**
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
@@ -2789,6 +2793,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         }
         if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
             return -1;
+        struct listener_config_t *siblings[2] = {NULL, NULL};
         for (ai = res; ai != NULL; ai = ai->ai_next) {
             struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen, 1);
             int listener_is_new = 0;
@@ -2818,6 +2823,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 quic->generate_resumption_token = &quic_resumption_token_generator;
                 quic->async_handshake = &async_nb_quic_handler;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
+                if (ai->ai_family == AF_INET)
+                    siblings[0] = listener;
+                else if (ai->ai_family == AF_INET6)
+                    siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
@@ -2898,6 +2907,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
+        }
+        if (siblings[0] != NULL && siblings[1] != NULL) {
+            siblings[0]->quic.sibling = siblings[1];
+            siblings[1]->quic.sibling = siblings[0];
         }
         freeaddrinfo(res);
 
@@ -3576,18 +3589,10 @@ static void setup_signal_handlers(void)
 #endif
 }
 
-struct st_h2o_quic_forwarded_t {
-    union {
-        struct sockaddr_in sin;
-        struct sockaddr_in6 sin6;
-    } srcaddr, destaddr;
-    int is_v6 : 1;
-};
-
 /* FIXME forward destaddr */
 /* The format:
  * type:     0b10000000 (1 byte)
- * version:  0x91917000 (4 bytes)
+ * version:  0x91c17000 (4 bytes)
  * destaddr: 1 or 7 or 19 bytes (UNSPEC, v4, v6)
  * srcaddr:  same as above
  * ttl:      1 byte
@@ -3789,6 +3794,16 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         if (encapsulated.destaddr.sin6.sin6_port != *h3ctx->sock.port)
             return 1;
         break;
+    }
+    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+        struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
+        if (listener_config->quic.sibling != NULL) {
+            int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid.thread_id];
+            write(fd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
+        } else {
+            /* drop packet */
+        }
+        return 0;
     }
 
     /* update */
