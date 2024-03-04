@@ -517,34 +517,46 @@ static struct st_server_address_t *pick_and_swap(struct st_connect_generator_t *
     return server_address;
 }
 
+static struct st_server_address_t *get_next_server_address_for_connect(struct st_connect_generator_t *self)
+{
+    struct st_server_address_t *server_address = NULL;
+
+    /* Fetch the next address from the list of resolved addresses. */
+    for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
+        if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET) {
+            server_address = pick_and_swap(self, i);
+            break;
+        } else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6) {
+            server_address = pick_and_swap(self, i);
+            break;
+        }
+    }
+
+    /* If address of the preferred address family is not available, select one of the other family, if available. Otherwise,
+     * send an HTTP error response or wait for address resolution. */
+    if (server_address == NULL && self->server_addresses.used < self->server_addresses.size) {
+        server_address = &self->server_addresses.list[self->server_addresses.used];
+        self->server_addresses.used++;
+    }
+
+    return server_address;
+}
+
 static void try_connect(struct st_connect_generator_t *self)
 {
     struct st_server_address_t *server_address;
 
     do {
-        server_address = NULL;
-
-        /* Fetch the next address from the list of resolved addresses. */
-        for (size_t i = self->server_addresses.used; i < self->server_addresses.size; i++) {
-            if (self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET)
-                server_address = pick_and_swap(self, i);
-            else if (!self->pick_v4 && self->server_addresses.list[i].sa->sa_family == AF_INET6)
-                server_address = pick_and_swap(self, i);
-        }
-
-        /* If address of the preferred address family is not available, select one of the other family, if available. Otherwise,
-         * send an HTTP error response or wait for address resolution. */
+        server_address = get_next_server_address_for_connect(self);
         if (server_address == NULL) {
-            if (self->server_addresses.used == self->server_addresses.size) {
-                if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
-                    assert(self->last_error.class == ERROR_CLASS_CONNECT);
-                    record_socket_error(self, self->last_error.str);
-                    on_connect_error(self, self->last_error.str);
-                }
-                return;
+            /* If address an is not available, send an HTTP error response or wait for address resolution. */
+            if (self->getaddr_req.v4 == NULL && self->getaddr_req.v6 == NULL) {
+                /* No pending address resolution, send error response. */
+                assert(self->last_error.class == ERROR_CLASS_CONNECT);
+                record_socket_error(self, self->last_error.str);
+                on_connect_error(self, self->last_error.str);
             }
-            server_address = &self->server_addresses.list[self->server_addresses.used];
-            self->server_addresses.used++;
+            return;
         }
 
         /* Connect. Retry if the connect function returns error immediately. */
