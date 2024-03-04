@@ -1737,8 +1737,7 @@ h2o_logger_t *h2o_create_logger(h2o_pathconf_t *conf, size_t sz);
 /**
  * initializes the context
  */
-void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_globalconf_t *config, uint32_t quic_thread_id,
-                      uint64_t quic_node_id);
+void h2o_context_init(h2o_context_t *context, h2o_loop_t *loop, h2o_globalconf_t *config);
 /**
  * disposes of the resources allocated for the context
  */
