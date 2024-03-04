@@ -541,8 +541,8 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         return;
 
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
-    if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
-        packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
+    if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid->node_id &&
+        packets[0].cid.dest.plaintext.thread_id == ctx->next_cid->thread_id) {
         khiter_t iter = kh_get_h2o_quic_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
@@ -580,7 +580,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         uint64_t accept_hashkey = calc_accept_hashkey(destaddr, srcaddr, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
-            if (offending_thread != ctx->next_cid.thread_id) {
+            if (offending_thread != ctx->next_cid->thread_id) {
                 if (ctx->forward_packets != NULL)
                     ctx->forward_packets(ctx, NULL, offending_thread, destaddr, srcaddr, ttl, packets, num_packets);
                 return;
@@ -600,7 +600,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                  * as a server (likely gracefully shutting down). Let the application process forward the packet to the next
                  * generation. */
                 if (ctx->forward_packets != NULL &&
-                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets))
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid->thread_id, destaddr, srcaddr, ttl, packets, num_packets))
                     return;
                 /* If not forwarded, send rejection to the peer. A Version Negotiation packet that carries only a greasing version
                  * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
@@ -624,7 +624,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                             uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                             uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
                             if (ctx->forward_packets != NULL && ttl > 0 &&
-                                (offending_node_id != ctx->next_cid.node_id || offending_thread_id != ctx->next_cid.thread_id))
+                                (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                                 ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                      num_packets);
                             return;
@@ -648,7 +648,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 goto Receive;
             uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
             uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
-            if (offending_node_id != ctx->next_cid.node_id || offending_thread_id != ctx->next_cid.thread_id) {
+            if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                 /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial that
                  * is supposed to be handled by another node. forward it. */
                 if (ttl == 0)
@@ -998,7 +998,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .loop = loop,
         .sock = {.sock = sock},
         .quic = quic,
-        .next_cid = {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+        .next_cid = NULL /* set by h2o_http3_set_context_identifier */,
         .conns_by_id = kh_init_h2o_quic_idmap(),
         .conns_accepting = kh_init_h2o_quic_acceptmap(),
         .notify_conn_update = notify_conn_update,
@@ -1034,13 +1034,12 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
 
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, quicly_cid_plaintext_t *next_cid,
                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
                                      h2o_quic_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
-    ctx->next_cid.thread_id = thread_id;
-    ctx->next_cid.node_id = node_id;
+    ctx->next_cid = next_cid;
     ctx->forward_packets = forward_cb;
     ctx->default_ttl = ttl;
     ctx->preprocess_packet = preprocess_cb;

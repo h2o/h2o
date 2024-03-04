@@ -266,9 +266,10 @@ struct st_h2o_quic_ctx_t {
      */
     quicly_context_t *quic;
     /**
-     *
+     * Retains the next CID to be used for a connection being associated to this context. Also, `thread_id` and `node_id` are
+     * constants that contain the identity of the current thread / node; packets targetted to other theads / nodes are forwarded.
      */
-    quicly_cid_plaintext_t next_cid;
+    quicly_cid_plaintext_t *next_cid;
     /**
      * hashmap of connections by quicly_cid_plaintext_t::master_id.
      */
@@ -451,7 +452,7 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
  *
  */
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
+void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, quicly_cid_plaintext_t *next_cid,
                                      uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
                                      h2o_quic_preprocess_packet_cb preprocess_cb);
 /**
