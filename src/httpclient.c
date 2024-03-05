@@ -94,6 +94,7 @@ static h2o_http3client_ctx_t h3ctx = {
         },
     .max_frame_payload_size = 16384,
 };
+static quicly_cid_plaintext_t h3_next_cid;
 static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -704,6 +705,7 @@ int main(int argc, char **argv)
         h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
                               1 /* use_gso */, NULL);
+        h3ctx.h3.next_cid = &h3_next_cid;
     }
 #endif
 
