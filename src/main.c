@@ -4073,7 +4073,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
-    conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
