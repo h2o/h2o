@@ -483,7 +483,7 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, int64_t **unblock
     }
 
 Exit:
-    if (ret == H2O_HTTP2_ERROR_INCOMPLETE)
+    if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
         ret = 0;
     if (ret == 0) {
         /* build list of newly unblocked streams ids reusing the memory of the blocked streams list (nasty!) */
