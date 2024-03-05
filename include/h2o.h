@@ -742,6 +742,13 @@ struct st_h2o_context_t {
     } http2;
 
     struct {
+        /**
+         * thread-local variable shared by multiple instances of `h2o_quic_ctx_t::next_cid`
+         */
+        quicly_cid_plaintext_t next_cid;
+        /**
+         *
+         */
         struct {
             /**
              * number of packets forwarded to another node in a cluster

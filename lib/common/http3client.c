@@ -269,13 +269,14 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
                                             &conn->handshake_properties.client.session_ticket, &resumed_tp))
             goto Fail;
     }
+    assert(conn->ctx->http3->h3.next_cid != NULL && "to identify connections, next_cid must be set");
     if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
-                              &conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
+                              conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
                               conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL, NULL)) != 0) {
         conn->super.super.quic = NULL; /* just in case */
         goto Fail;
     }
-    ++conn->ctx->http3->h3.next_cid.master_id; /* FIXME check overlap */
+    ++conn->ctx->http3->h3.next_cid->master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 

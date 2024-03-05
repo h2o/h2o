@@ -3709,9 +3709,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     h2o_context_t *h2octx = ctx->accept_ctx.ctx;
 
     /* determine the file descriptor to which the packets should be forwarded, or return */
-    if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid.node_id) {
+    if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid->node_id) {
         /* inter-node forwarding */
-        assert(ctx->http3.ctx.super.next_cid.node_id == conf.quic.node_id);
+        assert(ctx->http3.ctx.super.next_cid->node_id == conf.quic.node_id);
         for (size_t i = 0; i != conf.quic.forward_nodes.size; ++i) {
             if (*node_id == conf.quic.forward_nodes.entries[i].id) {
                 fd = conf.quic.forward_nodes.entries[i].fd;
@@ -3725,7 +3725,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         /* intra-node */
         if (node_id == NULL) {
             /* initial or 0-RTT packet, forward to thread_id being specified */
-            if (thread_id == h3ctx->next_cid.thread_id) {
+            if (thread_id == h3ctx->next_cid->thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
@@ -3733,7 +3733,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         } else {
             /* intra-node, validate thread id */
-            assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
+            assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
@@ -3798,7 +3798,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
         struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
         if (listener_config->quic.sibling != NULL) {
-            int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid.thread_id];
+            int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
             write(fd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
         } else {
             /* drop packet */
@@ -4073,6 +4073,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
@@ -4133,9 +4135,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
                                           conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
-                                          on_http3_accept, NULL, conf.globalconf.http3.use_gso);
-            h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
-                                            forward_quic_packets, rewrite_forwarded_quic_datagram);
+                                          &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
+                                          conf.globalconf.http3.use_gso);
+            h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
+                                            rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             listeners[i].http3.ctx.qpack = listener_config->quic.qpack;

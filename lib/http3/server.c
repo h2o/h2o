@@ -2089,10 +2089,10 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 }
 
 void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
-                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                                    h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
 {
-    return h2o_quic_init_context(ctx, loop, sock, quic, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
+    return h2o_quic_init_context(ctx, loop, sock, quic, next_cid, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
 }
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
@@ -2161,13 +2161,14 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->datagram_flows = kh_init(stream);
 
     /* accept connection */
+    assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
 #if PICOTLS_USE_DTRACE
     unsigned orig_skip_tracing = ptls_default_skip_tracing;
     ptls_default_skip_tracing = skip_tracing;
 #endif
     quicly_conn_t *qconn;
     int accept_ret = quicly_accept(
-        &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, &ctx->super.next_cid,
+        &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, ctx->super.next_cid,
         &conn->handshake_properties,
         &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
 #if PICOTLS_USE_DTRACE
@@ -2185,7 +2186,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     if (ctx->super.quic_stats != NULL) {
         ++ctx->super.quic_stats->packet_processed;
     }
-    ++ctx->super.next_cid.master_id; /* FIXME check overlap */
+    ++ctx->super.next_cid->master_id; /* FIXME check overlap */
     h2o_http3_setup(&conn->h3, qconn);
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));

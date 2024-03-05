@@ -42,6 +42,7 @@
 static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static h2o_accept_ctx_t accept_ctx;
+static quicly_cid_plaintext_t next_cid;
 static h2o_http3_server_ctx_t server_ctx;
 static quicly_context_t qctx = quicly_spec_context;
 static ptls_context_t ptls_ctx = {
@@ -141,6 +142,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         accept_ctx.ctx = &ctx;
         accept_ctx.hosts = config.hosts;
 
+        server_ctx.super.next_cid = &next_cid;
         server_ctx.accept_ctx = &accept_ctx;
         server_ctx.send_retry = 0;
         server_ctx.qpack.encoder_table_capacity = 4096;
