@@ -107,7 +107,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
         h2o_fatal("failed to bind default address to UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     h2o_socket_t *sock = h2o_evloop_socket_create(ctx->loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, NULL,
+    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, &ctx->http3.next_cid, NULL,
                                   h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */

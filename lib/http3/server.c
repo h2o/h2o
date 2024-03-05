@@ -2089,10 +2089,10 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 }
 
 void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
-                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                                    h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso)
 {
-    return h2o_quic_init_context(ctx, loop, sock, quic, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
+    return h2o_quic_init_context(ctx, loop, sock, quic, next_cid, acceptor, notify_conn_update, use_gso, &h2o->quic_stats);
 }
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,

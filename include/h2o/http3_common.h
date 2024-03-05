@@ -442,19 +442,24 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
 int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, size_t max_frame_payload_size,
                          const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 
+/**
+ * Initializes the QUIC context, binding the event loop, socket, quic, and other properties. `next_cid` should be a thread-local
+ * that contains the CID seed to be used; see `h2o_quic_ctx_t::next_cid` for more information.
+ */
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
-                           h2o_quic_stats_t *quic_stats);
+                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+                           h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats);
 /**
  *
  */
 void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
- *
+ * When running QUIC on multiple threads / nodes, it becomes necessary to forward incoming packets between those threads / nodes
+ * with encapsulation. This function makes adjustments to the context initialized by `h2o_quic_init_context` and registers the
+ * callbacks necessary for forwarding with en(de)capsulation.
  */
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, quicly_cid_plaintext_t *next_cid,
-                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                     h2o_quic_preprocess_packet_cb preprocess_cb);
+void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint8_t ttl,
+                                     h2o_quic_forward_packets_cb forward_cb, h2o_quic_preprocess_packet_cb preprocess_cb);
 /**
  *
  */

@@ -989,8 +989,8 @@ Validation_Success:;
 }
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
-                           h2o_quic_stats_t *quic_stats)
+                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+                           h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
 
@@ -998,7 +998,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .loop = loop,
         .sock = {.sock = sock},
         .quic = quic,
-        .next_cid = NULL /* set by h2o_http3_set_context_identifier */,
+        .next_cid = next_cid,
         .conns_by_id = kh_init_h2o_quic_idmap(),
         .conns_accepting = kh_init_h2o_quic_acceptmap(),
         .notify_conn_update = notify_conn_update,
@@ -1034,12 +1034,10 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
 
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, quicly_cid_plaintext_t *next_cid,
-                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                     h2o_quic_preprocess_packet_cb preprocess_cb)
+void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint8_t ttl,
+                                     h2o_quic_forward_packets_cb forward_cb, h2o_quic_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
-    ctx->next_cid = next_cid;
     ctx->forward_packets = forward_cb;
     ctx->default_ttl = ttl;
     ctx->preprocess_packet = preprocess_cb;

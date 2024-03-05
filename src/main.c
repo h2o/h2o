@@ -4135,9 +4135,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
                                           conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
-                                          on_http3_accept, NULL, conf.globalconf.http3.use_gso);
-            h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, &conf.threads[thread_index].ctx.http3.next_cid, 4,
-                                            forward_quic_packets, rewrite_forwarded_quic_datagram);
+                                          &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
+                                          conf.globalconf.http3.use_gso);
+            h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
+                                            rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             listeners[i].http3.ctx.qpack = listener_config->quic.qpack;
