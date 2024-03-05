@@ -256,18 +256,17 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    while (*src != src_end) {
-        int64_t *unblocked_stream_ids;
-        size_t num_unblocked;
-        int ret;
-        const char *err_desc = NULL;
-        if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end,
-                                                  &err_desc)) != 0) {
-            h2o_quic_close_connection(&conn->super, ret, err_desc);
-            break;
-        }
-        /* TODO handle unblocked streams */
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
+    int ret;
+    const char *err_desc = NULL;
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
+        0) {
+        h2o_quic_close_connection(&conn->super, ret, err_desc);
+        return;
     }
+
+    /* TODO handle unblocked streams */
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -278,14 +277,10 @@ static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    while (*src != src_end) {
-        int ret;
-        const char *err_desc = NULL;
-        if ((ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, src, src_end, &err_desc)) != 0) {
-            h2o_quic_close_connection(&conn->super, ret, err_desc);
-            break;
-        }
-    }
+    int ret;
+    const char *err_desc = NULL;
+    if ((ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, src, src_end, &err_desc)) != 0)
+        h2o_quic_close_connection(&conn->super, ret, err_desc);
 }
 
 static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
