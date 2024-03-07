@@ -63,7 +63,8 @@ static size_t aegis128l_encrypt_update(ptls_aead_context_t *_ctx, void *output, 
     struct aegis128l_context_t *ctx = (struct aegis128l_context_t *)_ctx;
     size_t written;
 
-    aegis128l_state_encrypt_update(&ctx->st, (uint8_t *)output, inlen + aegis128l_TAILBYTES_MAX, &written, (const uint8_t *)input, inlen);
+    aegis128l_state_encrypt_update(&ctx->st, (uint8_t *)output, inlen + aegis128l_TAILBYTES_MAX, &written, (const uint8_t *)input,
+                                   inlen);
 
     return written;
 }
@@ -73,7 +74,8 @@ static size_t aegis128l_encrypt_final(ptls_aead_context_t *_ctx, void *output)
     struct aegis128l_context_t *ctx = (struct aegis128l_context_t *)_ctx;
     size_t written;
 
-    aegis128l_state_encrypt_final(&ctx->st, (uint8_t *)output, aegis128l_TAILBYTES_MAX + PTLS_AEGIS128L_TAG_SIZE, &written, PTLS_AEGIS128L_TAG_SIZE);
+    aegis128l_state_encrypt_final(&ctx->st, (uint8_t *)output, aegis128l_TAILBYTES_MAX + PTLS_AEGIS128L_TAG_SIZE, &written,
+                                  PTLS_AEGIS128L_TAG_SIZE);
 
     return written;
 }
@@ -177,7 +179,8 @@ static size_t aegis256_encrypt_update(ptls_aead_context_t *_ctx, void *output, c
     struct aegis256_context_t *ctx = (struct aegis256_context_t *)_ctx;
     size_t written;
 
-    aegis256_state_encrypt_update(&ctx->st, (uint8_t *)output, inlen + aegis256_TAILBYTES_MAX, &written, (const uint8_t *)input, inlen);
+    aegis256_state_encrypt_update(&ctx->st, (uint8_t *)output, inlen + aegis256_TAILBYTES_MAX, &written, (const uint8_t *)input,
+                                  inlen);
 
     return written;
 }
@@ -187,7 +190,8 @@ static size_t aegis256_encrypt_final(ptls_aead_context_t *_ctx, void *output)
     struct aegis256_context_t *ctx = (struct aegis256_context_t *)_ctx;
     size_t written;
 
-    aegis256_state_encrypt_final(&ctx->st, (uint8_t *)output, aegis256_TAILBYTES_MAX + PTLS_AEGIS256_TAG_SIZE, &written, PTLS_AEGIS256_TAG_SIZE);
+    aegis256_state_encrypt_final(&ctx->st, (uint8_t *)output, aegis256_TAILBYTES_MAX + PTLS_AEGIS256_TAG_SIZE, &written,
+                                 PTLS_AEGIS256_TAG_SIZE);
 
     return written;
 }

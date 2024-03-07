@@ -161,7 +161,7 @@ static void chacha20poly1305_set_iv(ptls_aead_context_t *_ctx, const void *iv)
     struct chacha20poly1305_context_t *ctx = (struct chacha20poly1305_context_t *)_ctx;
 
     memcpy(ctx->static_iv, iv, sizeof(ctx->static_iv));
- }
+}
 
 static int chacha20poly1305_setup_crypto(ptls_aead_context_t *_ctx, int is_enc, const void *key, const void *iv,
                                          ptls_cipher_algorithm_t *chacha,

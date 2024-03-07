@@ -23,24 +23,20 @@
 #include "picotls.h"
 #include "picotls/minicrypto.h"
 
-ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[] = {// ciphers used with sha512 and sha384 (must be first)
-                                                        &ptls_minicrypto_aes256gcmsha384,
+ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[] = { // ciphers used with sha512 and sha384 (must be first)
+    &ptls_minicrypto_aes256gcmsha384,
 
-                                                        // ciphers used with sha256
-                                                        &ptls_minicrypto_aes128gcmsha256,
-                                                        &ptls_minicrypto_chacha20poly1305sha256,
-                                                        NULL};
+    // ciphers used with sha256
+    &ptls_minicrypto_aes128gcmsha256, &ptls_minicrypto_chacha20poly1305sha256, NULL};
 
-ptls_cipher_suite_t *ptls_minicrypto_cipher_suites_all[] = {// ciphers used with sha512 and sha384 (must be first)
+ptls_cipher_suite_t *ptls_minicrypto_cipher_suites_all[] = { // ciphers used with sha512 and sha384 (must be first)
 #ifdef PTLS_HAVE_AEGIS
-                                                           &ptls_minicrypto_aegis256sha512,
+    &ptls_minicrypto_aegis256sha512,
 #endif
-                                                           &ptls_minicrypto_aes256gcmsha384,
+    &ptls_minicrypto_aes256gcmsha384,
 
-                                                           // ciphers used with sha256
+// ciphers used with sha256
 #ifdef PTLS_HAVE_AEGIS
-                                                           &ptls_minicrypto_aegis128lsha256,
+    &ptls_minicrypto_aegis128lsha256,
 #endif
-                                                           &ptls_minicrypto_aes128gcmsha256,
-                                                           &ptls_minicrypto_chacha20poly1305sha256,
-                                                           NULL};
+    &ptls_minicrypto_aes128gcmsha256, &ptls_minicrypto_chacha20poly1305sha256, NULL};
