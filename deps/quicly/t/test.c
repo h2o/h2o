@@ -726,12 +726,18 @@ void test_ecn_index_from_bits(void)
 /* at the moment only derivation is tested */
 static void test_jumpstart(void)
 {
-    quicly_context_t unbounded_max = {.max_jumpstart_cwnd_bytes = UINT32_MAX};
+    quicly_context_t unbounded_max = {
+        .max_jumpstart_cwnd_packets = UINT32_MAX,
+        .transport_params.max_udp_payload_size = 1200,
+    };
     ok(derive_jumpstart_cwnd(&unbounded_max, 250, 1000000, 250) == 250000);
     ok(derive_jumpstart_cwnd(&unbounded_max, 250, 1000000, 400) == 250000); /* if RTT increases, CWND stays same */
     ok(derive_jumpstart_cwnd(&unbounded_max, 250, 1000000, 125) == 125000); /* if RTT decreses, CWND is reduced proportionally */
 
-    quicly_context_t bounded_max = {.max_jumpstart_cwnd_bytes = 80000};
+    quicly_context_t bounded_max = {
+        .max_jumpstart_cwnd_packets = 64,
+        .transport_params.max_udp_payload_size = 1250,
+    };
     ok(derive_jumpstart_cwnd(&bounded_max, 250, 1000000, 250) == 80000);
 }
 

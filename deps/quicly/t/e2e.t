@@ -4,13 +4,14 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
+use IO::Select;
 use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
 use Scope::Guard qw(scope_guard);
 use Test::More;
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep time);
 
 sub complex ($$;$) {
     my $s = shift;
@@ -27,7 +28,12 @@ sub complex ($$;$) {
 
 $ENV{BINARY_DIR} ||= ".";
 my $cli = "$ENV{BINARY_DIR}/cli";
+my $udpfw = "$ENV{BINARY_DIR}/udpfw";
 my $port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
+my $udpfw_port = empty_port({
     host  => "127.0.0.1",
     proto => "udp",
 });
@@ -347,6 +353,83 @@ subtest "raw-certificates-ec" => sub {
     is $resp, "hello world\n";
 };
 
+subtest "slow-start" => sub {
+    # spawn udpfw that applies 100ms RTT but otherwise nothing
+    my $udpfw_guard = spawn_process(
+        ["sh", "-c", "exec $udpfw -b 100 -i 1 -p 0 -B 100 -I 1 -P 100000 -l $udpfw_port 127.0.0.1 $port > /dev/null 2>&1"],
+        $udpfw_port,
+    );
+
+    # read first $size bytes from client $cli (which would be the payload received) and check RT
+    my $doit = sub {
+        my ($size, $rt_min, $rt_max) = @_;
+        subtest "${size}B" => sub {
+            my $start_at = time;
+            open my $fh, "-|", "$cli -p /$size 127.0.0.1 $udpfw_port 2>&1"
+                or die "failed to launch $cli:$!";
+            for (my $total_read = 0; $total_read < $size;) {
+                IO::Select->new($fh)->can_read(); # block until the command writes something
+                my $nread = sysread $fh, my $buf, 65536;
+                die "failed to read from pipe, got $nread:$!"
+                    unless $nread > 0;
+                $total_read += $nread;
+            }
+            my $elapsed = time - $start_at;
+            diag $elapsed;
+            cmp_ok $rt_min * 0.1, '<=', $elapsed, "RT >= $rt_min";
+            cmp_ok $rt_max * 0.1, '>=', $elapsed, "RT <= $rt_max";
+        };
+    };
+
+    my $each_cc = sub {
+        my $cb = shift;
+        for my $cc (qw(reno pico cubic)) {
+            subtest $cc => sub {
+                $cb->($cc);
+            };
+        }
+    };
+
+    subtest "no-pacing" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            subtest "respect-app-limited" => sub {
+                plan skip_all => "Cubic TODO respect app-limited"
+                    if $cc eq "cubic";
+                my $guard = spawn_server("-C", "$cc:10");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([14000, 2, 2.5], [45000, 3, 3.5], [72000, 4, 4.5]);
+            };
+            subtest "disregard-app-limited" => sub {
+                my $guard = spawn_server("-C", "$cc:10", "--disregard-app-limited");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([16000, 2, 2.5], [48000, 3, 3.5], [72000, 4, 4.5]);
+            };
+        });
+    };
+
+    subtest "pacing" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            subtest "respect-app-limited" => sub {
+                plan skip_all => "Cubic TODO respect app-limited"
+                    if $cc eq "cubic";
+                my $guard = spawn_server("-C", "$cc:20:p");
+                # check head of 1st and 3rd batch, tail of 1st and 2nd
+                $doit->(@$_)
+                    for ([1000, 2, 2.3], [28000, 2.3, 3], [85000, 3.3, 4], [89000, 4, 4.5]);
+            };
+            subtest "disregard-app-limited" => sub {
+                my $guard = spawn_server("-C", "$cc:20:p", "--disregard-app-limited");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([1000, 2, 2.3], [30000, 2.3, 3], [87000, 3.3, 4], [96000, 4, 4.5]);
+            };
+        });
+    }
+};
 
 done_testing;
 
@@ -357,16 +440,22 @@ sub spawn_server {
     } else {
         @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
     }
+    spawn_process(\@cmd, $port);
+}
+
+sub spawn_process {
+    my ($cmd, $listen_port) = @_;
+
     my $pid = fork;
     die "fork failed:$!"
         unless defined $pid;
     if ($pid == 0) {
-        exec @cmd;
-        die "failed to exec $cmd[0]:$?";
+        exec @$cmd;
+        die "failed to exec @{[$cmd->[0]]}:$?";
     }
-    while (`netstat -na` !~ /^udp.*\s127\.0\.0\.1[\.:]$port\s/m) {
+    while (`netstat -na` !~ /^udp.*\s(127\.0\.0\.1|0\.0\.0\.0|\*)[\.:]$listen_port\s/m) {
         if (waitpid($pid, WNOHANG) == $pid) {
-            die "failed to launch server";
+            die "failed to launch @{[$cmd->[0]]}";
         }
         sleep 0.1;
     }

@@ -59,7 +59,7 @@ struct queue_t {
             uint8_t data[2048];
             size_t len;
             int64_t arrival;
-        } * elements;
+        } *elements;
     } ring;
     int64_t delay_usec;      /* propagation delay */
     int64_t interval_usec;   /* serialization delay */

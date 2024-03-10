@@ -21,6 +21,7 @@
  */
 #include <assert.h>
 #include <inttypes.h>
+#include <sys/types.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <pthread.h>
@@ -345,6 +346,10 @@ struct st_quicly_conn_t {
  * have to be sent. There could be false positives; logic for sending each of these frames have the capability of detecting such
  * false positives. The purpose of this bit is to consolidate information as an optimization. */
 #define QUICLY_PENDING_FLOW_OTHERS_BIT (1 << 6)
+        /**
+         * if the most recent call to `quicly_send` ended in CC-limited state
+         */
+        uint8_t cc_limited : 1;
         /**
          *
          */
@@ -1363,6 +1368,8 @@ static void update_send_alarm(quicly_conn_t *conn, int can_send_stream_data, int
 
 static void update_cc_limited(quicly_conn_t *conn, int is_cc_limited)
 {
+    conn->egress.cc_limited = is_cc_limited;
+
     if (quicly_ratemeter_is_cc_limited(&conn->egress.ratemeter) != is_cc_limited) {
         if (is_cc_limited) {
             quicly_ratemeter_enter_cc_limited(&conn->egress.ratemeter, conn->egress.packet_number);
@@ -2269,7 +2276,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     quicly_linklist_init(&conn->egress.pending_streams.control);
     quicly_ratemeter_init(&conn->egress.ratemeter);
     if (server_name == NULL && conn->super.ctx->use_pacing && conn->egress.cc.type->cc_jumpstart != NULL &&
-        (conn->super.ctx->default_jumpstart_cwnd_bytes != 0 || conn->super.ctx->max_jumpstart_cwnd_bytes != 0))
+        (conn->super.ctx->default_jumpstart_cwnd_packets != 0 || conn->super.ctx->max_jumpstart_cwnd_packets != 0))
         conn->egress.try_jumpstart = 1;
     conn->crypto.tls = tls;
     if (handshake_properties != NULL) {
@@ -2567,7 +2574,7 @@ static int aead_decrypt_1rtt(void *ctx, uint64_t pn, quicly_decoded_packet_t *pa
 
     /* prepare key, when not available (yet) */
     if (space->cipher.ingress.aead[aead_index] == NULL) {
-    Retry_1RTT : {
+    Retry_1RTT: {
         /* Replace the AEAD key at the alternative slot (note: decryption key slots are shared by 0-RTT and 1-RTT), at the same time
          * dropping 0-RTT header protection key. */
         if (conn->application->cipher.ingress.header_protection.zero_rtt != NULL) {
@@ -3041,7 +3048,15 @@ static int on_ack_retire_connection_id(quicly_sentmap_t *map, const quicly_sent_
 
 static uint32_t calc_pacer_send_rate(quicly_conn_t *conn)
 {
-    return quicly_pacer_calc_send_rate(conn->egress.cc.pacer_multiplier, conn->egress.cc.cwnd, conn->egress.loss.rtt.smoothed);
+    /* The multiplier uses a hard-coded value of 2x in both the slow start and the congestion avoidance phases. This differs from
+     * Linux, which uses 1.25x for the latter. The rationale behind this choice is that 1.25x is not sufficiently aggressive
+     * immediately after a loss event. Following a loss event, the congestion window (CWND) is halved (i.e., beta), but the RTT
+     * remains high for one RTT and SRTT can remain high even loger, since it is a moving average adjusted with each ACK received.
+     * Consequently, if the multiplier is set to 1.25x, the calculated send rate could drop to as low as 1.25 * 1/2 = 0.625. By
+     * using a 2x multiplier, the send rate is guaranteed to become no less than that immediately before the loss event, which would
+     * have been the link throughput. */
+    return quicly_pacer_calc_send_rate(quicly_cc_in_jumpstart(&conn->egress.cc) ? 1 : 2, conn->egress.cc.cwnd,
+                                       conn->egress.loss.rtt.smoothed);
 }
 
 static int should_send_datagram_frame(quicly_conn_t *conn)
@@ -4186,8 +4201,10 @@ static uint32_t derive_jumpstart_cwnd(quicly_context_t *ctx, uint32_t new_rtt, u
         cwnd = cwnd * new_rtt / prev_rtt;
 
     /* cap to the configured value */
-    if (cwnd > ctx->max_jumpstart_cwnd_bytes)
-        cwnd = ctx->max_jumpstart_cwnd_bytes;
+    size_t jumpstart_cwnd =
+        quicly_cc_calc_initial_cwnd(ctx->max_jumpstart_cwnd_packets, ctx->transport_params.max_udp_payload_size);
+    if (cwnd > jumpstart_cwnd)
+        cwnd = jumpstart_cwnd;
 
     return (uint32_t)cwnd;
 }
@@ -4811,7 +4828,7 @@ static int send_other_control_frames(quicly_conn_t *conn, quicly_send_context_t 
 static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
 {
     int restrict_sending = 0, ack_only = 0, ret;
-    size_t min_packets_to_send = 0;
+    size_t min_packets_to_send = 0, orig_bytes_inflight = 0;
 
     /* handle timeouts */
     if (conn->idle_timeout.at <= conn->stash.now) {
@@ -4887,6 +4904,8 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
         s->send_window = calc_send_window(conn, min_packets_to_send * conn->egress.max_udp_payload_size,
                                           calc_amplification_limit_allowance(conn), pacer_window, restrict_sending);
     }
+
+    orig_bytes_inflight = conn->egress.loss.sentmap.bytes_in_flight;
 
     if (s->send_window == 0)
         ack_only = 1;
@@ -4998,21 +5017,27 @@ Exit:
          * size of the pacer (10 packets) */
         if (conn->egress.try_jumpstart && conn->egress.loss.rtt.minimum != UINT32_MAX) {
             conn->egress.try_jumpstart = 0;
-            uint32_t jumpstart_cwnd = 0;
-            conn->super.stats.jumpstart.new_rtt = conn->egress.loss.rtt.minimum;
-            if (conn->super.ctx->max_jumpstart_cwnd_bytes != 0 && conn->super.stats.jumpstart.prev_rate != 0 &&
-                conn->super.stats.jumpstart.prev_rtt != 0) {
-                /* Careful Resume */
-                jumpstart_cwnd = derive_jumpstart_cwnd(conn->super.ctx, conn->super.stats.jumpstart.new_rtt,
-                                                       conn->super.stats.jumpstart.prev_rate, conn->super.stats.jumpstart.prev_rtt);
-            } else if (conn->super.ctx->default_jumpstart_cwnd_bytes != 0) {
-                /* jumpstart without previous information */
-                jumpstart_cwnd = conn->super.ctx->default_jumpstart_cwnd_bytes;
-            }
-            /* jumpstart when it is likely to make difference */
-            if (jumpstart_cwnd >= conn->egress.cc.cwnd * 2) {
-                conn->super.stats.jumpstart.cwnd = (uint32_t)jumpstart_cwnd;
-                conn->egress.cc.type->cc_jumpstart(&conn->egress.cc, jumpstart_cwnd, conn->egress.packet_number);
+            if (conn->egress.cc.num_loss_episodes == 0) {
+                uint32_t jumpstart_cwnd = 0;
+                conn->super.stats.jumpstart.new_rtt = conn->egress.loss.rtt.minimum;
+                if (conn->super.ctx->max_jumpstart_cwnd_packets != 0 && conn->super.stats.jumpstart.prev_rate != 0 &&
+                    conn->super.stats.jumpstart.prev_rtt != 0) {
+                    /* Careful Resume */
+                    jumpstart_cwnd =
+                        derive_jumpstart_cwnd(conn->super.ctx, conn->super.stats.jumpstart.new_rtt,
+                                              conn->super.stats.jumpstart.prev_rate, conn->super.stats.jumpstart.prev_rtt);
+                } else if (conn->super.ctx->default_jumpstart_cwnd_packets != 0) {
+                    /* jumpstart without previous information */
+                    jumpstart_cwnd = quicly_cc_calc_initial_cwnd(conn->super.ctx->default_jumpstart_cwnd_packets,
+                                                                 conn->super.ctx->transport_params.max_udp_payload_size);
+                }
+                /* Jumpstart if the amount that can be sent in 1 RTT would be higher than without. Comparison target is CWND +
+                 * inflight, as that is the amount that can be sent at most. Note the flow rate can become smaller due to packets
+                 * paced across the entire RTT during jumpstart. */
+                if (jumpstart_cwnd > conn->egress.cc.cwnd + orig_bytes_inflight) {
+                    conn->super.stats.jumpstart.cwnd = (uint32_t)jumpstart_cwnd;
+                    conn->egress.cc.type->cc_jumpstart(&conn->egress.cc, jumpstart_cwnd, conn->egress.packet_number);
+                }
             }
         }
     }
@@ -5024,15 +5049,15 @@ Exit:
         commit_send_packet(conn, s, 0);
     }
     if (ret == 0) {
-        /* update timers, start / stop delivery rate estimator */
+        /* update timers, cc and delivery rate estimator states */
         if (conn->application == NULL || conn->application->super.unacked_count == 0)
             conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
         int can_send_stream_data = scheduler_can_send(conn);
         update_send_alarm(conn, can_send_stream_data, 1);
-        int is_cc_limited = can_send_stream_data && (s->num_datagrams == s->max_datagrams ||
-                                                     conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
-                                                     pacer_can_send_at(conn) > conn->stash.now);
-        update_cc_limited(conn, is_cc_limited);
+        update_cc_limited(conn, can_send_stream_data && conn->super.remote.address_validation.validated &&
+                                    (s->num_datagrams == s->max_datagrams ||
+                                     conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
+                                     pacer_can_send_at(conn) > conn->stash.now));
         if (s->num_datagrams != 0)
             update_idle_timeout(conn, 0);
     }
@@ -5530,8 +5555,14 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
+        /* Here, we pass `conn->egress.cc_limited` - a boolean flag indicating if last the last call to `quicly_send` ended with
+         * data being throttled by CC or pacer - to CC to determine if CWND can be grown.
+         * This might not be the best way to do this, but would likely be sufficient, as the flag being passed would be true only if
+         * the connection was CC-limited for at least one RTT. Hopefully, itwould also be aggressive enough during the slow start
+         * phase. */
+        int cc_limited = conn->super.ctx->cc_recognize_app_limited ? conn->egress.cc_limited : 1;
         conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
-                                          (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked),
+                                          (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), cc_limited,
                                           conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size);
         QUICLY_PROBE(QUICTRACE_CC_ACK, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
                      conn->egress.loss.sentmap.bytes_in_flight);

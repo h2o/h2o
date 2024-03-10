@@ -33,13 +33,7 @@ extern "C" {
 /**
  * Simple pacer. The design guarantees that the formula below is met for any given pacer-restricted period:
  *
- *   flow_rate * duration + burst_credit <= bytes_sent < flow_rate * duration + burst_credit + mtu
- *
- * where `burst_credit` is defined as:
- *
- *   burst_credit = max((9 * mtu + 1) - flow_rate, 0)
- *
- * and that the sender never sends more than max(10*mtu, flow_rate) per every time slice.
+ *   flow_rate * duration + 8 * mtu <= bytes_sent < flow_rate * duration + 10 * mtu
  */
 typedef struct st_quicly_pacer_t {
     /**
@@ -52,9 +46,8 @@ typedef struct st_quicly_pacer_t {
     size_t bytes_sent;
 } quicly_pacer_t;
 
-#define QUICLY_PACER_CALC_BURST_BYTES(mtu) ((size_t)(mtu)*9 + 1)
-#define QUICLY_PACER_SEND_RATE_MULTIPLIER 16
-#define QUICLY_PACER_CALC_MULTIPLIER(x) ((uint32_t)((x)*QUICLY_PACER_SEND_RATE_MULTIPLIER + 0.99)) /* round-up */
+#define QUICLY_PACER_BURST_LOW 8   /* lower bound in packets */
+#define QUICLY_PACER_BURST_HIGH 10 /* high bound in packets */
 
 /**
  * resets the pacer
@@ -74,7 +67,6 @@ static uint64_t quicly_pacer_get_window(quicly_pacer_t *pacer, int64_t now, uint
 static void quicly_pacer_consume_window(quicly_pacer_t *pacer, size_t delta);
 /**
  * Calculates the flow rate as `bytes_per_msec`. The returned value is no less than 1.
- * @param multiplier multiplier applied to `cwnd / rtt` in permil
  */
 static uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, uint32_t rtt);
 
@@ -89,7 +81,7 @@ inline void quicly_pacer_reset(quicly_pacer_t *pacer)
 inline int64_t quicly_pacer_can_send_at(quicly_pacer_t *pacer, uint32_t bytes_per_msec, uint16_t mtu)
 {
     /* return "now" if we have room in current msec */
-    size_t burst_size = QUICLY_PACER_CALC_BURST_BYTES(mtu);
+    size_t burst_size = QUICLY_PACER_BURST_LOW * mtu + 1;
     size_t burst_credit = burst_size > bytes_per_msec ? burst_size - bytes_per_msec : 0;
     if (pacer->bytes_sent < bytes_per_msec + burst_credit)
         return 0;
@@ -109,8 +101,8 @@ inline uint64_t quicly_pacer_get_window(quicly_pacer_t *pacer, int64_t now, uint
     if (now < can_send_at)
         return 0;
 
-    /* Calculate burst window, as max(10mtu, bytes_per_msec) */
-    size_t burst_window = QUICLY_PACER_CALC_BURST_BYTES(mtu);
+    /* Calculate the upper bound of burst window (the size is later rounded up) */
+    size_t burst_window = (QUICLY_PACER_BURST_HIGH - 1) * mtu + 1;
     if (burst_window < bytes_per_msec)
         burst_window = bytes_per_msec;
 
@@ -121,11 +113,18 @@ inline uint64_t quicly_pacer_get_window(quicly_pacer_t *pacer, int64_t now, uint
     uint64_t window, delta = (now - pacer->at) * bytes_per_msec;
     if (pacer->bytes_sent > delta) {
         pacer->bytes_sent -= delta;
-        window = burst_window > pacer->bytes_sent ? burst_window - pacer->bytes_sent : 1;
+        if (burst_window > pacer->bytes_sent) {
+            window = (burst_window - pacer->bytes_sent + mtu - 1) / mtu;
+            if (window < 2)
+                window = 2;
+        } else {
+            window = 2;
+        }
     } else {
         pacer->bytes_sent = 0;
-        window = burst_window;
+        window = (burst_window + mtu - 1) / mtu;
     }
+    window *= mtu;
 
     pacer->at = now;
 
@@ -139,7 +138,7 @@ inline void quicly_pacer_consume_window(quicly_pacer_t *pacer, size_t delta)
 
 inline uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, uint32_t rtt)
 {
-    return ((cwnd + QUICLY_PACER_SEND_RATE_MULTIPLIER - 1) / QUICLY_PACER_SEND_RATE_MULTIPLIER * multiplier + rtt - 1) / rtt;
+    return (cwnd * multiplier + rtt - 1) / rtt;
 }
 
 #ifdef __cplusplus

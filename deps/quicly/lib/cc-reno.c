@@ -24,7 +24,7 @@
 
 /* TODO: Avoid increase if sender was application limited. */
 static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                          uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
+                          int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
 
@@ -38,12 +38,16 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
-        cc->cwnd += bytes;
-        if (cc->cwnd_maximum < cc->cwnd)
-            cc->cwnd_maximum = cc->cwnd;
+        if (cc_limited) {
+            cc->cwnd += bytes;
+            if (cc->cwnd_maximum < cc->cwnd)
+                cc->cwnd_maximum = cc->cwnd;
+        }
         return;
     }
     /* Congestion avoidance. */
+    if (!cc_limited)
+        return;
     cc->state.reno.stash += bytes;
     if (cc->state.reno.stash < cc->cwnd)
         return;
@@ -68,7 +72,6 @@ void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
     if (lost_pn < cc->recovery_end)
         return;
     cc->recovery_end = next_pn;
-    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(1.2);
 
     /* if detected loss before receiving all acks for jumpstart, restore original CWND */
     if (cc->ssthresh == UINT32_MAX)
@@ -107,7 +110,6 @@ static void reno_reset(quicly_cc_t *cc, uint32_t initcwnd)
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->exit_slow_start_at = INT64_MAX;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
-    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(2);
 
     quicly_cc_jumpstart_reset(cc);
 }
@@ -160,5 +162,6 @@ uint32_t quicly_cc_calc_initial_cwnd(uint32_t max_packets, uint16_t max_udp_payl
     if (max_udp_payload_size > mtu_max)
         max_udp_payload_size = mtu_max;
 
-    return max_packets * max_udp_payload_size;
+    uint64_t cwnd_bytes = (uint64_t)max_packets * max_udp_payload_size;
+    return cwnd_bytes <= UINT32_MAX ? (uint32_t)cwnd_bytes : UINT32_MAX;
 }

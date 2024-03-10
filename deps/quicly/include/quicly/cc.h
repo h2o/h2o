@@ -63,10 +63,6 @@ typedef struct st_quicly_cc_t {
      */
     uint64_t recovery_end;
     /**
-     * multiplier to be applied for pacing, in 1/16 (e.g., 32 to send at twice CWND/RTT)
-     */
-    uint32_t pacer_multiplier;
-    /**
      * If the most recent loss episode was signalled by ECN only (i.e., no packet loss).
      */
     unsigned episode_by_ecn : 1;
@@ -186,7 +182,7 @@ struct st_quicly_cc_type_t {
      * Called when a packet is newly acknowledged.
      */
     void (*cc_on_acked)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                        uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size);
+                        int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size);
     /**
      * Called when a packet is detected as lost.
      * @param bytes    bytes declared lost, or zero iff ECN_CE is observed
@@ -241,6 +237,7 @@ void quicly_cc_reno_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
 static void quicly_cc__update_ecn_episodes(quicly_cc_t *cc, uint32_t lost_bytes, uint64_t lost_pn);
 
 static void quicly_cc_jumpstart_reset(quicly_cc_t *cc);
+static int quicly_cc_in_jumpstart(quicly_cc_t *cc);
 static void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint64_t next_pn);
 static void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint32_t bytes, uint64_t largest_acked,
                                          uint32_t inflight, uint64_t next_pn);
@@ -270,6 +267,11 @@ inline void quicly_cc_jumpstart_reset(quicly_cc_t *cc)
     cc->jumpstart.bytes_acked = 0;
 }
 
+inline int quicly_cc_in_jumpstart(quicly_cc_t *cc)
+{
+    return cc->jumpstart.enter_pn < UINT64_MAX && cc->jumpstart.exit_pn == UINT64_MAX;
+}
+
 inline void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint64_t next_pn)
 {
     assert(cc->cwnd < jump_cwnd);
@@ -279,7 +281,6 @@ inline void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint6
 
     /* adjust */
     cc->cwnd = jump_cwnd;
-    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(1);
 }
 
 inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint32_t bytes, uint64_t largest_acked,
@@ -303,7 +304,6 @@ inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint3
         cc->cwnd = inflight;
         cc->cwnd_exiting_jumpstart = cc->cwnd;
         cc->jumpstart.exit_pn = next_pn;
-        cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(2); /* revert to pacing of slow start */
     }
 }
 

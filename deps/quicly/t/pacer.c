@@ -22,20 +22,22 @@
 #include "quicly/pacer.h"
 #include "test.h"
 
-static const uint32_t multiplier = QUICLY_PACER_CALC_MULTIPLIER(2);
-
 static void test_calc_rate(void)
 {
     uint64_t bytes_per_msec;
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(multiplier, 50 * 1200, 10);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2, 50 * 1200, 10);
     ok(bytes_per_msec == 12000); /* send 60KB packets in 5ms */
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(multiplier, 100 * 1200, 10);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2, 100 * 1200, 10);
     ok(bytes_per_msec == 24000); /* 2x CWND, 2x flow rate */
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(multiplier, 50 * 1200, 100);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2, 50 * 1200, 100);
     ok(bytes_per_msec == 1200); /* 10x RTT, 1/10 flow rate */
+
+    /* half the rate as above, due to multiplier being 1x */
+    bytes_per_msec = quicly_pacer_calc_send_rate(1, 50 * 1200, 100);
+    ok(bytes_per_msec == 600);
 }
 
 static const uint16_t mtu = 1200;
@@ -106,7 +108,7 @@ static void test_medium(void)
 
 static void test_slow(void)
 {
-    const uint32_t bytes_per_msec = 500; /* one packet every 2.4ms */
+    const uint32_t bytes_per_msec = 700;
     quicly_pacer_t pacer;
     int64_t now = 1;
 
@@ -114,18 +116,15 @@ static void test_slow(void)
 
     now = test_pattern(&pacer, now, bytes_per_msec,
                        (const struct pattern[]){
-                           {1, 10 * mtu, 10 * mtu}, /* borrow 1199 bytes */
-                           {4, 1 * mtu, 1 * mtu},   /* borrowing 899 bytes, after 3ms */
-                           {6, 1 * mtu, 1 * mtu},   /* borrowing 1099 bytes */
-                           {9, 1 * mtu, 1 * mtu},   /* borrowing 799 bytes, after 3ms  */
-                           {11, 1 * mtu, 1 * mtu},  /* borrowing 999 bytes */
-                           {13, 1 * mtu, 1 * mtu},  /* borrowing 1199 bytes */
-                           {16, 1 * mtu, 1 * mtu},  /* borrowing 899 bytes, after 3ms */
-                           {18, 1 * mtu, 1 * mtu},  /* borrowing 1099 bytes */
-                           {21, 1 * mtu, 1 * mtu},  /* borrowing 799 bytes, after 3ms  */
-                           {23, 1 * mtu, 1 * mtu},  /* borrowing 999 bytes */
-                           {25, 1 * mtu, 1 * mtu},  /* borrowing 1199 bytes */
-                           {28, 1 * mtu, 1 * mtu},  /* borrowing 899 bytes, after 3ms */
+                           {1, 10 * mtu, 10 * mtu}, /* borrow 12000 bytes */
+                           {5, 2 * mtu, 2 * mtu},   /* borrowing 11600 bytes after 4ms */
+                           {8, 2 * mtu, 2 * mtu},   /* borrowing 11900 bytes after 3ms */
+                           {12, 2 * mtu, 2 * mtu},  /* borrowing 11500 bytes after 4ms */
+                           {15, 2 * mtu, 2 * mtu},  /* borrowing 11800 bytes after 3ms */
+                           {19, 2 * mtu, 2 * mtu},  /* borrowing 11400 bytes after 4ms */
+                           {22, 2 * mtu, 2 * mtu},  /* borrowing 11700 bytes after 3ms */
+                           {25, 2 * mtu, 2 * mtu},  /* borrowing 12000 bytes after 3ms */
+                           {29, 2 * mtu, 2 * mtu},  /* borrowing 11600 bytes after 4ms */
                            {0},
                        });
 }
@@ -141,13 +140,12 @@ static void test_fast(void)
     now = test_pattern(&pacer, now, bytes_per_msec,
                        (const struct pattern[]){
                            {1, 84 * mtu, 84 * mtu}, /* borrow 800 bytes */
-                           {2, 83 * mtu, 83 * mtu},   /* borrowing 400 bytes */
-                           {3, 83 * mtu, 83 * mtu},   /* borrowing 0 bytes */
-                           {4, 84 * mtu, 84 * mtu},   /* borrowing 800 bytes */
+                           {2, 83 * mtu, 83 * mtu}, /* borrowing 400 bytes */
+                           {3, 83 * mtu, 83 * mtu}, /* borrowing 0 bytes */
+                           {4, 84 * mtu, 84 * mtu}, /* borrowing 800 bytes */
                            {0},
                        });
 }
-
 
 void test_pacer(void)
 {

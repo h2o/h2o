@@ -112,7 +112,7 @@ static struct {
 struct {
     const char *path;
     int to_file;
-} * reqs;
+} *reqs;
 
 struct st_stream_data_t {
     quicly_streambuf_t streambuf;
@@ -447,11 +447,11 @@ static ssize_t receive_datagram(int fd, void *buf, quicly_address_t *src, uint8_
 #ifdef IP_RECVTOS
             if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type ==
 #ifdef __APPLE__
-                IP_RECVTOS
+                                                      IP_RECVTOS
 #else
-                IP_TOS
+                                                      IP_TOS
 #endif
-                ) {
+            ) {
                 assert((char *)CMSG_DATA(cmsg) - (char *)cmsg + 1 == cmsg->cmsg_len);
                 *ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
             }
@@ -663,8 +663,9 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                         send_datagram_frame = 0;
                     }
                     if (quicly_num_streams(conn) == 0) {
-                        if (request_interval != 0 && enqueue_requests_at == INT64_MAX) {
-                            enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
+                        if (request_interval != 0) {
+                            if (enqueue_requests_at == INT64_MAX)
+                                enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
                         } else {
                             static int close_called;
                             if (!close_called) {
@@ -1111,6 +1112,9 @@ static void usage(const char *cmd)
            "                            10) and use of pacing.\n"
            "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
            "                            29)\n"
+           "  --disable-ecn             turns off ECN support (default is on)\n"
+           "  --disregard-app-limited   instructs CC to increase CWND even when the flow is\n"
+           "                            application limited\n"
            "  -e event-log-file         file to log events\n"
            "  -E                        expand Client Hello (sends multiple client Initials)\n"
            "  --ech-config <file>       file that contains ECHConfigList or an empty file to\n"
@@ -1122,6 +1126,8 @@ static void usage(const char *cmd)
            "                            fraction of CWND (default: 0)\n"
            "  -G                        enable UDP generic segmentation offload\n"
            "  -i interval               interval to reissue requests (in milliseconds)\n"
+           "  --jumpstart-default <wnd> jumpstart CWND size for new connections, in packets\n"
+           "  --jumpstart-max <wnd>     maximum jumpstart CWND size for resuming connections\n"
            "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
            "  -K num-packets            perform key update every num-packets packets\n"
            "  -l log-file               file to log traffic secrets\n"
@@ -1205,8 +1211,9 @@ int main(int argc, char **argv)
     static const struct option longopts[] = {{"ech-key", required_argument, NULL, 0},
                                              {"ech-configs", required_argument, NULL, 0},
                                              {"disable-ecn", no_argument, NULL, 0},
-                                             {"default-jumpstart", required_argument, NULL, 0},
-                                             {"max-jumpstart", required_argument, NULL, 0},
+                                             {"disregard-app-limited", no_argument, NULL, 0},
+                                             {"jumpstart-default", required_argument, NULL, 0},
+                                             {"jumpstart-max", required_argument, NULL, 0},
                                              {NULL}};
     while ((ch = getopt_long(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h", longopts,
                              &opt_index)) != -1) {
@@ -1218,13 +1225,15 @@ int main(int argc, char **argv)
                 ech_setup_configs(optarg);
             } else if (strcmp(longopts[opt_index].name, "disable-ecn") == 0) {
                 ctx.enable_ecn = 0;
-            } else if (strcmp(longopts[opt_index].name, "default-jumpstart") == 0) {
-                if (sscanf(optarg, "%" SCNu32, &ctx.default_jumpstart_cwnd_bytes) != 1) {
+            } else if (strcmp(longopts[opt_index].name, "disregard-app-limited") == 0) {
+                ctx.cc_recognize_app_limited = 0;
+            } else if (strcmp(longopts[opt_index].name, "jumpstart-default") == 0) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.default_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse default jumpstart size: %s\n", optarg);
                     exit(1);
                 }
-            } else if (strcmp(longopts[opt_index].name, "max-jumpstart") == 0) {
-                if (sscanf(optarg, "%" SCNu32, &ctx.max_jumpstart_cwnd_bytes) != 1) {
+            } else if (strcmp(longopts[opt_index].name, "jumpstart-max") == 0) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.max_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
                     exit(1);
                 }

@@ -62,7 +62,7 @@ static uint32_t calc_bytes_per_mtu_increase(uint32_t cwnd, uint32_t rtt, uint32_
 
 /* TODO: Avoid increase if sender was application limited. */
 static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                          uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
+                          int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
 
@@ -73,6 +73,9 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     }
 
     quicly_cc_jumpstart_on_acked(cc, 0, bytes, largest_acked, inflight, next_pn);
+
+    if (!cc_limited)
+        return;
 
     cc->state.pico.stash += bytes;
 
@@ -110,9 +113,6 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
     if (lost_pn < cc->recovery_end)
         return;
     cc->recovery_end = next_pn;
-
-    /* switch pacer to congestion avoidance mode the moment loss is observed */
-    cc->pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(1.2);
 
     /* if detected loss before receiving all acks for jumpstart, restore original CWND */
     if (cc->ssthresh == UINT32_MAX)
@@ -163,7 +163,6 @@ static void pico_reset(quicly_cc_t *cc, uint32_t initcwnd)
         .cwnd_minimum = UINT32_MAX,
         .exit_slow_start_at = INT64_MAX,
         .ssthresh = UINT32_MAX,
-        .pacer_multiplier = QUICLY_PACER_CALC_MULTIPLIER(2),
     };
     pico_init_pico_state(cc, 0);
 
