@@ -5560,7 +5560,7 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
          * This might not be the best way to do this, but would likely be sufficient, as the flag being passed would be true only if
          * the connection was CC-limited for at least one RTT. Hopefully, itwould also be aggressive enough during the slow start
          * phase. */
-        int cc_limited = conn->super.ctx->cc_recognize_app_limited ? conn->egress.cc_limited : 1;
+        int cc_limited = conn->super.ctx->respect_app_limited ? conn->egress.cc_limited : 1;
         conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
                                           (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), cc_limited,
                                           conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size);

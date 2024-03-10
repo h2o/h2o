@@ -351,7 +351,7 @@ struct st_quicly_context_t {
     /**
      * if CC should take app-limited into consideration
      */
-    unsigned cc_recognize_app_limited : 1;
+    unsigned respect_app_limited : 1;
     /**
      *
      */
