@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include "quicly.h"
+#include "h2o.h"
 #include "h2o/hostinfo.h"
 #include "h2o/httpclient.h"
 #include "h2o/http2_common.h"
@@ -268,13 +269,14 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
                                             &conn->handshake_properties.client.session_ticket, &resumed_tp))
             goto Fail;
     }
+    assert(conn->ctx->http3->h3.next_cid != NULL && "to identify connections, next_cid must be set");
     if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
-                              &conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
+                              conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
                               conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL, NULL)) != 0) {
         conn->super.super.quic = NULL; /* just in case */
         goto Fail;
     }
-    ++conn->ctx->http3->h3.next_cid.master_id; /* FIXME check overlap */
+    ++conn->ctx->http3->h3.next_cid->master_id; /* FIXME check overlap */
     if ((ret = h2o_http3_setup(&conn->super, qconn)) != 0)
         goto Fail;
 
@@ -358,7 +360,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
@@ -445,7 +447,8 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         /* otherwise, read the frame */
         h2o_http3_read_frame_t frame;
         int ret;
-        if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
+        if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, req->conn->super.max_frame_payload_size, src,
+                                        src_end, err_desc)) != 0) {
             /* incomplete */
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE && err == 0)
                 return ret;
@@ -456,7 +459,7 @@ int handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const u
         case H2O_HTTP3_FRAME_TYPE_DATA:
             break;
         case H2O_HTTP3_FRAME_TYPE_HEADERS:
-            if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect)
+            if (req->super.upgrade_to != NULL)
                 return H2O_HTTP3_ERROR_FRAME_UNEXPECTED;
             /* flow continues */
         default:
@@ -484,7 +487,8 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
     int ret, frame_is_eos;
 
     /* read HEADERS frame */
-    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, src, src_end, err_desc)) != 0) {
+    if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, req->conn->super.max_frame_payload_size, src, src_end,
+                                    err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
             if (err != 0) {
                 notify_response_error(req, h2o_httpclient_error_io);
@@ -553,7 +557,7 @@ static int handle_input_expect_headers(struct st_h2o_http3client_req_t *req, con
                                         .status = status,
                                         .headers = headers.entries,
                                         .num_headers = headers.size};
-    if (h2o_httpclient__tunnel_is_ready(&req->super, status) && datagram_flow_id.base != NULL) {
+    if (h2o_httpclient__tunnel_is_ready(&req->super, status, on_head.version)) {
         on_head.forward_datagram.write_ = write_datagrams;
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
@@ -742,16 +746,19 @@ void start_request(struct st_h2o_http3client_req_t *req)
     req->quic->data = req;
 
     /* send request (TODO optimize) */
+    h2o_iovec_t protocol = {};
     h2o_iovec_t datagram_flow_id = {};
     if (req->super.upgrade_to == h2o_httpclient_upgrade_to_connect &&
         h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT-UDP")) && req->conn->super.peer_settings.h3_datagram) {
         datagram_flow_id.len = sprintf(datagram_flow_id_buf, "%" PRIu64, req->quic->stream_id);
         datagram_flow_id.base = datagram_flow_id_buf;
         req->offered_datagram_flow_id = 1;
+    } else if (req->super.upgrade_to != NULL && req->super.upgrade_to != h2o_httpclient_upgrade_to_connect) {
+        protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
-                                  url.authority, url.path, headers, num_headers, datagram_flow_id);
+                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0)
         emit_data(req, body);
@@ -838,8 +845,6 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
 {
     struct st_h2o_httpclient__h3_conn_t *conn;
     struct st_h2o_http3client_req_t *req;
-
-    assert(upgrade_to == NULL || upgrade_to == h2o_httpclient_upgrade_to_connect);
 
     if ((conn = find_connection(connpool, target)) == NULL)
         conn = create_connection(ctx, connpool, target);

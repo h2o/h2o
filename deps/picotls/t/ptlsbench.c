@@ -36,7 +36,9 @@
 #include "picotls/minicrypto.h"
 #include "picotls/openssl.h"
 #ifndef _WINDOWS
+#ifdef PTLS_HAVE_FUSION
 #include "picotls/fusion.h"
+#endif
 #endif
 #include <openssl/opensslv.h>
 
@@ -55,6 +57,10 @@
 #else
 #define BENCH_MODE "release"
 #endif
+#endif
+
+#ifdef PTLS_HAVE_MBEDTLS
+#include "picotls/mbedtls.h"
 #endif
 
 /* Time in microseconds */
@@ -262,14 +268,24 @@ static ptls_bench_entry_t aead_list[] = {
     {"ptlsbcrypt", "aes256gcm", &ptls_bcrypt_aes256gcm, &ptls_bcrypt_sha384, 1},
 #endif
 #if !defined(_WINDOWS)
+#ifdef PTLS_HAVE_FUSION
     {"fusion", "aes128gcm", &ptls_fusion_aes128gcm, &ptls_minicrypto_sha256, 1},
     {"fusion", "aes256gcm", &ptls_fusion_aes256gcm, &ptls_minicrypto_sha384, 1},
+#endif
 #endif
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
     {"openssl", "chacha20poly1305", &ptls_openssl_chacha20poly1305, &ptls_minicrypto_sha256, 1},
 #endif
     {"openssl", "aes128gcm", &ptls_openssl_aes128gcm, &ptls_minicrypto_sha256, 1},
-    {"openssl", "aes256gcm", &ptls_openssl_aes256gcm, &ptls_minicrypto_sha384, 1}};
+    {"openssl", "aes256gcm", &ptls_openssl_aes256gcm, &ptls_minicrypto_sha384, 1},
+#ifdef PTLS_HAVE_MBEDTLS
+    {"mbedtls", "aes128gcm", &ptls_mbedtls_aes128gcm, &ptls_mbedtls_sha256, 1},
+#if defined(MBEDTLS_SHA384_C)
+    {"mbedtls", "aes256gcm", &ptls_mbedtls_aes256gcm, &ptls_mbedtls_sha384, 1},
+#endif
+    {"mbedtls", "chacha20poly1305", &ptls_mbedtls_chacha20poly1305, &ptls_mbedtls_sha256, 1},
+#endif
+};
 
 static size_t nb_aead_list = sizeof(aead_list) / sizeof(ptls_bench_entry_t);
 
@@ -323,6 +339,13 @@ int main(int argc, char **argv)
     }
 #endif
 
+#ifdef PTLS_HAVE_MBEDTLS
+    if (psa_crypto_init() != PSA_SUCCESS) {
+        fprintf(stderr, "psa_crypto_init fails.\n");
+        exit(-1);
+    }
+#endif
+
     if (argc == 2 && strcmp(argv[1], "-f") == 0) {
         force_all_tests = 1;
     } else if (argc > 1) {
@@ -345,6 +368,11 @@ int main(int argc, char **argv)
     if (s == 0) {
         printf("Unexpected value of test sum s = %llx\n", (unsigned long long)s);
     }
+
+#ifdef PTLS_HAVE_MBEDTLS
+    /* Deinitialize the PSA crypto library. */
+    mbedtls_psa_crypto_free();
+#endif
 
     return ret;
 }

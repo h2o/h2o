@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <sys/socket.h>
 #include "picotls/openssl.h"
+#include "h2o.h"
 #include "h2o/string_.h"
 #include "h2o/http3_common.h"
 #include "h2o/http3_internal.h"
@@ -54,6 +55,8 @@ struct st_h2o_http3_ingress_unistream_t {
     void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
                          const uint8_t *src_end, int is_eos);
 };
+
+const char h2o_http3_err_frame_too_large[] = "HTTP/3 frame is too large";
 
 const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
 
@@ -253,18 +256,17 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    while (*src != src_end) {
-        int64_t *unblocked_stream_ids;
-        size_t num_unblocked;
-        int ret;
-        const char *err_desc = NULL;
-        if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end,
-                                                  &err_desc)) != 0) {
-            h2o_quic_close_connection(&conn->super, ret, err_desc);
-            break;
-        }
-        /* TODO handle unblocked streams */
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
+    int ret;
+    const char *err_desc = NULL;
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
+        0) {
+        h2o_quic_close_connection(&conn->super, ret, err_desc);
+        return;
     }
+
+    /* TODO handle unblocked streams */
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -275,14 +277,10 @@ static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    while (*src != src_end) {
-        int ret;
-        const char *err_desc = NULL;
-        if ((ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, src, src_end, &err_desc)) != 0) {
-            h2o_quic_close_connection(&conn->super, ret, err_desc);
-            break;
-        }
-    }
+    int ret;
+    const char *err_desc = NULL;
+    if ((ret = h2o_qpack_encoder_handle_input(conn->qpack.enc, src, src_end, &err_desc)) != 0)
+        h2o_quic_close_connection(&conn->super, ret, err_desc);
 }
 
 static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -298,8 +296,8 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
         int ret;
         const char *err_desc = NULL;
 
-        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL, src, src_end,
-                                        &err_desc)) != 0) {
+        if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL,
+                                        conn->max_frame_payload_size, src, src_end, &err_desc)) != 0) {
             if (ret != H2O_HTTP3_ERROR_INCOMPLETE)
                 h2o_quic_close_connection(&conn->super, ret, err_desc);
             break;
@@ -538,8 +536,8 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         return;
 
     /* find the matching connection, by first looking at the CID (all packets as client, or Handshake, 1-RTT packets as server) */
-    if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid.node_id &&
-        packets[0].cid.dest.plaintext.thread_id == ctx->next_cid.thread_id) {
+    if (packets[0].cid.dest.plaintext.node_id == ctx->next_cid->node_id &&
+        packets[0].cid.dest.plaintext.thread_id == ctx->next_cid->thread_id) {
         khiter_t iter = kh_get_h2o_quic_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
@@ -577,7 +575,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         uint64_t accept_hashkey = calc_accept_hashkey(destaddr, srcaddr, packets[0].cid.src);
         if (ctx->accept_thread_divisor != 0) {
             uint32_t offending_thread = accept_hashkey % ctx->accept_thread_divisor;
-            if (offending_thread != ctx->next_cid.thread_id) {
+            if (offending_thread != ctx->next_cid->thread_id) {
                 if (ctx->forward_packets != NULL)
                     ctx->forward_packets(ctx, NULL, offending_thread, destaddr, srcaddr, ttl, packets, num_packets);
                 return;
@@ -597,7 +595,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                  * as a server (likely gracefully shutting down). Let the application process forward the packet to the next
                  * generation. */
                 if (ctx->forward_packets != NULL &&
-                    ctx->forward_packets(ctx, NULL, ctx->next_cid.thread_id, destaddr, srcaddr, ttl, packets, num_packets))
+                    ctx->forward_packets(ctx, NULL, ctx->next_cid->thread_id, destaddr, srcaddr, ttl, packets, num_packets))
                     return;
                 /* If not forwarded, send rejection to the peer. A Version Negotiation packet that carries only a greasing version
                  * number is used for the purpose, hoping that that signal will trigger immediate downgrade to HTTP/2, across the
@@ -621,7 +619,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                             uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                             uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
                             if (ctx->forward_packets != NULL && ttl > 0 &&
-                                (offending_node_id != ctx->next_cid.node_id || offending_thread_id != ctx->next_cid.thread_id))
+                                (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                                 ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                      num_packets);
                             return;
@@ -645,7 +643,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 goto Receive;
             uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
             uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
-            if (offending_node_id != ctx->next_cid.node_id || offending_thread_id != ctx->next_cid.thread_id) {
+            if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                 /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial that
                  * is supposed to be handled by another node. forward it. */
                 if (ttl == 0)
@@ -907,8 +905,8 @@ static void on_timeout(h2o_timer_t *timeout)
     h2o_quic_send(conn);
 }
 
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **_src,
-                         const uint8_t *src_end, const char **err_desc)
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, size_t max_frame_payload_size,
+                         const uint8_t **_src, const uint8_t *src_end, const char **err_desc)
 {
     const uint8_t *src = *_src;
 
@@ -921,9 +919,9 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     /* read the content of the frame (unless it's a DATA frame) */
     frame->payload = NULL;
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
-        if (frame->length > H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE) {
+        if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
-            *err_desc = "H3 frame too large";
+            *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
         if (src_end - src < frame->length)
@@ -986,8 +984,8 @@ Validation_Success:;
 }
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
-                           h2o_quic_stats_t *quic_stats)
+                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+                           h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
 
@@ -995,7 +993,7 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .loop = loop,
         .sock = {.sock = sock},
         .quic = quic,
-        .next_cid = {0} /* thread_id, node_id are set by h2o_http3_set_context_identifier */,
+        .next_cid = next_cid,
         .conns_by_id = kh_init_h2o_quic_idmap(),
         .conns_accepting = kh_init_h2o_quic_acceptmap(),
         .notify_conn_update = notify_conn_update,
@@ -1031,13 +1029,10 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
 
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                     h2o_quic_preprocess_packet_cb preprocess_cb)
+void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint8_t ttl,
+                                     h2o_quic_forward_packets_cb forward_cb, h2o_quic_preprocess_packet_cb preprocess_cb)
 {
     ctx->accept_thread_divisor = accept_thread_divisor;
-    ctx->next_cid.thread_id = thread_id;
-    ctx->next_cid.node_id = node_id;
     ctx->forward_packets = forward_cb;
     ctx->default_ttl = ttl;
     ctx->preprocess_packet = preprocess_cb;
@@ -1116,11 +1111,12 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
 }
 
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
-                         const h2o_http3_qpack_context_t *qpack_ctx)
+                         const h2o_http3_qpack_context_t *qpack_ctx, size_t max_frame_payload_size)
 {
     h2o_quic_init_conn(&conn->super, ctx, &callbacks->super);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->qpack.ctx = qpack_ctx;
+    conn->max_frame_payload_size = max_frame_payload_size;
 }
 
 void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
@@ -1147,9 +1143,14 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
     ptls_buffer_push_block(&buf, -1, {
         quicly_context_t *qctx = quicly_get_context(conn->super.quic);
         if (qctx->transport_params.max_datagram_frame_size != 0) {
+            // advertise that we are prepared to receive both RFC and draft-03 datagram formats
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
             ptls_buffer_push_quicint(&buf, 1);
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
+            ptls_buffer_push_quicint(&buf, 1);
         };
+        ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
+        ptls_buffer_push_quicint(&buf, 1);
     });
 
     assert(!buf.is_allocated);
@@ -1216,8 +1217,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:
-        fprintf(stderr, "quicly_send returned %d\n", ret);
-        abort();
+        h2o_fatal("quicly_send returned %d", ret);
     }
 
     h2o_quic_schedule_timer(conn);
@@ -1277,6 +1277,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             blocked_streams = value;
             break;
         case H2O_HTTP3_SETTINGS_H3_DATAGRAM:
+        case H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03:
             switch (value) {
             case 0:
                 break;

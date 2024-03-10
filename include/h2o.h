@@ -99,6 +99,8 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
 
+#define H2O_LOG_URI_PATH "/.well-known/h2olog"
+
 typedef struct st_h2o_conn_t h2o_conn_t;
 typedef struct st_h2o_context_t h2o_context_t;
 typedef struct st_h2o_req_t h2o_req_t;
@@ -408,9 +410,16 @@ struct st_h2o_globalconf_t {
          */
         uint64_t graceful_shutdown_timeout;
         /**
+         * maximum number of HTTP2 streams to accept and advertise via HTTP2 SETTINGS.
+         *
+         * See max_concurrent_requests_per_connection and max_concurrent_streaming_requests_per_connection below for more info on
+         * the actual number of requests that h2o is willing to process concurrently.
+         */
+        uint32_t max_streams;
+        /**
          * maximum number of HTTP2 requests (per connection) to be handled simultaneously internally.
-         * H2O accepts at most 256 requests over HTTP/2, but internally limits the number of in-flight requests to the value
-         * specified by this property in order to limit the resources allocated to a single connection.
+         * H2O accepts at most `max_streams` requests over HTTP/2, but internally limits the number of in-flight requests to the
+         * value specified by this property in order to limit the resources allocated to a single connection.
          */
         size_t max_concurrent_requests_per_connection;
         /**
@@ -462,6 +471,10 @@ struct st_h2o_globalconf_t {
          * a boolean indicating if UDP GSO should be used when possible
          */
         uint8_t use_gso : 1;
+        /**
+         * maximum number of HTTP3 streaming requests (per connection) to be handled simultaneously internally.
+         */
+        size_t max_concurrent_streaming_requests_per_connection;
     } http3;
 
     struct {
@@ -505,6 +518,10 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
+        /**
+         * maximum number of pipes to retain for reuse
+         */
+        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -725,6 +742,13 @@ struct st_h2o_context_t {
     } http2;
 
     struct {
+        /**
+         * thread-local variable shared by multiple instances of `h2o_quic_ctx_t::next_cid`
+         */
+        quicly_cid_plaintext_t next_cid;
+        /**
+         *
+         */
         struct {
             /**
              * number of packets forwarded to another node in a cluster
@@ -746,6 +770,13 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
+        /**
+         * the list of spare pipes currently retained for reuse
+         */
+        struct {
+            int (*pipes)[2];
+            size_t count;
+        } spare_pipes;
     } proxy;
 
     struct {
@@ -949,6 +980,11 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
     /**
+     * An optional callback to move the ownership of the socket to the caller. It returns non-null for cleartext connections
+     * and thus the caller can call h2o_socket_export() and write cleartext to its fd.
+     */
+    h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
+    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -1091,6 +1127,10 @@ typedef struct st_h2o_req_overrides_t {
      * whether the proxied request should preserve host
      */
     unsigned proxy_preserve_host : 1;
+    /**
+     * whether the proxied request sends expect: 100-continue and wait 100 response before sending request body
+     */
+    unsigned proxy_use_expect : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */
@@ -1337,7 +1377,7 @@ struct st_h2o_req_t {
      */
     unsigned char reprocess_if_too_early : 1;
     /**
-     * set by the prxy handler if the http2 upstream refused the stream so the client can retry the request
+     * set by the proxy handler if the http2 upstream refused the stream so the client can retry the request
      */
     unsigned char upstream_refused : 1;
     /**
@@ -1385,7 +1425,9 @@ struct st_h2o_req_t {
     h2o_proceed_req_cb proceed_req;
 
     /**
-     * Callbacks used for forwarding datagrams. Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
+     * Callbacks for forwarding HTTP/3 Datagrams (RFC 9297).
+     * As these callbacks act at the RFC 9297 layer, masque Context IDs (RFC 9298) will be part of the *payload* being exchanged.
+     * Write-side is assumed to use `write_req.ctx` for retaining the context if necessary.
      */
     struct {
         h2o_forward_datagram_cb write_, read_;
@@ -1563,6 +1605,10 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
  * prepares the request for processing by looking at the method, URI, headers
  */
 h2o_hostconf_t *h2o_req_setup(h2o_req_t *req);
+/**
+ * applies given environment configuration to the request
+ */
+void h2o_req_apply_env(h2o_req_t *req, h2o_envconf_t *env);
 /**
  * binds configurations to the request
  */
@@ -2189,9 +2235,11 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t connection_attempt_delay;
     } happy_eyeballs;
     unsigned preserve_host : 1;
+    unsigned use_expect : 1;
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;
+    unsigned support_masque_draft_03 : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */
@@ -2258,10 +2306,15 @@ typedef struct st_h2o_connect_acl_entry_t {
 } h2o_connect_acl_entry_t;
 
 /**
- * registers the connect handler to the context
+ * registers the classic connect handler to the context
  */
 void h2o_connect_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
                           size_t num_acl_entries);
+/**
+ * registers the connect-udp handler (RFC 9298) to the context
+ */
+void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t *config, h2o_connect_acl_entry_t *acl_entries,
+                              size_t num_acl_entries);
 /**
  * Parses a ACL line and stores the result in `output`. If successful, returns NULL, otherwise a string indicating the problem is
  * being returned.
@@ -2322,6 +2375,18 @@ void h2o_self_trace_register(h2o_pathconf_t *conf);
  *
  */
 void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/h2olog.c */
+
+/**
+ * registers the h2olog handler, where h2olog(1) connects to.
+ */
+void h2o_log_register(h2o_hostconf_t *hostconf);
+/**
+ * registers the h2olog configurator.
+ */
+void h2o_log_register_configurator(h2o_globalconf_t *conf);
+
 
 /* inline defs */
 

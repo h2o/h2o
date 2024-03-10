@@ -46,6 +46,7 @@ our @EXPORT = qw(
     openssl_can_negotiate
     openssl_supports_tls13
     curl_supports_http2
+    curl_supports_http3
     run_with_curl
     h2get_exists
     run_with_h2get
@@ -247,18 +248,47 @@ sub sig_num {
     firstidx { $_ eq $name } split " ", $Config::Config{sig_name};
 }
 
-# returns a hash containing `port`, `tls_port`, `guard`
+# returns a hash containing `port`, `tls_port`, `quic_port`, `guard`
+# Set { disable_quic => 1} to disable QUIC support.
 sub spawn_h2o {
     my ($conf) = @_;
     my @opts;
     my $max_ssl_version;
+    my $disable_quic = ref $conf eq 'HASH' && $conf->{disable_quic};
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-    my @all_ports = ($port, $tls_port);
+    my $quic_port;
+    my $listen_quic;
+    my @all_ports = (
+        {
+            port => $port,
+            proto => 'tcp',
+        },
+        {
+            port => $tls_port,
+            proto => 'tcp',
+        },
+    );
+
+    if (!$disable_quic) {
+        $quic_port = empty_port({ host => "0.0.0.0", proto => "tcp" });
+        push @all_ports, {
+            port => $quic_port,
+            proto => 'udp',
+        };
+        $listen_quic = <<"EOT";
+  - type: quic
+    host: 0.0.0.0
+    port: $quic_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+EOT
+    }
 
     # setup the configuration file
-    $conf = $conf->($port, $tls_port)
+    $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
@@ -280,6 +310,7 @@ listen:
       key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.crt
       @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+$listen_quic
 @{[$user ? "user: $user" : ""]}
 EOT
 
@@ -288,6 +319,7 @@ EOT
         %$ret,
         port => $port,
         tls_port => $tls_port,
+        quic_port => $quic_port,
     };
 }
 
@@ -440,11 +472,18 @@ sub openssl_can_negotiate {
 }
 
 sub openssl_supports_tls13 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !!( `openssl s_client -help 2>&1` =~ /^\s*-tls1_3\s+/m);
 }
 
 sub curl_supports_http2 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
+}
+
+sub curl_supports_http3 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
+    return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
 }
 
 sub run_with_curl {
@@ -464,6 +503,13 @@ sub run_with_curl {
         plan skip_all => "curl does not support HTTP/2"
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
+    };
+    subtest "https/3" => sub {
+        plan skip_all => "curl does not support HTTP/3"
+            unless curl_supports_http3();
+        plan skip_all => "\$server does not have quic_port set"
+            unless $server->{quic_port};
+        $cb->("https", $server->{quic_port}, "curl --insecure --http3", 768);
     };
 }
 
@@ -589,18 +635,29 @@ sub spawn_forked {
 
     my $pid = fork;
     if ($pid) {
+        my $wait = sub {
+            while (waitpid($pid, 0) != $pid) {}
+            undef $pid;
+        };
         my $guard = make_guard(sub {
             return unless defined $pid;
             kill 'TERM', $pid;
-            while (waitpid($pid, 0) != $pid) {}
+            $wait->();
         });
+        my $read_outputs = sub {
+            my $out = path("$tempdir/out")->slurp if $opts->{stdout};
+            my $err = path("$tempdir/err")->slurp if $opts->{stderr};
+            ($out, $err)
+        };
         return +{
             pid => $pid,
+            wait => sub {
+                $wait->();
+                $read_outputs->()
+            },
             kill => sub {
                 undef $guard;
-                my $out = path("$tempdir/out")->slurp if $opts->{stdout};
-                my $err = path("$tempdir/err")->slurp if $opts->{stderr};
-                ($out, $err)
+                $read_outputs->()
             },
         };
     }
@@ -759,14 +816,20 @@ package H2ologTracer {
 
     sub new {
         my ($class, $opts) = @_;
-        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        unless ($opts->{pid} or $opts->{path}) {
+            Carp::croak("Missing pid or path in the opts");
+        }
+        my $h2o_pid = $opts->{pid};
+        my $h2olog_socket_path = $opts->{path};
         my $h2olog_args = $opts->{args} // [];
+        my $output_dir = $opts->{output_dir} // File::Temp::tempdir(CLEANUP => 1);
+
         my $h2olog_prog = t::Util::bindir() . "/h2olog";
 
-        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
-        my $output_file = "$tempdir/h2olog.jsonl";
+        my $output_file = "$output_dir/h2olog.jsonl";
+        my $attaching_opts = $h2o_pid ? "-p $h2o_pid" : "-u $h2olog_socket_path";
 
-        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d $attaching_opts -w '$output_file' 2>&1};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
@@ -775,7 +838,7 @@ package H2ologTracer {
             Carp::confess("h2olog[$tracer_pid] died unexpectedly")
                 unless defined $errline;
             Test::More::diag("h2olog[$tracer_pid]: $errline");
-            last if $errline =~ /Attaching pid=/;
+            last if $errline =~ /\bAttaching\b/ms;
         }
 
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
@@ -807,6 +870,8 @@ package H2ologTracer {
             _guard => $guard,
             tracer_pid => $tracer_pid,
             get_trace => $get_trace,
+            output_dir => $output_dir,
+            output_file => $output_file,
         }, $class;
     }
 

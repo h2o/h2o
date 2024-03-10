@@ -26,7 +26,6 @@
 #include <sys/socket.h>
 #include "quicly.h"
 #include "quicly/defaults.h"
-#include "h2o/absprio.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"
@@ -50,7 +49,9 @@
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
 #define H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS 7
-#define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x276
+#define H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
+#define H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03 0x276
+#define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x33
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -77,12 +78,7 @@
 #define H2O_HTTP3_ERROR_TRANSPORT -2
 #define H2O_HTTP3_ERROR_USER1 -256
 
-/**
- * maximum payload size excluding DATA frame; stream receive window MUST be at least as big as this + 16 bytes to hold the type and
- * the length
- */
-#define H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE 16384
-#define H2O_HTTP3_INITIAL_REQUEST_STREAM_WINDOW_SIZE (H2O_HTTP3_MAX_FRAME_PAYLOAD_SIZE * 2)
+#define H2O_HTTP3_DEFAULT_MAX_CONCURRENT_STREAMING_REQUESTS 1
 
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
@@ -105,14 +101,14 @@ typedef enum en_h2o_http3_priority_element_type_t {
 typedef struct st_h2o_http3_priority_update_frame_t {
     uint64_t element_is_push : 1;
     uint64_t element : 63;
-    h2o_absprio_t priority;
+    h2o_iovec_t value;
 } h2o_http3_priority_update_frame_t;
 
 typedef struct st_h2o_http3_goaway_frame_t {
     uint64_t stream_or_push_id;
 } h2o_http3_goaway_frame_t;
 
-#define H2O_HTTP3_PRIORITY_UPDATE_FRAME_CAPACITY (1 /* len */ + 1 /* frame type */ + 8 + sizeof("u=1,i=?0") - 1)
+size_t h2o_http3_priority_update_frame_capacity(h2o_http3_priority_update_frame_t *frame);
 uint8_t *h2o_http3_encode_priority_update_frame(uint8_t *dst, const h2o_http3_priority_update_frame_t *frame);
 int h2o_http3_decode_priority_update_frame(h2o_http3_priority_update_frame_t *frame, int is_push, const uint8_t *payload,
                                            size_t len, const char **err_desc);
@@ -270,9 +266,10 @@ struct st_h2o_quic_ctx_t {
      */
     quicly_context_t *quic;
     /**
-     *
+     * Retains the next CID to be used for a connection being associated to this context. Also, `thread_id` and `node_id` are
+     * constants that contain the identity of the current thread / node; packets targetted to other theads / nodes are forwarded.
      */
-    quicly_cid_plaintext_t next_cid;
+    quicly_cid_plaintext_t *next_cid;
     /**
      * hashmap of connections by quicly_cid_plaintext_t::master_id.
      */
@@ -401,6 +398,13 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
+    /**
+     * Maximum frame payload size (excluding DATA); this property essentially limits the maximum size of HEADERS frame.
+     * As `h2o_http3_read_frame` parses the frame inside the receive buffer, stream-level flow control credits specified in
+     * `quicly_context_t::transport_params.max_stream_data` MUST be no less than
+     * `h2o_http3_calc_min_flow_control_size(max_frame_payload_size)`.
+     */
+    size_t max_frame_payload_size;
 };
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -415,6 +419,8 @@ typedef struct st_h2o_http3_read_frame_t {
     const uint8_t *payload;
     uint64_t length;
 } h2o_http3_read_frame_t;
+
+extern const char h2o_http3_err_frame_too_large[];
 
 extern const ptls_iovec_t h2o_http3_alpn[3];
 
@@ -433,22 +439,27 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs);
 /**
  * returns a frame header (if BODY frame) or an entire frame
  */
-int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, const uint8_t **src,
-                         const uint8_t *src_end, const char **err_desc);
+int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t stream_type, size_t max_frame_payload_size,
+                         const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 
+/**
+ * Initializes the QUIC context, binding the event loop, socket, quic, and other properties. `next_cid` should be a thread-local
+ * that contains the CID seed to be used; see `h2o_quic_ctx_t::next_cid` for more information.
+ */
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           h2o_quic_accept_cb acceptor, h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso,
-                           h2o_quic_stats_t *quic_stats);
+                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+                           h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats);
 /**
  *
  */
 void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx);
 /**
- *
+ * When running QUIC on multiple threads / nodes, it becomes necessary to forward incoming packets between those threads / nodes
+ * with encapsulation. This function makes adjustments to the context initialized by `h2o_quic_init_context` and registers the
+ * callbacks necessary for forwarding with en(de)capsulation.
  */
-void h2o_quic_set_context_identifier(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint32_t thread_id, uint64_t node_id,
-                                     uint8_t ttl, h2o_quic_forward_packets_cb forward_cb,
-                                     h2o_quic_preprocess_packet_cb preprocess_cb);
+void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread_divisor, uint8_t ttl,
+                                     h2o_quic_forward_packets_cb forward_cb, h2o_quic_preprocess_packet_cb preprocess_cb);
 /**
  *
  */
@@ -481,7 +492,7 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
  * initializes a http3 connection
  */
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
-                         const h2o_http3_qpack_context_t *qpack_ctx);
+                         const h2o_http3_qpack_context_t *qpack_ctx, size_t max_frame_payload_size);
 /**
  *
  */
@@ -528,19 +539,30 @@ void h2o_http3_send_goaway_frame(h2o_http3_conn_t *conn, uint64_t stream_or_push
  */
 static int h2o_http3_has_received_settings(h2o_http3_conn_t *conn);
 /**
- * sends out H3 datagrams
+ * Sends H3 datagrams (RFC 9297).
+ * To send RFC 9298-style UDP packets, callers should set Context ID (0) as part of the payload.
  */
 void h2o_http3_send_h3_datagrams(h2o_http3_conn_t *conn, uint64_t flow_id, h2o_iovec_t *datagrams, size_t num_datagrams);
 /**
  * Decodes an H3 datagram. Returns the flow id if successful, or UINT64_MAX if not.
  */
 uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, size_t len);
+/**
+ * Given maximum payload size of headers block (e.g., `H2O_MAX_REQLEN`), returns the mimimum stream-level flow control credit that
+ * have to be guaranteed.
+ */
+static uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length);
 
 /* inline definitions */
 
 inline int h2o_http3_has_received_settings(h2o_http3_conn_t *conn)
 {
     return conn->qpack.enc != NULL;
+}
+
+inline uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length)
+{
+    return 8 /* max. type field */ + 8 /* max. length field */ + max_headers_length;
 }
 
 #endif

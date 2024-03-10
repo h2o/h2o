@@ -217,6 +217,10 @@ struct listener_config_t {
          * QPACK settings
          */
         h2o_http3_qpack_context_t qpack;
+        /**
+         * the matching ipv6 listener for an ipv4 listener and vice versa
+         */
+        struct listener_config_t *sibling;
     } quic;
     /**
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
@@ -396,8 +400,8 @@ static char **cmd_argv;
 static void set_cloexec(int fd)
 {
     if (fcntl(fd, F_SETFD, FD_CLOEXEC) == -1) {
-        perror("failed to set FD_CLOEXEC");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to set FD_CLOEXEC: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 }
 
@@ -486,9 +490,14 @@ static void async_nb_on_write_complete(h2o_socket_t *sock, const char *err)
     async_nb_submit_write_pending();
 }
 
+#define NEVERBLEED_MAX_IN_FLIGHT_TX 200
+
 static void async_nb_submit_write_pending(void)
 {
     struct async_nb_transaction_t *transaction;
+
+    if (async_nb.read_queue.len >= NEVERBLEED_MAX_IN_FLIGHT_TX)
+        return;
 
     if (!h2o_socket_is_writing(async_nb.sock) && (transaction = async_nb_get(&async_nb.write_queue)) != NULL) {
         /* write the first buf in the write queue */
@@ -507,30 +516,52 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
     // set fd to blocking for synchronous I/O
     if (fcntl(fd, F_SETFL, flags & ~O_NONBLOCK) == -1) {
-        perror("fcntl");
-        abort();
+        char buf[256];
+        h2o_fatal("fcntl: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 
     transaction_cb(neverbleed, buf);
 
     // set fd back to original
     if (fcntl(fd, F_SETFL, flags) == -1) {
-        perror("fcntl");
-        abort();
+        char buf[256];
+        h2o_fatal("fcntl: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 }
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
-    assert(transaction != NULL);
+    // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
+    // read responses until the neverbleed fd is no longer read ready
+    while (async_nb.read_queue.len > 0) {
+        struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
+        assert(transaction != NULL);
 
-    async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+        async_nb_run_sync(transaction->buf, neverbleed_transaction_read);
+        transaction->on_read_complete(transaction);
+
+        // if the neverleed fd is read ready, continue reading transactions
+        if (async_nb.read_queue.len > 0) {
+            int ret;
+            struct pollfd poll_fd;
+            poll_fd.fd = neverbleed_get_fd(neverbleed);
+            poll_fd.events = POLLIN;
+            while ((ret = poll(&poll_fd, 1, 0)) == -1 && (errno == EAGAIN || errno == EINTR))
+                ;
+            if (ret == -1)
+                h2o_fatal("poll(2):%d\n", errno);
+
+            if (ret == 0)
+                break;
+        }
+    }
+
+    // resume writing if there's room
+    if (async_nb.read_queue.len < NEVERBLEED_MAX_IN_FLIGHT_TX)
+        async_nb_submit_write_pending();
 
     if (async_nb.read_queue.len == 0)
         h2o_socket_read_stop(sock);
-
-    transaction->on_read_complete(transaction);
 }
 
 #if H2O_CAN_OSSL_ASYNC
@@ -546,16 +577,16 @@ static void async_nb_notify_fd(struct async_nb_transaction_t *_transaction)
 
 #if ASYNC_NB_USE_EVENTFD
     if (eventfd_write(transaction->notify_fd, 1) != 0) {
-        perror("eventfd_write");
-        abort();
+        char buf[256];
+        h2o_fatal("eventfd_write: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #else
     ssize_t ret;
     while ((ret = write(transaction->notify_fd, "x", 1)) == -1 && errno == EINTR)
         ;
     if (ret != 1) {
-        perror("write");
-        abort();
+        char buf[256];
+        h2o_fatal("write: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 #endif
 }
@@ -1399,6 +1430,12 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         pctx->ctx.emit_certificate = NULL;
     }
 
+    /* setup session ticket context so that resumption will succeed only against the same certificate */
+    assert(sizeof(pctx->ctx.ticket_context.bytes) == PTLS_SHA256_DIGEST_SIZE);
+    ptls_calc_hash(&ptls_openssl_sha256, pctx->ctx.ticket_context.bytes, pctx->ctx.certificates.list[0].base,
+                   pctx->ctx.certificates.list[0].len);
+    pctx->ctx.ticket_context.is_set = 1;
+
     if (listener->quic.ctx != NULL) {
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
@@ -1549,8 +1586,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             neverbleed_post_fork_cb = on_neverbleed_fork;
             neverbleed = h2o_mem_alloc(sizeof(*neverbleed));
             if (neverbleed_init(neverbleed, errbuf) != 0) {
-                fprintf(stderr, "%s\n", errbuf);
-                abort();
+                h2o_fatal("%s", errbuf);
             }
             neverbleed_transaction_cb = async_nb_transaction;
         }
@@ -1580,6 +1616,18 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
          * callback of picotls for incoming TLS 1.3 connections. */
         X509_VERIFY_PARAM *vpm = X509_STORE_get0_param(SSL_CTX_get_cert_store(ssl_ctx));
         int ret = X509_VERIFY_PARAM_set_flags(vpm, X509_V_FLAG_PARTIAL_CHAIN);
+        assert(ret == 1);
+    }
+
+    /* set session resumption context so that resumption will succeed only against the same certificate */
+    if (raw_pubkey_count == 0) {
+        uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
+        unsigned session_ctx_len;
+        H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
+        int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
+        assert(ret == 1);
+        assert(session_ctx_len == sizeof(session_ctx));
+        ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
 
@@ -2067,7 +2115,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         }
 #endif
 
-        SSL_CTX_set_session_id_context(identity->ossl, H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         setup_ecc_key(identity->ossl);
         if (cipher_suite != NULL && SSL_CTX_set_cipher_list(identity->ossl, (*cipher_suite)->data.scalar) != 1) {
             h2o_configurator_errprintf(cmd, *cipher_suite, "failed to setup SSL cipher suite\n");
@@ -2746,6 +2793,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         }
         if ((res = resolve_address(cmd, node, SOCK_DGRAM, IPPROTO_UDP, hostname, servname)) == NULL)
             return -1;
+        struct listener_config_t *siblings[2] = {NULL, NULL};
         for (ai = res; ai != NULL; ai = ai->ai_next) {
             struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen, 1);
             int listener_is_new = 0;
@@ -2775,6 +2823,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 quic->generate_resumption_token = &quic_resumption_token_generator;
                 quic->async_handshake = &async_nb_quic_handler;
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0);
+                if (ai->ai_family == AF_INET)
+                    siblings[0] = listener;
+                else if (ai->ai_family == AF_INET6)
+                    siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
@@ -2874,6 +2926,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
+        }
+        if (siblings[0] != NULL && siblings[1] != NULL) {
+            siblings[0]->quic.sibling = siblings[1];
+            siblings[1]->quic.sibling = siblings[0];
         }
         freeaddrinfo(res);
 
@@ -3552,18 +3608,10 @@ static void setup_signal_handlers(void)
 #endif
 }
 
-struct st_h2o_quic_forwarded_t {
-    union {
-        struct sockaddr_in sin;
-        struct sockaddr_in6 sin6;
-    } srcaddr, destaddr;
-    int is_v6 : 1;
-};
-
 /* FIXME forward destaddr */
 /* The format:
  * type:     0b10000000 (1 byte)
- * version:  0x91917000 (4 bytes)
+ * version:  0x91c17000 (4 bytes)
  * destaddr: 1 or 7 or 19 bytes (UNSPEC, v4, v6)
  * srcaddr:  same as above
  * ttl:      1 byte
@@ -3680,9 +3728,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     h2o_context_t *h2octx = ctx->accept_ctx.ctx;
 
     /* determine the file descriptor to which the packets should be forwarded, or return */
-    if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid.node_id) {
+    if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid->node_id) {
         /* inter-node forwarding */
-        assert(ctx->http3.ctx.super.next_cid.node_id == conf.quic.node_id);
+        assert(ctx->http3.ctx.super.next_cid->node_id == conf.quic.node_id);
         for (size_t i = 0; i != conf.quic.forward_nodes.size; ++i) {
             if (*node_id == conf.quic.forward_nodes.entries[i].id) {
                 fd = conf.quic.forward_nodes.entries[i].fd;
@@ -3696,7 +3744,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         /* intra-node */
         if (node_id == NULL) {
             /* initial or 0-RTT packet, forward to thread_id being specified */
-            if (thread_id == h3ctx->next_cid.thread_id) {
+            if (thread_id == h3ctx->next_cid->thread_id) {
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
@@ -3704,7 +3752,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         } else {
             /* intra-node, validate thread id */
-            assert(thread_id != ctx->http3.ctx.super.next_cid.thread_id);
+            assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
                 return 0;
@@ -3766,6 +3814,16 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
             return 1;
         break;
     }
+    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+        struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
+        if (listener_config->quic.sibling != NULL) {
+            int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
+            write(fd, msg->msg_iov[0].iov_base, msg->msg_iov[0].iov_len);
+        } else {
+            /* drop packet */
+        }
+        return 0;
+    }
 
     /* update */
     msg->msg_iov[0].iov_base += encapsulated.offset;
@@ -3797,6 +3855,7 @@ static void close_idle_connections(h2o_context_t *ctx)
                                            conf.soft_connection_limit_min_age * 1000);
     }
 }
+
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -4037,6 +4096,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].memcached,
@@ -4097,17 +4158,18 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
                                           conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
-                                          on_http3_accept, NULL, conf.globalconf.http3.use_gso);
-            h2o_quic_set_context_identifier(&listeners[i].http3.ctx.super, 0, (uint32_t)thread_index, conf.quic.node_id, 4,
-                                            forward_quic_packets, rewrite_forwarded_quic_datagram);
+                                          &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
+                                          conf.globalconf.http3.use_gso);
+            h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
+                                            rewrite_forwarded_quic_datagram);
             listeners[i].http3.ctx.accept_ctx = &listeners[i].accept_ctx;
             listeners[i].http3.ctx.send_retry = listener_config->quic.send_retry;
             listeners[i].http3.ctx.qpack = listener_config->quic.qpack;
             int fds[2];
             /* TODO switch to using named socket in temporary directory to forward packets between server generations */
             if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {
-                perror("socketpair(AF_UNIX, SOCK_DGRAM) failed");
-                abort();
+                char buf[256];
+                h2o_fatal("socketpair(AF_UNIX, SOCK_DGRAM) failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
             }
             set_cloexec(fds[0]);
             set_cloexec(fds[1]);
@@ -4119,18 +4181,22 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             conf.listeners[i]->quic.thread_fds[thread_index] = fds[1];
         }
     }
+
     /* and start listening */
     update_listener_state(listeners);
 
-    /* Wait for all threads to become ready but before letting any of them serve connections, swap the signal handler for graceful
-     * shutdown, check (and exit) if SIGTERM has been received already. */
+    /* wait for all threads to become ready */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
+
+    /* now that all worker threads are ready, in main thread, set signal handler for graceful shutdown / or exit immediately */
     if (thread_index == 0) {
         h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_notify_threads);
         if (conf.shutdown_requested)
             exit(0);
         fprintf(stderr, "h2o server (pid:%d) is ready to serve requests with %zu threads\n", (int)getpid(), conf.thread_map.size);
     }
+
+    /* let all worker threads start accepting connections */
     h2o_barrier_wait(&conf.startup_sync_barrier_post);
 
     /* the main loop */
@@ -4495,6 +4561,7 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
     h2o_self_trace_register_configurator(&conf.globalconf);
+    h2o_log_register_configurator(&conf.globalconf);
 
     static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
@@ -4507,8 +4574,8 @@ static int dup_listener(struct listener_config_t *config)
 #if H2O_USE_REUSEPORT
     socklen_t reuseportlen = sizeof(reuseport);
     if (getsockopt(config->fds.entries[0], SOL_SOCKET, H2O_SO_REUSEPORT, &reuseport, &reuseportlen) != 0) {
-        perror("gestockopt(SO_REUSEPORT) failed");
-        abort();
+        char buf[256];
+        h2o_fatal("gestockopt(SO_REUSEPORT) failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     assert(reuseportlen == sizeof(reuseport));
 #endif
@@ -4521,27 +4588,27 @@ static int dup_listener(struct listener_config_t *config)
         struct sockaddr_storage ss;
         socklen_t sslen = sizeof(ss);
         if (getsockopt(config->fds.entries[0], SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
-            perror("failed to obtain the type of a listening socket");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to obtain the type of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         assert(type == SOCK_DGRAM || type == SOCK_STREAM);
         if (getsockname(config->fds.entries[0], (struct sockaddr *)&ss, &sslen) != 0) {
-            perror("failed to obtain local address of a listening socket");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to obtain local address of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
                 set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
-            perror("failed to bind additional listener");
-            abort();
+            char buf[256];
+            h2o_fatal("failed to bind additional listener: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
     }
 #endif
     if (!reuseport && (fd = dup(config->fds.entries[0])) == -1) {
-        perror("failed to dup listening socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to dup listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     set_cloexec(fd);
     return fd;

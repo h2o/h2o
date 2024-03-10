@@ -78,34 +78,39 @@ EOS
 };
 
 subtest "curl-h1" => sub {
+    my $re_success = qr{Proxy replied 200 to CONNECT request|CONNECT tunnel established, response 200}m;
+    my $re_fail = sub {
+        my $code = shift;
+        qr{Received HTTP code $code from proxy after CONNECT|CONNECT tunnel failed, response $code}m;
+    };
     subtest "basic", sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/echo 2>&1`;
-        like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200 response to CONNECT";
+        like $content, $re_success, "Connect got a 200 response to CONNECT";
         my @c = $content =~ /$ok_resp/g;
         is @c, 2, "Got two 200 responses";
         unlike $content, qr{proxy-status:}i;
     };
     subtest "timeout", sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/sleep-and-respond?sleep=1 2>&1`;
-        like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
+        like $content, $re_success, "Connect got a 200";
         my @c = $content =~ /$ok_resp/g;
         is @c, 2, "Got two 200 responses, no timeout";
         unlike $content, qr{proxy-status:}i;
 
         $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$origin_port/sleep-and-respond?sleep=10 2>&1`;
-        like $content, qr{Proxy replied 200 to CONNECT request}m, "Connect got a 200";
+        like $content, $re_success, "Connect got a 200";
         @c = $content =~ /$ok_resp/g;
         is @c, 1, "Only got one 200 response";
         unlike $content, qr{proxy-status:}i;
     };
     subtest "acl" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
-        like $content, qr{Received HTTP code 403 from proxy after CONNECT};
+        like $content, $re_fail->(403);
         unlike $content, qr{proxy-status:}i;
     };
     subtest "immediate connect failure" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://255.255.255.255:$origin_port/ 2>&1 2>&1`;
-        like $content, qr{Received HTTP code 502 from proxy after CONNECT};
+        like $content, $re_fail->(502);
     };
 };
 
@@ -124,7 +129,10 @@ subtest "h2o-httpclient" => sub {
             or die "failed to open $tempdir/out:$!";
         do { local $/; <$fh> };
     };
-    for (['h1', 'http', $server->{port}, ''], ['h1s', 'https', $server->{tls_port}, ''], ['h3', 'https', $quic_port, '-3 100']) {
+    for (['h1', 'http', $server->{port}, ''],
+         ['h1s', 'https', $server->{tls_port}, ''],
+         ['h2', 'https', $server->{tls_port}, '-2 100'],
+         ['h3', 'https', $quic_port, '-3 100']) {
         my ($name, $scheme, $port, $opts) = @$_;
         subtest $name => sub {
             subtest "basic" => sub {

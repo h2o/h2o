@@ -44,7 +44,7 @@ extern const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS;
  * initializes the context
  */
 void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock,
-                                   quicly_context_t *quic, h2o_quic_accept_cb acceptor,
+                                   quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                                    h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso);
 
 /**

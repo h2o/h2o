@@ -20,10 +20,8 @@
  * IN THE SOFTWARE.
  */
 
+#include "picotls/minicrypto.h"
 #include "../libaegis.h"
-
-extern ptls_hash_algorithm_t ptls_minicrypto_sha256;
-extern ptls_hash_algorithm_t ptls_minicrypto_sha384;
 
 ptls_aead_algorithm_t ptls_minicrypto_aegis128l = {"AEGIS-128L",
                                                    PTLS_AEGIS128L_CONFIDENTIALITY_LIMIT,
@@ -56,7 +54,7 @@ ptls_aead_algorithm_t ptls_minicrypto_aegis256 = {"AEGIS-256",
                                                   0,
                                                   sizeof(struct aegis256_context_t),
                                                   aegis256_setup_crypto};
-ptls_cipher_suite_t ptls_minicrypto_aegis256sha384 = {.id = PTLS_CIPHER_SUITE_AEGIS256_SHA384,
-                                                      .name = PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA384,
+ptls_cipher_suite_t ptls_minicrypto_aegis256sha512 = {.id = PTLS_CIPHER_SUITE_AEGIS256_SHA512,
+                                                      .name = PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA512,
                                                       .aead = &ptls_minicrypto_aegis256,
-                                                      .hash = &ptls_minicrypto_sha384};
+                                                      .hash = &ptls_minicrypto_sha512};

@@ -44,9 +44,13 @@ print $up_resp "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\nhello";
 
 sleep 1;
 
-# open client, sending request body at 12KB/sec. The number is slightly greater than H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK, and
+# open client, sending request body 1 byte at a time, with H2O_HTTP3_REQUEST_BODY_MIN_BYTES_TO_BLOCK set to 1
 # the expectation is that h2o would start streaming the request body
-open my $client_resp, '-|', "$client_prog -3 100 -b 120000 -c 12000 -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
+
+my $chunk_size = 1;
+my $total_sent = 120000;
+
+open my $client_resp, '-|', "$client_prog -3 100 -b $total_sent -c $chunk_size -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
     or die "failed to launch $client_prog:$!";
 
 # wait until the request received by upstream is 3 seconds' worth of data
@@ -58,7 +62,7 @@ for (my $cnt = 0;; ++$cnt) {
     }
     if (-e "$tempdir/up_req.txt") {
         my $up_req_size = (stat "$tempdir/up_req.txt")[7];
-        last if $up_req_size > 12000 * 3;
+        last if $up_req_size > ($chunk_size * 3);
     }
     sleep 0.25;
 }
@@ -76,10 +80,10 @@ subtest "request-received-upstream" => sub {
     };
     my ($headers, $body) = split /\r\n\r\n/, $up_req, 2;
     like $headers, qr{^POST / HTTP/1\.1\r\n}s;
-    like $headers, qr{^content-length: 120000($|\r\n)}m;
+    like $headers, qr{^content-length: $total_sent($|\r\n)}m;
     like $body, qr{^a+$}s;
-    cmp_ok length($body), '>=', 12000 * 3;
-    cmp_ok length($body), '<', 12000 * 7;
+    cmp_ok length($body), '>=', $chunk_size;
+    cmp_ok length($body), '<', $chunk_size * 7;
 };
 
 subtest "response" => sub {

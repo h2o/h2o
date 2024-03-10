@@ -414,6 +414,31 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 
 <?
 $ctx->{directive}->(
+    name    => "h2olog",
+    levels  => [ qw(host) ],
+    default => "h2olog: OFF",
+    desc    => q{Under the path <code>/.well-known/h2olog</code> for the current host, registers a h2olog handler that emits the internals of traffic that the h2o process is handling.},
+)->(sub {
+?>
+<p>
+The <code>h2olog</code> command can be used to gather information through this endpoint.
+As the handler emits the internals of h2o to the client, only requests via a UNIX socket are accepted.
+</p>
+<p>
+This directive takes one of the following three arguments:
+<dl>
+<dt>off</dt>
+<dd>The h2olog endpoint is disabled.</dt>
+<dt>on</dt>
+<dd>The h2olog endpoint is enabled, but only information to gather performance data will be emitted.</dd>
+<dt>appdata</dt>
+<dd>The h2olog endpoint is enabled, and in addition to information necessary for gathering performance data, some payload of HTTP is emitted as well. The additional information might help diagnose issues specific to certain HTTP connections but might include sensitive information (e.g., HTTP cookies).</dd>
+</dl>
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "handshake-timeout",
     levels  => [ qw(global) ],
     default => "handshake-timeout: 10",

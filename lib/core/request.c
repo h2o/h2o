@@ -342,7 +342,8 @@ void h2o_dispose_request(h2o_req_t *req)
 int h2o_req_validate_pseudo_headers(h2o_req_t *req)
 {
     if (h2o_memis(req->input.method.base, req->input.method.len, H2O_STRLIT("CONNECT-UDP"))) {
-        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE)
+        /* The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
+        if (req->input.scheme != &H2O_URL_SCHEME_MASQUE && req->input.scheme != &H2O_URL_SCHEME_HTTPS)
             return 0;
         if (!h2o_memis(req->input.path.base, req->input.path.len, H2O_STRLIT("/")))
             return 0;
@@ -569,12 +570,12 @@ h2o_ostream_t *h2o_add_ostream(h2o_req_t *req, size_t alignment, size_t sz, h2o_
     return ostr;
 }
 
-static void apply_env(h2o_req_t *req, h2o_envconf_t *env)
+void h2o_req_apply_env(h2o_req_t *req, h2o_envconf_t *env)
 {
     size_t i;
 
     if (env->parent != NULL)
-        apply_env(req, env->parent);
+        h2o_req_apply_env(req, env->parent);
     for (i = 0; i != env->unsets.size; ++i)
         h2o_req_unsetenv(req, env->unsets.entries[i].base, env->unsets.entries[i].len);
     for (i = 0; i != env->sets.size; i += 2)
@@ -593,7 +594,7 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
     req->num_loggers = pathconf->_loggers.size;
 
     if (pathconf->env != NULL)
-        apply_env(req, pathconf->env);
+        h2o_req_apply_env(req, pathconf->env);
 }
 
 void h2o_proceed_response_deferred(h2o_req_t *req)
@@ -776,7 +777,7 @@ void h2o_send_redirect_internal(h2o_req_t *req, h2o_iovec_t method, const char *
     h2o_url_t url;
 
     /* parse the location URL */
-    if (h2o_url_parse_relative(url_str, url_len, &url) != 0) {
+    if (h2o_url_parse_relative(&req->pool, url_str, url_len, &url) != 0) {
         /* TODO log h2o_error_printf("[proxy] cannot handle location header: %.*s\n", (int)url_len, url); */
         h2o_send_error_deferred_502(req, "Gateway Error", "internal error", 0);
         return;
@@ -877,7 +878,7 @@ int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_
     h2o_url_t input;
 
     /* resolve the URL */
-    if (h2o_url_parse_relative(dest.base, dest.len, &input) != 0) {
+    if (h2o_url_parse_relative(&req->pool, dest.base, dest.len, &input) != 0) {
         return -1;
     }
     if (input.scheme != NULL && input.authority.base != NULL) {

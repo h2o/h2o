@@ -855,6 +855,30 @@ error-log
 .RE
 .RE
 
+.SS h2olog
+Under the path /.well-known/h2olog for the current host, registers a h2olog handler that emits the internals of traffic that the h2o process is handling.
+
+.PP
+
+
+The h2olog command can be used to gather information through this endpoint.
+As the handler emits the internals of h2o to the client, only requests via a UNIX socket are accepted.
+
+
+This directive takes one of the following three arguments:
+
+off
+The h2olog endpoint is disabled.
+on
+The h2olog endpoint is enabled, but only information to gather performance data will be emitted.
+appdata
+The h2olog endpoint is enabled, and in addition to information necessary for gathering performance data, some payload of HTTP is emitted as well. The additional information might help diagnose issues specific to certain HTTP connections but might include sensitive information (e.g., HTTP cookies).
+
+
+
+.RE
+.RE
+
 .SS handshake-timeout
 Maximum time (in seconds) that can be spent by a connection before it becomes ready to accept an HTTP request.
 
@@ -1947,6 +1971,19 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 .RE
 .RE
 
+.SS http2-max-streams
+  Maximum number of streams to advertise via HTTP2 SETTINGS_MAX_CONCURRENT_STREAMS.
+
+
+.PP
+
+
+ Limits the number of active requests that the proxy will accept on a client connection.  Also see "http2-max-concurrent-requests-per-connection" which controls the number of requests that the proxy will process concurrently.
+
+
+.RE
+.RE
+
 .SS http2-max-concurrent-requests-per-connection
 Maximum number of requests to be handled concurrently within a single HTTP/2 connection.
 
@@ -2225,6 +2262,17 @@ See http2-input-window-size.
 
 .RE
 .RE
+
+.SS http3-max-concurrent-streaming-requests-per-connection
+Maximum number of streaming requests to be handled concurrently within a single HTTP/3 connection.
+
+
+.PP
+
+
+.RE
+.RE
+
 
 
 
@@ -3425,6 +3473,24 @@ proxy.connect:
 Note: The precise syntax of the access control list element is address:port/netmask. This is because the URL parser is reused.
 
 
+The directive can only be used for the root path (i.e., /), as the classic CONNECT does not specify the path.
+
+
+.RE
+.RE
+
+.SS proxy.connect-udp
+Setup a CONNECT-UDP gateway defined by RFC 9298.
+
+.PP
+
+
+Supplied argument is an access control list, using the same format as that of proxy.connect.
+
+
+Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see proxy.connect.masque-draft-03.
+
+
 .RE
 .RE
 
@@ -3440,6 +3506,19 @@ proxy.proxy-status.identity
 .RE
 .RE
 
+
+.SS proxy.connect.masque-draft-03
+A boolean flag (ON or OFF) indicating if CONNECT-UDP requests conforming to draft-ietf-masque-connect-udp-03 should be handled.
+
+.PP
+
+
+This directive alters the behavior of proxy.connect because the CONNECT-UDP method defined in draft-03 followed the approach of the CONNECT method, which uses a HTTP proxy as a tunnel.
+The published RFC switched to specifying the tunnel by the target URI, and as a result, it is supported by a different directive: proxy.connect-udp.
+
+
+.RE
+.RE
 
 .SS proxy.emit-x-forwarded-headers
 (since v2.1)
@@ -3475,6 +3554,16 @@ proxy.emit-x-forwarded-headers
 .SS proxy.emit-missing-date-header
 (since v2.3)
 A boolean flag (ON or OFF) indicating if H2O should add a date header to the response, if that header is missing from the upstream response.
+
+.PP
+
+.RE
+.RE
+
+
+.SS proxy.expect
+(since v2.3)
+A boolean flag (ON or OFF) indicating if H2O should send expect: 100-continue header to the request, and postpone sending request body until it receives 100 response
 
 .PP
 
@@ -3714,6 +3803,28 @@ temp-buffer-threshold
 .RE
 .RE
 
+.SS proxy.max-spare-pipes
+This setting specifies the maximum number of pipes retained for reuse, when proxy.zerocopy is used.
+
+.PP
+
+
+This maximum is applied per each worker thread.
+The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
+When this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
+
+
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+
+
+.PP
+.BR See\ also:
+proxy.zerocopy
+
+.RE
+.RE
+
 .SS proxy.preserve-host
 A boolean flag (ON or OFF) designating whether or not to pass Host header from incoming request to upstream.
 
@@ -3910,7 +4021,7 @@ This approach does not reduce the total amount of bytes flowing through the CPU,
 
 .PP
 .BR See\ also:
-ssl-offload
+ssl-offload, proxy.max-spare-pipes
 
 .RE
 .RE

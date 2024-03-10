@@ -44,7 +44,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct headers_configurator_t *self = (void *)_self;
 
-    if (ctx->pathconf != NULL && *self->cmds != NULL) {
+    if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) && *self->cmds != NULL) {
         if (*self->cmds != NULL)
             h2o_mem_addref_shared(*self->cmds);
         h2o_headers_register(ctx->pathconf, *self->cmds);

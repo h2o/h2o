@@ -486,7 +486,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         /* request line is in ordinary form, path might contain absolute URL; if so, convert it */
         if (conn->req.input.path.len != 0 && conn->req.input.path.base[0] != '/') {
             h2o_url_t url;
-            if (h2o_url_parse(conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
+            if (h2o_url_parse(&conn->req.pool, conn->req.input.path.base, conn->req.input.path.len, &url) == 0) {
                 conn->req.input.scheme = url.scheme;
                 conn->req.input.path = url.path;
                 host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
@@ -686,11 +686,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             }
             conn->_req_entity_reader->handle_incoming_entity(conn);
         } else if (conn->req.is_tunnel_req) {
-            /* Is a CONNECT request or a upgrade that uses our stream API (e.g., websocket tunnelling), therefore:
-             * * the request is submitted immediately for processing,
-             * * input is read and provided to the request handler using the request streaming API,
-             * * but the timeout is stopped as the client might wait for the server to send 200 before sending anything. */
-            clear_timeouts(conn);
+            /* Is a CONNECT request or an upgrade (e.g., WebSocket). Request is submitted immediately and body is streamed. */
             if (!h2o_req_can_stream_request(&conn->req) &&
                 h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
                 h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
@@ -704,9 +700,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             conn->req.write_req.cb = write_req_connect_first;
             conn->req.write_req.ctx = &conn->req;
             conn->req.proceed_req = proceed_request;
-            conn->req.entity = h2o_iovec_init("", 0); /* set to non-NULL pointer to indicate that request body exists */
+            conn->_req_entity_reader->handle_incoming_entity(conn); /* read payload received early before submitting the request */
+            if (conn->req.entity.base == NULL)
+                conn->req.entity = h2o_iovec_init("", 0); /* if nothing was read, still indicate that body exists */
+            /* stop reading (this might or might not be done by `handle_incoming_entity`) until HTTP response is given */
+            h2o_socket_read_stop(conn->sock);
+            clear_timeouts(conn);
             h2o_process_request(&conn->req);
-            conn->_req_entity_reader->handle_incoming_entity(conn);
         } else {
             /* Ordinary request without request body. */
             clear_timeouts(conn);
@@ -1162,6 +1162,18 @@ static uint64_t get_req_id(h2o_req_t *req)
     return conn->_req_index;
 }
 
+static h2o_socket_t *steal_socket(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    h2o_socket_t *sock = conn->sock;
+
+    if (sock->ssl != NULL)
+        return NULL;
+
+    close_connection(conn, 0);
+    return sock;
+}
+
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1215,6 +1227,7 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .request_shutdown = initiate_graceful_shutdown,
     .can_zerocopy = can_zerocopy,
     .get_req_id = get_req_id,
+    .steal_socket = steal_socket,
     .log_ = {{
         .transport =
             {

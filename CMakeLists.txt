@@ -425,7 +425,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/h2olog.c
     lib/handler/headers.c
+    lib/handler/headers_util.c
+    lib/handler/http2_debug_state.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/connect.c
@@ -435,12 +438,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/self_trace.c
     lib/handler/server_timing.c
     lib/handler/status.c
-    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/memory.c
     lib/handler/status/requests.c
     lib/handler/status/ssl.c
-    lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
@@ -448,7 +449,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/h2olog.c
     lib/handler/configurator/headers.c
+    lib/handler/configurator/headers_util.c
+    lib/handler/configurator/http2_debug_state.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
@@ -456,8 +460,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
-    lib/handler/configurator/http2_debug_state.c
-    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 
@@ -891,9 +893,9 @@ ADD_CUSTOM_TARGET(doc-publish ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk publish BI
 
 GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
 
-IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON)
+IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON AND NOT (OPENSSL_VERSION VERSION_LESS "1.1.1"))
     ExternalProject_Add(h2get
-                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} "-DCMAKE_C_FLAGS=-include ${CMAKE_SOURCE_DIR}/include/h2o/openssl_backport.h" ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}

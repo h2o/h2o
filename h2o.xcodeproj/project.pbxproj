@@ -49,6 +49,10 @@
 		08CEA9DD267B0E3B00B4BB6B /* self_trace.c in Sources */ = {isa = PBXBuildFile; fileRef = 08CEA9DA267B0E3B00B4BB6B /* self_trace.c */; };
 		08DAFA08289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
 		08DAFA09289763FC00364143 /* memory.c in Sources */ = {isa = PBXBuildFile; fileRef = 08DAFA07289763FC00364143 /* memory.c */; };
+		08E86F3F2B5666A800F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F3E2B5666A700F7211C /* h2olog.c */; };
+		08E86F422B5666C000F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F412B5666C000F7211C /* h2olog.c */; };
+		08E86F432B5666C000F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F412B5666C000F7211C /* h2olog.c */; };
+		08E86F442B56675900F7211C /* h2olog.c in Sources */ = {isa = PBXBuildFile; fileRef = 08E86F3E2B5666A700F7211C /* h2olog.c */; };
 		08E9CC4E1E41F6660049DD26 /* embedded.c.h in Headers */ = {isa = PBXBuildFile; fileRef = 08E9CC4D1E41F6660049DD26 /* embedded.c.h */; };
 		08EFC4E027FE9F96004C532C /* throttle_resp.c in Sources */ = {isa = PBXBuildFile; fileRef = 08EFC4DF27FE9F96004C532C /* throttle_resp.c */; };
 		08F320DD1E7A9CA60038FA5A /* redis.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DE31D8276EA00A04BC1 /* redis.c */; };
@@ -698,6 +702,7 @@
 		0821950F2685262B00E3EFCF /* cc-pico.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-pico.c"; sourceTree = "<group>"; };
 		0829879326E1F3530053638F /* rate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80resume-context.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -710,6 +715,8 @@
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0855C4052B2BFF6300C7AE5B /* 40tunnel-udp.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tunnel-udp.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		085BDAE72B1DB4C2002851EA /* 40http3-priority.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-priority.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-selective-tracing.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-corrupted-scid-initial.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		086001C02730B6E30043886F /* forever_ticket.yaml */ = {isa = PBXFileReference; lastKnownFileType = text.yaml; path = forever_ticket.yaml; sourceTree = "<group>"; };
@@ -759,6 +766,9 @@
 		08CEA9D6267AF0EB00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08CEA9DA267B0E3B00B4BB6B /* self_trace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = self_trace.c; sourceTree = "<group>"; };
 		08DAFA07289763FC00364143 /* memory.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = memory.c; sourceTree = "<group>"; };
+		08E86F3E2B5666A700F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
+		08E86F412B5666C000F7211C /* h2olog.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = h2olog.c; sourceTree = "<group>"; };
+		08E86F462B60D94400F7211C /* 80http1-chunk-overhead.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http1-chunk-overhead.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E8FBF32A84DB5B00CF8FF3 /* 50reverse-proxy-http2-trailers.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50reverse-proxy-http2-trailers.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1598,6 +1608,7 @@
 				10BCF2FC1B168CAE0076939D /* fastcgi.c */,
 				107923AF19A3217300C52AD6 /* file.c */,
 				105534E91A42A83700627ECB /* file */,
+				08E86F3E2B5666A700F7211C /* h2olog.c */,
 				10AA2EBD1AA019D8004322AC /* headers.c */,
 				E90A95F21E30795100483D6C /* headers_util.c */,
 				084FC7C01D54B90D00E89F66 /* http2_debug_state.c */,
@@ -1721,17 +1732,18 @@
 				106C23001C0544CE00405689 /* errordoc.c */,
 				10BCF2FE1B1A892F0076939D /* fastcgi.c */,
 				105534DC1A3C7AA900627ECB /* file.c */,
+				08E86F412B5666C000F7211C /* h2olog.c */,
 				10AA2EBF1AA019FC004322AC /* headers.c */,
 				E90A95F41E30797D00483D6C /* headers_util.c */,
+				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				10B38A731B8D3544007DC191 /* mruby.c */,
 				105534DE1A3C7B9800627ECB /* proxy.c */,
 				10AA2EA61A8DA93C004322AC /* redirect.c */,
 				10AA2EC11AA0402E004322AC /* reproxy.c */,
 				10835E041C9B3C6200197E59 /* status.c */,
-				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
-				084FC7C31D54BB9200E89F66 /* http2_debug_state.c */,
 				7D937301202AC7BA005FE6AB /* server_timing.c */,
 				08CEA9DA267B0E3B00B4BB6B /* self_trace.c */,
+				10C45D4E1CFD15FA0096DB06 /* throttle_resp.c */,
 			);
 			path = configurator;
 			sourceTree = "<group>";
@@ -2243,6 +2255,7 @@
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
+				085BDAE72B1DB4C2002851EA /* 40http3-priority.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
 				E9414F8E24ED1CD700273C59 /* 40http3-shutdown.t */,
@@ -2268,6 +2281,7 @@
 				080BDCDB2AB92C630091CE31 /* 40tls13-aegis.t */,
 				E9F677D82008686B006476D3 /* 40tls13-early-data.t */,
 				106C22FB1C0413DA00405689 /* 40tunnel.t */,
+				0855C4052B2BFF6300C7AE5B /* 40tunnel-udp.t */,
 				104B9A221A47BBA1009EEE64 /* 40unix-socket.t */,
 				10AA2EB31A94B66D004322AC /* 40virtual-host.t */,
 				10AA2EB11A931409004322AC /* 50access-log.t */,
@@ -2377,6 +2391,7 @@
 				E9D497C625E4DE1E00F4A80D /* 80chunked.t */,
 				109EEFE11D77B350001F11D1 /* 80dup-host-headers.t */,
 				E9BC76C51EE4AB6C00EB7A09 /* 80graceful-shutdown.t */,
+				08E86F462B60D94400F7211C /* 80http1-chunk-overhead.t */,
 				08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */,
 				E9AFBF2C212A985E000F5DB8 /* 80http2-idle-timeout-for-zero-window.t */,
 				08CEA9CF2662136B00B4BB6B /* 80http3-header-linefeed.t */,
@@ -2387,6 +2402,7 @@
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
+				082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */,
 				106530A81D8A21A7005B2C60 /* 80reverse-proxy-missing-content-length-for-post.t */,
 				E9414F8F24ED1D5300273C59 /* 80reverse-proxy-truncated-chunked.t */,
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
@@ -3338,9 +3354,11 @@
 				107923CE19A3217300C52AD6 /* mimemap.c in Sources */,
 				107923C619A3217300C52AD6 /* connection.c in Sources */,
 				1022E7C31CA8BCCE00CE2A05 /* text_mode.c in Sources */,
+				08E86F3F2B5666A800F7211C /* h2olog.c in Sources */,
 				080D35EB1D5E060D0029B7E5 /* http2_debug_state.c in Sources */,
 				08CEA9D7267AF0EB00B4BB6B /* self_trace.c in Sources */,
 				10835E051C9B3C6200197E59 /* status.c in Sources */,
+				08E86F422B5666C000F7211C /* h2olog.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
@@ -3703,6 +3721,7 @@
 				E9708B7A1E52C83D0029E0A5 /* redirect.c in Sources */,
 				E9316EEB24417EAA00C9C127 /* huffman.c in Sources */,
 				E9708B4D1E52C7DF0029E0A5 /* socket.c in Sources */,
+				08E86F442B56675900F7211C /* h2olog.c in Sources */,
 				E987E5DC1FD7BEB500DE4346 /* dictionary_hash.c in Sources */,
 				E98403D12485172E00E3A6B1 /* retire_cid.c in Sources */,
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
@@ -3745,6 +3764,7 @@
 				08CEA9D326701D7600B4BB6B /* rand.c in Sources */,
 				107E34131C7FAC2000AEF5F8 /* brotli.c in Sources */,
 				E9708B4F1E52C7E50029E0A5 /* string.c in Sources */,
+				08E86F432B5666C000F7211C /* h2olog.c in Sources */,
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
 				108DD0861BA22E46004167DC /* mruby.c in Sources */,
 				E9708B5B1E52C7F30029E0A5 /* util.c in Sources */,

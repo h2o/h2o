@@ -243,6 +243,21 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 
 <?
 $ctx->{directive}->(
+    name    => "http2-max-streams",
+    levels  => [ qw(global) ],
+    default => 'http2-max-streams: 100',
+    desc    => <<'EOT',
+  Maximum number of streams to advertise via HTTP2 <a href="https://www.rfc-editor.org/rfc/rfc7540#section-6.5.2" target="_blank"><code>SETTINGS_MAX_CONCURRENT_STREAMS</code></a>.
+EOT
+)->(sub {
+?>
+<p>
+ Limits the number of active requests that the proxy will accept on a client connection.  Also see <a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a> which controls the number of requests that the proxy will process concurrently.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
     default => 'http2-max-concurrent-requests-per-connection: 100',

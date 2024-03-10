@@ -48,6 +48,7 @@
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
+static void add_header(h2o_iovec_t name, h2o_iovec_t value);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
 struct {
@@ -74,6 +75,7 @@ static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
+static const char *upgrade_token = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
@@ -90,7 +92,9 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
+    .max_frame_payload_size = 16384,
 };
+static quicly_cid_plaintext_t h3_next_cid;
 static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -123,6 +127,18 @@ static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iove
     memcpy(http3_session.ticket.base, src.base, src.len);
     http3_session.tp = *quicly_get_remote_transport_parameters(conn);
     return 0;
+}
+
+static void add_header(h2o_iovec_t name, h2o_iovec_t value)
+{
+    if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
+        fprintf(stderr, "too many request headers\n");
+        exit(EXIT_FAILURE);
+    }
+
+    req.headers[req.num_headers].name = name;
+    req.headers[req.num_headers].value = value;
+    ++req.num_headers;
 }
 
 static int load_http3_session(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name, ptls_iovec_t *token,
@@ -197,6 +213,14 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     h2o_buffer_consume(&std_in.sock->input, std_in.sock->input->size);
 }
 
+static size_t build_capsule_header(uint8_t *header_buf, size_t payload_len)
+{
+    uint8_t *p = header_buf;
+    *p++ = 0; /* Datagram Capsule Type */
+    p = quicly_encodev(p, (uint64_t)payload_len);
+    return p - header_buf;
+}
+
 static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 {
     uint8_t buf[1500];
@@ -204,10 +228,19 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     struct msghdr mess = {};
     ssize_t rret;
 
+    size_t context_id_len;
+    if (strcmp(req.method, "CONNECT-UDP") == 0) {
+        // No context id for draft03.
+        context_id_len = 0;
+    } else {
+        context_id_len = 1;
+        buf[0] = 0; // Context ID 0 used for UDP packets.
+    }
+
     /* read one UDP datagram, or return */
     do {
-        vec.iov_base = buf;
-        vec.iov_len = sizeof(buf);
+        vec.iov_base = buf + context_id_len;
+        vec.iov_len = sizeof(buf) - context_id_len;
         mess.msg_name = &udp_sock_remote_addr;
         mess.msg_namelen = sizeof(udp_sock_remote_addr);
         mess.msg_iov = &vec;
@@ -224,13 +257,13 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
     /* send the datagram directly or encapsulated on the stream */
     if (udp_write != NULL) {
-        h2o_iovec_t datagram = h2o_iovec_init(buf, rret);
+        h2o_iovec_t datagram = h2o_iovec_init(buf, context_id_len + rret);
         udp_write(client, &datagram, 1);
     } else {
         /* append UDP chunk to the input buffer of stdin read socket! */
-        uint8_t header[3] = {0}, *header_end = quicly_encodev(header + 1, (uint64_t)rret);
-        h2o_buffer_append(&std_in.sock->input, header, header_end - header);
-        h2o_buffer_append(&std_in.sock->input, buf, rret);
+        uint8_t header_buf[3];
+        h2o_buffer_append(&std_in.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
+        h2o_buffer_append(&std_in.sock->input, buf, context_id_len + rret);
         /* pretend as if we read from stdin */
         stdin_on_read(std_in.sock, NULL);
     }
@@ -238,12 +271,35 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
+    int is_draft03 = strcmp(req.method, "CONNECT-UDP") == 0;
+
     for (size_t i = 0; i != num_datagrams; ++i) {
-        const h2o_iovec_t *src = datagrams + i;
-        struct iovec vec = {.iov_base = src->base, .iov_len = src->len};
-        struct msghdr mess = {
-            .msg_name = &udp_sock_remote_addr, .msg_namelen = sizeof(udp_sock_remote_addr), .msg_iov = &vec, .msg_iovlen = 1};
-        sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
+        if (udp_sock != NULL) {
+            /* connected to client via UDP; decode and forward the UDP payload */
+            struct iovec udp_payload;
+            if (is_draft03) {
+                udp_payload = (struct iovec){datagrams[i].base, datagrams[i].len};
+            } else {
+                const uint8_t *src = (uint8_t *)datagrams[i].base;
+                /* Skip datagrams with context id != 0, rfc9298 section 5. TODO: error-close the connection upon decoding failure?
+                 */
+                if (ptls_decode_quicint(&src, src + datagrams[i].len) != 0)
+                    continue;
+                udp_payload = (struct iovec){.iov_base = (void *)src,
+                                             .iov_len = datagrams[i].len - (src - (const uint8_t *)datagrams[i].base)};
+            }
+            struct msghdr mess = {.msg_name = &udp_sock_remote_addr,
+                                  .msg_namelen = sizeof(udp_sock_remote_addr),
+                                  .msg_iov = &udp_payload,
+                                  .msg_iovlen = 1};
+            sendmsg(h2o_socket_get_fd(udp_sock), &mess, 0);
+        } else {
+            /* connected to client via capsule stream; encode and forward (TODO make it atomic write) */
+            uint8_t header_buf[3];
+            fwrite(header_buf, 1, build_capsule_header(header_buf, datagrams[i].len), stdout);
+            fwrite(datagrams[i].base, 1, datagrams[i].len, stdout);
+            fflush(stdout);
+        }
     }
 }
 
@@ -259,37 +315,45 @@ static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_mem_pool_t *pool;
-    h2o_url_t *url_parsed;
-    int is_connect = strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0;
+    h2o_url_t *target_uri;
+    const char *upgrade_to = NULL;
 
     /* allocate memory pool */
     pool = h2o_mem_alloc(sizeof(*pool));
     h2o_mem_init_pool(pool);
 
     /* parse URL, or host:port if CONNECT */
-    url_parsed = h2o_mem_alloc_pool(pool, *url_parsed, 1);
-    if (is_connect) {
-        if (h2o_url_init(url_parsed, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
-            url_parsed->_port == 0 || url_parsed->_port == 65535) {
+    target_uri = h2o_mem_alloc_pool(pool, *target_uri, 1);
+    *target_uri = (h2o_url_t){};
+
+    if (strcmp(req.method, "CONNECT-UDP") == 0 || (strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL)) {
+        /* Traditional CONNECT, either creating a TCP tunnel or a UDP tunnel in the style of masque draft-03).
+         * Authority section of target is set to host:port, and `upgrade_to` specifies traditional CONNECT. When masque is used,
+         * scheme and path are set accordingly. */
+        if (h2o_url_init(target_uri, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
+            target_uri->_port == 0 || target_uri->_port == 65535) {
             on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
             return;
         }
         if (strcmp(req.method, "CONNECT-UDP") == 0) {
-            url_parsed->scheme = &H2O_URL_SCHEME_MASQUE;
-            url_parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
+            target_uri->scheme = &H2O_URL_SCHEME_MASQUE;
+            target_uri->path = h2o_iovec_init(H2O_STRLIT("/"));
         }
+        upgrade_to = h2o_httpclient_upgrade_to_connect;
     } else {
-        if (h2o_url_parse(req.target, SIZE_MAX, url_parsed) != 0) {
+        /* An ordinary request or extended CONNECT. Both of them talks to origin specified by the target URI */
+        if (h2o_url_parse(pool, req.target, SIZE_MAX, target_uri) != 0) {
             on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
             return;
         }
+        upgrade_to = upgrade_token;
     }
 
     /* initiate the request */
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : url_parsed, NULL);
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : target_uri, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, io_timeout);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -314,8 +378,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, url_parsed, ctx, connpool,
-                           url_parsed, is_connect ? h2o_httpclient_upgrade_to_connect : NULL, on_connect);
+    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, target_uri, ctx, connpool,
+                           target_uri, upgrade_to, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -416,7 +480,7 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
         return NULL;
     }
 
-    if (udp_sock != NULL && (200 <= args->status && args->status <= 299)) {
+    if (200 <= args->status && args->status <= 299) {
         udp_write = args->forward_datagram.write_;
         if (args->forward_datagram.read_ != NULL)
             *args->forward_datagram.read_ = tunnel_on_udp_read;
@@ -639,8 +703,8 @@ int main(int argc, char **argv)
             exit(EXIT_FAILURE);
         }
         h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, NULL, h2o_httpclient_http3_notify_connection_update,
-                              1 /* use_gso */, NULL);
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, &h3_next_cid, NULL,
+                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
     }
 #endif
 
@@ -650,12 +714,16 @@ int main(int argc, char **argv)
         OPT_DISALLOW_DELAYED_ACK,
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
+        OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
+        OPT_UPGRADE,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
                                 {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+                                {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
@@ -687,13 +755,16 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
-        case 'x':
+        case 'x': {
+            h2o_mem_pool_t pool;
+            h2o_mem_init_pool(&pool);
             req.connect_to = h2o_mem_alloc(sizeof(*req.connect_to));
-            if (h2o_url_parse(optarg, strlen(optarg), req.connect_to) != 0) {
+            /* we can leak pool and `req.connect_to`, as they are globals allocated only once in `main` */
+            if (h2o_url_parse(&pool, optarg, strlen(optarg), req.connect_to) != 0) {
                 fprintf(stderr, "invalid server URL specified for -x\n");
                 exit(EXIT_FAILURE);
             }
-            break;
+        } break;
         case 'X': {
 #if H2O_USE_LIBUV
             fprintf(stderr, "-X is not supported by the libuv backend\n");
@@ -708,7 +779,6 @@ int main(int argc, char **argv)
             h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
             h3ctx.quic.initial_egress_max_udp_payload_size = 1400; /* increase initial UDP payload size so that we'd have room to
                                                                     * carry ordinary QUIC packets. */
-            req.method = "CONNECT-UDP";
 #endif
         } break;
         case 'C':
@@ -733,18 +803,12 @@ int main(int argc, char **argv)
                 fprintf(stderr, "no `:` found in -H\n");
                 exit(EXIT_FAILURE);
             }
-            if (req.num_headers >= sizeof(req.headers) / sizeof(req.headers[0])) {
-                fprintf(stderr, "too many request headers\n");
-                exit(EXIT_FAILURE);
-            }
             for (value_start = colon + 1; *value_start == ' ' || *value_start == '\t'; ++value_start)
                 ;
             /* lowercase the header field name (HTTP/2: RFC 9113 Section 8.2, HTTP/3: RFC 9114 Section 4.2) */
             h2o_iovec_t name = h2o_strdup(NULL, optarg, colon - optarg);
             h2o_strtolower(name.base, name.len);
-            req.headers[req.num_headers].name = name;
-            req.headers[req.num_headers].value = h2o_iovec_init(value_start, strlen(value_start));
-            ++req.num_headers;
+            add_header(name, h2o_iovec_init(value_start, strlen(value_start)));
         } break;
         case 'i':
             io_interval = atoi(optarg);
@@ -831,6 +895,15 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+                fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_UPGRADE:
+            upgrade_token = optarg;
+            break;
         default:
             exit(EXIT_FAILURE);
             break;
@@ -848,11 +921,33 @@ int main(int argc, char **argv)
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
     }
-    if (strcmp(req.method, "CONNECT") == 0 || strcmp(req.method, "CONNECT-UDP") == 0) {
+
+    int is_connect = 0;
+    if ((strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL) || strcmp(req.method, "CONNECT-UDP") == 0) {
+        /* traditional CONNECT */
         if (req.connect_to == NULL) {
-            fprintf(stderr, "CONNECT method must be accompanied by an `-x` option\n");
+            fprintf(stderr, "CONNECT method must be accompanied by either `-x` or `--upgrade`\n");
             exit(EXIT_FAILURE);
         }
+        is_connect = 1;
+    } else if (upgrade_token != NULL) {
+        /* masque using extended CONNECT (RFC 9298) */
+        if (strcmp(req.method, "GET") == 0) {
+            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0) {
+                fprintf(stderr, "extended CONNECT with GET cannot be used on H2/H3; specify `-2 0 -3 0`\n");
+                exit(EXIT_FAILURE);
+            }
+        } else if (strcmp(req.method, "CONNECT") == 0) {
+            if (ctx.protocol_selector.ratio.http2 < 0 ||
+                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
+                fprintf(stderr,
+                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
+                exit(EXIT_FAILURE);
+            }
+        }
+        is_connect = 1;
+    }
+    if (is_connect) {
 #if H2O_USE_LIBUV
         std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
 #else

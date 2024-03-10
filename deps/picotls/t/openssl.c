@@ -564,7 +564,8 @@ int main(int argc, char **argv)
                                   .sign_certificate = &openssl_sign_certificate.super};
     ptls_context_t openssl_ctx_sha256only = openssl_ctx;
     while (openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size != 32) {
-        assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 48); /* sha384 */
+        assert(openssl_ctx.cipher_suites[0]->hash->digest_size == 64 || /* sha512 */
+               openssl_ctx.cipher_suites[0]->hash->digest_size == 48);  /* sha384 */
         ++openssl_ctx_sha256only.cipher_suites;
     }
     assert(openssl_ctx_sha256only.cipher_suites[0]->hash->digest_size == 32); /* sha256 */
