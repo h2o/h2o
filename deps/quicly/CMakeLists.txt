@@ -68,6 +68,7 @@ SET(QUICLY_LIBRARY_FILES
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/frame.c
+    t/jumpstart.c
     t/local_cid.c
     t/loss.c
     t/lossy.c

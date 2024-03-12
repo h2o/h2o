@@ -62,10 +62,6 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
                             int64_t now, uint32_t max_udp_payload_size)
 {
-    /* when exiting slow start, use inverse of exponential growth ratio, as loss is detected 1 RTT later, at which point CWND has
-     * overshot as much as the growth ratio */
-    double beta = cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_RENO_BETA;
-
     quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
 
     /* Nothing to do if loss is in recovery window. */
@@ -75,7 +71,7 @@ void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
 
     /* if detected loss before receiving all acks for jumpstart, restore original CWND */
     if (cc->ssthresh == UINT32_MAX)
-        quicly_cc_jumpstart_on_first_loss(cc, lost_pn, &beta);
+        quicly_cc_jumpstart_on_first_loss(cc, lost_pn);
 
     ++cc->num_loss_episodes;
     if (cc->cwnd_exiting_slow_start == 0) {
@@ -84,7 +80,7 @@ void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
     }
 
     /* Reduce congestion window. */
-    cc->cwnd *= beta;
+    cc->cwnd *= cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_RENO_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;

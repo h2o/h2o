@@ -36,13 +36,14 @@
 		0829879026E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879226E0A9DF0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879126E0A9DF0053638F /* rate.c */; };
 		085125F828F51BA20074C124 /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
+		085AB4D726427E9C00DF5209 /* pacer.h in Headers */ = {isa = PBXBuildFile; fileRef = 085AB4D626427E9C00DF5209 /* pacer.h */; };
+		085AB4D9264283D600DF5209 /* pacer.c in Sources */ = {isa = PBXBuildFile; fileRef = 085AB4D8264283D600DF5209 /* pacer.c */; };
 		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
+		089738FB2B9FF2E1000569EB /* jumpstart.c in Sources */ = {isa = PBXBuildFile; fileRef = 089738FA2B9FF2E1000569EB /* jumpstart.c */; };
 		08B3297A29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297B29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297C29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297D29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
-		085AB4D726427E9C00DF5209 /* pacer.h in Headers */ = {isa = PBXBuildFile; fileRef = 085AB4D626427E9C00DF5209 /* pacer.h */; };
-		085AB4D9264283D600DF5209 /* pacer.c in Sources */ = {isa = PBXBuildFile; fileRef = 085AB4D8264283D600DF5209 /* pacer.c */; };
 		E904233D24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233E24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
 		E904233F24AED0410072C5B7 /* loss.c in Sources */ = {isa = PBXBuildFile; fileRef = E904233C24AED0410072C5B7 /* loss.c */; };
@@ -193,9 +194,10 @@
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		085125F728EFC0480074C124 /* cplusplus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = cplusplus.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		08B3297929407096009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		085AB4D626427E9C00DF5209 /* pacer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pacer.h; sourceTree = "<group>"; };
 		085AB4D8264283D600DF5209 /* pacer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pacer.c; sourceTree = "<group>"; };
+		089738FA2B9FF2E1000569EB /* jumpstart.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = jumpstart.c; sourceTree = "<group>"; };
+		08B3297929407096009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E9056C071F56965300E2B96C /* linklist.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = linklist.h; sourceTree = "<group>"; };
@@ -478,6 +480,7 @@
 				085125F728EFC0480074C124 /* cplusplus.t */,
 				E98884C221E3F23A0060F010 /* e2e.t */,
 				E99F8C281F4EAEF800C26B3D /* frame.c */,
+				089738FA2B9FF2E1000569EB /* jumpstart.c */,
 				E9736533246FD3DA0039AA49 /* local_cid.c */,
 				E904234024AEFB980072C5B7 /* loss.c */,
 				E920D22F1F49EE0B00799777 /* lossy.c */,
@@ -884,6 +887,7 @@
 				E9D31DD1232DEDB400ACD5EC /* quicly-probes.d in Sources */,
 				E9736530246FD3B50039AA49 /* local_cid.c in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
+				089738FB2B9FF2E1000569EB /* jumpstart.c in Sources */,
 				E920D2301F49EE0B00799777 /* lossy.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,
 				E9F6A42F1F41375B0083F0B2 /* sendstate.c in Sources */,

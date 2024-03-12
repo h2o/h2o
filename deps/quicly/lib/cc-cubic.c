@@ -121,7 +121,7 @@ static void cubic_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     /* if detected loss before receiving all acks for jumpstart, restore original CWND */
     if (cc->ssthresh == UINT32_MAX)
-        quicly_cc_jumpstart_on_first_loss(cc, lost_pn, NULL /* do we want to adopt beta == 1 as other CCs do? */);
+        quicly_cc_jumpstart_on_first_loss(cc, lost_pn);
 
     ++cc->num_loss_episodes;
     if (cc->cwnd_exiting_slow_start == 0) {
@@ -143,7 +143,7 @@ static void cubic_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     update_cubic_k(cc, max_udp_payload_size);
 
     /* RFC 8312, Section 4.5; Multiplicative Decrease */
-    cc->cwnd *= QUICLY_CUBIC_BETA;
+    cc->cwnd *= cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_CUBIC_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;

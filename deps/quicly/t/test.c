@@ -723,8 +723,7 @@ void test_ecn_index_from_bits(void)
     ok(get_ecn_index_from_bits(3) == 2);
 }
 
-/* at the moment only derivation is tested */
-static void test_jumpstart(void)
+static void test_jumpstart_cwnd(void)
 {
     quicly_context_t unbounded_max = {
         .max_jumpstart_cwnd_packets = UINT32_MAX,
@@ -818,6 +817,7 @@ int main(int argc, char **argv)
     subtest("test-nondecryptable-initial", test_nondecryptable_initial);
     subtest("set_cc", test_set_cc);
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
+    subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
 
     return done_testing();

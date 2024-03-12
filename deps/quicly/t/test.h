@@ -61,5 +61,6 @@ void test_stream_concurrency(void);
 void test_received_cid(void);
 void test_local_cid(void);
 void test_retire_cid(void);
+void test_jumpstart(void);
 
 #endif
