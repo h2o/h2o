@@ -182,7 +182,7 @@ struct st_h2o_http3_server_conn_t {
     /**
      * the earliest moment (in terms of max_data.sent) when the next resumption token can be sent
      */
-    uint64_t next_resumption_token_threshold;
+    uint64_t skip_jumpstart_token_until;
     /**
      * timeout entry used for graceful shutdown
      */
@@ -1976,17 +1976,15 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
     }
 
 Exit:
-    /* send a resumption token if we've sent all available data and there is still room to send something, but not too frequently */
+    /* Send a resumption token if we've sent all available data and there is still room to send something, but not too frequently.
+     * We send a token every 200KB at most; the threshold has been chosen so that the additional overhead would be <0.1% assuming a
+     * token size of 200 bytes. */
     if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
         uint64_t max_data_sent;
         quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
-        if (max_data_sent >= conn->next_resumption_token_threshold) {
+        if (max_data_sent >= conn->skip_jumpstart_token_until) {
             quicly_send_resumption_token(conn->h3.super.quic);
-            if (max_data_sent < 1048576) {
-                conn->next_resumption_token_threshold = max_data_sent * 2;
-            } else {
-                conn->next_resumption_token_threshold = max_data_sent + 1048576;
-            }
+            conn->skip_jumpstart_token_until = max_data_sent + 200000;
         }
     }
 
@@ -2190,7 +2188,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     conn->datagram_flows = kh_init(stream);
-    conn->next_resumption_token_threshold = 65536; /* send jumpstart token is meaningless if data being sent is as few as this */
+    conn->skip_jumpstart_token_until =
+        quicly_cc_calc_initial_cwnd(ctx->super.quic->initcwnd_packets, ctx->super.quic->transport_params.max_udp_payload_size) *
+        4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
 
     /* accept connection */
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
