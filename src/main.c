@@ -21,106 +21,16 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#ifdef __APPLE__
-#define __APPLE_USE_RFC_3542 /* to use IPV6_RECVPKTINFO */
-#endif
-
-/* system header files */
-#include <arpa/inet.h>
-#include <assert.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <getopt.h>
-#include <inttypes.h>
-#include <limits.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
-#include <pthread.h>
-#include <pwd.h>
-#include <grp.h>
-#include <signal.h>
-#include <stdio.h>
-#include <unistd.h>
-#include <sys/resource.h>
-#include <sys/stat.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <sys/uio.h>
-#include <sys/un.h>
-#include <sys/wait.h>
-#include <openssl/opensslv.h>
-
-/* OS-specific header files */
-#ifdef __FreeBSD__
-#include <pthread_np.h>
-#endif
-
-/* environment / configuration-specific header files */
-#ifdef LIBCAP_FOUND
-#include <sys/capability.h>
-#include <sys/prctl.h>
-#endif
-#include <openssl/crypto.h>
-#include <openssl/dh.h>
-#include <openssl/err.h>
-#include <openssl/ssl.h>
-#ifdef LIBC_HAS_BACKTRACE
-#include <execinfo.h>
-#endif
-
-/* non-system header files */
-#include "picotls.h"
-#include "picotls/certificate_compression.h"
-#include "picotls/minicrypto.h"
-#include "picotls/openssl.h"
-#include "picotls/pembase64.h"
-#if H2O_USE_FUSION
-#include "picotls/fusion.h"
-#endif
-#include "quicly.h"
-#include "cloexec.h"
-#include "yoml-parser.h"
-#include "neverbleed.h"
-#include "h2o.h"
-#include "h2o/configurator.h"
-#include "h2o/http1.h"
-#include "h2o/http2.h"
-#include "h2o/http3_server.h"
-#include "h2o/serverutil.h"
-#include "h2o/file.h"
-#include "h2o/version.h"
-#if H2O_USE_MRUBY
-#include "h2o/mruby_.h"
-#endif
-#include "standalone.h"
-#include "../lib/probes_.h"
-
-#if defined(__linux__)
-#include <sys/eventfd.h>
-#define ASYNC_NB_USE_EVENTFD 1
-#endif
+#include "headers/platform_config.h"
+#include "headers/system.h"
+#include "headers/os_specific.h"
+#include "headers/config_specific.h"
+#include "headers/non_system.h"
 
 #ifdef TCP_FASTOPEN
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 4096
 #else
 #define H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE 0
-#endif
-
-#if defined(__linux) && defined(SO_REUSEPORT)
-#define H2O_USE_REUSEPORT 1
-#define H2O_SO_REUSEPORT SO_REUSEPORT
-#elif defined(SO_REUSEPORT_LB) /* FreeBSD */
-#define H2O_USE_REUSEPORT 1
-#define H2O_SO_REUSEPORT SO_REUSEPORT_LB
-#else
-#define H2O_USE_REUSEPORT 0
-#endif
-
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
-#define H2O_HAS_PTHREAD_SETAFFINITY_NP 1
 #endif
 
 #define H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS 32
