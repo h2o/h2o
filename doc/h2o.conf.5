@@ -2176,6 +2176,8 @@ The quic attribute accepts following parameters.
 
 amp-limit
 Amount of data that can be sent to the client before the client address is validated; see section 8.1 of RFC 9000. Default is 3.
+ecn
+A boolean flag (either ON or OFF) indicating whether the server should use ECN signals to detect congestion. The default setting is ON. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.
 handshake-timeout-rtt-multiplier
 Handshake timeout in the unit of round-trip time. Default is 400.
 max-initial-handshake-packets

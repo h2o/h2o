@@ -93,6 +93,8 @@ The <code>quic</code> attribute accepts following parameters.
 <dl>
 <dt>amp-limit</dt>
 <dd>Amount of data that can be sent to the client before the client address is validated; see <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-address-validation" target=_blank>section 8.1 of RFC 9000</a>. Default is 3.</dd>
+<dt>ecn</dt>
+<dd>A boolean flag (either <code>ON</code> or <code>OFF</code>) indicating whether the server should use ECN signals to detect congestion. The default setting is <code>ON</code>. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.</dd>
 <dt>handshake-timeout-rtt-multiplier</dt>
 <dd>Handshake timeout in the unit of round-trip time. Default is 400.</dd>
 <dt>max-initial-handshake-packets</dt>
