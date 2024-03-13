@@ -648,7 +648,7 @@ int main(int argc, char **argv)
     h2o_multithread_receiver_t getaddr_receiver;
     h2o_httpclient_ctx_t ctx = {
         .getaddr_receiver = &getaddr_receiver,
-        .max_buffer_size = H2O_SOCKET_INITIAL_INPUT_BUFFER_SIZE * 2,
+        .max_buffer_size = 128 * 1024,
         .http2 = {.max_concurrent_streams = 100},
         .http3 = &h3ctx,
     };

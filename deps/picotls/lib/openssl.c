@@ -101,22 +101,21 @@ static int EVP_CIPHER_CTX_reset(EVP_CIPHER_CTX *ctx)
 #endif
 
 static const ptls_openssl_signature_scheme_t rsa_signature_schemes[] = {{PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256, EVP_sha256},
-                                                                                  {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
-                                                                                  {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
-                                                                                  {UINT16_MAX, NULL}};
-static const ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {
-    {PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256}, {UINT16_MAX, NULL}};
+                                                                        {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, EVP_sha384},
+                                                                        {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA512, EVP_sha512},
+                                                                        {UINT16_MAX, NULL}};
+static const ptls_openssl_signature_scheme_t secp256r1_signature_schemes[] = {{PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256, EVP_sha256},
+                                                                              {UINT16_MAX, NULL}};
 #if PTLS_OPENSSL_HAVE_SECP384R1
-static const ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {
-    {PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384}, {UINT16_MAX, NULL}};
+static const ptls_openssl_signature_scheme_t secp384r1_signature_schemes[] = {{PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, EVP_sha384},
+                                                                              {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-static const ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {
-    {PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512}, {UINT16_MAX, NULL}};
+static const ptls_openssl_signature_scheme_t secp521r1_signature_schemes[] = {{PTLS_SIGNATURE_ECDSA_SECP521R1_SHA512, EVP_sha512},
+                                                                              {UINT16_MAX, NULL}};
 #endif
 #if PTLS_OPENSSL_HAVE_ED25519
-static const ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL},
-                                                                                      {UINT16_MAX, NULL}};
+static const ptls_openssl_signature_scheme_t ed25519_signature_schemes[] = {{PTLS_SIGNATURE_ED25519, NULL}, {UINT16_MAX, NULL}};
 #endif
 
 /**
@@ -854,8 +853,8 @@ Exit:
 
 #endif
 
-static int do_sign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf,
-                   ptls_iovec_t input, ptls_async_job_t **async)
+static int do_sign(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *scheme, ptls_buffer_t *outbuf, ptls_iovec_t input,
+                   ptls_async_job_t **async)
 {
     EVP_MD_CTX *ctx = NULL;
     const EVP_MD *md = scheme->scheme_md != NULL ? scheme->scheme_md() : NULL;
@@ -2183,7 +2182,6 @@ ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256 = {
     .hash = &ptls_openssl_sha256};
 #endif
 
-
 #if PTLS_HAVE_AEGIS
 ptls_aead_algorithm_t ptls_openssl_aegis128l = {
     .name = "AEGIS-128L",
@@ -2194,7 +2192,7 @@ ptls_aead_algorithm_t ptls_openssl_aegis128l = {
     .key_size = PTLS_AEGIS128L_KEY_SIZE,
     .iv_size = PTLS_AEGIS128L_IV_SIZE,
     .tag_size = PTLS_AEGIS128L_TAG_SIZE,
-    .tls12 = { .fixed_iv_size = 0, .record_iv_size = 0 },
+    .tls12 = {.fixed_iv_size = 0, .record_iv_size = 0},
     .non_temporal = 0,
     .align_bits = 0,
     .context_size = sizeof(struct aegis128l_context_t),
@@ -2214,45 +2212,43 @@ ptls_aead_algorithm_t ptls_openssl_aegis256 = {
     .key_size = PTLS_AEGIS256_KEY_SIZE,
     .iv_size = PTLS_AEGIS256_IV_SIZE,
     .tag_size = PTLS_AEGIS256_TAG_SIZE,
-    .tls12 = { .fixed_iv_size = 0, .record_iv_size = 0 },
+    .tls12 = {.fixed_iv_size = 0, .record_iv_size = 0},
     .non_temporal = 0,
     .align_bits = 0,
     .context_size = sizeof(struct aegis256_context_t),
     .setup_crypto = aegis256_setup_crypto,
 };
 ptls_cipher_suite_t ptls_openssl_aegis256sha512 = {.id = PTLS_CIPHER_SUITE_AEGIS256_SHA512,
-                                                    .name = PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA512,
-                                                    .aead = &ptls_openssl_aegis256,
-                                                    .hash = &ptls_openssl_sha512};
+                                                   .name = PTLS_CIPHER_SUITE_NAME_AEGIS256_SHA512,
+                                                   .aead = &ptls_openssl_aegis256,
+                                                   .hash = &ptls_openssl_sha512};
 #endif
 
+ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = { // ciphers used with sha384 (must be first)
+    &ptls_openssl_aes256gcmsha384,
 
-
-ptls_cipher_suite_t *ptls_openssl_cipher_suites[] = {// ciphers used with sha384 (must be first)
-                                                     &ptls_openssl_aes256gcmsha384,
-
-                                                     // ciphers used with sha256
-                                                     &ptls_openssl_aes128gcmsha256,
+    // ciphers used with sha256
+    &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
-                                                     &ptls_openssl_chacha20poly1305sha256,
+    &ptls_openssl_chacha20poly1305sha256,
 #endif
-                                                     NULL};
+    NULL};
 
-ptls_cipher_suite_t *ptls_openssl_cipher_suites_all[] = {// ciphers used with sha384 (must be first)
+ptls_cipher_suite_t *ptls_openssl_cipher_suites_all[] = { // ciphers used with sha384 (must be first)
 #if PTLS_HAVE_AEGIS
-                                                        &ptls_openssl_aegis256sha512,
+    &ptls_openssl_aegis256sha512,
 #endif
-                                                        &ptls_openssl_aes256gcmsha384,
+    &ptls_openssl_aes256gcmsha384,
 
-                                                        // ciphers used with sha256
+// ciphers used with sha256
 #if PTLS_HAVE_AEGIS
-                                                        &ptls_openssl_aegis128lsha256,
+    &ptls_openssl_aegis128lsha256,
 #endif
-                                                        &ptls_openssl_aes128gcmsha256,
+    &ptls_openssl_aes128gcmsha256,
 #if PTLS_OPENSSL_HAVE_CHACHA20_POLY1305
-                                                        &ptls_openssl_chacha20poly1305sha256,
+    &ptls_openssl_chacha20poly1305sha256,
 #endif
-                                                        NULL};
+    NULL};
 
 ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_ecdhe_rsa_aes128gcmsha256,
                                                            &ptls_openssl_tls12_ecdhe_ecdsa_aes128gcmsha256,
