@@ -35,14 +35,22 @@ The <code>quic</code> attribute accepts following parameters.
 <dd>Amount of data that can be sent to the client before the client address is validated; see <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-address-validation" target=_blank>section 8.1 of RFC 9000</a>. Default is 3.</dd>
 <dt>handshake-timeout-rtt-multiplier</dt>
 <dd>Handshake timeout in the unit of round-trip time. Default is 400.</dd>
+<dt>jumpstart-default</dt>
+<dd>Jumpstart enhances the slow start phase of congestion control by pacing a large number of packets for an entire round-trip time (RTT), allowing the server to assess the network's capacity sooner. This parameter specifies the number of packets sent during the jumpstart phase. The default value is zero, indicating that jumpstart is disabled for new connections.</dd>
+<dt>jumpstart-max</dt>
+<dd>Upon resuming QUIC connections, clients present tokens issued by the server that contain the bandwidth of the previous connection. This information enables the server to instantly match the previous send rate by adjusting the jumpstart window accordingly. This parameter sets a cap on the maximum size of the jumpstart window. If set to zero (the default), the server disregards the bandwidth values in the tokens. Nonetheless, the server may still initiate a jumpstart without using previous information, based on the <code>jumpstart-default</code> parameter.</dd>
 <dt>max-initial-handshake-packets</dt>
 <dd>Maximum number of Initial packets to be sent before the handshake is deemed to have failed. Default is 1,000.</dd>
 <dt>max-streams-bidi</dt>
 <dd>Maximum number of client-initated bi-directional streams. This parameter controls the HTTP request concurrency of a HTTP/3 connection. Default is 100.</dd>
 <dt>max-udp-payload-size</dt>
 <dd>See <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-transport-parameter-definit">Section 18.2 of RFC 9000</a>. Default is 1,472.</dd>
+<dt>pacing</dt>
+<dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether sent packets should be paced. The default setting is <code>OFF</code>.</dd>
 <dt>qpack-encoder-table-capacity</dt>
 <dd>Size of the QPACK encoder table. Default is 4,096.</dd>
+<dt>respect-app-limited</dt>
+<dd>This boolean flag (either <code>OFF</code> or <code>ON</code>) indicates whether the server should respect the notion of rate limited traffic when adjusting the size of the congestion window, as detailed in <a href="https://datatracker.ietf.org/doc/html/rfc7661" target=_blank>RFC 7661</a>. The default setting is <code>ON</code>.</dd>
 <dt>retry</dt>
 <dd>A boolean flag (<code>OFF</code> or <code>ON</code>) indicating if a Retry packet should be used for validating the client address. Use of Retry packets mitigate denial-of-service attacks at the cost of incurring one additional round-trip for processing the handshake.</dd>
 <dt>sndbuf, rcvbuf</dt>
