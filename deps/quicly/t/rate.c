@@ -43,8 +43,8 @@ static void test_basic(void)
     int64_t now = 1000;
 
     /* send 1KB packet every 20ms, in CWND-limited state */
+    quicly_ratemeter_enter_cc_limited(&meter, pn);
     for (; pn < 100; ++pn) {
-        quicly_ratemeter_in_cwnd_limited(&meter, pn);
         bytes_acked += 1000;
         now += 20;
         quicly_ratemeter_on_ack(&meter, now, bytes_acked, pn);
@@ -52,8 +52,8 @@ static void test_basic(void)
     CHECK_REPORT(50000, 50000, 0);
 
     /* send at a slow rate, in application-limited state */
+    quicly_ratemeter_exit_cc_limited(&meter, pn);
     for (; pn < 200; ++pn) {
-        quicly_ratemeter_not_cwnd_limited(&meter, pn);
         bytes_acked += 10;
         now += 20;
         quicly_ratemeter_on_ack(&meter, now, bytes_acked, pn);
@@ -61,8 +61,8 @@ static void test_basic(void)
     CHECK_REPORT(50000, 50000, 0);
 
     /* send 2KB packet every 20ms, in CWND-limited state */
+    quicly_ratemeter_enter_cc_limited(&meter, pn);
     for (; pn < 300; ++pn) {
-        quicly_ratemeter_in_cwnd_limited(&meter, pn);
         bytes_acked += 2000;
         now += 20;
         quicly_ratemeter_on_ack(&meter, now, bytes_acked, pn);
@@ -78,8 +78,8 @@ static void test_burst(void)
     CHECK_REPORT(0, 0, 0);
 
     /* send 10 packet burst (pn=1 to 10) */
-    quicly_ratemeter_in_cwnd_limited(&meter, 1);
-    quicly_ratemeter_not_cwnd_limited(&meter, 11);
+    quicly_ratemeter_enter_cc_limited(&meter, 1);
+    quicly_ratemeter_exit_cc_limited(&meter, 11);
 
     /* ack every 2 packets up to pn=9, every 20ms */
     uint64_t pn = 0, bytes_acked = 0;

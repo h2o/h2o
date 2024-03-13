@@ -68,10 +68,12 @@ SET(QUICLY_LIBRARY_FILES
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/frame.c
+    t/jumpstart.c
     t/local_cid.c
     t/loss.c
     t/lossy.c
     t/maxsender.c
+    t/pacer.c
     t/ranges.c
     t/rate.c
     t/remote_cid.c
@@ -127,7 +129,7 @@ ADD_EXECUTABLE(udpfw t/udpfw.c)
 
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} WITH_DTRACE=${WITH_DTRACE} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS cli test.t)
+    DEPENDS cli udpfw test.t)
 
 ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 

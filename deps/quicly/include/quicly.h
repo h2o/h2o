@@ -59,7 +59,7 @@ extern "C" {
 #define QUICLY_PACKET_TYPE_RETRY (QUICLY_LONG_HEADER_BIT | QUICLY_QUIC_BIT | 0x30)
 #define QUICLY_PACKET_TYPE_BITMASK 0xf0
 
-#define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte)&QUICLY_LONG_HEADER_BIT) != 0)
+#define QUICLY_PACKET_IS_LONG_HEADER(first_byte) (((first_byte) & QUICLY_LONG_HEADER_BIT) != 0)
 
 /**
  * Version 1.
@@ -74,7 +74,7 @@ extern "C" {
  */
 #define QUICLY_PROTOCOL_VERSION_DRAFT27 0xff00001b
 
-#define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte)&0xf0) == 0xc0)
+#define QUICLY_PACKET_IS_INITIAL(first_byte) (((first_byte) & 0xf0) == 0xc0)
 
 #define QUICLY_STATELESS_RESET_PACKET_MIN_LEN 39
 
@@ -327,6 +327,16 @@ struct st_quicly_context_t {
      */
     uint64_t max_initial_handshake_packets;
     /**
+     * Jumpstart CWND to be used when there is no previous information. If set to zero, slow start is used. Note jumpstart is
+     * possible only when the use_pacing flag is set.
+     */
+    uint32_t default_jumpstart_cwnd_packets;
+    /**
+     * Maximum jumpstart CWND to be used for connections with previous delivery rate information (i.e., resuming connections). If
+     * set to zero, slow start is used.
+     */
+    uint32_t max_jumpstart_cwnd_packets;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
@@ -334,6 +344,14 @@ struct st_quicly_context_t {
      * whether to use ECN on the send side; ECN is always on on the receive side
      */
     unsigned enable_ecn : 1;
+    /**
+     * if pacing should be used
+     */
+    unsigned use_pacing : 1;
+    /**
+     * if CC should take app-limited into consideration
+     */
+    unsigned respect_app_limited : 1;
     /**
      *
      */
@@ -523,7 +541,33 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
      */                                                                                                                            \
-    uint64_t num_initial_handshake_exceeded
+    uint64_t num_initial_handshake_exceeded;                                                                                       \
+    /**                                                                                                                            \
+     * jumpstart parameters and the CWND being adopted (see also quicly_cc_t::cwnd_exiting_jumpstart)                              \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        uint64_t prev_rate;                                                                                                        \
+        uint32_t prev_rtt;                                                                                                         \
+        uint32_t new_rtt;                                                                                                          \
+        uint32_t cwnd;                                                                                                             \
+    } jumpstart;                                                                                                                   \
+    /**                                                                                                                            \
+     * some contents of the last token sent                                                                                        \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        /**                                                                                                                        \
+         * when sent, relative to the creation time of the connection                                                              \
+         */                                                                                                                        \
+        int64_t at;                                                                                                                \
+        /**                                                                                                                        \
+         * delivery rate                                                                                                           \
+         */                                                                                                                        \
+        uint64_t rate;                                                                                                             \
+        /**                                                                                                                        \
+         * rtt                                                                                                                     \
+         */                                                                                                                        \
+        uint32_t rtt;                                                                                                              \
+    } token_sent
 
 typedef struct st_quicly_stats_t {
     /**
@@ -858,6 +902,7 @@ struct st_quicly_address_token_plaintext_t {
     enum { QUICLY_ADDRESS_TOKEN_TYPE_RETRY, QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION } type;
     uint64_t issued_at;
     quicly_address_t local, remote;
+    unsigned address_mismatch : 1;
     union {
         struct {
             quicly_cid_t original_dcid;
@@ -1113,8 +1158,8 @@ int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params
  */
 int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
                    struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
-                   ptls_handshake_properties_t *handshake_properties,
-                   const quicly_transport_parameters_t *resumed_transport_params, void *appdata);
+                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params,
+                   void *appdata);
 /**
  * accepts a new connection
  * @param new_cid        The CID to be used for the connection. When an error is being returned, the application can reuse the CID

@@ -2830,14 +2830,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn;
-                    if (h2o_configurator_parse_mapping(cmd, *quic_node, NULL,
-                                                       "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                                                       "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                                                       "max-initial-handshake-packets:s,ecn:s",
-                                                       &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                                                       &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
-                                                       &max_initial_handshake_packets, &ecn) != 0)
+                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
+                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max;
+                    if (h2o_configurator_parse_mapping(
+                            cmd, *quic_node, NULL,
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
+                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
+                            "jumpstart-max:s",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
+                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
+                            &respect_app_limited, &jumpstart_default, &jumpstart_max) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -2896,6 +2899,25 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         listener->quic.ctx->enable_ecn = !!on;
                     }
+                    if (pacing != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *pacing, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->use_pacing = (unsigned)on;
+                    }
+                    if (respect_app_limited != NULL) {
+                        ssize_t on = h2o_configurator_scanf(cmd, *respect_app_limited, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.ctx->respect_app_limited = (unsigned)on;
+                    }
+                    if (jumpstart_default != NULL &&
+                        h2o_configurator_scanf(cmd, *jumpstart_default, "%" PRIu32,
+                                               &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
+                        return -1;
+                    if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" PRIu32,
+                                                                        &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
+                        return -1;
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
@@ -3900,10 +3922,14 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
 
     if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
         age = 0;
-    if (h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0)
-        return 0;
+
+    token->address_mismatch =
+        h2o_socket_compare_address(remote, &token->remote.sa, token->type == QUICLY_ADDRESS_TOKEN_TYPE_RETRY) != 0;
+
     switch (token->type) {
     case QUICLY_ADDRESS_TOKEN_TYPE_RETRY:
+        if (token->address_mismatch)
+            return 0;
         if (age > 30 * 1000)
             return 0;
         if (!quicly_cid_is_equal(&token->retry.client_cid, client_cid))
@@ -3913,7 +3939,7 @@ static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, 
         break;
     case QUICLY_ADDRESS_TOKEN_TYPE_RESUMPTION:
         if (age > 10 * 60 * 1000)
-            return 0;
+            token->address_mismatch = 1;
         break;
     default:
         h2o_fatal("unexpected token type: %d", (int)token->type);

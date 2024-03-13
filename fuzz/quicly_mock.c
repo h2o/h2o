@@ -468,5 +468,20 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
     assert(0 && "unimplemented");
 }
 
+void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed)
+{
+    if (send_permitted != NULL)
+        *send_permitted = 0xdeadbeef;
+    if (sent != NULL)
+        *sent = 0xdeadbeef;
+    if (consumed != NULL)
+        *consumed = 0xdeadbeef;
+}
+
+int quicly_send_resumption_token(quicly_conn_t *conn)
+{
+    return 0;
+}
+
 const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
                                               QUICLY_PROTOCOL_VERSION_DRAFT27, 0};

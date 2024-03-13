@@ -180,6 +180,10 @@ struct st_h2o_http3_server_conn_t {
      */
     khash_t(stream) * datagram_flows;
     /**
+     * the earliest moment (in terms of max_data.sent) when the next resumption token can be sent
+     */
+    uint64_t skip_jumpstart_token_until;
+    /**
      * timeout entry used for graceful shutdown
      */
     h2o_timer_t _graceful_shutdown_timeout;
@@ -808,14 +812,22 @@ Redo:
     PUSH_U32("ssthresh", cc.ssthresh);
     PUSH_U32("cwnd-initial", cc.cwnd_initial);
     PUSH_U32("cwnd-exiting-slow-start", cc.cwnd_exiting_slow_start);
+    PUSH_U64("exit-slow-start-at", cc.exit_slow_start_at);
     PUSH_U32("cwnd-minimum", cc.cwnd_minimum);
     PUSH_U32("cwnd-maximum", cc.cwnd_maximum);
+    PUSH_U64("jumpstart-prev-rate", jumpstart.prev_rate);
+    PUSH_U32("jumpstart-pret-rtt", jumpstart.prev_rtt);
+    PUSH_U32("jumpstart-cwnd", jumpstart.cwnd);
+    PUSH_U32("jumpstart-exit-cwnd", cc.cwnd_exiting_jumpstart);
     PUSH_U32("num-loss-episodes", cc.num_loss_episodes);
     PUSH_U32("num-ecn-loss-episodes", cc.num_ecn_loss_episodes);
     PUSH_U64("num-ptos", num_ptos);
     PUSH_U64("delivery-rate-latest", delivery_rate.latest);
     PUSH_U64("delivery-rate-smoothed", delivery_rate.smoothed);
     PUSH_U64("delivery-rate-stdev", delivery_rate.stdev);
+    PUSH_U64("token-sent-at", token_sent.at);
+    PUSH_U64("token-sent-rate", token_sent.rate);
+    PUSH_U32("token-sent-rtt", token_sent.rtt);
     PUSH_NUM_FRAMES(received);
     PUSH_NUM_FRAMES(sent);
     PUSH_SIZE_T("num-sentmap-packets-largest", num_sentmap_packets_largest);
@@ -1872,8 +1884,11 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
 
 static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
+#define HAS_DATA_TO_SEND()                                                                                                         \
+    (conn->scheduler.uni.active != 0 || conn->scheduler.reqs.active.smallest_urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS)
+
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
-    int ret = 0;
+    int had_data_to_send = HAS_DATA_TO_SEND(), ret = 0;
 
     while (quicly_can_send_data(conn->h3.super.quic, s)) {
         /* The strategy is:
@@ -1961,7 +1976,21 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
     }
 
 Exit:
+    /* Send a resumption token if we've sent all available data and there is still room to send something, but not too frequently.
+     * We send a token every 200KB at most; the threshold has been chosen so that the additional overhead would be ~0.1% assuming a
+     * token size of 200 bytes (in reality, one NEW_TOKEN frame will uses 56 bytes). */
+    if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
+        uint64_t max_data_sent;
+        quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
+        if (max_data_sent >= conn->skip_jumpstart_token_until) {
+            quicly_send_resumption_token(conn->h3.super.quic);
+            conn->skip_jumpstart_token_until = max_data_sent + 200000;
+        }
+    }
+
     return ret;
+
+#undef HAS_DATA_TO_SEND
 }
 
 static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *qs)
@@ -2159,6 +2188,9 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
     conn->datagram_flows = kh_init(stream);
+    conn->skip_jumpstart_token_until =
+        quicly_cc_calc_initial_cwnd(ctx->super.quic->initcwnd_packets, ctx->super.quic->transport_params.max_udp_payload_size) *
+        4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
 
     /* accept connection */
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
