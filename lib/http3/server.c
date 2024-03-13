@@ -1977,8 +1977,8 @@ static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc
 
 Exit:
     /* Send a resumption token if we've sent all available data and there is still room to send something, but not too frequently.
-     * We send a token every 200KB at most; the threshold has been chosen so that the additional overhead would be <0.1% assuming a
-     * token size of 200 bytes. */
+     * We send a token every 200KB at most; the threshold has been chosen so that the additional overhead would be ~0.1% assuming a
+     * token size of 200 bytes (in reality, one NEW_TOKEN frame will uses 56 bytes). */
     if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
         uint64_t max_data_sent;
         quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
