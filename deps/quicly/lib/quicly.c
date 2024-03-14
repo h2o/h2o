@@ -347,10 +347,6 @@ struct st_quicly_conn_t {
  * false positives. The purpose of this bit is to consolidate information as an optimization. */
 #define QUICLY_PENDING_FLOW_OTHERS_BIT (1 << 6)
         /**
-         * if the most recent call to `quicly_send` ended in CC-limited state
-         */
-        uint8_t cc_limited : 1;
-        /**
          *
          */
         uint8_t try_jumpstart : 1;
@@ -1366,10 +1362,8 @@ static void update_send_alarm(quicly_conn_t *conn, int can_send_stream_data, int
                              can_send_stream_data, handshake_is_in_progress, conn->egress.max_data.sent, is_after_send);
 }
 
-static void update_cc_limited(quicly_conn_t *conn, int is_cc_limited)
+static void update_ratemeter(quicly_conn_t *conn, int is_cc_limited)
 {
-    conn->egress.cc_limited = is_cc_limited;
-
     if (quicly_ratemeter_is_cc_limited(&conn->egress.ratemeter) != is_cc_limited) {
         if (is_cc_limited) {
             quicly_ratemeter_enter_cc_limited(&conn->egress.ratemeter, conn->egress.packet_number);
@@ -1395,7 +1389,7 @@ static void setup_next_send(quicly_conn_t *conn)
 
     /* When the flow becomes application-limited due to receiving some information, stop collecting delivery rate samples. */
     if (!can_send_stream_data)
-        update_cc_limited(conn, 0);
+        update_ratemeter(conn, 0);
 }
 
 static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
@@ -3314,8 +3308,11 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
     } else {
         packet_bytes_in_flight = 0;
     }
-    if (quicly_sentmap_is_open(&conn->egress.loss.sentmap))
-        quicly_sentmap_commit(&conn->egress.loss.sentmap, (uint16_t)packet_bytes_in_flight);
+    if (quicly_sentmap_is_open(&conn->egress.loss.sentmap)) {
+        int cc_limited = conn->egress.loss.sentmap.bytes_in_flight + packet_bytes_in_flight >=
+                         conn->egress.cc.cwnd / 2; /* for the rationale behind this formula, see handle_ack_frame */
+        quicly_sentmap_commit(&conn->egress.loss.sentmap, (uint16_t)packet_bytes_in_flight, cc_limited);
+    }
 
     conn->egress.cc.type->cc_on_sent(&conn->egress.cc, &conn->egress.loss, (uint32_t)packet_bytes_in_flight, conn->stash.now);
     if (conn->egress.pacer != NULL)
@@ -3351,7 +3348,7 @@ static int commit_send_packet(quicly_conn_t *conn, quicly_send_context_t *s, int
             return ret;
         if (quicly_sentmap_allocate(&conn->egress.loss.sentmap, on_invalid_ack) == NULL)
             return PTLS_ERROR_NO_MEMORY;
-        quicly_sentmap_commit(&conn->egress.loss.sentmap, 0);
+        quicly_sentmap_commit(&conn->egress.loss.sentmap, 0, 0);
         ++conn->egress.packet_number;
         conn->egress.next_pn_to_skip = calc_next_pn_to_skip(conn->super.ctx->tls, conn->egress.packet_number, conn->egress.cc.cwnd,
                                                             conn->egress.max_udp_payload_size);
@@ -5054,10 +5051,10 @@ Exit:
             conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
         int can_send_stream_data = scheduler_can_send(conn);
         update_send_alarm(conn, can_send_stream_data, 1);
-        update_cc_limited(conn, can_send_stream_data && conn->super.remote.address_validation.validated &&
-                                    (s->num_datagrams == s->max_datagrams ||
-                                     conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
-                                     pacer_can_send_at(conn) > conn->stash.now));
+        update_ratemeter(conn, can_send_stream_data && conn->super.remote.address_validation.validated &&
+                                   (s->num_datagrams == s->max_datagrams ||
+                                    conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
+                                    pacer_can_send_at(conn) > conn->stash.now));
         if (s->num_datagrams != 0)
             update_idle_timeout(conn, 0);
     }
@@ -5262,7 +5259,7 @@ static int enter_close(quicly_conn_t *conn, int local_is_initiating, int wait_dr
         return ret;
     if (quicly_sentmap_allocate(&conn->egress.loss.sentmap, on_end_closing) == NULL)
         return PTLS_ERROR_NO_MEMORY;
-    quicly_sentmap_commit(&conn->egress.loss.sentmap, 0);
+    quicly_sentmap_commit(&conn->egress.loss.sentmap, 0, 0);
     ++conn->egress.packet_number;
 
     if (local_is_initiating) {
@@ -5445,6 +5442,12 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
     size_t bytes_acked = 0;
     int includes_ack_eliciting = 0, includes_late_ack = 0, ret;
 
+    /* The flow is considered CC-limited if the packet was sent while `inflight >= 1/2 * CNWD` or acked under the same condition.
+     * 1/2 of CWND is adopted for fairness with RFC 7661, and also provides correct increase; i.e., if an idle flow goes into
+     * CC-limited state for X round-trips then becomes idle again, all packets sent during that X round-trips will be considered as
+     * CC-limited. */
+    int cc_limited = !conn->super.ctx->respect_app_limited || conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd / 2;
+
     if ((ret = quicly_decode_ack_frame(&state->src, state->end, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN)) != 0)
         return ret;
 
@@ -5514,6 +5517,8 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
             if (sent->cc_bytes_in_flight != 0) {
                 bytes_acked += sent->cc_bytes_in_flight;
                 conn->super.stats.num_bytes.ack_received += sent->cc_bytes_in_flight;
+                if (sent->cc_limited)
+                    cc_limited = 1;
             }
             if ((ret = quicly_sentmap_update(&conn->egress.loss.sentmap, &iter, QUICLY_SENTMAP_EVENT_ACKED)) != 0)
                 return ret;
@@ -5555,12 +5560,6 @@ static int handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload
 
     /* OnPacketAcked and OnPacketAckedCC */
     if (bytes_acked > 0) {
-        /* Here, we pass `conn->egress.cc_limited` - a boolean flag indicating if last the last call to `quicly_send` ended with
-         * data being throttled by CC or pacer - to CC to determine if CWND can be grown.
-         * This might not be the best way to do this, but would likely be sufficient, as the flag being passed would be true only if
-         * the connection was CC-limited for at least one RTT. Hopefully, itwould also be aggressive enough during the slow start
-         * phase. */
-        int cc_limited = conn->super.ctx->respect_app_limited ? conn->egress.cc_limited : 1;
         conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
                                           (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), cc_limited,
                                           conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size);

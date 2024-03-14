@@ -455,7 +455,7 @@ sub spawn_process {
     }
     while (`netstat -na` !~ /^udp.*\s(127\.0\.0\.1|0\.0\.0\.0|\*)[\.:]$listen_port\s/m) {
         if (waitpid($pid, WNOHANG) == $pid) {
-            die "failed to launch @{[$cmd->[0]]}";
+            die "failed to launch @{[$cmd->[0]]}:$?";
         }
         sleep 0.1;
     }
