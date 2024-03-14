@@ -1689,6 +1689,8 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
      * retransmissions), as well as prepending a DATA frame header */
     if (bufcnt != 0) {
+        if (h2o_timeval_is_null(&stream->req.timestamps.response_body_start_at))
+            stream->req.timestamps.response_body_start_at = h2o_gettimeofday(get_conn(stream)->super.ctx->loop);
         h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
         uint64_t prev_body_size = stream->sendbuf.final_body_size;
         for (size_t i = 0; i != bufcnt; ++i) {

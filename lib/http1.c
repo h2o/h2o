@@ -1049,6 +1049,10 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
         bufs[bufcnt++] = inbufs[i];
         bytes_sent += inbufs[i].len;
     }
+
+    if (bytes_sent > 0 && h2o_timeval_is_null(&conn->req.timestamps.response_body_start_at))
+        conn->req.timestamps.response_body_start_at = h2o_gettimeofday(conn->super.ctx->loop);
+
     conn->req.bytes_sent += bytes_sent;
 
     if (conn->_ostr_final.chunked_buf != NULL) {

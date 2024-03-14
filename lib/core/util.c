@@ -852,6 +852,7 @@ void h2o_add_server_timing_header(h2o_req_t *req, int uses_trailer)
         emit_server_timing_element(req, &dst, "connect", h2o_time_compute_connect_time, max_len);
         emit_server_timing_element(req, &dst, "request-header", h2o_time_compute_header_time, max_len);
         emit_server_timing_element(req, &dst, "request-body", h2o_time_compute_body_time, max_len);
+        emit_server_timing_element(req, &dst, "response-body", h2o_time_compute_response_body_time, max_len);
         emit_server_timing_element(req, &dst, "request-total", h2o_time_compute_request_total_time, max_len);
         emit_server_timing_element(req, &dst, "process", h2o_time_compute_process_time, max_len);
     }
