@@ -385,6 +385,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
         h2o_vector_reserve(&req->pool, &stream->_data, bufcnt);
         memcpy(stream->_data.entries, bufs, sizeof(*bufs) * bufcnt);
         stream->_data.size = bufcnt;
+        if (h2o_timeval_is_null(&req->timestamps.response_body_start_at))
+            req->timestamps.response_body_start_at = h2o_gettimeofday(conn->super.ctx->loop);
     }
 
     h2o_http2_conn_register_for_proceed_callback(conn, stream);

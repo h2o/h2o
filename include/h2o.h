@@ -1301,6 +1301,7 @@ struct st_h2o_req_t {
         struct timeval request_begin_at;
         struct timeval request_body_begin_at;
         struct timeval response_start_at;
+        struct timeval response_body_start_at;
         struct timeval response_end_at;
     } timestamps;
     /**
@@ -2564,6 +2565,7 @@ COMPUTE_DURATION(body_time,
 COMPUTE_DURATION(request_total_time, &req->timestamps.request_begin_at, &req->processed_at.at)
 COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_start_at)
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at)
+COMPUTE_DURATION(response_body_time, &req->timestamps.response_body_start_at, &req->timestamps.response_end_at)
 COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at)
 
 COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->proxy_stats.timestamps.start_at)
