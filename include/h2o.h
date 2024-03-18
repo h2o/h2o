@@ -475,6 +475,12 @@ struct st_h2o_globalconf_t {
          * maximum number of HTTP3 streaming requests (per connection) to be handled simultaneously internally.
          */
         size_t max_concurrent_streaming_requests_per_connection;
+        /**
+         *
+         */
+        struct {
+            h2o_http3_qpack_context_t qpack;
+        } on_streams;
     } http3;
 
     struct {
@@ -759,6 +765,14 @@ struct st_h2o_context_t {
              */
             uint64_t forwarded_packet_received;
         } events;
+        /**
+         *
+         */
+        struct {
+            quicly_context_t _quicly;
+            h2o_quic_ctx_t quic;
+            h2o_http3_qpack_context_t qpack;
+        } on_streams;
     } http3;
 
     struct {
@@ -789,6 +803,7 @@ struct st_h2o_context_t {
          */
         uint64_t alpn_h1;
         uint64_t alpn_h2;
+        uint64_t alpn_h3_on_streams;
         /**
          * counter for handshakes
          */

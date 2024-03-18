@@ -29,6 +29,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/http3_server.h"
 #include "h2o/hiredis_.h"
 
 struct st_h2o_accept_data_t {
@@ -360,8 +361,12 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
-    const h2o_iovec_t *ident;
-    for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
+    if (h2o_memis(proto.base, proto.len, H2O_STRLIT("h3"))) {
+        ++data->ctx->ctx->ssl.alpn_h3_on_streams;
+        h2o_http3_accept_on_streams(data->ctx, sock, data->connected_at);
+        goto Exit;
+    }
+    for (const h2o_iovec_t *ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
         if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
             /* connect as http2 */
             ++data->ctx->ctx->ssl.alpn_h2;
@@ -921,7 +926,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     {                                                                                                                              \
         H2O_STRLIT(s)                                                                                                              \
     }
-#define ALPN_PROTOCOLS_CORE ALPN_ENTRY("h2"), ALPN_ENTRY("h2-16"), ALPN_ENTRY("h2-14")
+#define ALPN_PROTOCOLS_CORE ALPN_ENTRY("h3"), ALPN_ENTRY("h2"), ALPN_ENTRY("h2-16"), ALPN_ENTRY("h2-14")
 #define NPN_PROTOCOLS_CORE                                                                                                         \
     "\x02"                                                                                                                         \
     "h2"                                                                                                                           \

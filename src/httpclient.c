@@ -671,6 +671,7 @@ int main(int argc, char **argv)
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
     h3ctx.quic.save_resumption_token = &save_http3_token;
+    h3ctx.quic.qos_is_writing = &h2o_quic_qos_is_writing;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));

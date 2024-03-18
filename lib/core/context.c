@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <sys/time.h>
 #include "h2o.h"
+#include "h2o/http3_server.h"
 #include "h2o/memcached.h"
 
 void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf)
@@ -97,6 +98,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
     h2o_linklist_init_anchor(&ctx->_conns.shutdown);
+    ctx->http3.on_streams._quicly = quicly_spec_context;
+    ctx->http3.on_streams.quic.loop = loop;
+    ctx->http3.on_streams.quic.quic = &ctx->http3.on_streams._quicly;
+    h2o_http3_server_amend_quicly_context(ctx->globalconf, ctx->http3.on_streams.quic.quic);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -108,9 +113,8 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.http2.max_concurrent_streams = ctx->globalconf->proxy.http2.max_concurrent_streams;
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
     ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
-    ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
+    h2o_httpclient_connection_pool_init(&ctx->proxy.connpool, &ctx->globalconf->proxy.global_socketpool);
     ctx->proxy.spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->proxy.spare_pipes.pipes[0]) * config->proxy.max_spare_pipes);
-    h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
 #ifdef __linux__
     /* pre-fill the pipe cache at context init */
