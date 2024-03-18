@@ -771,7 +771,6 @@ struct st_h2o_context_t {
         struct {
             quicly_context_t _quicly;
             h2o_quic_ctx_t quic;
-            h2o_http3_qpack_context_t qpack;
         } on_streams;
     } http3;
 
