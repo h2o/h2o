@@ -48,6 +48,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
 {
     connpool->socketpool = sockpool;
     h2o_linklist_init_anchor(&connpool->http2.conns);
+    h2o_linklist_init_anchor(&connpool->http3_on_streams.conns);
     h2o_linklist_init_anchor(&connpool->http3.conns);
 }
 
@@ -132,7 +133,11 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     } else if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_httpclient__h1_on_connect(client, sock, origin);
     } else {
-        if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
+        if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h3"))) {
+            /* detach this socket from the socketpool to count the number of h1 connections correctly */
+            h2o_socketpool_detach(client->connpool->socketpool, sock);
+            h2o_httpclient__h3_on_connect(client, sock, origin);
+        } else if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
         ForceH2:
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
             h2o_socketpool_detach(client->connpool->socketpool, sock);
@@ -235,6 +240,8 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
                             h2o_httpclient_connect_cb on_connect)
 {
     static const h2o_iovec_t no_protos = {}, both_protos = {H2O_STRLIT("\x02"
+                                                                       "h3"
+                                                                       "\x02"
                                                                        "h2"
                                                                        "\x08"
                                                                        "http/1.1")};

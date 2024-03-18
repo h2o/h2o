@@ -740,6 +740,41 @@ static void test_jumpstart_cwnd(void)
     ok(derive_jumpstart_cwnd(&bounded_max, 250, 1000000, 250) == 80000);
 }
 
+static void test_on_streams(void)
+{
+    quicly_conn_t *client_conn = quicly_qos_new(&quic_ctx, 1, NULL), *server_conn = quicly_qos_new(&quic_ctx, 0, NULL);
+    quicly_stream_t *client_stream = NULL, *server_stream;
+    quicly_streambuf_t *server_streambuf;
+    char buf[10480];
+    size_t bufsize;
+    int ret;
+
+    bufsize = sizeof(buf);
+    ret = quicly_qos_send(server_conn, buf, &bufsize);
+    ok(ret == 0);
+
+    ret = quicly_qos_receive(client_conn, buf, &bufsize);
+    ok(ret == 0);
+
+    ret = quicly_open_stream(client_conn, &client_stream, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(client_stream, "hello", 5);
+    ok(ret == 0);
+
+    bufsize = sizeof(buf);
+    ret = quicly_qos_send(client_conn, buf, &bufsize);
+    ok(ret == 0);
+
+    ret = quicly_qos_receive(server_conn, buf, &bufsize);
+    ok(ret == 0);
+
+    server_stream = quicly_get_stream(server_conn, client_stream->stream_id);
+    ok(server_stream != NULL);
+    server_streambuf = server_stream->data;
+    ok(server_streambuf->ingress.off == 5);
+    ok(memcmp(server_streambuf->ingress.base, "hello", 5) == 0);
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -819,6 +854,7 @@ int main(int argc, char **argv)
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
+    subtest("on-streams", test_on_streams);
 
     return done_testing();
 }
