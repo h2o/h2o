@@ -371,8 +371,9 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     h2o_linklist_init_anchor(&conn->pending_requests);
 
     conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
-                                             h2o_iovec_init(conn->server.named_serv, strlen(conn->server.named_serv)), AF_UNSPEC,
-                                             SOCK_DGRAM, IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, conn);
+                                             h2o_iovec_init(conn->server.named_serv, strlen(conn->server.named_serv)),
+                                             ctx->http3->h3.sock.addr.ss_family, SOCK_DGRAM, IPPROTO_UDP,
+                                             AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, conn);
     h2o_timer_link(conn->ctx->loop, conn->ctx->connect_timeout, &conn->timeout);
     conn->timeout.cb = on_connect_timeout;
 
