@@ -388,7 +388,6 @@ static void on_head(h2o_socket_t *sock, const char *err)
     struct st_h2o_http1client_t *client = sock->data;
     int minor_version, version, http_status, rlen;
     const char *msg;
-#define MAX_HEADERS 100
     h2o_header_t *headers;
     h2o_iovec_t *header_names;
     size_t msg_len, num_headers, i;
@@ -409,22 +408,26 @@ static void on_head(h2o_socket_t *sock, const char *err)
 
     client->super._timeout.cb = on_head_timeout;
 
-    headers = h2o_mem_alloc_pool(client->super.pool, *headers, MAX_HEADERS);
-    header_names = h2o_mem_alloc_pool(client->super.pool, *header_names, MAX_HEADERS);
+    headers = h2o_mem_alloc_pool(client->super.pool, *headers, H2O_MAX_HEADERS);
+    header_names = h2o_mem_alloc_pool(client->super.pool, *header_names, H2O_MAX_HEADERS);
 
     /* continue parsing the responses until we see a final one */
     while (1) {
         /* parse response */
-        struct phr_header src_headers[MAX_HEADERS];
-        num_headers = MAX_HEADERS;
-        rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, src_headers,
-                                  &num_headers, 0);
+        struct phr_header src_headers[H2O_MAX_HEADERS];
+        num_headers = H2O_MAX_HEADERS;
+        rlen = phr_parse_response(sock->input->bytes, sock->input->size < H2O_MAX_REQLEN ? sock->input->size : H2O_MAX_REQLEN,
+                                  &minor_version, &http_status, &msg, &msg_len, src_headers, &num_headers, 0);
         switch (rlen) {
         case -1: /* error */
             on_error(client, h2o_httpclient_error_http1_parse_failed);
             return;
         case -2: /* incomplete */
-            h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+            if (sock->input->size >= H2O_MAX_REQLEN) {
+                on_error(client, h2o_httpclient_error_http1_parse_failed);
+            } else {
+                h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
+            }
             return;
         }
 

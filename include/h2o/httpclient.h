@@ -380,11 +380,11 @@ extern const char h2o_httpclient_error_flow_control[];
 extern const char h2o_httpclient_error_http1_line_folding[];
 extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
 extern const char h2o_httpclient_error_http1_parse_failed[];
+extern const char h2o_httpclient_error_http1_headers_too_long[];
 extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 extern const char h2o_httpclient_error_malformed_frame[];
 extern const char h2o_httpclient_error_unexpected_101[];
-
 
 extern const char h2o_httpclient_upgrade_to_connect[];
 
