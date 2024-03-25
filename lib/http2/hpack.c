@@ -431,7 +431,7 @@ Redo:
         *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
                         ? h2o_hpack_soft_err_found_invalid_char_in_header_name
                         : h2o_hpack_soft_err_found_invalid_char_in_header_value;
-        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+        return H2O_HTTP2_ERROR_SOFT_REJECT;
     } else {
         return 0;
     }
@@ -518,7 +518,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
         const char *decode_err = NULL;
         int ret = decode_cb(pool, decode_ctx, &name, &value, &src, src_end, &decode_err);
         if (ret != 0) {
-            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+            if (ret == H2O_HTTP2_ERROR_SOFT_REJECT) {
                 /* this is a soft error, we continue parsing, but register only the first error */
                 if (*err_desc == NULL) {
                     *err_desc = decode_err;
@@ -631,7 +631,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
     }
 
     if (*err_desc != NULL)
-        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+        return H2O_HTTP2_ERROR_SOFT_REJECT;
     return 0;
 }
 
@@ -655,7 +655,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         const char *decode_err = NULL;
         int ret = decode_cb(pool, decode_ctx, &name, &value, &src, src_end, &decode_err);
         if (ret != 0) {
-            if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+            if (ret == H2O_HTTP2_ERROR_SOFT_REJECT) {
                 /* this is a soft error, we continue parsing, but register only the first error */
                 if (*err_desc == NULL) {
                     *err_desc = decode_err;
@@ -726,7 +726,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
     } while (src != src_end);
 
     if (*err_desc) {
-        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+        return H2O_HTTP2_ERROR_SOFT_REJECT;
     }
     return 0;
 }

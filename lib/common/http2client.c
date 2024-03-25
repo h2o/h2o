@@ -330,7 +330,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
 
     if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table, status, headers, NULL, src, len,
                                         err_desc)) != 0) {
-        if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+        if (ret == H2O_HTTP2_ERROR_SOFT_REJECT) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }
@@ -409,7 +409,7 @@ static int on_trailers(struct st_h2o_http2client_conn_t *conn, struct st_h2o_htt
 
     if ((ret = h2o_hpack_parse_response(stream->super.pool, h2o_hpack_decode_header, &conn->input.header_table, NULL,
                                         &stream->input.trailers, NULL, src, len, err_desc)) != 0) {
-        if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+        if (ret == H2O_HTTP2_ERROR_SOFT_REJECT) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }

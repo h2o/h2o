@@ -621,8 +621,8 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
         0) {
-        /* all errors except invalid-header-char are connection errors */
-        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+        /* all hard errors are connection errors */
+        if (ret != H2O_HTTP2_ERROR_SOFT_REJECT)
             return ret;
     }
 
@@ -676,7 +676,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 
     /* send 400 if the request contains invalid header characters */
     if (ret != 0) {
-        assert(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+        assert(ret == H2O_HTTP2_ERROR_SOFT_REJECT);
         return send_invalid_request_error(conn, stream, *err_desc);
     }
 

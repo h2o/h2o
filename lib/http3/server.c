@@ -1427,7 +1427,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
                                        header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
-        ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+        ret != H2O_HTTP2_ERROR_SOFT_REJECT)
         return ret;
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
@@ -1492,7 +1492,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     }
 
     /* send a 400 error when observing an invalid header character */
-    if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+    if (ret == H2O_HTTP2_ERROR_SOFT_REJECT)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", *err_desc, err_desc);
 
     /* validate semantic requirement */

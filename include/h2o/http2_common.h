@@ -52,8 +52,9 @@
 #define H2O_HTTP2_ERROR_INADEQUATE_SECURITY -12
 #define H2O_HTTP2_ERROR_MAX 13
 /* end of the HTTP2-spec defined errors */
-#define H2O_HTTP2_ERROR_INVALID_HEADER_CHAR                                                                                        \
-    -254 /* an internal value indicating that invalid characters were found in the header name or value */
+#define H2O_HTTP2_ERROR_SOFT_REJECT                                                                                                \
+    -254 /* an internal value indicating that the headers were valid at the HPACK level but should be rejected at the stream level \
+          * due to various reasons (e.g., invalid characters found in name or value, headers too long) */
 #define H2O_HTTP2_ERROR_INCOMPLETE -255 /* an internal value indicating that all data is not ready */
 #define H2O_HTTP2_ERROR_PROTOCOL_CLOSE_IMMEDIATELY -256
 

@@ -739,7 +739,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
         *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
                         ? h2o_hpack_soft_err_found_invalid_char_in_header_name
                         : h2o_hpack_soft_err_found_invalid_char_in_header_value;
-        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+        return H2O_HTTP2_ERROR_SOFT_REJECT;
     }
     return 0;
 Fail:
@@ -804,7 +804,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 static int normalize_error_code(int err)
 {
     /* convert H2 errors (except invaild_header_char) to QPACK error code */
-    if (err < 0 && err != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+    if (err < 0 && err != H2O_HTTP2_ERROR_SOFT_REJECT)
         err = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
     return err;
 }
@@ -825,7 +825,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
                                        pseudo_header_exists_map, content_length, expect, digests, datagram_flow_id, src,
                                        src_end - src, err_desc)) != 0) {
         /* bail out if the error is a hard error, otherwise build header ack then return */
-        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+        if (ret != H2O_HTTP2_ERROR_SOFT_REJECT)
             return normalize_error_code(ret);
     }
 
