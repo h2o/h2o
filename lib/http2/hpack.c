@@ -105,6 +105,8 @@ const char h2o_hpack_err_unexpected_connection_specific_header[] = "found an une
 const char h2o_hpack_err_invalid_content_length_header[] = "invalid content-length header";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
+const char h2o_hpack_soft_err_headers_too_long[] = "headers too long";
+
 
 size_t h2o_hpack_decode_huffman(char *_dst, unsigned *soft_errors, const uint8_t *src, size_t len, int is_name,
                                 const char **err_desc)
@@ -507,6 +509,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
+    size_t headers_size_as_h1 = 0;
 
     *content_length = SIZE_MAX;
 
@@ -581,6 +584,10 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             }
         } else {
             pseudo_header_exists_map = NULL;
+            /* update size, and if it is greater than the limit, register a soft error */
+            headers_size_as_h1 += name->len + value.len + sizeof(": \r\n") - 1;
+            if (*err_desc == NULL && (headers_size_as_h1 > H2O_MAX_REQLEN || headers->size > H2O_MAX_HEADERS))
+                *err_desc = h2o_hpack_soft_err_headers_too_long;
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 if (token->flags.is_hpack_special) {
@@ -613,9 +620,11 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
-                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                if (*err_desc == NULL)
+                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
             } else {
-                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                if (*err_desc == NULL)
+                    h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
             }
         }
     Next:;

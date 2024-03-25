@@ -60,13 +60,6 @@ extern "C" {
 #define H2O_USE_BROTLI 0
 #endif
 
-#ifndef H2O_MAX_HEADERS
-#define H2O_MAX_HEADERS 100
-#endif
-#ifndef H2O_MAX_REQLEN
-#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
-#endif
-
 #ifndef H2O_SOMAXCONN
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN 65535

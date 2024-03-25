@@ -37,6 +37,7 @@ extern const char h2o_hpack_err_unexpected_connection_specific_header[];
 extern const char h2o_hpack_err_invalid_content_length_header[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
+extern const char h2o_hpack_soft_err_headers_too_long[];
 
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME 0x1
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE 0x2

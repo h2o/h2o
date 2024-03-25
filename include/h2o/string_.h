@@ -47,6 +47,13 @@ extern "C" {
     H2O_UINT64_LONGEST_STR /* As it is hard to define a macro based on the actual size of size_t, we hard-code it to 64-bits and   \
                               assert that in string.c */
 
+#ifndef H2O_MAX_HEADERS
+#define H2O_MAX_HEADERS 100
+#endif
+#ifndef H2O_MAX_REQLEN
+#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
+#endif
+
 /**
  * duplicates given string
  * @param pool memory pool (or NULL to use malloc)
