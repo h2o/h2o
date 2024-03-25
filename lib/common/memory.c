@@ -78,7 +78,7 @@ struct st_h2o_mem_pool_shared_ref_t {
 };
 
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
-H2O_NORETURN void (*h2o__fatal_redirect)(const char *, int, const char *, ...) = h2o__fatal;
+H2O_NORETURN void (*h2o___fatal)(const char *, int, const char *, ...) = h2o__fatal;
 
 static const h2o_mem_recycle_conf_t mem_pool_allocator_conf = {.memsize = sizeof(union un_h2o_mem_pool_chunk_t)};
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_conf};
