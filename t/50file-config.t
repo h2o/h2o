@@ -96,7 +96,8 @@ EOT
     $doit->("ON", q{--header "Accept-Encoding: br"}, ['/index.txt', '/'], $index_br_len);
     $doit->("ON", q{--header "Accept-Encoding: zstd"}, ['/index.txt', '/'], $index_zstd_len);
     $doit->("ON", q{--header "Accept-Encoding: br, zstd"}, ['/index.txt', '/'], $index_br_len);
-    $doit->("ON", q{--header "Accept-Encoding: zstd, br"}, ['/index.txt', '/'], $index_br_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, zstd"}, ['/index.txt', '/'], $index_zstd_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, br, zstd"}, ['/index.txt', '/'], $index_br_len);
 
     $doit->("gunzip", "", ['/alice2.txt'], $alice2_orig_len);
     $doit->("gunzip", q{--header "Accept-Encoding: gzip"}, ['/alice2.txt'], $alice2_gz_len);
