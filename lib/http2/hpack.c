@@ -643,6 +643,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         *status = 0;
 
     const uint8_t *src_end = src + len;
+    size_t headers_size_as_h1 = 0;
 
     /* the response MUST contain a :status header as the first element */
     if (status != NULL && src == src_end) {
@@ -702,6 +703,10 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                 *err_desc = h2o_hpack_err_missing_mandatory_pseudo_header;
                 return H2O_HTTP2_ERROR_PROTOCOL;
             }
+            /* update size, and if it is greater than the limit, register a soft error */
+            headers_size_as_h1 += name->len + value.len + sizeof(": \r\n") - 1;
+            if (*err_desc == NULL && (headers_size_as_h1 > H2O_MAX_REQLEN || headers->size > H2O_MAX_HEADERS))
+                *err_desc = h2o_hpack_soft_err_headers_too_long;
             if (h2o_iovec_is_token(name)) {
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 /* reject headers as defined in draft-16 8.1.2.2 */
