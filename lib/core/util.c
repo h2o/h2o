@@ -718,6 +718,8 @@ int h2o_get_compressible_types(const h2o_headers_t *headers)
                     compressible_types |= H2O_COMPRESSIBLE_GZIP;
                 else if (h2o_lcstris(token, token_len, H2O_STRLIT("br")))
                     compressible_types |= H2O_COMPRESSIBLE_BROTLI;
+                else if (h2o_lcstris(token, token_len, H2O_STRLIT("zstd")))
+                    compressible_types |= H2O_COMPRESSIBLE_ZSTD;
             }
         }
     }
