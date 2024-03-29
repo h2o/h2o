@@ -2906,7 +2906,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         listener->quic.ctx->use_pacing = (unsigned)on;
                     }
                     if (respect_app_limited != NULL) {
-                        ssize_t on = h2o_configurator_scanf(cmd, *respect_app_limited, "OFF,ON");
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *respect_app_limited, "OFF,ON");
                         if (on == -1)
                             return -1;
                         listener->quic.ctx->respect_app_limited = (unsigned)on;
