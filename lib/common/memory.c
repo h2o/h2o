@@ -78,13 +78,12 @@ struct st_h2o_mem_pool_shared_ref_t {
 };
 
 void *(*volatile h2o_mem__set_secure)(void *, int, size_t) = memset;
-H2O_NORETURN void (*h2o___fatal)(const char *, int, const char *, ...) = h2o__fatal;
 
 static const h2o_mem_recycle_conf_t mem_pool_allocator_conf = {.memsize = sizeof(union un_h2o_mem_pool_chunk_t)};
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_conf};
 size_t h2o_mmap_errors = 0;
 
-void h2o__fatal(const char *file, int line, const char *msg, ...)
+static H2O_NORETURN void default_h2o_fatal(const char *file, int line, const char *msg, ...)
 {
     char buf[1024];
     va_list args;
@@ -97,6 +96,8 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 
     abort();
 }
+
+H2O_NORETURN void (*h2o__fatal)(const char *, int, const char *, ...) = default_h2o_fatal;
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {

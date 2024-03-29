@@ -182,12 +182,9 @@ typedef struct st_h2o_doublebuffer_t {
 extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 
 /**
- * prints an error message and aborts. h2o_fatal can be modified by
- * setting the function pointer it expands to, which is
- * h2o___fatal.
+ * prints an error message and aborts. h2o_fatal can be modified by setting the function pointer it expands to, which is h2o__fatal.
  */
-H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
-extern H2O_NORETURN void (*h2o___fatal)(const char *file, int line, const char *msg, ...);
+extern H2O_NORETURN void (*h2o__fatal)(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
 #ifndef h2o_fatal
 #define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
 #endif
