@@ -117,7 +117,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (content_encoding_header_index != -1)
         goto Next;
 
-/* open the compressor */
+/* open the compressor (TODO add support for zstd) */
 #if H2O_USE_BROTLI
     if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
         compressor =
