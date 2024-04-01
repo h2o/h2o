@@ -303,6 +303,7 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
         }                                                                                                                          \
     }
             TRY_VARIANT(H2O_COMPRESSIBLE_BROTLI, "br", ".br");
+            TRY_VARIANT(H2O_COMPRESSIBLE_ZSTD, "zstd", ".zstd");
             TRY_VARIANT(H2O_COMPRESSIBLE_GZIP, "gzip", ".gz");
 #undef TRY_VARIANT
         }
