@@ -1,0 +1,16 @@
+GET /index.txt HTTP/1.1
+h-st: ion: Upgrade, HTTP1-Settings
+www-authenticate: h2tings: AAMAAABkAT /index.t‹t H
+www-authenticate: h2c
+http2-settings: AAMction: Upgrade, HTTP1-Settingsÿ
+www-authenticate: hAABkAAQAidnex.txtTP/1.1
+host: 127.0.0.1:5145nnection: Upgrade, HTTP1-Settings
+www-authenticate: h2c
+http2-settings: AAMAAABkAAÑAAP__
+accept: */*
+user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRI * HTTP/1.gs
+www-authenticate:.16.1;

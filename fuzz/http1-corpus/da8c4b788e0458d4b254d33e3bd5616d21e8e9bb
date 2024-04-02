@@ -1,0 +1,9 @@
+GET /index.txt HTTP/1.1
+host: 1
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AA99999999999999999999999999999999999999999999999999999999999999999999MAAA
+
+
+
+--MARK--

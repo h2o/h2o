@@ -1,0 +1,46 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */pt:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+HoSt: 142/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/.we/t/chunked-teste HTTP/1.1
+Host: 142/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+H*st: 127Agent: (:schemPOST / HTTP/1.1
+Host0.0.1:512HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: *//reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+HoSt: 142/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/.we/t/chunked-teste HTTP/1.1
+Host: 142/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+H*st: 127Agent: (:schemPOST / HTTP/1.1
+Host0.0.1:51273t:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 284/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/.we/te HTTP/1.1
+Host: 142/..ÿÿÿÿÿÿ
+
+GET /reproxy-test/p'rade:
+ c2hhttp2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttpPRI * HTTP/2
+--MARK--
+P‚-settings: AAMAAABkK--
+PRI * rrrrrh2

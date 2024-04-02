@@ -1,0 +1,6 @@
+GET /foo%0D%0Aa:1 HTTP/1.1
+Host:1240
+User.-Agent: curl/9.0-
+
+
+--MARK--

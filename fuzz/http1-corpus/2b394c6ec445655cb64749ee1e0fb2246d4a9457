@@ -1,0 +1,6 @@
+GET ‚index.txt HTTP/1.1
+hostexpec: 127.: AA1
+
+
+--MARK--
+PRI * PRI *

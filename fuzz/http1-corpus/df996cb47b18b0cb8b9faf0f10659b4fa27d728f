@@ -1,0 +1,13 @@
+GET /reproxy-test/.we1ll¿known/h1../te HTTP/1.1
+Host: 127.51458
+connecti
+--MARK--
+on: Upgrade, HTTP2-Settings
+upgrade: text/vn
+
+
+ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARK--
+

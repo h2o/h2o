@@ -1,0 +1,9 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127l/7.49.0-: 127.0.0.2
+Via: 2 example.co
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ127.0.0.2
+Via: 2 ex4/1:schem
+
+
+--MARK--
+PRI * 

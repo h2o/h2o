@@ -1,0 +1,11 @@
+GET /websocket/ HTTP/1.1
+Connection: upgrade
+Upgrade: we\socky: abcde
+Sec-Websocket-Version: 12
+
+
+--MARK--
+hello wo
+
+--MAd 10
+--MARK--

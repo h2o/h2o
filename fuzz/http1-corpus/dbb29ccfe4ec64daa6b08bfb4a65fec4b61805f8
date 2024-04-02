@@ -1,0 +1,24 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÷proxy-test/ind../\ex.tde, ÷upgrP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÷proxy-test/ind../\ex.tde, ÷upgrad÷÷GET 0-DEV
+Accept: */*
+X-Forwarded-For: ÷÷÷÷50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÷÷÷÷÷÷÷: */*
+X-Forward:statu: 31EV
+Accept: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÷÷÷÷÷÷÷: */'indehttp:Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Farded-F: */*
+X-Forwarded-For: 127.0.0.2nt: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

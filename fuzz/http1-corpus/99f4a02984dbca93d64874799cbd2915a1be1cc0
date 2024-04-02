@@ -1,0 +1,15 @@
+GET / HTTP/1.1
+host:host.examplÿÿÿÿÿ curl/7.49ncoding:gzip
+
+
+GET /-t
+--MARK--
+est/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7ell¿know.1ÿÿÿÿÿÿÿ*
+
+
+--MARKÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARK--
