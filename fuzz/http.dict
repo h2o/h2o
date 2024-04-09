@@ -2684,3 +2684,29 @@ url_encode_utf8_c0_5c="%c0%5c"
 url_encode_unicode_16_002e="%u002e"
 url_encode_unicode_16_2215="%u2215"
 url_encode_unicode_16_2216="%u2216"
+
+# Charset
+charset_utf8="charset=UTF-8"
+
+# Expires date
+expires_date="Fri, 31 Dec 1999 23:59:59 GMT"
+
+# Cache directives
+cache_max_age="max-age"
+cache_max_stale="max-stale"
+cache_min_fresh="min-fresh"
+cache_no_cache="no-cache"
+cache_no_store="no-store"
+cache_no_transform="no-transform"
+cache_only_if_cached="only-if-cached"
+cache_stale_if_error="stale-if-error"
+cache_s_max_age="s-max-age"
+cache_must_revalidate="must-revalidate"
+cache_proxy_revalidate="proxy-revalidate"
+cache_private="private"
+cache_public="public"
+cache_immutable="immutable"
+cache_stale_while_revalidate="stale-while-revalidate"
+
+# URL example
+url="http://example.com"
