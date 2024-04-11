@@ -1,0 +1,16 @@
+GET /reproxy-test/ind../ex.txt HTTP/1.1
+host1:5099ÖÖÖÖÖÖGEaccept-ecnodins HTTP/1.1
+Host: 127.0.0.1:50811t: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖaudio/GSM-HR-08 */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖ.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÜÖÖÖÖÖÖÖÖÖÖÖÖt:² */'
+X-Forwer-ddaFor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖer-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI * HTTP/3.0Settings
+upgrade: h2c
+ÿÿÿÿÿÿÿ¡¦¦

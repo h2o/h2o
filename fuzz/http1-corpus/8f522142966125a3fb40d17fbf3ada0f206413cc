@@ -1,0 +1,13 @@
+GET /reproxy-test/halfdome.jpg HTTP/1.1
+host: 127.0.0OOOOOOOOOOO.1:51358
+connection: Upgrad
+--MARK--
+e, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAA////////////////////AB
+accept: 
+**Tuser-agent: nght/2tp1.16нн
+
+
+--MARK--
+PRI

@@ -1,0 +1,13 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:Accept-Ranges2c
+http2-settings:n: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /inde
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /i-Sgs: AAMAAABkAAQAAP__
+accett-rangettp2-settings: AAMAAGET /websoc
+
+
+--MARK--
+PRApply-To-Redirect-RefI *ex.tx *ex.txt HTTP 

@@ -1,0 +1,7 @@
+GET /reproxy-test/halfdojpg HTTP/1.1
+Host: 127.0.0.1:5140
+rUes-e:!bytes=100-
+User-Agent: cur/*
+
+
+--MARK--

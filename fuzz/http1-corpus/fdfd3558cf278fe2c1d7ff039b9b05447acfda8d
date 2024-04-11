@@ -1,0 +1,7 @@
+GET /chunked-testtus=200&resp:x-reproxyrl=http://%5Bunix%3A%2Ftmp%2F55N00&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2e./.. HTTP/1.1
+host: 1271.16.1
+
+
+--MARK--
+PRI * HTT
+host´x.txt HTTP-

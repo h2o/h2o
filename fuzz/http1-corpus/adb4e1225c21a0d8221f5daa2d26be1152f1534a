@@ -1,0 +1,8 @@
+GET /404?-u%3A50605/indet HTTP/1.1
+host: 127.0.0.1:50765
+connection: U2c
+http:2-settings: AAMAAABkA: *ghttp2/1.16.1
+
+
+--MARK--
+PRI *RK--

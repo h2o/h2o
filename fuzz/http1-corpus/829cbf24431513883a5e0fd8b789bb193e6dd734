@@ -1,0 +1,11 @@
+GET ‚index.txt HTTP/1.1
+hostexpec: 127.: A‚index.txt HTTP-1.1
+hostexpec: 127.: AA´ÿÿÿABkA:statuGET ‚index.txt HTTP/1.1
+hostpexec: A´ÿÿÿABkA:statuGET ‚#indetxt HTT
+hosteypec:: AAMAA´ÿÿ
+
+--GET %halfdd.valve.source.compiled-m1
+_
+
+--MARK--
+PRI * HTTP/2.-

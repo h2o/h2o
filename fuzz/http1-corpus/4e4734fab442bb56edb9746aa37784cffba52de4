@@ -1,0 +1,9 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Up AAMAAGET /websocket/ HTTP/0.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGer-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

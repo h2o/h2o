@@ -1,0 +1,40 @@
+POST / HTTP/1.1
+Host: 254.0.0.1:51273
+User-Agent: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ33333333unked-testOST / HTTP/1.1
+Host: 127/chunked-test
+User-Agent: curl/7.49.0-DEVÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+Traosfer$Encoding: chunked
+'Content-Type: app”–*œ‹–/x-wwfr73
+User-Agent: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿP/ch00000000000000000000000000000000000000000000000000000000X-Forwarded-Host°¬« / HTTP/1.1
+Host: 127/chunked-test
+User-Agent: curl/7.49.0-DEVÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+Transfer$Encoindg: chunked
+'Content-Type: app”–*œ‹–/x-wwfr73
+User-Agent: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ000000000000001230972972estOST / HTTP/1.1
+Host: 127/chunked-test
+User-Agent: curl/7.49.0-DEVÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+Transfer$Encoding: chunked
+'Content-Type: app”–*œ‹–/x-wwfr73
+User-Agent: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ33unked-testOST / HTTP/1.1
+Host: 127/chunked-test
+User-Agent: curl/7.49.0-DEVÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+Transfer$Encoding: chunked
+'Content-Type: app”–*œ‹–/x-wwfrwmo--urlencoded 
+
+PRI * HTTP/3a
+helloworld
+Accept: *s
+1
+
+
+--
+a
+helloworld
+0
+
+
+--MARK--

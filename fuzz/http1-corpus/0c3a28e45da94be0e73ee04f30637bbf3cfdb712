@@ -1,0 +1,15 @@
+GET /reproxy-test/indpro../\ex/txt HTTP/1.1
+ept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 examp™ˇˇˇle(.coappliForwarded-Nor: ÷÷÷÷÷÷÷÷÷÷/*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.welløknown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/d-For:
+X-Forwarded-For: ÷÷÷÷÷e(.coapn/font-sfnthem
+
+
+--MARK--
+PRI * 

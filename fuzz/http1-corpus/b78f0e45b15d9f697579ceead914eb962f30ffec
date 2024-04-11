@@ -1,0 +1,12 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50or: 127.0.0.2
+Via:
+User-Agent:ccept: */*
+Xsagent: nght2/1:schem
+
+
+--MARK--
+PTP/1.0
+CoRnteI * nt
+1Length:
+

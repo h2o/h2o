@@ -1,0 +1,5 @@
+GET /:ch/%5Bunix%3A%2Ftmp%2F55N00&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2e./.. HTTP/1.11.16.1ø
+
+
+--MARK--
+PRI *.txt HTTP-
