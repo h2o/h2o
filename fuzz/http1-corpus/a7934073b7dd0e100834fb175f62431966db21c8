@@ -1,0 +1,13 @@
+POST / HTTP/1.1
+Host: 127.url/7-DEV
+Accept:$`/*
+Connection: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAMAAAkBAAQAAP__
+Content-Length:
+Upgrade: h4c
+HTTP2-Settings: AABm-urlencoded
+
+
+--MARK--
+PRI * HTTP/2

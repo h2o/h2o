@@ -1,0 +1,9 @@
+GET /reproxy-…est/index.txt HTTP/1.1
+hNEL: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP3-Settings
+upgrade: h2c
+h0.1:514527.0.0.7.0.0.1apphem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

@@ -1,0 +1,35 @@
+POST / HTTP/1.1
+Host: 127.0.0.1:50699
+User-AgentUpgrade: e: applicaQAAP__
+Contente: avideo/oggpplica
+--MARK--
+-form-
+--MARK--
+urlencoded
+
+hGET /websocket/ HTTP/1.1
+Co'nnection: upgpade
+Upg7.0.0.1:50699
+User-AgentUpgrade: he: application/x-www-form-ur
+HTTP2-Settings: AAMAAABkAAQAAP__
+Contente: applicaQAAP__
+Contente: avideo/oggpplica
+--MARK--
+-form-
+--MARK--
+urlencoded
+
+hGET /websocket/ HTTP/1.1
+C.1:50699
+User-AgentUpgrade: he: application/x-www-form-urlencoded
+
+hBET /websocket/ HTTP/1.1
+Co'nnection: upgpade
+Upg7.0.0.1:50699
+User-AgentUpgrade: h2c
+HTTP2-Settings:e: application/x-www-form-urlencoded
+
+hhello w-
+orl d09
+
+--MARK--

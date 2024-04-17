@@ -575,6 +575,7 @@ enum {
     H2O_COMPRESS_HINT_ENABLE,      /* compression was explicitly enabled for this request */
     H2O_COMPRESS_HINT_ENABLE_GZIP, /* compression was explicitly enabled for this request, asking for gzip */
     H2O_COMPRESS_HINT_ENABLE_BR,   /* compression was explicitly enabled for this request, asking for br */
+    H2O_COMPRESS_HINT_ENABLE_ZSTD, /* compression was explicitly enabled for this request, asking for zstd */
 };
 
 /**
@@ -1513,6 +1514,7 @@ void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *va
 int h2o_get_compressible_types(const h2o_headers_t *headers);
 #define H2O_COMPRESSIBLE_GZIP 1
 #define H2O_COMPRESSIBLE_BROTLI 2
+#define H2O_COMPRESSIBLE_ZSTD 4
 /**
  * builds destination URL or path, by contatenating the prefix and path_info of the request
  */

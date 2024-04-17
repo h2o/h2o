@@ -1,0 +1,15 @@
+GET / HTTP/1.1
+host:h­st.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+
+
+GET /ser-Agent: c:schemurl/t:ÿÿÿst/.well¿known/h2/../teM&RK--
+ H127.0.0.1:50492
+User-Agent: curl/7.49.0-DEV
+A6-MARKÿÿÿÿÿÿÿÿÿÿÿÿ/*
+
+
+--MARK--

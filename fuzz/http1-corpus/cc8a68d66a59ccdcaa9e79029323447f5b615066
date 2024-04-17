@@ -1,0 +1,16 @@
+POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*
+Connectiction: Upgr/*
+Connectiction: Upgrade, HTTP2-Settings
+Upgrade: h2c
+HTTP2-Settings: AAMAAABkAAQAAP__
+Content-Length: 0
+Contelt-Type: aœ›ept: */*
+Connectiction: Upgrade, HTTP2 AAMAAABkAAQAAP__
+Content-Length: 0
+Contelt-Type: application/x-www-form-urlencoded
+
+
+--MARK--
+PRI * HTTP/
+--MARK--
