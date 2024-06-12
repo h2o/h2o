@@ -1173,10 +1173,10 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
         /* close the stream if an error occurred */
-        if (errstr != NULL) {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1);
-            return;
-        }
+        // if (errstr != NULL) {
+        //     shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1);
+        //     return;
+        // }
     }
 
     /* remove the bytes from the request body buffer */
