@@ -296,9 +296,6 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
         (void)write(fd, req, sizeof(req) - 1);
     }
 
-    if (debug)
-        infof("Attaching %s", unix_socket_path);
-
     /* read and process */
     while (1) {
         ssize_t rret;
@@ -335,6 +332,8 @@ static int read_from_unix_socket(const char *unix_socket_path, FILE *outfp, bool
             }
             /* success */
             ret = EXIT_SUCCESS;
+            if (debug)
+                infof("Attaching %s", unix_socket_path);
             memmove(buf, buf + http_headers_len, buflen - http_headers_len);
             buflen -= http_headers_len;
         }
