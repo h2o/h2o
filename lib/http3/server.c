@@ -1073,7 +1073,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 } else if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT) {
                     return;
                 }
-            } while (src != src_end && !stream->read_blocked);
+            } while (src != src_end && !stream->read_blocked && !quicly_stop_requested(stream->quic));
             /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
             size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
             h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
@@ -1142,7 +1142,7 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
     /* save received data (FIXME avoid copying if possible; see hqclient.c) */
     h2o_http3_update_recvbuf(&stream->recvbuf.buf, off, input, len);
 
-    if (stream->read_blocked)
+    if (stream->read_blocked || quicly_stop_requested(stream->quic))
         return;
 
     /* handle input (FIXME propage err_desc) */
