@@ -520,10 +520,8 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int sto
                             int reset_only_if_open)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-    if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
+    if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
         quicly_request_stop(stream->quic, stop_sending_code);
-        h2o_buffer_consume(&stream->recvbuf.buf, stream->recvbuf.buf->size);
-    }
     if (reset_only_if_open && quicly_stream_has_send_side(0, stream->quic->stream_id) &&
         !quicly_sendstate_is_open(&stream->quic->sendstate)) {
         if (stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY)
