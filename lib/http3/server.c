@@ -1093,7 +1093,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                                 stream->req.req_body_bytes_received < stream->req.content_length
                                     ? H2O_HTTP3_ERROR_REQUEST_INCOMPLETE
                                     : H2O_HTTP3_ERROR_GENERAL_PROTOCOL,
-                                in_generator, 1);
+                                in_generator, 0);
             } else {
                 if (stream->req.write_req.cb != NULL) {
                     if (!h2o_linklist_is_linked(&stream->link))
@@ -1116,7 +1116,8 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 }
             }
         } else {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */, H2O_HTTP3_ERROR_REQUEST_INCOMPLETE, in_generator, 1);
+            /* request stream closed with an incomplete request, send error */
+            shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */, H2O_HTTP3_ERROR_REQUEST_INCOMPLETE, in_generator, 0);
         }
     } else {
         if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK && stream->req_body != NULL &&
@@ -1337,7 +1338,7 @@ int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const 
             stream->req.content_length - stream->req.req_body_bytes_received < frame.length) {
             /* The only viable option here is to reset the stream, as we might have already started streaming the request body
              * upstream. This behavior is consistent with what we do in HTTP/2. */
-            shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator, 1);
+            shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator, 0);
             return 0;
         }
         break;
@@ -1409,7 +1410,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
                                     src_end, err_desc)) != 0) {
         if (*err_desc == h2o_http3_err_frame_too_large && frame.type == H2O_HTTP3_FRAME_TYPE_HEADERS) {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 0, 1);
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 0, 0);
             return 0;
         } else {
             return ret;
@@ -1463,7 +1464,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
          * "CONNECT". The draft requires "masque" in `:scheme` but we need to support clients that put "https" there instead. */
         if (!((header_exists_map & H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS) == 0 &&
               h2o_memis(stream->req.input.path.base, stream->req.input.path.len, H2O_STRLIT("/")))) {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0, 1);
+            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0, 0);
             return 0;
         }
         if (datagram_flow_id_field.base != NULL) {
@@ -1493,7 +1494,7 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
 
     /* check that all MUST pseudo headers exist, and that there are no other pseudo headers than MUST or MAY */
     if (!((header_exists_map & must_exist_map) == must_exist_map && (header_exists_map & ~(must_exist_map | may_exist_map)) == 0)) {
-        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0, 1);
+        shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0, 0);
         return 0;
     }
 
