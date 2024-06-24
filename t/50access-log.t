@@ -178,6 +178,7 @@ subtest 'timings' => sub {
                     , "request-total-time":%{request-total-time}x
                     , "request-header-time":%{request-header-time}x
                     , "request-body-time":%{request-body-time}x
+                    , "response-body-time":%{response-body-time}x
                     , "process-time":%{process-time}x
                     , "response-time":%{response-time}x
                     , "duration":%{duration}x
@@ -202,6 +203,7 @@ subtest 'timings' => sub {
                     cmp_ok $log->{"request-total-time"}, ">=", 0;
                     cmp_ok $log->{"request-header-time"}, ">=", 0;
                     cmp_ok $log->{"request-body-time"}, ">=", 0;
+                    cmp_ok $log->{"response-body-time"}, ">=", 0;
                     cmp_ok $log->{"process-time"}, ">=", 0;
                     cmp_ok $log->{"response-time"}, ">=", $least_duration;
                     cmp_ok $log->{"total-time"}, ">=", $least_duration;
