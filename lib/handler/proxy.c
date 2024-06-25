@@ -67,6 +67,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
 {
 #if H2O_USE_LIBUV
     h2o_fatal("no HTTP/3 support for libuv");
+    return NULL;
 #else
 
     h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
