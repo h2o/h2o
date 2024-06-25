@@ -78,7 +78,7 @@ static int tests = 0, fails = 0, skips = 0;
 
 static void millisleep(int ms)
 {
-#ifdef _MSC_VER
+#if _MSC_VER
     Sleep(ms);
 #else
     usleep(ms*1000);
@@ -103,13 +103,6 @@ static long long usec(void) {
 #undef assert
 #define assert(e) (void)(e)
 #endif
-
-#define redisTestPanic(msg) \
-    do { \
-        fprintf(stderr, "PANIC: %s (In function \"%s\", file \"%s\", line %d)\n", \
-                msg, __func__, __FILE__, __LINE__); \
-        exit(1); \
-    } while (1)
 
 /* Helper to extract Redis version information.  Aborts on any failure. */
 #define REDIS_VERSION_FIELD "redis_version:"
@@ -156,7 +149,7 @@ static redisContext *select_database(redisContext *c) {
     assert(reply != NULL);
     freeReplyObject(reply);
 
-    /* Make sure the DB is empty */
+    /* Make sure the DB is emtpy */
     reply = redisCommand(c,"DBSIZE");
     assert(reply != NULL);
     if (reply->type == REDIS_REPLY_INTEGER && reply->integer == 0) {
@@ -239,7 +232,7 @@ static redisContext *do_connect(struct config config) {
             c = redisConnectFd(fd);
         }
     } else {
-        redisTestPanic("Unknown connection type!");
+        assert(NULL);
     }
 
     if (c == NULL) {
@@ -416,37 +409,10 @@ static void test_tcp_options(struct config cfg) {
     redisContext *c;
 
     c = do_connect(cfg);
-
     test("We can enable TCP_KEEPALIVE: ");
     test_cond(redisEnableKeepAlive(c) == REDIS_OK);
 
-#ifdef TCP_USER_TIMEOUT
-    test("We can set TCP_USER_TIMEOUT: ");
-    test_cond(redisSetTcpUserTimeout(c, 100) == REDIS_OK);
-#else
-    test("Setting TCP_USER_TIMEOUT errors when unsupported: ");
-    test_cond(redisSetTcpUserTimeout(c, 100) == REDIS_ERR && c->err == REDIS_ERR_IO);
-#endif
-
-    redisFree(c);
-}
-
-static void test_unix_keepalive(struct config cfg) {
-    redisContext *c;
-    redisReply *r;
-
-    c = do_connect(cfg);
-
-    test("Setting TCP_KEEPALIVE on a unix socket returns an error: ");
-    test_cond(redisEnableKeepAlive(c) == REDIS_ERR && c->err == 0);
-
-    test("Setting TCP_KEEPALIVE on a unix socket doesn't break the connection: ");
-    r = redisCommand(c, "PING");
-    test_cond(r != NULL && r->type == REDIS_REPLY_STATUS && r->len == 4 &&
-              !memcmp(r->str, "PONG", 4));
-    freeReplyObject(r);
-
-    redisFree(c);
+    disconnect(c, 0);
 }
 
 static void test_reply_reader(void) {
@@ -718,16 +684,6 @@ static void test_reply_reader(void) {
     freeReplyObject(reply);
     redisReaderFree(reader);
 
-    test("Correctly parses RESP3 double -Nan: ");
-    reader = redisReaderCreate();
-    redisReaderFeed(reader, ",-nan\r\n", 7);
-    ret = redisReaderGetReply(reader, &reply);
-    test_cond(ret == REDIS_OK &&
-              ((redisReply*)reply)->type == REDIS_REPLY_DOUBLE &&
-              isnan(((redisReply*)reply)->dval));
-    freeReplyObject(reply);
-    redisReaderFree(reader);
-
     test("Can parse RESP3 nil: ");
     reader = redisReaderCreate();
     redisReaderFeed(reader, "_\r\n",3);
@@ -790,26 +746,6 @@ static void test_reply_reader(void) {
         ((redisReply*)reply)->element[2]->type == REDIS_REPLY_STRING &&
         ((redisReply*)reply)->element[2]->len == 6 &&
         !strcmp(((redisReply*)reply)->element[2]->str,"second") &&
-        ((redisReply*)reply)->element[3]->type == REDIS_REPLY_BOOL &&
-        ((redisReply*)reply)->element[3]->integer);
-    freeReplyObject(reply);
-    redisReaderFree(reader);
-
-    test("Can parse RESP3 attribute: ");
-    reader = redisReaderCreate();
-    redisReaderFeed(reader, "|2\r\n+foo\r\n:123\r\n+bar\r\n#t\r\n",26);
-    ret = redisReaderGetReply(reader,&reply);
-    test_cond(ret == REDIS_OK &&
-        ((redisReply*)reply)->type == REDIS_REPLY_ATTR &&
-        ((redisReply*)reply)->elements == 4 &&
-        ((redisReply*)reply)->element[0]->type == REDIS_REPLY_STATUS &&
-        ((redisReply*)reply)->element[0]->len == 3 &&
-        !strcmp(((redisReply*)reply)->element[0]->str,"foo") &&
-        ((redisReply*)reply)->element[1]->type == REDIS_REPLY_INTEGER &&
-        ((redisReply*)reply)->element[1]->integer == 123 &&
-        ((redisReply*)reply)->element[2]->type == REDIS_REPLY_STATUS &&
-        ((redisReply*)reply)->element[2]->len == 3 &&
-        !strcmp(((redisReply*)reply)->element[2]->str,"bar") &&
         ((redisReply*)reply)->element[3]->type == REDIS_REPLY_BOOL &&
         ((redisReply*)reply)->element[3]->integer);
     freeReplyObject(reply);
@@ -935,9 +871,9 @@ static void test_allocator_injection(void) {
 
 #define HIREDIS_BAD_DOMAIN "idontexist-noreally.com"
 static void test_blocking_connection_errors(void) {
+    redisContext *c;
     struct addrinfo hints = {.ai_family = AF_INET};
     struct addrinfo *ai_tmp = NULL;
-    redisContext *c;
 
     int rv = getaddrinfo(HIREDIS_BAD_DOMAIN, "6379", &hints, &ai_tmp);
     if (rv != 0) {
@@ -964,24 +900,10 @@ static void test_blocking_connection_errors(void) {
     }
 
 #ifndef _WIN32
-    redisOptions opt = {0};
-    struct timeval tv;
-
     test("Returns error when the port is not open: ");
     c = redisConnect((char*)"localhost", 1);
     test_cond(c->err == REDIS_ERR_IO &&
         strcmp(c->errstr,"Connection refused") == 0);
-    redisFree(c);
-
-
-    /* Verify we don't regress from the fix in PR #1180 */
-    test("We don't clobber connection exception with setsockopt error: ");
-    tv = (struct timeval){.tv_sec = 0, .tv_usec = 500000};
-    opt.command_timeout = opt.connect_timeout = &tv;
-    REDIS_OPTIONS_SET_TCP(&opt, "localhost", 10337);
-    c = redisConnectWithOptions(&opt);
-    test_cond(c->err == REDIS_ERR_IO &&
-              strcmp(c->errstr, "Connection refused") == 0);
     redisFree(c);
 
     test("Returns error when the unix_sock socket path doesn't accept connections: ");
@@ -1385,7 +1307,7 @@ static void test_blocking_io_errors(struct config config) {
 }
 
 static void test_invalid_timeout_errors(struct config config) {
-    redisContext *c = NULL;
+    redisContext *c;
 
     test("Set error when an invalid timeout usec value is used during connect: ");
 
@@ -1397,10 +1319,10 @@ static void test_invalid_timeout_errors(struct config config) {
     } else if(config.type == CONN_UNIX) {
         c = redisConnectUnixWithTimeout(config.unix_sock.path, config.connect_timeout);
     } else {
-        redisTestPanic("Unknown connection type!");
+        assert(NULL);
     }
 
-    test_cond(c != NULL && c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
+    test_cond(c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
     redisFree(c);
 
     test("Set error when an invalid timeout sec value is used during connect: ");
@@ -1413,10 +1335,10 @@ static void test_invalid_timeout_errors(struct config config) {
     } else if(config.type == CONN_UNIX) {
         c = redisConnectUnixWithTimeout(config.unix_sock.path, config.connect_timeout);
     } else {
-        redisTestPanic("Unknown connection type!");
+        assert(NULL);
     }
 
-    test_cond(c != NULL && c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
+    test_cond(c->err == REDIS_ERR_IO && strcmp(c->errstr, "Invalid timeout specified") == 0);
     redisFree(c);
 }
 
@@ -1621,9 +1543,6 @@ static void test_throughput(struct config config) {
 // }
 
 #ifdef HIREDIS_TEST_ASYNC
-
-#pragma GCC diagnostic ignored "-Woverlength-strings"   /* required on gcc 4.8.x due to assert statements */
-
 struct event_base *base;
 
 typedef struct TestState {
@@ -2298,7 +2217,7 @@ static void test_async_polling(struct config config) {
      */
     test("Ping/Pong from onConnected callback (Issue #931): ");
     c = do_aconnect(config, ASTEST_ISSUE_931_PING);
-    /* connect callback issues ping, response callback destroys context */
+    /* connect callback issues ping, reponse callback destroys context */
     while(astest.ac)
         redisPollTick(c, 0.1);
     assert(astest.connected == 0);
@@ -2401,7 +2320,6 @@ int main(int argc, char **argv) {
         test_blocking_connection_timeouts(cfg);
         test_blocking_io_errors(cfg);
         test_invalid_timeout_errors(cfg);
-        test_unix_keepalive(cfg);
         if (throughput) test_throughput(cfg);
     } else {
         test_skipped();

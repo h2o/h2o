@@ -250,7 +250,6 @@ static void moveToNextTask(redisReader *r) {
         prv = r->task[r->ridx-1];
         assert(prv->type == REDIS_REPLY_ARRAY ||
                prv->type == REDIS_REPLY_MAP ||
-               prv->type == REDIS_REPLY_ATTR ||
                prv->type == REDIS_REPLY_SET ||
                prv->type == REDIS_REPLY_PUSH);
         if (cur->idx == prv->elements-1) {
@@ -304,8 +303,7 @@ static int processLineItem(redisReader *r) {
                 d = INFINITY; /* Positive infinite. */
             } else if (len == 4 && strcasecmp(buf,"-inf") == 0) {
                 d = -INFINITY; /* Negative infinite. */
-            } else if ((len == 3 && strcasecmp(buf,"nan") == 0) ||
-                       (len == 4 && strcasecmp(buf, "-nan") == 0)) {
+            } else if (len == 3 && strcasecmp(buf,"nan") == 0) {
                 d = NAN; /* nan. */
             } else {
                 d = strtod((char*)buf,&eptr);
@@ -535,7 +533,7 @@ static int processAggregateItem(redisReader *r) {
 
             moveToNextTask(r);
         } else {
-            if (cur->type == REDIS_REPLY_MAP || cur->type == REDIS_REPLY_ATTR) elements *= 2;
+            if (cur->type == REDIS_REPLY_MAP) elements *= 2;
 
             if (r->fn && r->fn->createArray)
                 obj = r->fn->createArray(cur,elements);
@@ -603,9 +601,6 @@ static int processItem(redisReader *r) {
             case '%':
                 cur->type = REDIS_REPLY_MAP;
                 break;
-            case '|':
-                cur->type = REDIS_REPLY_ATTR;
-                break;
             case '~':
                 cur->type = REDIS_REPLY_SET;
                 break;
@@ -646,7 +641,6 @@ static int processItem(redisReader *r) {
         return processBulkItem(r);
     case REDIS_REPLY_ARRAY:
     case REDIS_REPLY_MAP:
-    case REDIS_REPLY_ATTR:
     case REDIS_REPLY_SET:
     case REDIS_REPLY_PUSH:
         return processAggregateItem(r);

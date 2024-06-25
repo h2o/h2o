@@ -102,7 +102,6 @@ void freeReplyObject(void *reply) {
         break; /* Nothing to free */
     case REDIS_REPLY_ARRAY:
     case REDIS_REPLY_MAP:
-    case REDIS_REPLY_ATTR:
     case REDIS_REPLY_SET:
     case REDIS_REPLY_PUSH:
         if (r->element != NULL) {
@@ -161,7 +160,6 @@ static void *createStringObject(const redisReadTask *task, char *str, size_t len
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -194,7 +192,6 @@ static void *createArrayObject(const redisReadTask *task, size_t elements) {
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -215,7 +212,6 @@ static void *createIntegerObject(const redisReadTask *task, long long value) {
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -253,7 +249,6 @@ static void *createDoubleObject(const redisReadTask *task, double value, char *s
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -272,7 +267,6 @@ static void *createNilObject(const redisReadTask *task) {
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -293,7 +287,6 @@ static void *createBoolObject(const redisReadTask *task, int bval) {
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
-               parent->type == REDIS_REPLY_ATTR ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
         parent->element[task->idx] = r;
@@ -399,12 +392,12 @@ int redisvFormatCommand(char **target, const char *format, va_list ap) {
                     while (*_p != '\0' && strchr(flags,*_p) != NULL) _p++;
 
                     /* Field width */
-                    while (*_p != '\0' && isdigit((int) *_p)) _p++;
+                    while (*_p != '\0' && isdigit(*_p)) _p++;
 
                     /* Precision */
                     if (*_p == '.') {
                         _p++;
-                        while (*_p != '\0' && isdigit((int) *_p)) _p++;
+                        while (*_p != '\0' && isdigit(*_p)) _p++;
                     }
 
                     /* Copy va_list before consuming with va_arg */
@@ -867,9 +860,7 @@ redisContext *redisConnectWithOptions(const redisOptions *options) {
         return NULL;
     }
 
-    if (c->err == 0 && c->fd != REDIS_INVALID_FD &&
-        options->command_timeout != NULL && (c->flags & REDIS_BLOCK))
-    {
+    if (options->command_timeout != NULL && (c->flags & REDIS_BLOCK) && c->fd != REDIS_INVALID_FD) {
         redisContextSetTimeout(c, *options->command_timeout);
     }
 
@@ -951,18 +942,11 @@ int redisSetTimeout(redisContext *c, const struct timeval tv) {
     return REDIS_ERR;
 }
 
-int redisEnableKeepAliveWithInterval(redisContext *c, int interval) {
-    return redisKeepAlive(c, interval);
-}
-
 /* Enable connection KeepAlive. */
 int redisEnableKeepAlive(redisContext *c) {
-    return redisKeepAlive(c, REDIS_KEEPALIVE_INTERVAL);
-}
-
-/* Set the socket option TCP_USER_TIMEOUT. */
-int redisSetTcpUserTimeout(redisContext *c, unsigned int timeout) {
-    return redisContextSetTcpUserTimeout(c, timeout);
+    if (redisKeepAlive(c, REDIS_KEEPALIVE_INTERVAL) != REDIS_OK)
+        return REDIS_ERR;
+    return REDIS_OK;
 }
 
 /* Set a user provided RESP3 PUSH handler and return any old one set. */

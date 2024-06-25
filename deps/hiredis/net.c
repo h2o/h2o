@@ -41,7 +41,6 @@
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
-#include <time.h>
 
 #include "net.h"
 #include "sds.h"
@@ -173,10 +172,6 @@ int redisKeepAlive(redisContext *c, int interval) {
     int val = 1;
     redisFD fd = c->fd;
 
-    /* TCP_KEEPALIVE makes no sense with AF_UNIX connections */
-    if (c->connection_type == REDIS_CONN_UNIX)
-        return REDIS_ERR;
-
 #ifndef _WIN32
     if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof(val)) == -1){
         __redisSetError(c,REDIS_ERR_OTHER,strerror(errno));
@@ -233,23 +228,6 @@ int redisSetTcpNoDelay(redisContext *c) {
     return REDIS_OK;
 }
 
-int redisContextSetTcpUserTimeout(redisContext *c, unsigned int timeout) {
-    int res;
-#ifdef TCP_USER_TIMEOUT
-    res = setsockopt(c->fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &timeout, sizeof(timeout));
-#else
-    res = -1;
-    errno = ENOTSUP;
-    (void)timeout;
-#endif
-    if (res == -1) {
-        __redisSetErrorFromErrno(c,REDIS_ERR_IO,"setsockopt(TCP_USER_TIMEOUT)");
-        redisNetClose(c);
-        return REDIS_ERR;
-    }
-    return REDIS_OK;
-}
-
 #define __MAX_MSEC (((LONG_MAX) - 999) / 1000)
 
 static int redisContextTimeoutMsec(redisContext *c, long *result)
@@ -276,54 +254,37 @@ static int redisContextTimeoutMsec(redisContext *c, long *result)
     return REDIS_OK;
 }
 
-static long redisPollMillis(void) {
-#ifndef _MSC_VER
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    return (now.tv_sec * 1000) + now.tv_nsec / 1000000;
-#else
-    FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);
-    return (((long long)ft.dwHighDateTime << 32) | ft.dwLowDateTime) / 10;
-#endif
-}
-
 static int redisContextWaitReady(redisContext *c, long msec) {
-    struct pollfd wfd;
-    long end;
-    int res;
+    struct pollfd   wfd[1];
 
-    if (errno != EINPROGRESS) {
-        __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
-        redisNetClose(c);
-        return REDIS_ERR;
-    }
+    wfd[0].fd     = c->fd;
+    wfd[0].events = POLLOUT;
 
-    wfd.fd = c->fd;
-    wfd.events = POLLOUT;
-    end = msec >= 0 ? redisPollMillis() + msec : 0;
+    if (errno == EINPROGRESS) {
+        int res;
 
-    while ((res = poll(&wfd, 1, msec)) <= 0) {
-        if (res < 0 && errno != EINTR) {
+        if ((res = poll(wfd, 1, msec)) == -1) {
             __redisSetErrorFromErrno(c, REDIS_ERR_IO, "poll(2)");
             redisNetClose(c);
             return REDIS_ERR;
-        } else if (res == 0 || (msec >= 0 && redisPollMillis() >= end)) {
+        } else if (res == 0) {
             errno = ETIMEDOUT;
-            __redisSetErrorFromErrno(c, REDIS_ERR_IO, NULL);
+            __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
             redisNetClose(c);
             return REDIS_ERR;
-        } else {
-            /* res < 0 && errno == EINTR, try again */
         }
+
+        if (redisCheckConnectDone(c, &res) != REDIS_OK || res == 0) {
+            redisCheckSocketError(c);
+            return REDIS_ERR;
+        }
+
+        return REDIS_OK;
     }
 
-    if (redisCheckConnectDone(c, &res) != REDIS_OK || res == 0) {
-        redisCheckSocketError(c);
-        return REDIS_ERR;
-    }
-
-    return REDIS_OK;
+    __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
+    redisNetClose(c);
+    return REDIS_ERR;
 }
 
 int redisCheckConnectDone(redisContext *c, int *completed) {

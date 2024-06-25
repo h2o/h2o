@@ -159,7 +159,6 @@ static int redisLibuvAttach(redisAsyncContext* ac, uv_loop_t* loop) {
     memset(p, 0, sizeof(*p));
 
     if (uv_poll_init_socket(loop, &p->handle, c->fd) != 0) {
-        hi_free(p);
         return REDIS_ERR;
     }
 

@@ -60,7 +60,7 @@ jobs:
     steps:
     - name: Install qemu
       if: matrix.emulator
-      run: sudo apt-get update && sudo apt-get install -y qemu-user
+      run: sudo apt-get install -y qemu-user
     - name: Install platform toolset
       if: matrix.toolset
       run: sudo apt-get install -y gcc-${{matrix.toolset}}
@@ -82,14 +82,12 @@ jobs:
     steps:
       - uses: microsoft/setup-msbuild@v1.0.2
       - uses: actions/checkout@v3
-      - name: Run CMake (shared lib)
-        run: cmake -Wno-dev CMakeLists.txt
-      - name: Build hiredis (shared lib)
+      - name: Run CMake
+        run: cmake -Wno-dev CmakeLists.txt
+      - name: Build hiredis
         run: MSBuild hiredis.vcxproj /p:Configuration=Debug
-      - name: Run CMake (static lib)
-        run: cmake -Wno-dev CMakeLists.txt -DBUILD_SHARED_LIBS=OFF
-      - name: Build hiredis (static lib)
-        run: MSBuild hiredis.vcxproj /p:Configuration=Debug
+      - name: Build hiredis_static
+        run: MSBuild hiredis_static.vcxproj /p:Configuration=Debug
       - name: Build hiredis-test
         run: MSBuild hiredis-test.vcxproj /p:Configuration=Debug
       # use memurai, redis compatible server, since it is easy to install.  Can't

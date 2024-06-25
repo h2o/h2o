@@ -46,9 +46,9 @@ typedef long long ssize_t;
 #include "alloc.h" /* for allocation wrappers */
 
 #define HIREDIS_MAJOR 1
-#define HIREDIS_MINOR 2
+#define HIREDIS_MINOR 1
 #define HIREDIS_PATCH 0
-#define HIREDIS_SONAME 1.2.1-dev
+#define HIREDIS_SONAME 1.1.0
 
 /* Connection type can be blocking or non-blocking and is set in the
  * least significant bit of the flags field in redisContext. */
@@ -154,17 +154,23 @@ struct redisSsl;
 
 #define REDIS_OPT_NONBLOCK 0x01
 #define REDIS_OPT_REUSEADDR 0x02
-#define REDIS_OPT_NOAUTOFREE 0x04        /* Don't automatically free the async
-                                          * object on a connection failure, or
-                                          * other implicit conditions. Only free
-                                          * on an explicit call to disconnect()
-                                          * or free() */
-#define REDIS_OPT_NO_PUSH_AUTOFREE 0x08  /* Don't automatically intercept and
-                                          * free RESP3 PUSH replies. */
-#define REDIS_OPT_NOAUTOFREEREPLIES 0x10 /* Don't automatically free replies. */
-#define REDIS_OPT_PREFER_IPV4 0x20       /* Prefer IPv4 in DNS lookups. */
-#define REDIS_OPT_PREFER_IPV6 0x40       /* Prefer IPv6 in DNS lookups. */
+#define REDIS_OPT_PREFER_IPV4 0x04
+#define REDIS_OPT_PREFER_IPV6 0x08
 #define REDIS_OPT_PREFER_IP_UNSPEC (REDIS_OPT_PREFER_IPV4 | REDIS_OPT_PREFER_IPV6)
+
+/**
+ * Don't automatically free the async object on a connection failure,
+ * or other implicit conditions. Only free on an explicit call to disconnect() or free()
+ */
+#define REDIS_OPT_NOAUTOFREE 0x04
+
+/* Don't automatically intercept and free RESP3 PUSH replies. */
+#define REDIS_OPT_NO_PUSH_AUTOFREE 0x08
+
+/**
+ * Don't automatically free replies
+ */
+#define REDIS_OPT_NOAUTOFREEREPLIES 0x10
 
 /* In Unix systems a file descriptor is a regular signed int, with -1
  * representing an invalid descriptor. In Windows it is a SOCKET
@@ -322,8 +328,6 @@ int redisReconnect(redisContext *c);
 redisPushFn *redisSetPushCallback(redisContext *c, redisPushFn *fn);
 int redisSetTimeout(redisContext *c, const struct timeval tv);
 int redisEnableKeepAlive(redisContext *c);
-int redisEnableKeepAliveWithInterval(redisContext *c, int interval);
-int redisSetTcpUserTimeout(redisContext *c, unsigned int timeout);
 void redisFree(redisContext *c);
 redisFD redisFreeKeepFd(redisContext *c);
 int redisBufferRead(redisContext *c);

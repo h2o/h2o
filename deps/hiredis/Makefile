@@ -39,11 +39,7 @@ export REDIS_TEST_CONFIG
 CC:=$(shell sh -c 'type $${CC%% *} >/dev/null 2>/dev/null && echo $(CC) || echo gcc')
 CXX:=$(shell sh -c 'type $${CXX%% *} >/dev/null 2>/dev/null && echo $(CXX) || echo g++')
 OPTIMIZATION?=-O3
-WARNINGS=-Wall -Wextra -Wstrict-prototypes -Wwrite-strings -Wno-missing-field-initializers
-USE_WERROR?=1
-ifeq ($(USE_WERROR),1)
-  WARNINGS+=-Werror
-endif
+WARNINGS=-Wall -W -Wstrict-prototypes -Wwrite-strings -Wno-missing-field-initializers
 DEBUG_FLAGS?= -g -ggdb
 REAL_CFLAGS=$(OPTIMIZATION) -fPIC $(CPPFLAGS) $(CFLAGS) $(WARNINGS) $(DEBUG_FLAGS) $(PLATFORM_FLAGS)
 REAL_LDFLAGS=$(LDFLAGS)
@@ -96,25 +92,18 @@ ifeq ($(TEST_ASYNC),1)
 endif
 
 ifeq ($(USE_SSL),1)
-  ifndef OPENSSL_PREFIX
-    ifeq ($(uname_S),Darwin)
-      SEARCH_PATH1=/opt/homebrew/opt/openssl
-      SEARCH_PATH2=/usr/local/opt/openssl
-
-      ifneq ($(wildcard $(SEARCH_PATH1)),)
-        OPENSSL_PREFIX=$(SEARCH_PATH1)
-      else ifneq ($(wildcard $(SEARCH_PATH2)),)
-        OPENSSL_PREFIX=$(SEARCH_PATH2)
-      endif
+  ifeq ($(uname_S),Linux)
+    ifdef OPENSSL_PREFIX
+      CFLAGS+=-I$(OPENSSL_PREFIX)/include
+      SSL_LDFLAGS+=-L$(OPENSSL_PREFIX)/lib -lssl -lcrypto
+    else
+      SSL_LDFLAGS=-lssl -lcrypto
     endif
-  endif
-
-  ifdef OPENSSL_PREFIX
+  else
+    OPENSSL_PREFIX?=/usr/local/opt/openssl
     CFLAGS+=-I$(OPENSSL_PREFIX)/include
-    SSL_LDFLAGS+=-L$(OPENSSL_PREFIX)/lib
+    SSL_LDFLAGS+=-L$(OPENSSL_PREFIX)/lib -lssl -lcrypto
   endif
-
-  SSL_LDFLAGS+=-lssl -lcrypto
 endif
 
 ifeq ($(uname_S),FreeBSD)
@@ -315,7 +304,7 @@ install: $(DYLIBNAME) $(STLIBNAME) $(PKGCONFNAME) $(SSL_INSTALL)
 	$(INSTALL) hiredis.h async.h read.h sds.h alloc.h sockcompat.h $(INSTALL_INCLUDE_PATH)
 	$(INSTALL) adapters/*.h $(INSTALL_INCLUDE_PATH)/adapters
 	$(INSTALL) $(DYLIBNAME) $(INSTALL_LIBRARY_PATH)/$(DYLIB_MINOR_NAME)
-	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(DYLIB_MINOR_NAME) $(DYLIBNAME) && ln -sf $(DYLIB_MINOR_NAME) $(DYLIB_MAJOR_NAME)
+	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(DYLIB_MINOR_NAME) $(DYLIBNAME)
 	$(INSTALL) $(STLIBNAME) $(INSTALL_LIBRARY_PATH)
 	mkdir -p $(INSTALL_PKGCONF_PATH)
 	$(INSTALL) $(PKGCONFNAME) $(INSTALL_PKGCONF_PATH)
@@ -324,7 +313,7 @@ install-ssl: $(SSL_DYLIBNAME) $(SSL_STLIBNAME) $(SSL_PKGCONFNAME)
 	mkdir -p $(INSTALL_INCLUDE_PATH) $(INSTALL_LIBRARY_PATH)
 	$(INSTALL) hiredis_ssl.h $(INSTALL_INCLUDE_PATH)
 	$(INSTALL) $(SSL_DYLIBNAME) $(INSTALL_LIBRARY_PATH)/$(SSL_DYLIB_MINOR_NAME)
-	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(SSL_DYLIB_MINOR_NAME) $(SSL_DYLIBNAME) && ln -sf $(SSL_DYLIB_MINOR_NAME) $(SSL_DYLIB_MAJOR_NAME)
+	cd $(INSTALL_LIBRARY_PATH) && ln -sf $(SSL_DYLIB_MINOR_NAME) $(SSL_DYLIBNAME)
 	$(INSTALL) $(SSL_STLIBNAME) $(INSTALL_LIBRARY_PATH)
 	mkdir -p $(INSTALL_PKGCONF_PATH)
 	$(INSTALL) $(SSL_PKGCONFNAME) $(INSTALL_PKGCONF_PATH)

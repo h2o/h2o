@@ -37,12 +37,6 @@ IF (LIBUV)
     TARGET_LINK_LIBRARIES(example-libuv hiredis uv)
 ENDIF()
 
-FIND_PATH(LIBSDEVENT systemd/sd-event.h)
-IF (LIBSDEVENT)
-    ADD_EXECUTABLE(example-libsdevent example-libsdevent.c)
-    TARGET_LINK_LIBRARIES(example-libsdevent hiredis systemd)
-ENDIF()
-
 IF (APPLE)
     FIND_LIBRARY(CF CoreFoundation)
     ADD_EXECUTABLE(example-macosx example-macosx.c)
