@@ -287,7 +287,7 @@ IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	file(GLOB SPECIAL_SRC_FILES
         	"deps/hiredis/*"
 		"lib/common/memory.c")
-	set_source_files_properties(${SPECIAL_SRC_FILES} PROPERTIES COMPILE_FLAGS -Wno_GNU_SOURCE)
+	set_source_files_properties(${SPECIAL_SRC_FILES} PROPERTIES COMPILE_FLAGS -U_GNU_SOURCE)
 	#SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_MUSL_LIB")
     ENDIF ()
 ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
