@@ -284,8 +284,10 @@ ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread -D_GNU_SOURCE")
     IF ("${${DISTRO}}" STREQUAL "alpine")
-	    set_source_files_properties(deps/hiredis/hiredis.h PROPERTIES COMPILE_FLAGS -Wno_GNU_SOURCE)
-	    set_source_files_properties(lib/common/memory.c PROPERTIES COMPILE_FLAGS -Wno_GNU_SOURCE)
+	file(GLOB SPECIAL_SRC_FILES
+        	"deps/hiredis/*"
+		"lib/common/memory.c")
+	set_source_files_properties(${SPECIAL_SRC_FILES} PROPERTIES COMPILE_FLAGS -Wno_GNU_SOURCE)
 	#SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D_MUSL_LIB")
     ENDIF ()
 ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
