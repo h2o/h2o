@@ -604,7 +604,7 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
 
 char *h2o_strerror_r(int err, char *buf, size_t len)
 {
-#if !(defined(_GNU_SOURCE) && defined(__gnu_linux__)) || _MUSL_LIB
+#if (!(defined(_GNU_SOURCE) && defined(__gnu_linux__))) || defined(_MUSL_LIB)
     strerror_r(err, buf, len);
     return buf;
 #else
