@@ -1002,7 +1002,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     struct st_on_client_hello_ptls_t *self = (struct st_on_client_hello_ptls_t *)_self;
     void *conn = *ptls_get_data_ptr(tls); /* either h2o_socket_t (TCP) or quicly_conn_t (QUIC) */
-    int conn_is_quic = self->listener->quic.ctx != NULL, ret = 0;
+    int conn_is_quic = is_quic_listener(self->listener), ret = 0;
     struct listener_ssl_config_t *ssl_config;
 
     /* determine ssl_config based on SNI */
@@ -1436,7 +1436,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                    pctx->ctx.certificates.list[0].len);
     pctx->ctx.ticket_context.is_set = 1;
 
-    if (listener->quic.ctx != NULL) {
+    if (is_quic_listener(listener)) {
 #if H2O_USE_FUSION
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
         if (ptls_fusion_is_supported_by_cpu()) {
@@ -2050,9 +2050,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     if (use_picotls) {
         if (cipher_suite_tls13_node != NULL &&
-            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
+            (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, is_quic_listener(listener))) == NULL)
             goto Error;
-    } else if (listener->quic.ctx != NULL) {
+    } else if (is_quic_listener(listener)) {
         h2o_configurator_errprintf(cmd, *ssl_node, "QUIC support requires TLS 1.3 using picotls");
         goto Error;
     }
@@ -2162,13 +2162,13 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                                             ech.create_opener, ech.retry_configs);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
-                if (identity != ssl_config->identities || listener->quic.ctx != NULL) {
+                if (identity != ssl_config->identities || is_quic_listener(listener)) {
                     h2o_configurator_errprintf(cmd, *ssl_node, "%s", errstr);
                     goto Error;
                 }
                 h2o_configurator_errprintf(cmd, *ssl_node, "%s; TLS 1.3 will be disabled", errstr);
             }
-            if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
+            if (is_quic_listener(listener) && listener->quic.ctx->tls == NULL)
                 listener->quic.ctx->tls = ssl_config->identities[0].ptls.ctx;
         } else if (raw_pubkey.base != NULL) {
             h2o_configurator_errprintf(cmd, *parsed->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
@@ -2232,7 +2232,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* congestion control is a concept of the transport but we want to control it per-host, hence defined here */
     if (cc_node != NULL) {
-        if (listener->quic.ctx == NULL) {
+        if (!is_quic_listener(listener)) {
             /* TCP; CC name is kept in the SSL config */
             ssl_config->cc.tcp = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
         } else {
@@ -2254,7 +2254,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     /* initcwnd */
     if (initcwnd_node != NULL) {
-        if (listener->quic.ctx == NULL) {
+        if (!is_quic_listener(listener)) {
             /* TCP; skip as there's no way of setting */
         } else {
             /* QUIC */
@@ -2278,7 +2278,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener = conf.listeners[i];
         if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr, 1) == 0 &&
-            (listener->quic.ctx != NULL) == is_quic)
+            (is_quic_listener(listener)) == is_quic)
             return listener;
     }
 
@@ -4064,6 +4064,11 @@ ExitNoDecrements:
     return &conn->super;
 }
 
+static inline int is_quic_listener(struct listener_config_t *listener)
+{
+    return listener->quic.ctx != NULL;
+}
+
 static void update_listener_state(struct listener_ctx_t *listeners)
 {
     size_t i;
@@ -4158,7 +4163,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
         listeners[i].sock->data = listeners + i;
         /* setup quic context and the unix socket to receive forwarded packets */
-        if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
+        if (thread_index < conf.quic.num_threads && is_quic_listener(listener_config)) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
                                           conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
                                           &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
@@ -4215,7 +4220,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* shutdown requested, unregister, close the listeners and notify the protocol handlers */
     for (i = 0; i != conf.num_listeners; ++i) {
-        if (conf.listeners[i]->quic.ctx == NULL)
+        if (!is_quic_listener(conf.listeners[i]) && !is_reverse_listener(conf.listeners[i]))
             h2o_socket_read_stop(listeners[i].sock);
     }
     h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
@@ -4286,7 +4291,7 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
             char host[NI_MAXHOST], serv[NI_MAXSERV + 1];
             int err;
             /* add "u" prefix if binding to a UDP port */
-            if (conf.listeners[i]->quic.ctx != NULL) {
+            if (is_quic_listener(conf.listeners[i])) {
                 strcpy(serv, "u");
             } else {
                 serv[0] = '\0';
@@ -5005,7 +5010,7 @@ int main(int argc, char **argv)
                 h2o_vector_reserve(NULL, &ssl_contexts, ssl_contexts.size + 1);
                 ssl_contexts.entries[ssl_contexts.size++] = conf.listeners[i]->ssl.entries[j]->identities[0].ossl;
             }
-            if (conf.listeners[i]->quic.ctx != NULL)
+            if (is_quic_listener(conf.listeners[i]))
                 has_quic = 1;
             conf.listeners[i]->quic.thread_fds = h2o_mem_alloc(conf.quic.num_threads * sizeof(*conf.listeners[i]->quic.thread_fds));
             for (j = 0; j != conf.quic.num_threads; ++j)
@@ -5031,9 +5036,8 @@ int main(int argc, char **argv)
 
     /* apply HTTP/3 global configuraton to the listeners */
     for (size_t i = 0; i != conf.num_listeners; ++i) {
-        quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
-            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
+        if (is_quic_listener(conf.listeners[i]))
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, conf.listeners[i]->quic.ctx);
     }
 
     /* all setup should be complete by now */
