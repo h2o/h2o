@@ -57,9 +57,13 @@ typedef struct st_quicly_sent_packet_t {
      */
     uint8_t frames_in_flight : 1;
     /**
-     * 
+     *
      */
     uint8_t cc_limited : 1;
+    /**
+     * if sent on a promoted path
+     */
+    uint8_t promoted_path : 1;
     /**
      * number of bytes in-flight for the packet, from the context of CC (becomes zero when deemed lost, but not when PTO fires)
      */
@@ -256,7 +260,7 @@ int quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_
 /**
  * commits a write
  */
-static void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited);
+static void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited, int promoted_path);
 /**
  * Allocates a slot to contain a callback for a frame.  The function MUST be called after _prepare but before _commit.
  */
@@ -294,7 +298,7 @@ inline int quicly_sentmap_is_open(quicly_sentmap_t *map)
     return map->_pending_packet != NULL;
 }
 
-inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited)
+inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited, int promoted_path)
 {
     assert(quicly_sentmap_is_open(map));
 
@@ -305,6 +309,8 @@ inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_fligh
         map->bytes_in_flight += bytes_in_flight;
     }
     map->_pending_packet->data.packet.frames_in_flight = 1;
+    if (promoted_path)
+        map->_pending_packet->data.packet.promoted_path = 1;
     map->_pending_packet = NULL;
 
     ++map->num_packets;
