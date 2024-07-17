@@ -104,6 +104,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
   H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_NEW_PATH,
+  H2OLOG_EVENT_ID_QUICLY_DELETE_PATH,
+  H2OLOG_EVENT_ID_QUICLY_PROMOTE_PATH,
+  H2OLOG_EVENT_ID_QUICLY_ELICIT_PATH_MIGRATION,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE,
@@ -159,6 +163,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_ECN_VALIDATION,
   H2OLOG_EVENT_ID_QUICLY_ECN_CONGESTION,
+  H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_SEND,
+  H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_SEND,
+  H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_DATAGRAM_SEND,
   H2OLOG_EVENT_ID_QUICLY_DATAGRAM_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_ACK_FREQUENCY_RECEIVE,
@@ -270,6 +278,27 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } stateless_reset_receive;
+    struct { // quicly:new_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+      char remote[STR_LEN];
+    } new_path;
+    struct { // quicly:delete_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } delete_path;
+    struct { // quicly:promote_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } promote_path;
+    struct { // quicly:elicit_path_migration
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } elicit_path_migration;
     struct { // quicly:crypto_handshake
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -603,6 +632,30 @@ struct h2olog_event_t {
       int64_t at;
       uint64_t ce_count;
     } ecn_congestion;
+    struct { // quicly:path_challenge_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_challenge_send;
+    struct { // quicly:path_challenge_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_challenge_receive;
+    struct { // quicly:path_response_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_response_send;
+    struct { // quicly:path_response_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_response_receive;
     struct { // quicly:datagram_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -909,6 +962,10 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "handshake_timeout", "trace_quicly__handshake_timeout"),
     h2o_tracer::usdt("quicly", "initial_handshake_packet_exceed", "trace_quicly__initial_handshake_packet_exceed"),
     h2o_tracer::usdt("quicly", "stateless_reset_receive", "trace_quicly__stateless_reset_receive"),
+    h2o_tracer::usdt("quicly", "new_path", "trace_quicly__new_path"),
+    h2o_tracer::usdt("quicly", "delete_path", "trace_quicly__delete_path"),
+    h2o_tracer::usdt("quicly", "promote_path", "trace_quicly__promote_path"),
+    h2o_tracer::usdt("quicly", "elicit_path_migration", "trace_quicly__elicit_path_migration"),
     h2o_tracer::usdt("quicly", "crypto_handshake", "trace_quicly__crypto_handshake"),
     h2o_tracer::usdt("quicly", "crypto_update_secret", "trace_quicly__crypto_update_secret"),
     h2o_tracer::usdt("quicly", "crypto_send_key_update", "trace_quicly__crypto_send_key_update"),
@@ -964,6 +1021,10 @@ void h2o_raw_tracer::initialize() {
     h2o_tracer::usdt("quicly", "stream_data_blocked_receive", "trace_quicly__stream_data_blocked_receive"),
     h2o_tracer::usdt("quicly", "ecn_validation", "trace_quicly__ecn_validation"),
     h2o_tracer::usdt("quicly", "ecn_congestion", "trace_quicly__ecn_congestion"),
+    h2o_tracer::usdt("quicly", "path_challenge_send", "trace_quicly__path_challenge_send"),
+    h2o_tracer::usdt("quicly", "path_challenge_receive", "trace_quicly__path_challenge_receive"),
+    h2o_tracer::usdt("quicly", "path_response_send", "trace_quicly__path_response_send"),
+    h2o_tracer::usdt("quicly", "path_response_receive", "trace_quicly__path_response_receive"),
     h2o_tracer::usdt("quicly", "datagram_send", "trace_quicly__datagram_send"),
     h2o_tracer::usdt("quicly", "datagram_receive", "trace_quicly__datagram_receive"),
     h2o_tracer::usdt("quicly", "ack_frequency_receive", "trace_quicly__ack_frequency_receive"),
@@ -1123,6 +1184,43 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("seq"), seq_);
     json_write_pair_c(out_, STR_LIT("conn"), event.stateless_reset_receive.conn_master_id);
     json_write_pair_c(out_, STR_LIT("time"), event.stateless_reset_receive.at);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_NEW_PATH: { // quicly:new_path
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("new-path"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.new_path.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.new_path.at);
+    json_write_pair_c(out_, STR_LIT("path-index"), event.new_path.path_index);
+    json_write_pair_c(out_, STR_LIT("remote"), event.new_path.remote, strlen(event.new_path.remote));
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_DELETE_PATH: { // quicly:delete_path
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("delete-path"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.delete_path.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.delete_path.at);
+    json_write_pair_c(out_, STR_LIT("path-index"), event.delete_path.path_index);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_PROMOTE_PATH: { // quicly:promote_path
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("promote-path"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.promote_path.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.promote_path.at);
+    json_write_pair_c(out_, STR_LIT("path-index"), event.promote_path.path_index);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_ELICIT_PATH_MIGRATION: { // quicly:elicit_path_migration
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("elicit-path-migration"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.elicit_path_migration.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.elicit_path_migration.at);
+    json_write_pair_c(out_, STR_LIT("path-index"), event.elicit_path_migration.path_index);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE: { // quicly:crypto_handshake
@@ -1686,6 +1784,46 @@ void h2o_raw_tracer::do_handle_event(const void *data, int data_len) {
     json_write_pair_c(out_, STR_LIT("conn"), event.ecn_congestion.conn_master_id);
     json_write_pair_c(out_, STR_LIT("time"), event.ecn_congestion.at);
     json_write_pair_c(out_, STR_LIT("ce-count"), event.ecn_congestion.ce_count);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_SEND: { // quicly:path_challenge_send
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("path-challenge-send"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.path_challenge_send.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.path_challenge_send.at);
+    json_write_pair_c(out_, STR_LIT("bytes"), event.path_challenge_send.bytes, (event.path_challenge_send.bytes_len < STR_LEN ? event.path_challenge_send.bytes_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.path_challenge_send.bytes_len);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_RECEIVE: { // quicly:path_challenge_receive
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("path-challenge-receive"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.path_challenge_receive.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.path_challenge_receive.at);
+    json_write_pair_c(out_, STR_LIT("bytes"), event.path_challenge_receive.bytes, (event.path_challenge_receive.bytes_len < STR_LEN ? event.path_challenge_receive.bytes_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.path_challenge_receive.bytes_len);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_SEND: { // quicly:path_response_send
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("path-response-send"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.path_response_send.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.path_response_send.at);
+    json_write_pair_c(out_, STR_LIT("bytes"), event.path_response_send.bytes, (event.path_response_send.bytes_len < STR_LEN ? event.path_response_send.bytes_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.path_response_send.bytes_len);
+    break;
+  }
+  case H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_RECEIVE: { // quicly:path_response_receive
+    json_write_pair_n(out_, STR_LIT("type"), STR_LIT("path-response-receive"));
+    json_write_pair_c(out_, STR_LIT("tid"), event.tid);
+    json_write_pair_c(out_, STR_LIT("seq"), seq_);
+    json_write_pair_c(out_, STR_LIT("conn"), event.path_response_receive.conn_master_id);
+    json_write_pair_c(out_, STR_LIT("time"), event.path_response_receive.at);
+    json_write_pair_c(out_, STR_LIT("bytes"), event.path_response_receive.bytes, (event.path_response_receive.bytes_len < STR_LEN ? event.path_response_receive.bytes_len : STR_LEN));
+    json_write_pair_c(out_, STR_LIT("bytes-len"), event.path_response_receive.bytes_len);
     break;
   }
   case H2OLOG_EVENT_ID_QUICLY_DATAGRAM_SEND: { // quicly:datagram_send
@@ -2259,6 +2397,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_HANDSHAKE_TIMEOUT,
   H2OLOG_EVENT_ID_QUICLY_INITIAL_HANDSHAKE_PACKET_EXCEED,
   H2OLOG_EVENT_ID_QUICLY_STATELESS_RESET_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_NEW_PATH,
+  H2OLOG_EVENT_ID_QUICLY_DELETE_PATH,
+  H2OLOG_EVENT_ID_QUICLY_PROMOTE_PATH,
+  H2OLOG_EVENT_ID_QUICLY_ELICIT_PATH_MIGRATION,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_HANDSHAKE,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_UPDATE_SECRET,
   H2OLOG_EVENT_ID_QUICLY_CRYPTO_SEND_KEY_UPDATE,
@@ -2314,6 +2456,10 @@ enum h2olog_event_id_t {
   H2OLOG_EVENT_ID_QUICLY_STREAM_DATA_BLOCKED_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_ECN_VALIDATION,
   H2OLOG_EVENT_ID_QUICLY_ECN_CONGESTION,
+  H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_SEND,
+  H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_RECEIVE,
+  H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_SEND,
+  H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_DATAGRAM_SEND,
   H2OLOG_EVENT_ID_QUICLY_DATAGRAM_RECEIVE,
   H2OLOG_EVENT_ID_QUICLY_ACK_FREQUENCY_RECEIVE,
@@ -2425,6 +2571,27 @@ struct h2olog_event_t {
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
     } stateless_reset_receive;
+    struct { // quicly:new_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+      char remote[STR_LEN];
+    } new_path;
+    struct { // quicly:delete_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } delete_path;
+    struct { // quicly:promote_path
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } promote_path;
+    struct { // quicly:elicit_path_migration
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      size_t path_index;
+    } elicit_path_migration;
     struct { // quicly:crypto_handshake
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -2758,6 +2925,30 @@ struct h2olog_event_t {
       int64_t at;
       uint64_t ce_count;
     } ecn_congestion;
+    struct { // quicly:path_challenge_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_challenge_send;
+    struct { // quicly:path_challenge_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_challenge_receive;
+    struct { // quicly:path_response_send
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_response_send;
+    struct { // quicly:path_response_receive
+      typeof_st_quicly_conn_t__master_id conn_master_id;
+      int64_t at;
+      uint8_t bytes[STR_LEN];
+      size_t bytes_len;
+    } path_response_receive;
     struct { // quicly:datagram_send
       typeof_st_quicly_conn_t__master_id conn_master_id;
       int64_t at;
@@ -3312,6 +3503,102 @@ int trace_quicly__stateless_reset_receive(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__stateless_reset_receive\n");
+
+  return 0;
+}
+// quicly:new_path
+int trace_quicly__new_path(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_NEW_PATH, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.new_path.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.new_path.at);
+  }
+  { // size_t path_index
+    bpf_usdt_readarg(3, ctx, &event.new_path.path_index);
+  }
+  { // const char * remote
+    bpf_usdt_readarg(4, ctx, &buf);
+    bpf_probe_read(&event.new_path.remote, sizeof(event.new_path.remote), buf);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__new_path\n");
+
+  return 0;
+}
+// quicly:delete_path
+int trace_quicly__delete_path(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_DELETE_PATH, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.delete_path.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.delete_path.at);
+  }
+  { // size_t path_index
+    bpf_usdt_readarg(3, ctx, &event.delete_path.path_index);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__delete_path\n");
+
+  return 0;
+}
+// quicly:promote_path
+int trace_quicly__promote_path(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PROMOTE_PATH, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.promote_path.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.promote_path.at);
+  }
+  { // size_t path_index
+    bpf_usdt_readarg(3, ctx, &event.promote_path.path_index);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__promote_path\n");
+
+  return 0;
+}
+// quicly:elicit_path_migration
+int trace_quicly__elicit_path_migration(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_ELICIT_PATH_MIGRATION, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.elicit_path_migration.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.elicit_path_migration.at);
+  }
+  { // size_t path_index
+    bpf_usdt_readarg(3, ctx, &event.elicit_path_migration.path_index);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__elicit_path_migration\n");
 
   return 0;
 }
@@ -4777,6 +5064,114 @@ int trace_quicly__ecn_congestion(struct pt_regs *ctx) {
 
   if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
     bpf_trace_printk("failed to perf_submit in trace_quicly__ecn_congestion\n");
+
+  return 0;
+}
+// quicly:path_challenge_send
+int trace_quicly__path_challenge_send(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.path_challenge_send.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.path_challenge_send.at);
+  }
+  { // const void * bytes
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.path_challenge_send.bytes, sizeof(event.path_challenge_send.bytes), buf);
+  }
+  { // size_t bytes_len
+    bpf_usdt_readarg(4, ctx, &event.path_challenge_send.bytes_len);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__path_challenge_send\n");
+
+  return 0;
+}
+// quicly:path_challenge_receive
+int trace_quicly__path_challenge_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PATH_CHALLENGE_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.path_challenge_receive.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.path_challenge_receive.at);
+  }
+  { // const void * bytes
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.path_challenge_receive.bytes, sizeof(event.path_challenge_receive.bytes), buf);
+  }
+  { // size_t bytes_len
+    bpf_usdt_readarg(4, ctx, &event.path_challenge_receive.bytes_len);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__path_challenge_receive\n");
+
+  return 0;
+}
+// quicly:path_response_send
+int trace_quicly__path_response_send(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_SEND, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.path_response_send.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.path_response_send.at);
+  }
+  { // const void * bytes
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.path_response_send.bytes, sizeof(event.path_response_send.bytes), buf);
+  }
+  { // size_t bytes_len
+    bpf_usdt_readarg(4, ctx, &event.path_response_send.bytes_len);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__path_response_send\n");
+
+  return 0;
+}
+// quicly:path_response_receive
+int trace_quicly__path_response_receive(struct pt_regs *ctx) {
+  const void *buf = NULL;
+  struct h2olog_event_t event = { .id = H2OLOG_EVENT_ID_QUICLY_PATH_RESPONSE_RECEIVE, .tid = (uint32_t)bpf_get_current_pid_tgid(), };
+
+  { // struct st_quicly_conn_t * conn
+    uint8_t conn[sizeof_st_quicly_conn_t] = {};
+    bpf_usdt_readarg(1, ctx, &buf);
+    bpf_probe_read(&conn, sizeof_st_quicly_conn_t, buf);
+    event.path_response_receive.conn_master_id = get_st_quicly_conn_t__master_id(conn);
+  }
+  { // int64_t at
+    bpf_usdt_readarg(2, ctx, &event.path_response_receive.at);
+  }
+  { // const void * bytes
+    bpf_usdt_readarg(3, ctx, &buf);
+    bpf_probe_read(&event.path_response_receive.bytes, sizeof(event.path_response_receive.bytes), buf);
+  }
+  { // size_t bytes_len
+    bpf_usdt_readarg(4, ctx, &event.path_response_receive.bytes_len);
+  }
+
+  if (events.perf_submit(ctx, &event, sizeof(event)) != 0)
+    bpf_trace_printk("failed to perf_submit in trace_quicly__path_response_receive\n");
 
   return 0;
 }
