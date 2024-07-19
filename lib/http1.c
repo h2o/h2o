@@ -998,10 +998,17 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
 {
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)_req->conn;
     h2o_sendvec_t bufs[inbufcnt + 1 + 2]; /* 1 for header, 2 for chunked encoding */
-    size_t bufcnt = 0, chunked_prefix_index = 0;
+    size_t bufcnt = 0, chunk_size = 0, chunked_prefix_index = 0;
 
     assert(&conn->req == _req);
     assert(_self == &conn->_ostr_final.super);
+
+    for (size_t i = 0; i != inbufcnt; ++i) {
+        assert(inbufs[i].len != 0);
+        chunk_size += inbufs[i].len;
+    }
+    assert(chunk_size != 0 || send_state != H2O_SEND_STATE_IN_PROGRESS || conn->_ostr_final.state == OSTREAM_STATE_HEAD ||
+           !"`h2o_send` can be called only when there is new information");
 
     if (conn->_ostr_final.informational.write_inflight) {
         conn->_ostr_final.informational.pending_final.inbufs = h2o_mem_alloc_pool(&conn->req.pool, h2o_sendvec_t, inbufcnt);
@@ -1044,15 +1051,13 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     if (conn->_ostr_final.chunked_buf != NULL)
         chunked_prefix_index = bufcnt++;
 
-    size_t bytes_sent = 0;
-    for (size_t i = 0; i != inbufcnt; ++i) {
+    for (size_t i = 0; i != inbufcnt; ++i)
         bufs[bufcnt++] = inbufs[i];
-        bytes_sent += inbufs[i].len;
-    }
-    conn->req.bytes_sent += bytes_sent;
+
+    conn->req.bytes_sent += chunk_size;
 
     if (conn->_ostr_final.chunked_buf != NULL) {
-        encode_chunked(bufs + chunked_prefix_index, bufs + bufcnt, send_state, bytes_sent, conn->req.send_server_timing != 0,
+        encode_chunked(bufs + chunked_prefix_index, bufs + bufcnt, send_state, chunk_size, conn->req.send_server_timing != 0,
                        conn->_ostr_final.chunked_buf);
         if (bufs[bufcnt].len != 0)
             ++bufcnt;
