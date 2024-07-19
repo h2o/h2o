@@ -2179,6 +2179,9 @@ h2o_mimemap_t *h2o_file_get_mimemap(h2o_file_handler_t *handler);
  */
 void h2o_file_register_configurator(h2o_globalconf_t *conf);
 
+void h2o_mishandler_register_configurator(h2o_globalconf_t *globalconf);
+h2o_handler_t *h2o_mishandler_register(h2o_pathconf_t *pathconf);
+
 /* lib/headers.c */
 
 enum {

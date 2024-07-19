@@ -430,6 +430,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/headers_util.c
     lib/handler/http2_debug_state.c
     lib/handler/mimemap.c
+    lib/handler/mishandler.c
     lib/handler/proxy.c
     lib/handler/connect.c
     lib/handler/redirect.c
@@ -453,6 +454,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/headers.c
     lib/handler/configurator/headers_util.c
     lib/handler/configurator/http2_debug_state.c
+    lib/handler/configurator/mishandler.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c

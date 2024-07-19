@@ -4563,6 +4563,7 @@ static void setup_configurators(void)
 #if H2O_USE_MRUBY
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
+    h2o_mishandler_register_configurator(&conf.globalconf);
     h2o_self_trace_register_configurator(&conf.globalconf);
     h2o_log_register_configurator(&conf.globalconf);
 
