@@ -3836,6 +3836,12 @@ static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_
     } else {
         /* STREAM frame: insert length if space can be left for more frames. Otherwise, retain STREAM frame header omitting the
          * length field, prepending PADDING if necessary. */
+#if 1 /* for the time being always emit the length field */
+        if (space_left < len_of_len) {
+            *len = dst_end - *dst - len_of_len;
+            *wrote_all = 0;
+        }
+#else
         if (space_left <= len_of_len) {
             if (space_left != 0) {
                 memmove(*frame_at + space_left, *frame_at, *dst + *len - *frame_at);
@@ -3846,6 +3852,7 @@ static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_
             *dst += *len;
             return;
         }
+#endif
         **frame_at |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
     }
 
