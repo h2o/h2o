@@ -48,6 +48,9 @@ h2o_balancer_t *h2o_balancer_create_rr(void);
 /* least connection */
 h2o_balancer_t *h2o_balancer_create_lc(void);
 
+/* best of two */
+h2o_balancer_t *h2o_balancer_create_bo2(void);
+
 #ifdef __cplusplus
 }
 #endif
