@@ -175,7 +175,7 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
         struct msghdr msg;
         do {
             msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
-        } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
+        } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags | MSG_NOSIGNAL)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
 
         if (wret == -1)
