@@ -917,16 +917,20 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 {
     ++loop->run_count;
 
-    /* update socket states, poll, set readable flags, perform pending writes */
+    /* Update socket states, poll, set readable flags, perform pending writes. */
     if (evloop_do_proceed(loop, max_wait) != 0)
         return -1;
 
-    /* run the pending callbacks */
+    /* Run the pending callbacks. */
     run_pending(loop);
 
-    /* run the expired timers at the same time invoking pending callbacks for every timer callback. This is an locality
-     * optimization; handles things like timeout -> write -> on_write_complete for each object. */
-    while (1) {
+    /* Run the expired timers at the same time invoking pending callbacks for every timer callback. This is an locality
+     * optimization; handles things like timeout -> write -> on_write_complete for each object.
+     * Expired timers are fetched and run at most 10 times, after which `h2o_evloop_run` returns even if there is a
+     * pending immediate timer. By doing so, we guarantee that the server can make progress by polling the socket, doing
+     * I/O, as well as running other operations coded in the caller of `h2s_evloop_run`, even if there is broken code
+     * that registers an immediate timer perpetually. */
+    for (int i = 0; i < 10; ++i) {
         h2o_linklist_t expired;
         h2o_linklist_init_anchor(&expired);
         h2o_timerwheel_get_expired(loop->_timeouts, loop->_now_millisec, &expired);

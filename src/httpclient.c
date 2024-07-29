@@ -95,6 +95,7 @@ static h2o_http3client_ctx_t h3ctx = {
     .max_frame_payload_size = 16384,
 };
 static quicly_cid_plaintext_t h3_next_cid;
+static const char *session_file = NULL;
 static const char *progname; /* refers to argv[0] */
 
 static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
@@ -103,17 +104,136 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
 
-static struct {
-    ptls_iovec_t token;
-    ptls_iovec_t ticket;
-    quicly_transport_parameters_t tp;
-} http3_session;
+static void load_session(const char *server_name, ptls_iovec_t *tls_session, quicly_transport_parameters_t *quic_tp,
+                         ptls_iovec_t *quic_address_token)
+{
+    uint8_t buf[2048];
+    size_t len;
+    int ret;
+
+    *tls_session = ptls_iovec_init(NULL, 0);
+    *quic_address_token = ptls_iovec_init(NULL, 0);
+    *quic_tp = (quicly_transport_parameters_t){};
+
+    { /* read file */
+        FILE *fp;
+        if (session_file == NULL || (fp = fopen(session_file, "r")) == NULL)
+            return;
+        if ((len = fread(buf, 1, sizeof(buf), fp)) == 0) {
+            fclose(fp);
+            return;
+        }
+        fclose(fp);
+    }
+
+    const uint8_t *src = buf, *end = buf + len;
+    ptls_decode_open_block(src, end, -1, {
+        if (end - src != strlen(server_name) || memcmp(src, server_name, end - src) != 0) {
+            ret = PTLS_ALERT_USER_CANCELED; /* any value would do, as the return value is compressed to bool */
+            goto Exit;
+        }
+        src = end;
+    });
+    ptls_decode_open_block(src, end, -1, {
+        if (src != end) {
+            *tls_session = ptls_iovec_init(h2o_mem_alloc(end - src), end - src);
+            memcpy(tls_session->base, src, end - src);
+            src = end;
+        }
+    });
+    ptls_decode_open_block(src, end, -1, {
+        if (tls_session->base != NULL) {
+            if ((ret = quicly_decode_transport_parameter_list(quic_tp, NULL, NULL, NULL, NULL, src, end)) != 0)
+                goto Exit;
+        }
+        src = end;
+    });
+    ptls_decode_block(src, end, -1, {
+        if (src != end) {
+            *quic_address_token = ptls_iovec_init(h2o_mem_alloc(end - src), end - src);
+            memcpy(quic_address_token->base, src, end - src);
+            src = end;
+        }
+    });
+
+    ret = 0;
+
+Exit:
+    if (ret != 0) {
+        free(tls_session->base);
+        *tls_session = ptls_iovec_init(NULL, 0);
+        free(quic_address_token->base);
+        *quic_address_token = ptls_iovec_init(NULL, 0);
+    }
+}
+
+static void save_session(ptls_t *tls, ptls_iovec_t *tls_session, const quicly_transport_parameters_t *quic_tp,
+                         ptls_iovec_t *quic_address_token)
+{
+    if (session_file == NULL)
+        return;
+
+    const char *server_name = ptls_get_server_name(tls);
+    struct {
+        ptls_iovec_t tls_session, quic_address_token;
+        quicly_transport_parameters_t quic_tp;
+    } loaded;
+    ptls_buffer_t buf;
+    int ret;
+
+    ptls_buffer_init(&buf, "", 0);
+
+    /* load current data, or zero clear */
+    load_session(server_name, &loaded.tls_session, &loaded.quic_tp, &loaded.quic_address_token);
+
+    /* if new data is not supplied, point to the loaded values */
+    if (tls_session == NULL)
+        tls_session = &loaded.tls_session;
+    if (quic_address_token == NULL)
+        quic_address_token = &loaded.quic_address_token;
+    if (quic_tp == NULL)
+        quic_tp = &loaded.quic_tp;
+
+    /* seralize the data */
+    ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, server_name, strlen(server_name)); });
+    ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, tls_session->base, tls_session->len); });
+    ptls_buffer_push_block(&buf, -1, {
+        if (tls_session->base != NULL &&
+            (ret = quicly_encode_transport_parameter_list(&buf, quic_tp, NULL, NULL, NULL, NULL, 0)) != 0)
+            goto Exit;
+    });
+    ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, quic_address_token->base, quic_address_token->len); });
+
+    {
+        FILE *fp;
+        if ((fp = fopen(session_file, "w")) == NULL) {
+            fprintf(stderr, "failed to open file:%s:%s\n", session_file, strerror(errno));
+            exit(EX_OSERR);
+        }
+        fwrite(buf.base, 1, buf.off, fp);
+        fclose(fp);
+    }
+
+    free(loaded.tls_session.base);
+    free(loaded.quic_address_token.base);
+    ptls_buffer_dispose(&buf);
+    return;
+
+Exit:
+    fprintf(stderr, "%s:out of memory\n", __FUNCTION__);
+    exit(EX_SOFTWARE);
+}
+
+static int load_http3_session_cb(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
+                                 ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *tp)
+{
+    load_session(server_name, session_ticket, tp, address_token);
+    return 1;
+}
 
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
 {
-    free(http3_session.token.base);
-    http3_session.token = ptls_iovec_init(h2o_mem_alloc(token.len), token.len);
-    memcpy(http3_session.token.base, token.base, token.len);
+    save_session(quicly_get_tls(conn), NULL, NULL, &token);
     return 0;
 }
 
@@ -122,10 +242,7 @@ static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iove
     quicly_conn_t *conn = *ptls_get_data_ptr(tls);
     assert(quicly_get_tls(conn) == tls);
 
-    free(http3_session.ticket.base);
-    http3_session.ticket = ptls_iovec_init(h2o_mem_alloc(src.len), src.len);
-    memcpy(http3_session.ticket.base, src.base, src.len);
-    http3_session.tp = *quicly_get_remote_transport_parameters(conn);
+    save_session(tls, &src, quicly_get_remote_transport_parameters(conn), NULL);
     return 0;
 }
 
@@ -139,22 +256,6 @@ static void add_header(h2o_iovec_t name, h2o_iovec_t value)
     req.headers[req.num_headers].name = name;
     req.headers[req.num_headers].value = value;
     ++req.num_headers;
-}
-
-static int load_http3_session(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name, ptls_iovec_t *token,
-                              ptls_iovec_t *ticket, quicly_transport_parameters_t *tp)
-{
-    /* TODO respect server_addr, server_name */
-    if (http3_session.token.base != NULL) {
-        *token = ptls_iovec_init(h2o_mem_alloc(http3_session.token.len), http3_session.token.len);
-        memcpy(token->base, http3_session.token.base, http3_session.token.len);
-    }
-    if (http3_session.ticket.base != NULL) {
-        *ticket = ptls_iovec_init(h2o_mem_alloc(http3_session.ticket.len), http3_session.ticket.len);
-        memcpy(ticket->base, http3_session.ticket.base, http3_session.ticket.len);
-        *tp = http3_session.tp;
-    }
-    return 1;
 }
 
 struct st_timeout {
@@ -579,6 +680,8 @@ static void usage(const char *progname)
             "  -m <method>  request method (default: GET). When method is CONNECT,\n"
             "               \"host:port\" should be specified in place of URL.\n"
             "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -s <session-file>\n"
+            "               file to read / write session information (atm HTTP/3 only)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
@@ -680,7 +783,7 @@ int main(int argc, char **argv)
         ptls_clear_memory(random_key, sizeof(random_key));
     }
     h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
-    h3ctx.load_session = load_http3_session;
+    h3ctx.load_session = load_http3_session_cb;
 
 #if H2O_USE_LIBUV
     ctx.loop = uv_loop_new();
@@ -726,7 +829,7 @@ int main(int argc, char **argv)
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -861,6 +964,9 @@ int main(int argc, char **argv)
         } break;
         case 'f':
             exit_failure_on_http_errors = 1;
+            break;
+        case 's':
+            session_file = optarg;
             break;
         case 'h':
             usage(argv[0]);
