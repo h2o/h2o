@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use Net::EmptyPort qw(check_port);
 use Test::More;
+use File::Temp qw(tempfile);
 use t::Util;
 
 plan skip_all => 'curl not found'
@@ -25,7 +26,18 @@ check_port($upstream_port) or die "can't connect to server socket";
 my $client_socket = $socket->accept();
 close($client_socket);
 
+my $quic_port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
+
 my $server = spawn_h2o(<< "EOT");
+listen:
+  type: quic
+  port: $quic_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -53,19 +65,20 @@ sub doone {
 
     my $req;
     $client_socket = $socket->accept();
+    $client_socket->autoflush(1);
     $client_socket->recv($req, 1024);
     $client_socket->send($upstream_response);
     close($client_socket);
-    my $curl_output = do { local $/; <$reader> };
-    like $curl_output, qr{$expected}, $test_description;
+    my $client_output = do { local $/; <$reader> };
+    like $client_output, qr{$expected}, $test_description;
     close($reader);
     wait();
 }
 
+my $resp_preface = "HTTP/1.1 200 Ok\r\nTransfer-encoding:chunked\r\n\r\n";
 sub doit {
     my $proto = shift;
     my $cmd = "curl -k -svo /dev/null --http${proto} https://127.0.0.1:$server->{'tls_port'}/ 2>&1";
-    my $resp_preface = "HTTP/1.1 200 Ok\r\nTransfer-encoding:chunked\r\n\r\n";
     my $err_string = "Illegal or missing hexadecimal sequence in chunked-encoding";
     if ($proto == "2") {
         # curl-7.57.0 includes "was not closed cleanly"
@@ -88,6 +101,15 @@ subtest "HTTP/1.1" => sub {
 
 subtest "HTTP/2" => sub {
     doit("2");
+};
+
+subtest "HTTP/3" => sub {
+    my $client_prog = bindir() . "/h2o-httpclient";
+    (undef, my $tempfn) = tempfile(UNLINK => 1);
+    doone("$client_prog -o $tempfn -3 100 https://127.0.0.1:$quic_port/ 2>&1", "${resp_preface}2\r\na", "I/O error", "h2o-httpclient sees an error");
+    is -s $tempfn, 1, "Received one byte";
+    doone("$client_prog -o $tempfn -3 100 https://127.0.0.1:$quic_port/ 2>&1", "${resp_preface}1", "I/O error", "h2o-httpclient sees an error");
+    is -s $tempfn, 0, "Received zero bytes";
 };
 
 $socket->close();
