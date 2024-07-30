@@ -2103,6 +2103,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
         /* initialize OpenSSL context */
         identity->ossl = SSL_CTX_new(SSLv23_server_method());
+#ifdef OPENSSL_IS_BORINGSSL
+        /* unlock TLS1.0 for min version */
+        SSL_CTX_set_min_proto_version(identity->ossl, TLS1_VERSION);
+#endif
         SSL_CTX_set_options(identity->ossl, ssl_options);
 #if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
