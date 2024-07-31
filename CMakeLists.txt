@@ -655,7 +655,7 @@ ENDIF ()
 
 ADD_CUSTOM_COMMAND(
     OUTPUT quicly-tracer.h
-    COMMAND ${PROJECT_SOURCE_DIR}/deps/quicly/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/deps/quicly/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
+    COMMAND sh -c "'${PROJECT_SOURCE_DIR}'/deps/quicly/misc/probe2trace.pl -a tracer < '${PROJECT_SOURCE_DIR}'/deps/quicly/quicly-probes.d > '${CMAKE_CURRENT_BINARY_DIR}'/quicly-tracer.h"
     DEPENDS deps/quicly/quicly-probes.d deps/quicly/misc/probe2trace.pl
     VERBATIM)
 
