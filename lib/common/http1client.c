@@ -560,6 +560,11 @@ static void on_head(h2o_socket_t *sock, const char *err)
     if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);
         return;
+    } else if (client->super._cb.on_body == h2o_httpclient_socket_stealed) {
+        h2o_buffer_consume(&sock->input, rlen);
+        client->sock = NULL;
+        close_client(client);
+        return;
     } else if (client->super._cb.on_body == NULL) {
         client->_do_keepalive = 0;
         close_client(client);

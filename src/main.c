@@ -222,12 +222,31 @@ struct listener_config_t {
          */
         struct listener_config_t *sibling;
     } quic;
+
+    struct {
+        h2o_url_t client;
+        uint64_t reconnect_interval;
+        uint64_t connections_per_thread;
+    } reverse;
+
     /**
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
      */
     unsigned sndbuf, rcvbuf;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
+};
+
+struct reverse_ctx_t {
+    struct listener_ctx_t *listener; // point to parent listenre_ctx_t object
+    struct {
+        h2o_httpclient_t *client;
+        h2o_httpclient_ctx_t ctx;
+        h2o_httpclient_connection_pool_t connpool;
+        h2o_socketpool_t sockpool;
+    } httpclient;
+    h2o_timer_t reconnect_timer;
+    h2o_mem_pool_t pool;
 };
 
 struct listener_ctx_t {
@@ -238,6 +257,8 @@ struct listener_ctx_t {
         h2o_http3_server_ctx_t ctx;
         h2o_socket_t *forwarded_sock;
     } http3;
+
+    H2O_VECTOR(struct reverse_ctx_t) reverses;
 };
 
 typedef struct st_resolve_tag_node_cache_entry_t {
@@ -931,6 +952,17 @@ static void on_sni_update_tracing(void *conn, int is_quic, const char *server_na
         }
     }
 }
+
+static inline int is_reverse_listener(struct listener_config_t *listener)
+{
+    return listener->reverse.client.scheme != NULL;
+}
+
+static inline int is_quic_listener(struct listener_config_t *listener)
+{
+    return listener->quic.ctx != NULL;
+}
+
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
 {
@@ -2277,6 +2309,8 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
 
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener = conf.listeners[i];
+        if (is_reverse_listener(listener))
+            continue;
         if (listener->addrlen == addrlen && h2o_socket_compare_address((void *)&listener->addr, addr, 1) == 0 &&
             (is_quic_listener(listener)) == is_quic)
             return listener;
@@ -2291,9 +2325,11 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
     memset(listener, 0, sizeof(*listener));
-    h2o_vector_reserve(NULL, &listener->fds, 1);
-    listener->fds.entries[listener->fds.size++] = fd;
-    memcpy(&listener->addr, addr, addrlen);
+    if (fd != -1) {
+        h2o_vector_reserve(NULL, &listener->fds, 1);
+        listener->fds.entries[listener->fds.size++] = fd;
+    }
+    h2o_memcpy(&listener->addr, addr, addrlen);
     listener->addrlen = addrlen;
     if (is_global) {
         listener->hosts = NULL;
@@ -2303,6 +2339,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
+    memset(&listener->reverse, 0, sizeof(listener->reverse));
     listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
@@ -2632,11 +2669,13 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
 
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    const char *hostname = NULL, *servname, *type = "tcp";
+    const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL, **group_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL, **client_node = NULL;
     int proxy_protocol = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
+    uint64_t reconnect_interval = 1000;
+    uint64_t connections_per_thread = 1;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -2644,16 +2683,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **reconnect_interval_node, **connections_per_thread_node;
         if (h2o_configurator_parse_mapping(
-                cmd, node, "port:s",
-                "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s",
-                &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node) != 0)
+                cmd, node, NULL,
+                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,client:s,reconnect-interval:s,connections-per-thread:s",
+                &host_node, &port_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &client_node, &reconnect_interval_node, &connections_per_thread_node) != 0)
             return -1;
-        servname = (*port_node)->data.scalar;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
+        if (port_node != NULL)
+            servname = (*port_node)->data.scalar;
         if (type_node != NULL) {
             type = (*type_node)->data.scalar;
         } else if (quic_node != NULL) {
@@ -2666,14 +2706,22 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             return -1;
         if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
+        if (reconnect_interval_node != NULL && h2o_configurator_scanf(cmd, *reconnect_interval_node, "%lu", &reconnect_interval) != 0)
+            return -1;
+        if (connections_per_thread_node != NULL && h2o_configurator_scanf(cmd, *connections_per_thread_node, "%lu", &connections_per_thread) != 0)
+            return -1;
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
         return -1;
     }
 
-    if (strcmp(type, "unix") == 0) {
+    if (strcmp(type, "reverse") != 0 && servname == NULL) {
+        h2o_configurator_errprintf(cmd, *initcwnd_node, "cannot find mandatory attribute: port");
+        return -1;
+    }
 
+    if (strcmp(type, "unix") == 0) {
         if (cc_node != NULL)
             h2o_configurator_errprintf(cmd, *cc_node, "[warning] cannot set congestion controller for unix socket");
         if (initcwnd_node != NULL)
@@ -2936,8 +2984,28 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         }
         freeaddrinfo(res);
 
-    } else {
+    } else if (strcmp(type, "reverse") == 0) {
 
+        /* reverse http tunnel */
+        if (client_node == NULL) {
+            h2o_configurator_errprintf(cmd, node, "missing mandatory directive `client` for type `reverse`");
+            return -1;
+        }
+
+        h2o_url_t parsed;
+        if (h2o_url_parse(NULL, (*client_node)->data.scalar, strlen((*client_node)->data.scalar), &parsed) != 0) {
+            h2o_configurator_errprintf(cmd, node, "invalid reverse client url");
+            return -1;
+        }
+
+        struct listener_config_t *listener = add_listener(-1, NULL, 0, ctx->hostconf == NULL, 0, stream_sndbuf, stream_rcvbuf);
+        listener->reverse.reconnect_interval = reconnect_interval;
+        listener->reverse.connections_per_thread = connections_per_thread;
+        h2o_url_copy(NULL, &listener->reverse.client, &parsed);
+        if (listener->hosts != NULL && ctx->hostconf != NULL)
+            h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
+
+    } else {
         h2o_configurator_errprintf(cmd, node, "unknown listen type: %s", type);
         return -1;
     }
@@ -3859,6 +3927,17 @@ static void close_idle_connections(h2o_context_t *ctx)
     }
 }
 
+static void set_socket_options(h2o_socket_t *sock, struct listener_config_t *listener_config)
+{
+    if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
+                                                   sizeof(listener_config->sndbuf)) != 0)
+        h2o_perror("failed to set SO_SNDBUF");
+    if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf,
+                                                   sizeof(listener_config->rcvbuf)) != 0)
+        h2o_perror("failed to set SO_RCVBUF");
+    set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
+}
+
 static void on_accept(h2o_socket_t *listener, const char *err)
 {
     struct listener_ctx_t *ctx = listener->data;
@@ -3891,14 +3970,7 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
-        struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
-        if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
-                                                       sizeof(listener_config->sndbuf)) != 0)
-            h2o_perror("failed to set SO_SNDBUF");
-        if (listener_config->rcvbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_RCVBUF, &listener_config->rcvbuf,
-                                                       sizeof(listener_config->rcvbuf)) != 0)
-            h2o_perror("failed to set SO_RCVBUF");
-        set_tcp_congestion_controller(sock, listener_config->tcp_congestion_controller);
+        set_socket_options(sock, conf.listeners[ctx->listener_index]);
 
         h2o_accept(&ctx->accept_ctx, sock);
 
@@ -4064,26 +4136,154 @@ ExitNoDecrements:
     return &conn->super;
 }
 
-static inline int is_quic_listener(struct listener_config_t *listener)
-{
-    return listener->quic.ctx != NULL;
-}
-
 static void update_listener_state(struct listener_ctx_t *listeners)
 {
     size_t i;
 
     if (num_connections(0) < conf.max_connections) {
         for (i = 0; i != conf.num_listeners; ++i) {
-            if (conf.listeners[i]->quic.ctx == NULL && !h2o_socket_is_reading(listeners[i].sock))
+            if (!is_quic_listener(conf.listeners[i]) && !is_reverse_listener(conf.listeners[i]) && !h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_start(listeners[i].sock, on_accept);
         }
     } else {
         for (i = 0; i != conf.num_listeners; ++i) {
-            if (conf.listeners[i]->quic.ctx == NULL && h2o_socket_is_reading(listeners[i].sock))
+            if (!is_quic_listener(conf.listeners[i]) && !is_reverse_listener(conf.listeners[i]) && h2o_socket_is_reading(listeners[i].sock))
                 h2o_socket_read_stop(listeners[i].sock);
         }
     }
+}
+
+struct on_reverse_close_data_t {
+    void (*orig_cb)(void *data);
+    void *orig_data;
+    struct reverse_ctx_t *reverse;
+};
+
+static void start_reverse_listening(struct reverse_ctx_t *reverse);
+
+void on_reverse_close(void *_data) {
+    struct on_reverse_close_data_t *data = (void *)_data;
+    data->orig_cb(data->orig_data);
+
+    struct reverse_ctx_t *reverse = data->reverse;
+    reverse->httpclient.client = NULL;
+    h2o_mem_clear_pool(&reverse->pool);
+
+    // reconnect
+    h2o_timer_link(reverse->listener->accept_ctx.ctx->loop, conf.listeners[reverse->listener->listener_index]->reverse.reconnect_interval, &reverse->reconnect_timer);
+}
+
+static void on_reverse_read(h2o_socket_t *sock, const char *err)
+{
+    struct reverse_ctx_t *reverse = (void *)sock->data;
+
+    h2o_socket_read_stop(sock);
+    if (err != NULL) {
+        h2o_error_printf("unexpected read error in on_reverse_rea: %s\n", err);
+        return;
+    }
+
+    h2o_accept(&reverse->listener->accept_ctx, sock);
+}
+
+static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
+{
+    struct reverse_ctx_t *reverse = (void *)client->data;
+
+    if (errstr != NULL) {
+        h2o_error_printf("received error in on_reverse_head: %s\n", errstr);
+
+        // reconnect
+        h2o_timer_link(reverse->listener->accept_ctx.ctx->loop, conf.listeners[reverse->listener->listener_index]->reverse.reconnect_interval, &reverse->reconnect_timer);
+
+        return NULL;
+    }
+
+    if (args->status != 101) {
+        h2o_error_printf("received unexpected status in on_reverse_head: %u\n", args->status);
+
+        // reconnect
+        h2o_timer_link(reverse->listener->accept_ctx.ctx->loop, conf.listeners[reverse->listener->listener_index]->reverse.reconnect_interval, &reverse->reconnect_timer);
+
+        return NULL;
+    }
+
+
+    // replace sock's on_close data with our own to retry on close
+    h2o_httpclient_conn_properties_t conn_props;
+    client->get_conn_properties(client, &conn_props);
+
+    struct on_reverse_close_data_t *data = h2o_mem_alloc_pool(&reverse->pool, *data, sizeof(*data));
+    data->reverse = reverse;
+    data->orig_cb = conn_props.sock->on_close.cb;
+    data->orig_data = conn_props.sock->on_close.data;
+    conn_props.sock->on_close.cb = on_reverse_close;
+    conn_props.sock->on_close.data = data;
+
+    conn_props.sock->data = reverse;
+
+    set_socket_options(conn_props.sock, conf.listeners[reverse->listener->listener_index]);
+
+    h2o_socket_read_stop(conn_props.sock);
+    h2o_socket_read_start(conn_props.sock, on_reverse_read);
+
+    return h2o_httpclient_socket_stealed;
+}
+
+// this callback is actually never called, but needed just to signal that streaming mode is enabled
+static void reverse_proceed_request(h2o_httpclient_t *client, const char *errstr)
+{
+    if (errstr != NULL)
+        h2o_error_printf("reverse_proceed_request failed: %s\n", errstr);
+}
+
+
+static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                         h2o_url_t *origin)
+{
+    struct reverse_ctx_t *reverse = (void *)client->data;
+
+    if (errstr != NULL) {
+        h2o_error_printf("error in on_reverse_connect: %s\n", errstr);
+        // reconnect
+        h2o_timer_link(reverse->listener->accept_ctx.ctx->loop, conf.listeners[reverse->listener->listener_index]->reverse.reconnect_interval, &reverse->reconnect_timer);
+        return NULL;
+    }
+
+    h2o_hostconf_t *hostconf = conf.listeners[reverse->listener->listener_index]->hosts[0];
+
+    char portbuf[sizeof(H2O_UINT16_LONGEST_STR)];
+    size_t portlen = sprintf(portbuf, "%u", hostconf->authority.port);
+
+    // setup request
+    *method = h2o_iovec_init(H2O_STRLIT("GET"));
+
+    *url = *origin;
+    url->path = h2o_concat(&reverse->pool,
+        h2o_iovec_init(H2O_STRLIT("/.well-known/reverse/tcp/")),
+        hostconf->authority.host,
+        h2o_iovec_init(H2O_STRLIT("/")),
+        h2o_iovec_init(portbuf, portlen)
+    );
+
+    h2o_headers_t headers_vec = (h2o_headers_t){};
+    h2o_add_header_by_str(&reverse->pool, &headers_vec, H2O_STRLIT("ALPN"), 0, NULL, H2O_STRLIT("http%2F1.1"));
+    *headers = headers_vec.entries;
+    *num_headers = headers_vec.size;
+    *body = h2o_iovec_init(NULL, 0);
+    *proceed_req_cb = reverse_proceed_request;
+
+    return on_reverse_head;
+}
+
+static void start_reverse_listening(struct reverse_ctx_t *reverse)
+{
+    h2o_mem_init_pool(&reverse->pool);
+    h2o_httpclient_connect(&reverse->httpclient.client, &reverse->pool,
+        reverse, &reverse->httpclient.ctx, &reverse->httpclient.connpool,
+        &conf.listeners[reverse->listener->listener_index]->reverse.client, "reverse", on_reverse_connect);
 }
 
 static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_linklist_t *messages)
@@ -4095,6 +4295,12 @@ static void on_server_notification(h2o_multithread_receiver_t *receiver, h2o_lin
         h2o_linklist_unlink(&message->link);
         free(message);
     }
+}
+
+static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
+{
+    struct reverse_ctx_t *reverse = H2O_STRUCT_FROM_MEMBER(struct reverse_ctx_t, reconnect_timer, timer);
+    start_reverse_listening(reverse);
 }
 
 H2O_NORETURN static void *run_loop(void *_thread_index)
@@ -4152,16 +4358,50 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* setup listeners */
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
-        int fd = listener_config->fds.entries[thread_index];
         listeners[i] = (struct listener_ctx_t){i,
                                                {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
                                                 listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
         if (listener_config->ssl.size != 0) {
+            // FIXME: is this ssl_ctx needed even for reverse?
             listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->identities[0].ossl;
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
-        listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        listeners[i].sock->data = listeners + i;
+        if (is_reverse_listener(listener_config)) {
+            h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
+            listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
+            for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
+                listeners[i].reverses.entries[j].listener = &listeners[i];
+                h2o_timer_init(&listeners[i].reverses.entries[j].reconnect_timer, on_reverse_reconnect_timeout);
+                listeners[i].reverses.entries[j].httpclient.ctx = (h2o_httpclient_ctx_t){
+                    .loop = conf.threads[thread_index].ctx.loop,
+                    .getaddr_receiver = &conf.threads[thread_index].ctx.receivers.hostinfo_getaddr,
+                    .io_timeout = 10000, // FIXME
+                    .connect_timeout = 10000, // FIXME
+                    .first_byte_timeout = 10000,
+                    .keepalive_timeout = 10000,
+                    .max_buffer_size = SIZE_MAX,
+                    .protocol_selector = {.ratio = { .http2 = 0, .http3 = 0}}, // now only supports h1
+                };
+                listeners[i].reverses.entries[j].httpclient.connpool = (h2o_httpclient_connection_pool_t){
+                    .socketpool = &listeners[i].reverses.entries[j].httpclient.sockpool,
+                };
+
+                h2o_socketpool_target_t *target = h2o_socketpool_create_target(&listener_config->reverse.client, NULL);
+                h2o_socketpool_init_specific(&listeners[i].reverses.entries[j].httpclient.sockpool, SIZE_MAX, &target, 1, NULL);
+                h2o_socketpool_set_timeout(&listeners[i].reverses.entries[j].httpclient.sockpool, UINT64_MAX);
+                h2o_socketpool_register_loop(&listeners[i].reverses.entries[j].httpclient.sockpool, conf.threads[thread_index].ctx.loop);
+
+                SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+                h2o_socketpool_set_ssl_ctx(&listeners[i].reverses.entries[j].httpclient.sockpool, ssl_ctx);
+                SSL_CTX_free(ssl_ctx);
+
+                h2o_httpclient_connection_pool_init(&listeners[i].reverses.entries[j].httpclient.connpool, &listeners[i].reverses.entries[j].httpclient.sockpool);
+            }
+        } else  {
+            int fd = listener_config->fds.entries[thread_index];
+            listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+            listeners[i].sock->data = listeners + i;
+        }
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && is_quic_listener(listener_config)) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
@@ -4192,6 +4432,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* and start listening */
     update_listener_state(listeners);
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        if (!is_reverse_listener(conf.listeners[i]))
+            continue;
+        for (size_t j = 0; j != conf.listeners[i]->reverse.connections_per_thread; ++j) {
+            start_reverse_listening(&listeners[i].reverses.entries[j]);
+        }
+    }
 
     /* wait for all threads to become ready */
     h2o_barrier_wait(&conf.startup_sync_barrier_init);
@@ -4225,11 +4472,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     }
     h2o_evloop_run(conf.threads[thread_index].ctx.loop, 0);
     for (i = 0; i != conf.num_listeners; ++i) {
-        if (conf.listeners[i]->quic.ctx == NULL) {
+        if (is_quic_listener(conf.listeners[i])) {
+            listeners[i].http3.ctx.super.acceptor = NULL;
+        } else if (is_reverse_listener(conf.listeners[i])) {
+            // TODO
+        } else {
             h2o_socket_close(listeners[i].sock);
             listeners[i].sock = NULL;
-        } else {
-            listeners[i].http3.ctx.super.acceptor = NULL;
         }
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
@@ -4285,6 +4534,9 @@ static char **build_server_starter_argv(const char *h2o_cmd, const char *config_
     }
 
     for (i = 0; i != conf.num_listeners; ++i) {
+        if (is_reverse_listener(conf.listeners[i]))
+            continue;
+
         char *newarg;
         switch (conf.listeners[i]->addr.ss_family) {
         default: {
@@ -4626,6 +4878,8 @@ static void create_per_thread_listeners(void)
 {
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
+        if (is_reverse_listener(listener_config))
+            continue;
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
         while (listener_config->fds.size < conf.thread_map.size) {
             int fd = dup_listener(listener_config);
@@ -4821,7 +5075,7 @@ int main(int argc, char **argv)
     if (conf.ssl_zerocopy) {
         for (size_t listener_index = 0; listener_index != conf.num_listeners; ++listener_index) {
             struct listener_config_t *listener = conf.listeners[listener_index];
-            if (listener->quic.ctx == NULL) {
+            if (!is_reverse_listener(listener) && !is_quic_listener(listener)) {
                 for (size_t ssl_index = 0; ssl_index != listener->ssl.size; ++ssl_index) {
                     struct listener_ssl_config_t *ssl = listener->ssl.entries[ssl_index];
                     for (struct listener_ssl_identity_t *identity = ssl->identities; identity->certificate_file != NULL;
