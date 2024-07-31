@@ -228,6 +228,7 @@ struct listener_config_t {
         h2o_url_t client;
         uint64_t reconnect_interval;
         uint64_t connections_per_thread;
+        SSL_CTX *ssl_ctx;
     } reverse;
 
     /**
@@ -1870,9 +1871,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file, **ech_node;
-    struct listener_ssl_parsed_identity_t *parsed_identities;
-    size_t num_parsed_identities;
+        **http2_origin_frame_node, **client_ca_file, **ech_node, **verify_peer_node;
+    struct listener_ssl_parsed_identity_t *parsed_identities = NULL;
+    size_t num_parsed_identities = 0;
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
@@ -1903,13 +1904,18 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s,ech:a",
+                                           "http2-origin-frame:*,client-ca-file:s,ech:a,verify-peer:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node, &verify_peer_node) != 0)
             return -1;
         if (identity_node != NULL) {
+            if (is_reverse_listener(listener)) {
+                h2o_configurator_errprintf(cmd, *identity_node,
+                                           "identity directive is not supported in reverse listener");
+                return -1;
+            }
             if (certificate_file != NULL || key_file != NULL) {
                 h2o_configurator_errprintf(cmd, *identity_node,
                                            "either one of `identity` or `certificate-file`-`key-file` pair can be used");
@@ -1939,15 +1945,17 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     return -1;
             }
         } else {
-            if (certificate_file == NULL || key_file == NULL) {
+            if (!is_reverse_listener(listener) && (certificate_file == NULL || key_file == NULL)) {
                 h2o_configurator_errprintf(cmd, *ssl_node, "cannot find mandatory attribute: %s",
                                            certificate_file == NULL ? "certificate-file" : "key-file");
                 return -1;
             }
-            parsed_identities = alloca(sizeof(*parsed_identities));
-            num_parsed_identities = 1;
-            parsed_identities[0].certificate_file = certificate_file;
-            parsed_identities[0].key_file = key_file;
+            if (certificate_file != NULL && key_file != NULL) {
+                parsed_identities = alloca(sizeof(*parsed_identities));
+                num_parsed_identities = 1;
+                parsed_identities[0].certificate_file = certificate_file;
+                parsed_identities[0].key_file = key_file;
+            }
         }
     }
 
@@ -2095,6 +2103,38 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls.ctx;
         ech.create_opener = base->ech.server.create_opener;
         ech.retry_configs = base->ech.server.retry_configs;
+    }
+
+    if (is_reverse_listener(listener)) {
+        listener->reverse.ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+        SSL_CTX_set_options(listener->reverse.ssl_ctx, ssl_options);
+
+        if (verify_peer_node != NULL) {
+            if (!is_reverse_listener(listener)) {
+                h2o_configurator_errprintf(cmd, *cc_node, "verify-peer is only available in reverse listener");
+                goto Error;
+            }
+            ssize_t ret = h2o_configurator_get_one_of(cmd, *verify_peer_node, "OFF,ON");
+            if (ret == -1)
+                return -1;
+            if (ret == 1) {
+                SSL_CTX_set_verify(listener->reverse.ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            }
+        }
+
+        if (num_parsed_identities != 0) {
+            assert(num_parsed_identities == 1);
+            ptls_iovec_t raw_pubkey;
+            h2o_iovec_t dummy_cert_chain_pem = h2o_iovec_init(NULL, 0);
+            if (load_ssl_identity(cmd, listener->reverse.ssl_ctx, &dummy_cert_chain_pem, &raw_pubkey, 0, parsed_identities, NULL) != 0)
+                goto Error;
+            if (raw_pubkey.base != NULL) {
+                h2o_configurator_errprintf(cmd, *parsed_identities->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
+                goto Error;
+            }
+        }
+
+        return 0;
     }
 
     /* create a new entry in the SSL context list */
@@ -2991,6 +3031,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         listener->reverse.reconnect_interval = reconnect_interval;
         listener->reverse.connections_per_thread = connections_per_thread;
         h2o_url_copy(NULL, &listener->reverse.client, &parsed);
+        if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, 1) != 0) {
+            return -1;
+        }
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
@@ -4214,8 +4257,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         listeners[i] = (struct listener_ctx_t){i,
                                                {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
                                                 listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
-        if (listener_config->ssl.size != 0) {
-            // FIXME: is this ssl_ctx needed even for reverse?
+        if (listener_config->ssl.size != 0 && !is_reverse_listener(listener_config)) {
             listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->identities[0].ossl;
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
@@ -4223,7 +4265,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
             listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
             for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
-                h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.client, &listeners[i].accept_ctx, (h2o_reverse_config_t){ .reconnect_interval = listener_config->reverse.reconnect_interval, .setup_socket = setup_socket }, &listeners[i]);
+                h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.client,
+                    &listeners[i].accept_ctx, (h2o_reverse_config_t){
+                        .reconnect_interval = listener_config->reverse.reconnect_interval,
+                        .ssl_ctx = listener_config->reverse.ssl_ctx,
+                        .setup_socket = setup_socket
+                    }, &listeners[i]);
             }
         } else  {
             int fd = listener_config->fds.entries[thread_index];

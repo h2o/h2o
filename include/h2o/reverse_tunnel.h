@@ -4,6 +4,7 @@ struct st_h2o_accept_ctx_t;
 
 typedef struct st_h2o_reverse_config_t {
     uint64_t reconnect_interval;
+    SSL_CTX *ssl_ctx;
     void (*setup_socket)(h2o_socket_t *sock, void *data);
 } h2o_reverse_config_t;
 

@@ -124,22 +124,9 @@ static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const
         return NULL;
     }
 
-    // h2o_hostconf_t *hostconf = conf.listeners[reverse->listener->listener_index]->hosts[0];
-
-    // char portbuf[sizeof(H2O_UINT16_LONGEST_STR)];
-    // size_t portlen = sprintf(portbuf, "%u", hostconf->authority.port);
-
     // setup request
     *method = h2o_iovec_init(H2O_STRLIT("GET"));
     *url = *reverse->client;
-
-    // *url = *origin;
-    // url->path = h2o_concat(&reverse->pool,
-    //     h2o_iovec_init(H2O_STRLIT("/.well-known/reverse/tcp/")),
-    //     hostconf->authority.host,
-    //     h2o_iovec_init(H2O_STRLIT("/")),
-    //     h2o_iovec_init(portbuf, portlen)
-    // );
 
     h2o_headers_t headers_vec = (h2o_headers_t){};
     h2o_add_header_by_str(&reverse->pool, &headers_vec, H2O_STRLIT("ALPN"), 0, NULL, H2O_STRLIT("http%2F1.1"));
@@ -162,8 +149,9 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_
     reverse->httpclient.ctx = (h2o_httpclient_ctx_t){
         .loop = accept_ctx->ctx->loop,
         .getaddr_receiver = &accept_ctx->ctx->receivers.hostinfo_getaddr,
-        .io_timeout = 10000, // FIXME
-        .connect_timeout = 10000, // FIXME
+        // TODO: make these parameters configurable
+        .io_timeout = 10000,
+        .connect_timeout = 10000,
         .first_byte_timeout = 10000,
         .keepalive_timeout = 10000,
         .max_buffer_size = SIZE_MAX,
@@ -178,7 +166,13 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_
     h2o_socketpool_set_timeout(&reverse->httpclient.sockpool, UINT64_MAX);
     h2o_socketpool_register_loop(&reverse->httpclient.sockpool, accept_ctx->ctx->loop);
 
-    SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX *ssl_ctx = config.ssl_ctx;
+    if (config.ssl_ctx == NULL) {
+        ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+    } else {
+        SSL_CTX_up_ref(ssl_ctx);
+    }
     h2o_socketpool_set_ssl_ctx(&reverse->httpclient.sockpool, ssl_ctx);
     SSL_CTX_free(ssl_ctx);
 
