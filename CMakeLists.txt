@@ -396,6 +396,7 @@ SET(LIB_SOURCE_FILES
     lib/common/memory.c
     lib/common/multithread.c
     lib/common/redis.c
+    lib/common/reverse_tunnel.c
     lib/common/serverutil.c
     lib/common/socket.c
     lib/common/socketpool.c
