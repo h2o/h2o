@@ -305,7 +305,7 @@ static void test_vector(void)
     ok(off == sizeof(datagram));
 
     /* decrypt */
-    const struct st_ptls_salt_t *salt = get_salt(QUICLY_PROTOCOL_VERSION_DRAFT29);
+    const quicly_salt_t *salt = quicly_get_salt(QUICLY_PROTOCOL_VERSION_DRAFT29);
     ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0,
                                    ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL);
     ok(ret == 0);
@@ -744,21 +744,13 @@ int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
     static ptls_openssl_sign_certificate_t cert_signer;
-    static ptls_context_t tlsctx = {ptls_openssl_random_bytes,
-                                    &ptls_get_time,
-                                    ptls_openssl_key_exchanges,
-                                    ptls_openssl_cipher_suites,
-                                    {&cert, 1},
-                                    {{NULL}},
-                                    NULL,
-                                    NULL,
-                                    &cert_signer.super,
-                                    NULL,
-                                    0,
-                                    0,
-                                    0,
-                                    NULL,
-                                    1};
+    static ptls_context_t tlsctx = {.random_bytes = ptls_openssl_random_bytes,
+                                    .get_time = &ptls_get_time,
+                                    .key_exchanges = ptls_openssl_key_exchanges,
+                                    .cipher_suites = ptls_openssl_cipher_suites,
+                                    .certificates = {&cert, 1},
+                                    .sign_certificate = &cert_signer.super,
+                                    .require_dhe_on_psk = 1};
     quic_ctx = quicly_spec_context;
     quic_ctx.tls = &tlsctx;
     quic_ctx.transport_params.max_streams_bidi = 10;

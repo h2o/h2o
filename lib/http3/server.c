@@ -802,6 +802,13 @@ Redo:
     PUSH_U64("packets-acked-ecn-ect1", num_packets.acked_ecn_counts[1]);
     PUSH_U64("packets-acked-ecn-ce", num_packets.acked_ecn_counts[2]);
     PUSH_U64("late-acked", num_packets.late_acked);
+    PUSH_U64("initial-received", num_packets.initial_received);
+    PUSH_U64("zero-rtt-received", num_packets.zero_rtt_received);
+    PUSH_U64("handshake-received", num_packets.handshake_received);
+    PUSH_U64("initial-sent", num_packets.initial_sent);
+    PUSH_U64("zero-rtt-sent", num_packets.zero_rtt_sent);
+    PUSH_U64("handshake-sent", num_packets.handshake_sent);
+    PUSH_U64("packets-received-out-of-order", num_packets.received_out_of_order);
     PUSH_U64("bytes-received", num_bytes.received);
     PUSH_U64("bytes-sent", num_bytes.sent);
     PUSH_U64("bytes-lost", num_bytes.lost);
