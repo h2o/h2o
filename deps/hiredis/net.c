@@ -495,6 +495,8 @@ addrretry:
             continue;
 
         c->fd = s;
+        if (redisSetTcpNoDelay(c) != REDIS_OK)
+            goto error;
         if (redisSetBlocking(c,0) != REDIS_OK)
             goto error;
         if (c->tcp.source_addr) {
@@ -562,8 +564,6 @@ addrretry:
             } else {
                 wait_for_ready:
                 if (redisContextWaitReady(c,timeout_msec) != REDIS_OK)
-                    goto error;
-                if (redisSetTcpNoDelay(c) != REDIS_OK)
                     goto error;
             }
         }
