@@ -344,6 +344,7 @@ SET(LIB_SOURCE_FILES
     deps/hiredis/net.c
     deps/hiredis/read.c
     deps/hiredis/sds.c
+    deps/hiredis/alloc.c
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
