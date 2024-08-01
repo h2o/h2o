@@ -339,6 +339,7 @@ SET(BROTLI_SOURCE_FILES
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
+    deps/hiredis/alloc.c
     deps/hiredis/async.c
     deps/hiredis/hiredis.c
     deps/hiredis/net.c
