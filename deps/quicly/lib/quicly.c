@@ -2532,6 +2532,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
         unlock_now(conn);
         ptls_free(tls);
         free(conn);
+        free(pacer);
         return NULL;
     }
     quicly_local_cid_init_set(&conn->super.local.cid_set, ctx->cid_encryptor, local_cid);
