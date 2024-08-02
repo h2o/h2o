@@ -1481,7 +1481,6 @@ typedef struct st_h2o_reverse_ctx_t {
     h2o_mem_pool_t pool;
 } h2o_reverse_ctx_t;
 
-void h2o_reverse_start_listening(h2o_reverse_ctx_t *reverse);
 void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data);
 
 /**

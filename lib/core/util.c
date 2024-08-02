@@ -990,12 +990,6 @@ void on_reverse_close(void *_data) {
     schedule_reconnect(reverse);
 }
 
-static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
-{
-    h2o_reverse_ctx_t *reverse = H2O_STRUCT_FROM_MEMBER(h2o_reverse_ctx_t, reconnect_timer, timer);
-    h2o_reverse_start_listening(reverse);
-}
-
 static void on_reverse_read(h2o_socket_t *sock, const char *err)
 {
     h2o_reverse_ctx_t *reverse = (void *)sock->data;
@@ -1083,6 +1077,20 @@ static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const
     return on_reverse_head;
 }
 
+static void start_listening(h2o_reverse_ctx_t *reverse)
+{
+    h2o_mem_init_pool(&reverse->pool);
+    h2o_httpclient_connect(&reverse->httpclient.client, &reverse->pool,
+        reverse, &reverse->httpclient.ctx, &reverse->httpclient.connpool,
+        reverse->client, "reverse", on_reverse_connect);
+}
+
+static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
+{
+    h2o_reverse_ctx_t *reverse = H2O_STRUCT_FROM_MEMBER(h2o_reverse_ctx_t, reconnect_timer, timer);
+    start_listening(reverse);
+}
+
 void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data)
 {
     reverse->client = client;
@@ -1122,12 +1130,7 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_
     SSL_CTX_free(ssl_ctx);
 
     h2o_httpclient_connection_pool_init(&reverse->httpclient.connpool, &reverse->httpclient.sockpool);
+
+    start_listening(reverse);
 }
 
-void h2o_reverse_start_listening(h2o_reverse_ctx_t *reverse)
-{
-    h2o_mem_init_pool(&reverse->pool);
-    h2o_httpclient_connect(&reverse->httpclient.client, &reverse->pool,
-        reverse, &reverse->httpclient.ctx, &reverse->httpclient.connpool,
-        reverse->client, "reverse", on_reverse_connect);
-}

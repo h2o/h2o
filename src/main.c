@@ -4261,16 +4261,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;
         }
         if (is_reverse_listener(listener_config)) {
-            h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
-            listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
-            for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
-                h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.client,
-                    &listeners[i].accept_ctx, (h2o_reverse_config_t){
-                        .reconnect_interval = listener_config->reverse.reconnect_interval,
-                        .ssl_ctx = listener_config->reverse.ssl_ctx,
-                        .setup_socket = setup_socket
-                    }, &listeners[i]);
-            }
+            /* reverse listeners is ok to be setup immediately before they start listening */
         } else  {
             int fd = listener_config->fds.entries[thread_index];
             listeners[i].sock = h2o_evloop_socket_create(conf.threads[thread_index].ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
@@ -4306,11 +4297,21 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     /* and start listening */
     update_listener_state(listeners);
+
+    /* and start reverse-tunnel listening too */
     for (size_t i = 0; i != conf.num_listeners; ++i) {
-        if (!is_reverse_listener(conf.listeners[i]))
+        struct listener_config_t *listener_config = conf.listeners[i];
+        if (!is_reverse_listener(listener_config))
             continue;
-        for (size_t j = 0; j != conf.listeners[i]->reverse.connections_per_thread; ++j) {
-            h2o_reverse_start_listening(&listeners[i].reverses.entries[j]);
+        h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
+        listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
+        for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
+            h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.client,
+                &listeners[i].accept_ctx, (h2o_reverse_config_t){
+                    .reconnect_interval = listener_config->reverse.reconnect_interval,
+                    .ssl_ctx = listener_config->reverse.ssl_ctx,
+                    .setup_socket = setup_socket
+                }, &listeners[i]);
         }
     }
 
