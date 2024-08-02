@@ -303,8 +303,8 @@ void h2o_httpclient_set_conn_properties_of_socket(h2o_socket_t *sock, h2o_httpcl
     properties->sock = sock;
 }
 
-static int socket_stealed(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
+static int steal_socket(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     assert(!"this callback is solery for signaling purpose and should never be called");
 }
-const h2o_httpclient_body_cb h2o_httpclient_socket_stealed = socket_stealed;
+const h2o_httpclient_body_cb h2o_httpclient_steal_socket = steal_socket;

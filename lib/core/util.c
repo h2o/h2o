@@ -1039,7 +1039,7 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
     h2o_socket_read_stop(conn_props.sock);
     h2o_socket_read_start(conn_props.sock, on_reverse_read);
 
-    return h2o_httpclient_socket_stealed;
+    return h2o_httpclient_steal_socket;
 }
 
 // this callback is actually never called, but needed just to signal that streaming mode is enabled
