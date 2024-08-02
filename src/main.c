@@ -2734,9 +2734,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             return -1;
         if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
-        if (reconnect_interval_node != NULL && h2o_configurator_scanf(cmd, *reconnect_interval_node, "%lu", &reconnect_interval) != 0)
+        if (reconnect_interval_node != NULL && h2o_configurator_scanf(cmd, *reconnect_interval_node, "%" SCNu64, &reconnect_interval) != 0)
             return -1;
-        if (connections_per_thread_node != NULL && h2o_configurator_scanf(cmd, *connections_per_thread_node, "%lu", &connections_per_thread) != 0)
+        if (connections_per_thread_node != NULL && h2o_configurator_scanf(cmd, *connections_per_thread_node, "%" SCNu64, &connections_per_thread) != 0)
             return -1;
     } break;
     default:
