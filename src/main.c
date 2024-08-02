@@ -2745,7 +2745,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     }
 
     if (strcmp(type, "reverse") != 0 && servname == NULL) {
-        h2o_configurator_errprintf(cmd, *initcwnd_node, "cannot find mandatory attribute: port");
+        h2o_configurator_errprintf(cmd, node, "type is not `reverse` and `port` is not specified");
         return -1;
     }
 
