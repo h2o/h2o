@@ -227,7 +227,7 @@ struct listener_config_t {
         h2o_url_t url;
         uint64_t reconnect_interval;
         uint64_t connections_per_thread;
-        SSL_CTX *ssl_ctx;
+        h2o_socketpool_t sockpool;
     } reverse;
 
     /**
@@ -2105,8 +2105,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (is_reverse_listener(listener)) {
-        listener->reverse.ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-        SSL_CTX_set_options(listener->reverse.ssl_ctx, ssl_options);
+        SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+        SSL_CTX_set_options(ssl_ctx, ssl_options);
 
         if (verify_peer_node != NULL) {
             if (!is_reverse_listener(listener)) {
@@ -2117,7 +2117,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             if (ret == -1)
                 return -1;
             if (ret == 1) {
-                SSL_CTX_set_verify(listener->reverse.ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+                SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
             }
         }
 
@@ -2125,13 +2125,16 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             assert(num_parsed_identities == 1);
             ptls_iovec_t raw_pubkey;
             h2o_iovec_t dummy_cert_chain_pem = h2o_iovec_init(NULL, 0);
-            if (load_ssl_identity(cmd, listener->reverse.ssl_ctx, &dummy_cert_chain_pem, &raw_pubkey, 0, parsed_identities, NULL) != 0)
+            if (load_ssl_identity(cmd, ssl_ctx, &dummy_cert_chain_pem, &raw_pubkey, 0, parsed_identities, NULL) != 0)
                 goto Error;
             if (raw_pubkey.base != NULL) {
                 h2o_configurator_errprintf(cmd, *parsed_identities->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
                 goto Error;
             }
         }
+
+        h2o_socketpool_set_ssl_ctx(&listener->reverse.sockpool, ssl_ctx);
+        SSL_CTX_free(ssl_ctx);
 
         return 0;
     }
@@ -3029,7 +3032,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         struct listener_config_t *listener = add_listener(-1, NULL, 0, ctx->hostconf == NULL, 0, stream_sndbuf, stream_rcvbuf);
         listener->reverse.reconnect_interval = reconnect_interval;
         listener->reverse.connections_per_thread = connections_per_thread;
+
+        h2o_socketpool_target_t *target = h2o_socketpool_create_target(&parsed, NULL);
+        h2o_socketpool_init_specific(&listener->reverse.sockpool, SIZE_MAX, &target, 1, NULL);
+        h2o_socketpool_set_timeout(&listener->reverse.sockpool, UINT64_MAX);
+        SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+        SSL_CTX_free(ssl_ctx);
+
         h2o_url_copy(NULL, &listener->reverse.url, &parsed);
+
         if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, 1) != 0) {
             return -1;
         }
@@ -4305,11 +4317,12 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
             continue;
         h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
         listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
+
         for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
             h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.url,
                 &listeners[i].accept_ctx, (h2o_reverse_config_t){
                     .reconnect_interval = listener_config->reverse.reconnect_interval,
-                    .ssl_ctx = listener_config->reverse.ssl_ctx,
+                    .sockpool = &listener_config->reverse.sockpool,
                     .setup_socket = setup_socket
                 }, &listeners[i]);
         }

@@ -1110,26 +1110,9 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *url, h2o_accept_ctx
         .max_buffer_size = SIZE_MAX,
         .protocol_selector = {.ratio = { .http2 = 0, .http3 = 0}}, // now only supports h1
     };
-    reverse->httpclient.connpool = (h2o_httpclient_connection_pool_t){
-        .socketpool = &reverse->httpclient.sockpool,
-    };
 
-    h2o_socketpool_target_t *target = h2o_socketpool_create_target(url, NULL);
-    h2o_socketpool_init_specific(&reverse->httpclient.sockpool, SIZE_MAX, &target, 1, NULL);
-    h2o_socketpool_set_timeout(&reverse->httpclient.sockpool, UINT64_MAX);
-    h2o_socketpool_register_loop(&reverse->httpclient.sockpool, accept_ctx->ctx->loop);
-
-    SSL_CTX *ssl_ctx = config.ssl_ctx;
-    if (config.ssl_ctx == NULL) {
-        ssl_ctx = SSL_CTX_new(SSLv23_client_method());
-        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
-    } else {
-        SSL_CTX_up_ref(ssl_ctx);
-    }
-    h2o_socketpool_set_ssl_ctx(&reverse->httpclient.sockpool, ssl_ctx);
-    SSL_CTX_free(ssl_ctx);
-
-    h2o_httpclient_connection_pool_init(&reverse->httpclient.connpool, &reverse->httpclient.sockpool);
+    h2o_socketpool_register_loop(config.sockpool, accept_ctx->ctx->loop);
+    h2o_httpclient_connection_pool_init(&reverse->httpclient.connpool, config.sockpool);
 
     start_listening(reverse);
 }

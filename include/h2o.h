@@ -1462,7 +1462,7 @@ extern const h2o_iovec_t h2o_alpn_protocols[];
 
 typedef struct st_h2o_reverse_config_t {
     uint64_t reconnect_interval;
-    SSL_CTX *ssl_ctx;
+    h2o_socketpool_t *sockpool;
     void (*setup_socket)(h2o_socket_t *sock, void *data);
 } h2o_reverse_config_t;
 
