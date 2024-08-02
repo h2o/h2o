@@ -1065,7 +1065,7 @@ static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const
 
     // setup request
     *method = h2o_iovec_init(H2O_STRLIT("GET"));
-    *url = *reverse->client;
+    *url = *reverse->url;
 
     h2o_headers_t headers_vec = (h2o_headers_t){};
     h2o_add_header_by_str(&reverse->pool, &headers_vec, H2O_STRLIT("ALPN"), 0, NULL, H2O_STRLIT("http%2F1.1"));
@@ -1082,7 +1082,7 @@ static void start_listening(h2o_reverse_ctx_t *reverse)
     h2o_mem_init_pool(&reverse->pool);
     h2o_httpclient_connect(&reverse->httpclient.client, &reverse->pool,
         reverse, &reverse->httpclient.ctx, &reverse->httpclient.connpool,
-        reverse->client, "reverse", on_reverse_connect);
+        reverse->url, "reverse", on_reverse_connect);
 }
 
 static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
@@ -1091,9 +1091,9 @@ static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
     start_listening(reverse);
 }
 
-void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data)
+void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *url, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data)
 {
-    reverse->client = client;
+    reverse->url = url;
     reverse->config = config;
     reverse->accept_ctx = accept_ctx;
     h2o_timer_init(&reverse->reconnect_timer, on_reverse_reconnect_timeout);
@@ -1114,7 +1114,7 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_
         .socketpool = &reverse->httpclient.sockpool,
     };
 
-    h2o_socketpool_target_t *target = h2o_socketpool_create_target(client, NULL);
+    h2o_socketpool_target_t *target = h2o_socketpool_create_target(url, NULL);
     h2o_socketpool_init_specific(&reverse->httpclient.sockpool, SIZE_MAX, &target, 1, NULL);
     h2o_socketpool_set_timeout(&reverse->httpclient.sockpool, UINT64_MAX);
     h2o_socketpool_register_loop(&reverse->httpclient.sockpool, accept_ctx->ctx->loop);

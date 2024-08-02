@@ -1468,7 +1468,7 @@ typedef struct st_h2o_reverse_config_t {
 
 typedef struct st_h2o_reverse_ctx_t {
     h2o_reverse_config_t config;
-    h2o_url_t *client;
+    h2o_url_t *url;
     h2o_accept_ctx_t *accept_ctx;
     h2o_timer_t reconnect_timer;
     void *data;

@@ -224,7 +224,7 @@ struct listener_config_t {
     } quic;
 
     struct {
-        h2o_url_t client;
+        h2o_url_t url;
         uint64_t reconnect_interval;
         uint64_t connections_per_thread;
         SSL_CTX *ssl_ctx;
@@ -944,7 +944,7 @@ static void on_sni_update_tracing(void *conn, int is_quic, const char *server_na
 
 static inline int is_reverse_listener(struct listener_config_t *listener)
 {
-    return listener->reverse.client.scheme != NULL;
+    return listener->reverse.url.scheme != NULL;
 }
 
 static inline int is_quic_listener(struct listener_config_t *listener)
@@ -3029,7 +3029,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         struct listener_config_t *listener = add_listener(-1, NULL, 0, ctx->hostconf == NULL, 0, stream_sndbuf, stream_rcvbuf);
         listener->reverse.reconnect_interval = reconnect_interval;
         listener->reverse.connections_per_thread = connections_per_thread;
-        h2o_url_copy(NULL, &listener->reverse.client, &parsed);
+        h2o_url_copy(NULL, &listener->reverse.url, &parsed);
         if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, 1) != 0) {
             return -1;
         }
@@ -4306,7 +4306,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         h2o_vector_reserve(NULL, &listeners[i].reverses, listener_config->reverse.connections_per_thread);
         listeners[i].reverses.size = listener_config->reverse.connections_per_thread;
         for (size_t j = 0; j != listener_config->reverse.connections_per_thread; ++j) {
-            h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.client,
+            h2o_reverse_init(&listeners[i].reverses.entries[j], &listener_config->reverse.url,
                 &listeners[i].accept_ctx, (h2o_reverse_config_t){
                     .reconnect_interval = listener_config->reverse.reconnect_interval,
                     .ssl_ctx = listener_config->reverse.ssl_ctx,
