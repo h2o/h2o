@@ -229,6 +229,11 @@ typedef struct st_h2o_httpclient_conn_properties_t {
      * Underlying TCP connection, if any.
      */
     h2o_socket_t *sock;
+    /**
+     * Length of bytes which should be consumed if on_head callback returns h2o_httpclient_steal_socket.
+     * This is available only in http1, otherwise set to NULL.
+     */
+     size_t *steal_bytes;
 } h2o_httpclient_conn_properties_t;
 
 struct st_h2o_httpclient_t {

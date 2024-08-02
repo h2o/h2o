@@ -1030,8 +1030,11 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
     data->orig_data = conn_props.sock->on_close.data;
     conn_props.sock->on_close.cb = on_reverse_close;
     conn_props.sock->on_close.data = data;
-
     conn_props.sock->data = reverse;
+
+    // we only use http1 and it must set steal_bytes
+    assert(conn_props.steal_bytes != NULL);
+    h2o_buffer_consume(&conn_props.sock->input, *conn_props.steal_bytes);
 
     if (reverse->config.setup_socket != NULL)
         reverse->config.setup_socket(conn_props.sock, reverse->data);
