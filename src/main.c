@@ -89,7 +89,6 @@
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/http3_server.h"
-#include "h2o/reverse_tunnel.h"
 #include "h2o/serverutil.h"
 #include "h2o/file.h"
 #include "h2o/version.h"
