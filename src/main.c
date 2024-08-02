@@ -2699,7 +2699,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 {
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL, **group_node = NULL, **client_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL, **url_node = NULL;
     int proxy_protocol = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
     uint64_t reconnect_interval = 1000;
@@ -2714,9 +2714,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **reconnect_interval_node, **connections_per_thread_node;
         if (h2o_configurator_parse_mapping(
                 cmd, node, NULL,
-                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,client:s,reconnect-interval:s,connections-per-thread:s",
+                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,url:s,reconnect-interval:s,connections-per-thread:s",
                 &host_node, &port_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &client_node, &reconnect_interval_node, &connections_per_thread_node) != 0)
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &url_node, &reconnect_interval_node, &connections_per_thread_node) != 0)
             return -1;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
@@ -3015,13 +3015,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     } else if (strcmp(type, "reverse") == 0) {
 
         /* reverse http tunnel */
-        if (client_node == NULL) {
-            h2o_configurator_errprintf(cmd, node, "missing mandatory directive `client` for type `reverse`");
+        if (url_node == NULL) {
+            h2o_configurator_errprintf(cmd, node, "missing mandatory directive `url` for type `reverse`");
             return -1;
         }
 
         h2o_url_t parsed;
-        if (h2o_url_parse(NULL, (*client_node)->data.scalar, strlen((*client_node)->data.scalar), &parsed) != 0) {
+        if (h2o_url_parse(NULL, (*url_node)->data.scalar, strlen((*url_node)->data.scalar), &parsed) != 0) {
             h2o_configurator_errprintf(cmd, node, "invalid reverse client url");
             return -1;
         }
