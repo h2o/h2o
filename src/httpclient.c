@@ -820,6 +820,7 @@ int main(int argc, char **argv)
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_UPGRADE,
+        OPT_RATIO_HTTP3_ON_STREAMS,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -828,6 +829,7 @@ int main(int argc, char **argv)
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
+                                {"h3-on-streams", required_argument, NULL, OPT_RATIO_HTTP3_ON_STREAMS},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -927,6 +929,13 @@ int main(int argc, char **argv)
             } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
                        !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_RATIO_HTTP3_ON_STREAMS:
+            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.h3_on_streams) != 1 ||
+                !(0 <= ctx.protocol_selector.ratio.h3_on_streams && ctx.protocol_selector.ratio.h3_on_streams <= 100)) {
+                fprintf(stderr, "failed to parse H3-on-Streams ratio (--h3s)\n");
                 exit(EXIT_FAILURE);
             }
             break;

@@ -148,6 +148,10 @@ typedef struct st_h2o_httpclient_protocol_ratio_t {
      */
     int8_t http2;
     /**
+     * Indicates the percentage of requests for which HTTP/3-on-Streams should be used (TODO support negative value).
+     */
+    int8_t h3_on_streams;
+    /**
      * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative, because
      * unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
      */
@@ -173,7 +177,7 @@ typedef struct st_h2o_httpclient_ctx_t {
          * Each deficit is initialized to zero, then incremented by the respective percentage, and the protocol corresponding to the
          * one with the highest value is chosen. Then, the chosen variable is decremented by 100.
          */
-        int16_t _deficits[4];
+        int16_t _deficits[5];
     } protocol_selector;
 
     /**
