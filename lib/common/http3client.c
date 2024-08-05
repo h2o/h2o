@@ -952,9 +952,10 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
 
 quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame = {on_receive_datagram_frame};
 
-void h2o_httpclient__h3_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin)
+void h2o_httpclient__h3s_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin)
 {
     struct st_h2o_http3client_req_t *req = (void *)_client;
+    assert(req->super.ctx->http3 != NULL);
 
     assert(!h2o_timer_is_linked(&req->super._timeout));
 

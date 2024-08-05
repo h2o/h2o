@@ -421,7 +421,7 @@ extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);
-void h2o_httpclient__h3_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin);
+void h2o_httpclient__h3s_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin);
 struct st_h2o_httpclient__h3_conn_t *h2o_httpclient__find_h3_connection(h2o_httpclient_connection_pool_t *pool, int on_streams,
                                                                         h2o_url_t *origin);
 extern const size_t h2o_httpclient__h3_size;
