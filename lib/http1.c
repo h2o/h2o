@@ -999,6 +999,7 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     struct st_h2o_http1_conn_t *conn = (struct st_h2o_http1_conn_t *)_req->conn;
     h2o_sendvec_t bufs[inbufcnt + 1 + 2]; /* 1 for header, 2 for chunked encoding */
     size_t bufcnt = 0, chunked_prefix_index = 0;
+    int empty_payload_allowed = conn->_ostr_final.state == OSTREAM_STATE_HEAD || send_state != H2O_SEND_STATE_IN_PROGRESS;
 
     assert(&conn->req == _req);
     assert(_self == &conn->_ostr_final.super);
@@ -1046,9 +1047,12 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
 
     size_t bytes_sent = 0;
     for (size_t i = 0; i != inbufcnt; ++i) {
+        if (inbufs[i].len == 0)
+            continue;
         bufs[bufcnt++] = inbufs[i];
         bytes_sent += inbufs[i].len;
     }
+    assert(empty_payload_allowed || bytes_sent != 0 || !"h2o_data must only be called when there is progress");
     conn->req.bytes_sent += bytes_sent;
 
     if (conn->_ostr_final.chunked_buf != NULL) {
