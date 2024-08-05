@@ -1,0 +1,73 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÖupgradÖÖGET /echo-headers HTor:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ81|
+User-Agent: cGET /echo-r-Agent: curl/7.49.0-DEV HTTP/1.1
+Host: 12V
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.st:h­st.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:scReferer7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/tUser-Agent: cGET /echo-r-Agent: curl/7.49.0-DEV HTTP/1.1
+Host: 128.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 127.0.0.2
+Via: 2 example
+Accept: */*
+accept-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GEh /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+Xpt: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ-A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.st:h­st.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GEh /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+Xpt: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖt: */*
+X-Forwarded-For:
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖÖ
+
+ÖÖÖÖÖÖÖÖngs
+upgrade: h2c
+ããããããããããããããããããããããããããããããããããhttp2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

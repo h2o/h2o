@@ -1,0 +1,12 @@
+GET /rknown/h1/../te HTTP/1.1
+Host: 127.0.0.1ÿÿurl/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿent: curl/7.49.0-DEV
+A6ccept:ÿÿÿst/.well¿known/h2/../te H
+--MARK--
+ost: 127.0.0.1:50492
+User-Agent: cuol/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿurl/7ÿÿÿÿ.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ¶¶¶ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ (/*
+
+
+--MARK--

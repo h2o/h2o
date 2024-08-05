@@ -1,0 +1,6 @@
+GET /manager/html HTTP/1.1
+Host: ff28141acc074e5a85034232f14399c3.internal:8086
+User-Agent: Mozilla/5.0 (Windows NT 6.1; Win64; x64; rv:109.0) Gecko/20100101 Firefox/110.0
+Authorization: Basic dG9tY2F0OnRvb3I=
+Accept-Encoding: gzip
+

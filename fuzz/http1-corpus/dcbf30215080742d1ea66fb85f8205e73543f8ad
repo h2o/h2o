@@ -1,0 +1,8 @@
+GET /index.txt HTTP/1.1
+host: 127.0.P2rSetti
+if-range: h2c
+http3-settinggent:-doc
+
+
+--MARK--
+/2.0-MARK--

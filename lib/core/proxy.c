@@ -576,6 +576,9 @@ static char compress_hint_to_enum(const char *val, size_t len)
     if (h2o_lcstris(val, len, H2O_STRLIT("br"))) {
         return H2O_COMPRESS_HINT_ENABLE_BR;
     }
+    if (h2o_lcstris(val, len, H2O_STRLIT("zstd"))) {
+        return H2O_COMPRESS_HINT_ENABLE_ZSTD;
+    }
     return H2O_COMPRESS_HINT_AUTO;
 }
 

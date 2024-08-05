@@ -1,0 +1,7 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 15741:.0.0.7.0.0.1:58
+content-location:video/evc /inchem
+
+
+--MARK--
+.txt HTTP 

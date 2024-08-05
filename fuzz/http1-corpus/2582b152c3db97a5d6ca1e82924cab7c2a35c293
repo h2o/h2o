@@ -1,0 +1,20 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:5 Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMADGET /webso'ck:schemTP/2.1
+Connection: upgrcket
+Sec-Websocket-KeAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Sïttings
+upgrade: h2c
+http2-settWebsocketTKey:A ÿÿÿÿÿÿÿÿaGET É/indGET /index.txt HTTP/1.1
+hAAAAepgrade: h2c
+http2-settings: AAMAAGET /webso'c_
+accept: */*
+ugrade: h2c
+http2-settWebsocket-Key:user-agent: n,http2/1:schem
+
+
+--MARK--
+PRI *ex.txt HTTP 

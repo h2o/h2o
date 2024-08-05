@@ -1,0 +1,7 @@
+GET / HTTP/1.1
+Ht: 127.0.0.1:50082
+User-Agent: Mozilla/5.0 (/*
+Accept-E:coding: gzip
+
+
+--MARK--

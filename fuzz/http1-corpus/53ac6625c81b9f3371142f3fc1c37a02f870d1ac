@@ -1,0 +1,40 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTPT /index.on: Upgrade, HTTP1-Settin Upgrade, HTTP2-Settings
+upgrade:ettc
+ettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: uñòçúîöãÚ
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTT
+Sec-WebsSec-Websocket-: Upgrade, HTTP2-Settin Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMA HTTP/1.1
+Connection: upgrckeccept-rangettpapplication/vnd.fujitsu.oasys3t/ Httings: AAMAAGET /websocketndex.on: Upgrade, HTTP2-Settin Upgrade, HTTP AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTSe√ttings
+upgrade: h2c
+h0.1:5HTTP2-Settings
+upgrade: h22-Settings
+upgrade: h2c
+h0.1:514n: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP1-Settin Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2ccket-Key: aGET /indGET /index.on: Upgrade, c-WebsSec-Websocket-Key: QAAP__
+accept: */*
+user-agent: ngËttp1/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

@@ -189,11 +189,34 @@ typedef struct st_h2o_quic_stats_t {
     func(num_packets.lost_time_threshold, "num-packets.lost-time-threshold") \
     func(num_packets.ack_received, "num-packets.ack-received") \
     func(num_packets.late_acked, "num-packets.late-acked") \
+    func(num_packets.initial_received, "num-packets.initial-received") \
+    func(num_packets.zero_rtt_received, "num-packets.zero-rtt-received") \
+    func(num_packets.handshake_received, "num-packets.handshake-received") \
+    func(num_packets.initial_sent, "num-packets.initial-sent") \
+    func(num_packets.zero_rtt_sent, "num-packets.zero-rtt-sent") \
+    func(num_packets.handshake_sent, "num-packets.handshake-sent") \
+    func(num_packets.received_out_of_order, "num-packets.received-out-of-order") \
+    func(num_packets.received_ecn_counts[0], "num-packets.received-ecn-ect0") \
+    func(num_packets.received_ecn_counts[1], "num-packets.received-ecn-ect1") \
+    func(num_packets.received_ecn_counts[2], "num-packets.received-ecn-ce") \
+    func(num_packets.acked_ecn_counts[0], "num-packets.acked-ecn-ect0") \
+    func(num_packets.acked_ecn_counts[1], "num-packets.acked-ecn-ect1") \
+    func(num_packets.acked_ecn_counts[2], "num-packets.acked-ecn-ce") \
+    func(num_packets.sent_promoted_paths, "num-packets.sent-promoted-paths") \
+    func(num_packets.ack_received_promoted_paths, "num-packets.ack-received-promoted-paths") \
     func(num_bytes.received, "num-bytes.received") \
     func(num_bytes.sent, "num-bytes.sent") \
     func(num_bytes.lost, "num-bytes.lost") \
     func(num_bytes.stream_data_sent, "num-bytes.stream-data-sent") \
     func(num_bytes.stream_data_resent, "num-bytes.stream-data-resent") \
+    func(num_paths.created, "num-paths.created") \
+    func(num_paths.validated, "num-paths.validated") \
+    func(num_paths.validation_failed, "num-paths.validation-failed") \
+    func(num_paths.migration_elicited, "num-paths.migration-elicited") \
+    func(num_paths.promoted, "num-paths.promoted") \
+    func(num_paths.closed_no_dcid, "num-paths.closed-no-dcid") \
+    func(num_paths.ecn_validated, "num-paths.ecn-validated") \
+    func(num_paths.ecn_failed, "num-paths.ecn_failed") \
     func(num_frames_sent.padding, "num-frames-sent.padding") \
     func(num_frames_sent.ping, "num-frames-sent.ping") \
     func(num_frames_sent.ack, "num-frames-sent.ack") \

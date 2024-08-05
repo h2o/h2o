@@ -1,0 +1,54 @@
+GET /404?resp:st–‹us=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMGET /404?resp:st–‹us=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: ngh=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdome.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1/1.1
+if-modified-since: http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMGET /404?resp:st–‹us=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: ngh=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdome.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAPrl=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMGET /404?resp:st–‹us=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F016.1/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAPrl=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMGET /404?resp:st–‹us=200&resp:x-reproxy-url=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdoEm.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: ngh=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdome.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16.1/1.1
+if-modified-since: http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMGET rl=http://%5Bunix%3A%2Ftmp%2F0vB9Jswey0%5D/halfdomE.jpg HTTP/1.1
+if-modified-since: h2c
+http2-settings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: ngh=http://%5Bunix%3A%2FGET /index.txt HTTP/1.1
+host: 127.user-agent: nghttp2/1.16.1
+
+
+--MARK--
+PRI * HTT[P/2.0
+/1.1
+if-modified-since: h2c
+http2-settiîgs: AAMAAABkAAQAAP__
+accept: */

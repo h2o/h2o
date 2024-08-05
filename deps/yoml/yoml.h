@@ -26,6 +26,7 @@
 extern "C" {
 #endif
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -56,6 +57,7 @@ struct st_yoml_t {
     char *anchor;
     char *tag;
     size_t _refcnt;
+    unsigned _merged : 1;
     union {
         char *scalar;
         yoml_sequence_t sequence;
@@ -71,6 +73,7 @@ static inline void yoml_free(yoml_t *node, void *(*mem_set)(void *, int, size_t)
     if (node == NULL)
         return;
 
+    assert(node->_refcnt > 0);
     if (--node->_refcnt == 0) {
         free(node->filename);
         free(node->anchor);
