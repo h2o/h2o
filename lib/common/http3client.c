@@ -854,7 +854,7 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
 
 static void setup_request(struct st_h2o_http3client_req_t *req, struct st_h2o_httpclient__h3_conn_t *conn)
 {
-    memset((char *)(req + sizeof(req->super)), 0, sizeof(*req) - sizeof(req->super));
+    memset((char *)req + sizeof(req->super), 0, sizeof(*req) - sizeof(req->super));
 
     req->super.buf = &req->recvbuf.body;
     req->super.cancel = cancel_request;
