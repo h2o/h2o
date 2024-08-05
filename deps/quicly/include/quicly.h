@@ -275,6 +275,14 @@ typedef struct st_quicly_transport_parameters_t {
     uint16_t max_datagram_frame_size;
 } quicly_transport_parameters_t;
 
+typedef struct st_quicly_salt_t {
+    uint8_t initial[20];
+    struct {
+        uint8_t key[PTLS_AES128_KEY_SIZE];
+        uint8_t iv[PTLS_AESGCM_IV_SIZE];
+    } retry;
+} quicly_salt_t;
+
 struct st_quicly_context_t {
     /**
      * tls context to use
@@ -330,6 +338,15 @@ struct st_quicly_context_t {
      * the connection.
      */
     uint64_t max_initial_handshake_packets;
+    /**
+     * maximum number of probe packets (i.e., packets carrying PATH_CHALLENGE frames) to be sent before calling a path unreachable
+     */
+    uint64_t max_probe_packets;
+    /**
+     * Once path validation fails for the specified number of paths, packets arriving on new tuples will be dropped. Setting this
+     * value to zero effectively disables the endpoint responding to path migration attempts.
+     */
+    uint64_t max_path_validation_failures;
     /**
      * Jumpstart CWND to be used when there is no previous information. If set to zero, slow start is used. Note jumpstart is
      * possible only when the use_pacing flag is set.
@@ -477,9 +494,29 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t late_acked;                                                                                                       \
         /**                                                                                                                        \
-         * Total number of Initial and Handshake packets sent.                                                                     \
+         * Total number of Initial packets received.                                                                               \
          */                                                                                                                        \
-        uint64_t initial_handshake_sent;                                                                                           \
+        uint64_t initial_received;                                                                                                 \
+        /**                                                                                                                        \
+         * Total number of 0-RTT packets received.                                                                                 \
+         */                                                                                                                        \
+        uint64_t zero_rtt_received;                                                                                                \
+        /**                                                                                                                        \
+         * Total number of Handshake packets received.                                                                             \
+         */                                                                                                                        \
+        uint64_t handshake_received;                                                                                               \
+        /**                                                                                                                        \
+         * Total number of Initial packets sent.                                                                                   \
+         */                                                                                                                        \
+        uint64_t initial_sent;                                                                                                     \
+        /**                                                                                                                        \
+         * Total number of 0-RTT packets sent.                                                                                     \
+         */                                                                                                                        \
+        uint64_t zero_rtt_sent;                                                                                                    \
+        /**                                                                                                                        \
+         * Total number of Handshake packets sent.                                                                                 \
+         */                                                                                                                        \
+        uint64_t handshake_sent;                                                                                                   \
         /**                                                                                                                        \
          * Total number of packets received out of order.                                                                          \
          */                                                                                                                        \
@@ -492,6 +529,14 @@ struct st_quicly_conn_streamgroup_state_t {
          * connection-wide ack-received counters for ECT(0), ECT(1), CE                                                            \
          */                                                                                                                        \
         uint64_t acked_ecn_counts[3];                                                                                              \
+        /**                                                                                                                        \
+         * Total number of packets sent on promoted paths.                                                                         \
+         */                                                                                                                        \
+        uint64_t sent_promoted_paths;                                                                                              \
+        /**                                                                                                                        \
+         * Total number of acked packets that were sent on promoted.                                                               \
+         */                                                                                                                        \
+        uint64_t ack_received_promoted_paths;                                                                                      \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -520,6 +565,30 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
     struct {                                                                                                                       \
+        /**                                                                                                                        \
+         * number of alternate paths created                                                                                       \
+         */                                                                                                                        \
+        uint64_t created;                                                                                                          \
+        /**                                                                                                                        \
+         * number alternate paths validated                                                                                        \
+         */                                                                                                                        \
+        uint64_t validated;                                                                                                        \
+        /**                                                                                                                        \
+         * number of alternate paths that were created but failed to validate                                                      \
+         */                                                                                                                        \
+        uint64_t validation_failed;                                                                                                \
+        /**                                                                                                                        \
+         * number of paths on which migration has been elicited (i.e., received non-probing packets)                               \
+         */                                                                                                                        \
+        uint64_t migration_elicited;                                                                                               \
+        /**                                                                                                                        \
+         * number of migrations                                                                                                    \
+         */                                                                                                                        \
+        uint64_t promoted;                                                                                                         \
+        /**                                                                                                                        \
+         * number of alternate paths that were closed due to Connection ID being unavailable                                       \
+         */                                                                                                                        \
+        uint64_t closed_no_dcid;                                                                                                   \
         /**                                                                                                                        \
          * number of paths that were ECN-capable                                                                                   \
          */                                                                                                                        \
@@ -634,10 +703,6 @@ struct _st_quicly_conn_public_t {
          */
         quicly_local_cid_set_t cid_set;
         /**
-         * the local address (may be AF_UNSPEC)
-         */
-        quicly_address_t address;
-        /**
          * the SCID used in long header packets. Equivalent to local_cid[seq=0]. Retaining the value separately is the easiest way
          * of staying away from the complexity caused by remote peer sending RCID frames before the handshake concludes.
          */
@@ -652,20 +717,12 @@ struct _st_quicly_conn_public_t {
          * CIDs received from the remote peer
          */
         quicly_remote_cid_set_t cid_set;
-        /**
-         * the remote address (cannot be AF_UNSPEC)
-         */
-        quicly_address_t address;
         struct st_quicly_conn_streamgroup_state_t bidi, uni;
         quicly_transport_parameters_t transport_params;
         struct {
             unsigned validated : 1;
             unsigned send_probe : 1;
         } address_validation;
-        /**
-         * largest value of Retire Prior To field observed so far
-         */
-        uint64_t largest_retire_prior_to;
     } remote;
     /**
      * Retains the original DCID used by the client. Servers use this to route packets incoming packets. Clients use this when
@@ -1010,11 +1067,11 @@ static quicly_stream_id_t quicly_get_remote_next_stream_id(quicly_conn_t *conn, 
 /**
  * Returns the local address of the connection. This may be AF_UNSPEC, indicating that the operating system is choosing the address.
  */
-static struct sockaddr *quicly_get_sockname(quicly_conn_t *conn);
+struct sockaddr *quicly_get_sockname(quicly_conn_t *conn);
 /**
  * Returns the remote address of the connection. This would never be AF_UNSPEC.
  */
-static struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
+struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
 /**
  *
  */
@@ -1144,6 +1201,15 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
  */
 int quicly_is_destination(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                           quicly_decoded_packet_t *decoded);
+/**
+ * returns salts given version
+ */
+const quicly_salt_t *quicly_get_salt(uint32_t protocol_version);
+/**
+ *
+ */
+int quicly_calc_initial_keys(ptls_cipher_suite_t *cs, uint8_t *ingress, uint8_t *egress, ptls_iovec_t cid, int is_client,
+                             ptls_iovec_t salt);
 /**
  *
  */
@@ -1443,18 +1509,6 @@ inline quicly_stream_id_t quicly_get_remote_next_stream_id(quicly_conn_t *conn, 
 {
     struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
     return uni ? c->remote.uni.next_stream_id : c->remote.bidi.next_stream_id;
-}
-
-inline struct sockaddr *quicly_get_sockname(quicly_conn_t *conn)
-{
-    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return &c->local.address.sa;
-}
-
-inline struct sockaddr *quicly_get_peername(quicly_conn_t *conn)
-{
-    struct _st_quicly_conn_public_t *c = (struct _st_quicly_conn_public_t *)conn;
-    return &c->remote.address.sa;
 }
 
 inline uint32_t quicly_get_protocol_version(quicly_conn_t *conn)

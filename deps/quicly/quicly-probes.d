@@ -50,6 +50,11 @@ provider quicly {
     probe initial_handshake_packet_exceed(struct st_quicly_conn_t *conn, int64_t at, uint64_t num_packets);
     probe stateless_reset_receive(struct st_quicly_conn_t *conn, int64_t at);
 
+    probe new_path(struct st_quicly_conn_t *conn, int64_t at, size_t path_index, const char *remote);
+    probe delete_path(struct st_quicly_conn_t *conn, int64_t at, size_t path_index);
+    probe promote_path(struct st_quicly_conn_t *conn, int64_t at, size_t path_index);
+    probe elicit_path_migration(struct st_quicly_conn_t *conn, int64_t at, size_t path_index);
+
     probe crypto_handshake(struct st_quicly_conn_t *conn, int64_t at, int ret);
     probe crypto_update_secret(struct st_quicly_conn_t *conn, int64_t at, int is_enc, uint8_t epoch, const char *label, const char *secret);
     probe crypto_send_key_update(struct st_quicly_conn_t *conn, int64_t at, uint64_t phase, const char *secret);
@@ -128,6 +133,12 @@ provider quicly {
 
     probe ecn_validation(struct st_quicly_conn_t *conn, int64_t at, int ecn_state);
     probe ecn_congestion(struct st_quicly_conn_t *conn, int64_t at, uint64_t ce_count);
+
+    probe path_challenge_send(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
+    probe path_challenge_receive(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
+
+    probe path_response_send(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
+    probe path_response_receive(struct st_quicly_conn_t *conn, int64_t at, const void *bytes, size_t bytes_len);
 
     probe datagram_send(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);
     probe datagram_receive(struct st_quicly_conn_t *conn, int64_t at, const void *payload, size_t payload_len);

@@ -106,7 +106,8 @@ typedef struct st_quicly_stream_frame_t {
     ptls_iovec_t data;
 } quicly_stream_frame_t;
 
-static int quicly_decode_stream_frame(uint8_t type_flags, const uint8_t **src, const uint8_t *end, quicly_stream_frame_t *frame);
+static int quicly_decode_stream_frame(uint8_t type_flags, uint64_t max_frame_size, const uint8_t **src, const uint8_t *end,
+                                      quicly_stream_frame_t *frame);
 static uint8_t *quicly_encode_crypto_frame_header(uint8_t *dst, uint8_t *dst_end, uint64_t offset, size_t *data_len);
 static int quicly_decode_crypto_frame(const uint8_t **src, const uint8_t *end, quicly_stream_frame_t *frame);
 
@@ -369,16 +370,17 @@ inline unsigned quicly_clz64(uint64_t v)
     return v != 0 ? __builtin_clzll(v) : 64;
 }
 
-inline int quicly_decode_stream_frame(uint8_t type_flags, const uint8_t **src, const uint8_t *end, quicly_stream_frame_t *frame)
+inline int quicly_decode_stream_frame(uint8_t type_flags, uint64_t max_frame_size, const uint8_t **src, const uint8_t *end,
+                                      quicly_stream_frame_t *frame)
 {
     /* obtain stream id */
     if ((frame->stream_id = quicly_decodev(src, end)) == UINT64_MAX)
-        goto Error;
+        return QUICLY_ERROR_PARTIAL_FRAME;
 
     /* obtain offset */
     if ((type_flags & QUICLY_FRAME_TYPE_STREAM_BIT_OFF) != 0) {
         if ((frame->offset = quicly_decodev(src, end)) == UINT64_MAX)
-            goto Error;
+            return QUICLY_ERROR_PARTIAL_FRAME;
     } else {
         frame->offset = 0;
     }
@@ -387,22 +389,31 @@ inline int quicly_decode_stream_frame(uint8_t type_flags, const uint8_t **src, c
     if ((type_flags & QUICLY_FRAME_TYPE_STREAM_BIT_LEN) != 0) {
         uint64_t len;
         if ((len = quicly_decodev(src, end)) == UINT64_MAX)
-            goto Error;
+            return QUICLY_ERROR_PARTIAL_FRAME;
         if ((uint64_t)(end - *src) < len)
-            goto Error;
+            return QUICLY_ERROR_PARTIAL_FRAME;
+        if (len > max_frame_size)
+            return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
         frame->data = ptls_iovec_init(*src, len);
         *src += len;
     } else {
-        frame->data = ptls_iovec_init(*src, end - *src);
-        *src = end;
+        if (max_frame_size == SIZE_MAX) {
+            /* QUIC v1 */
+            frame->data = ptls_iovec_init(*src, end - *src);
+            *src = end;
+        } else {
+            /* QUIC on Streams */
+            if (end - *src < max_frame_size)
+                return QUICLY_ERROR_PARTIAL_FRAME;
+            frame->data = ptls_iovec_init(*src, max_frame_size);
+            *src += max_frame_size;
+        }
     }
 
     /* fin bit */
     frame->is_fin = (type_flags & QUICLY_FRAME_TYPE_STREAM_BIT_FIN) != 0;
 
     return 0;
-Error:
-    return QUICLY_ERROR_PARTIAL_FRAME;
 }
 
 inline uint8_t *quicly_encode_crypto_frame_header(uint8_t *dst, uint8_t *dst_end, uint64_t offset, size_t *data_len)
