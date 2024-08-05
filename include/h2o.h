@@ -1473,6 +1473,8 @@ extern const char h2o_http2_npn_protocols[];
 extern const char h2o_npn_protocols[];
 extern const h2o_iovec_t h2o_http2_alpn_protocols[];
 extern const h2o_iovec_t h2o_alpn_protocols[];
+extern const h2o_iovec_t h2o_h3_on_streams_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols_including_h3_on_streams[];
 
 /**
  * accepts a connection
