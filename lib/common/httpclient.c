@@ -88,9 +88,15 @@ static h2o_httpclient_t *create_client(h2o_httpclient_t **_client, h2o_mem_pool_
                                        h2o_httpclient_connection_pool_t *connpool, const char *upgrade_to,
                                        h2o_httpclient_connect_cb on_connect)
 {
-#define SZ_MAX(x, y) ((x) > (y) ? (x) : (y))
-    size_t sz = SZ_MAX(h2o_httpclient__h1_size, h2o_httpclient__h2_size);
-#undef SZ_MAX
+    static size_t sz;
+    H2O_MULTITHREAD_ONCE({
+        sz = h2o_httpclient__h1_size;
+        if (sz < h2o_httpclient__h2_size)
+            sz = h2o_httpclient__h2_size;
+        if (sz < h2o_httpclient__h3_size)
+            sz = h2o_httpclient__h3_size;
+    });
+
     h2o_httpclient_t *client = h2o_mem_alloc(sz);
     memset(client, 0, sz);
     client->pool = pool;
