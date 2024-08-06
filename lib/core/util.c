@@ -1019,6 +1019,38 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
         return NULL;
     }
 
+    int found_connection_header = 0, found_upgrade_header = 0;
+    for (size_t i = 0; i != args->num_headers; ++i) {
+        h2o_header_t *header = &args->headers[i];
+        if (h2o_iovec_is_token(args->headers[i].name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
+            if (token == H2O_TOKEN_CONNECTION) {
+                if (!h2o_lcstris(header->value.base, header->value.len, H2O_STRLIT("upgrade"))) {
+                    h2o_error_printf("unexpected connection header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
+                found_connection_header = 1;
+            } else if (token == H2O_TOKEN_UPGRADE) {
+                if (!h2o_memis(header->value.base, header->value.len, H2O_STRLIT("reverse"))) {
+                    h2o_error_printf("unexpected upgrade header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
+                found_upgrade_header = 1;
+            }
+        }
+    }
+    if (!found_connection_header) {
+        h2o_error_printf("missing connection header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+    if (!found_upgrade_header) {
+        h2o_error_printf("missing upgrade header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
 
     // replace sock's on_close data with our own to retry on close
     h2o_httpclient_conn_properties_t conn_props;
