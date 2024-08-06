@@ -181,6 +181,8 @@ static SSL_CTX *create_ssl_ctx(void)
 {
     long options;
     SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    if (ctx == NULL)
+        return NULL;
     options = SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
 #ifdef SSL_OP_NO_RENEGOTIATION
     /* introduced in openssl 1.1.0h */
