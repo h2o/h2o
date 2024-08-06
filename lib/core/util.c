@@ -1019,7 +1019,15 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
         return NULL;
     }
 
+    enum enum_selected_alpn_t {
+        SELECTED_ALPN_NONE,
+        SELECTED_ALPN_H2,
+        SELECTED_ALPN_H1,
+    };
+
     int found_connection_header = 0, found_upgrade_header = 0;
+    enum enum_selected_alpn_t selected_alpn = SELECTED_ALPN_NONE;
+
     for (size_t i = 0; i != args->num_headers; ++i) {
         h2o_header_t *header = &args->headers[i];
         if (h2o_iovec_is_token(args->headers[i].name)) {
@@ -1038,6 +1046,16 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
                     return NULL;
                 }
                 found_upgrade_header = 1;
+            } else if (token == H2O_TOKEN_SELECTED_ALPN) {
+                if (h2o_memis(header->value.base, header->value.len, H2O_STRLIT("h2"))) {
+                    selected_alpn = SELECTED_ALPN_H2;
+                } else if (h2o_memis(header->value.base, header->value.len, H2O_STRLIT("http%2F1.1"))) {
+                    selected_alpn = SELECTED_ALPN_H1;
+                } else {
+                    h2o_error_printf("unexpected selected-alpn header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
             }
         }
     }
@@ -1048,6 +1066,11 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
     }
     if (!found_upgrade_header) {
         h2o_error_printf("missing upgrade header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+    if (selected_alpn == SELECTED_ALPN_NONE) {
+        h2o_error_printf("missing selected-alpn header\n");
         schedule_reconnect(reverse);
         return NULL;
     }
@@ -1103,7 +1126,7 @@ static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const
     *url = *reverse->url;
 
     h2o_headers_t headers_vec = (h2o_headers_t){};
-    h2o_add_header_by_str(&reverse->pool, &headers_vec, H2O_STRLIT("ALPN"), 0, NULL, H2O_STRLIT("http%2F1.1"));
+    h2o_add_header(&reverse->pool, &headers_vec, H2O_TOKEN_ALPN, NULL, H2O_STRLIT("h2,http%2F1.1"));
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
     *body = h2o_iovec_init(NULL, 0);

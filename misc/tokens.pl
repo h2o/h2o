@@ -314,6 +314,8 @@ __DATA__
 0 0 0 0 0 0 0 1 no-early-hints
 0 1 1 0 1 0 0 0 datagram-flow-id
 0 1 1 0 0 0 0 0 proxy-connection
+0 0 0 0 0 0 0 0 alpn
+0 0 0 0 0 0 0 0 selected-alpn
 
 # QPACK static table (index, name, value)
 0 :authority

@@ -41,6 +41,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("access-control-request-method")}, {0, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("age")}, {21, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("allow")}, {22, 0, 0, 0, 0, 0, 0, 1}},
+                             {{H2O_STRLIT("alpn")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("alt-svc")}, {0, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("authorization")}, {23, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("cache-control")}, {24, 0, 0, 0, 0, 0, 0, 1}},
@@ -87,6 +88,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("referer")}, {51, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("refresh")}, {52, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("retry-after")}, {53, 0, 0, 0, 0, 0, 0, 1}},
+                             {{H2O_STRLIT("selected-alpn")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("server")}, {54, 0, 0, 0, 0, 0, 0, 1}},
                              {{H2O_STRLIT("set-cookie")}, {55, 0, 0, 0, 0, 0, 1, 0}},
                              {{H2O_STRLIT("strict-transport-security")}, {56, 0, 0, 0, 0, 0, 0, 1}},
@@ -106,7 +108,7 @@ h2o_token_t h2o__tokens[] = {{{H2O_STRLIT(":authority")}, {1, 0, 0, 0, 0, 0, 0, 
                              {{H2O_STRLIT("x-reproxy-url")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-traffic")}, {0, 0, 0, 0, 0, 0, 0, 0}},
                              {{H2O_STRLIT("x-xss-protection")}, {0, 0, 0, 0, 0, 0, 0, 1}}};
-size_t h2o__num_tokens = 85;
+size_t h2o__num_tokens = 87;
 
 const h2o_hpack_static_table_entry_t h2o_hpack_static_table[61] = {{H2O_TOKEN_AUTHORITY, {H2O_STRLIT("")}},
                                                                    {H2O_TOKEN_METHOD, {H2O_STRLIT("GET")}},
@@ -312,6 +314,10 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
             if (memcmp(name, "fro", 3) == 0)
                 return H2O_TOKEN_FROM;
             break;
+        case 'n':
+            if (memcmp(name, "alp", 3) == 0)
+                return H2O_TOKEN_ALPN;
+            break;
         case 't':
             if (memcmp(name, "hos", 3) == 0)
                 return H2O_TOKEN_HOST;
@@ -507,6 +513,8 @@ const h2o_token_t *h2o_lookup_token(const char *name, size_t len)
         case 'n':
             if (memcmp(name, "authorizatio", 12) == 0)
                 return H2O_TOKEN_AUTHORIZATION;
+            if (memcmp(name, "selected-alp", 12) == 0)
+                return H2O_TOKEN_SELECTED_ALPN;
             break;
         case 's':
             if (memcmp(name, "accept-range", 12) == 0)
@@ -993,6 +1001,12 @@ int32_t h2o_qpack_lookup_allow(h2o_iovec_t value, int *is_exact)
     return -1;
 }
 
+int32_t h2o_qpack_lookup_alpn(h2o_iovec_t value, int *is_exact)
+{
+    *is_exact = 0;
+    return -1;
+}
+
 int32_t h2o_qpack_lookup_alt_svc(h2o_iovec_t value, int *is_exact)
 {
     if (h2o_memis(value.base, value.len, H2O_STRLIT("clear"))) {
@@ -1429,6 +1443,12 @@ int32_t h2o_qpack_lookup_retry_after(h2o_iovec_t value, int *is_exact)
     return -1;
 }
 
+int32_t h2o_qpack_lookup_selected_alpn(h2o_iovec_t value, int *is_exact)
+{
+    *is_exact = 0;
+    return -1;
+}
+
 int32_t h2o_qpack_lookup_server(h2o_iovec_t value, int *is_exact)
 {
     if (h2o_memis(value.base, value.len, H2O_STRLIT(""))) {
@@ -1603,7 +1623,7 @@ int32_t h2o_qpack_lookup_x_xss_protection(h2o_iovec_t value, int *is_exact)
     return 62;
 }
 
-const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[85] = {h2o_qpack_lookup_authority,
+const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[87] = {h2o_qpack_lookup_authority,
                                                                 h2o_qpack_lookup_method,
                                                                 h2o_qpack_lookup_path,
                                                                 h2o_qpack_lookup_protocol,
@@ -1623,6 +1643,7 @@ const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[85] = {h2o_qpack_lookup
                                                                 h2o_qpack_lookup_access_control_request_method,
                                                                 h2o_qpack_lookup_age,
                                                                 h2o_qpack_lookup_allow,
+                                                                h2o_qpack_lookup_alpn,
                                                                 h2o_qpack_lookup_alt_svc,
                                                                 h2o_qpack_lookup_authorization,
                                                                 h2o_qpack_lookup_cache_control,
@@ -1669,6 +1690,7 @@ const h2o_qpack_lookup_static_cb h2o_qpack_lookup_static[85] = {h2o_qpack_lookup
                                                                 h2o_qpack_lookup_referer,
                                                                 h2o_qpack_lookup_refresh,
                                                                 h2o_qpack_lookup_retry_after,
+                                                                h2o_qpack_lookup_selected_alpn,
                                                                 h2o_qpack_lookup_server,
                                                                 h2o_qpack_lookup_set_cookie,
                                                                 h2o_qpack_lookup_strict_transport_security,
