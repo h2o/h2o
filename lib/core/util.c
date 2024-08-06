@@ -990,19 +990,6 @@ void on_reverse_close(void *_data) {
     schedule_reconnect(reverse);
 }
 
-static void on_reverse_read(h2o_socket_t *sock, const char *err)
-{
-    h2o_reverse_ctx_t *reverse = (void *)sock->data;
-
-    h2o_socket_read_stop(sock);
-    if (err != NULL) {
-        h2o_error_printf("unexpected read error in on_reverse_rea: %s\n", err);
-        return;
-    }
-
-    h2o_accept(reverse->accept_ctx, sock);
-}
-
 static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     h2o_reverse_ctx_t *reverse = (void *)client->data;
@@ -1095,7 +1082,14 @@ static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const ch
         reverse->config.setup_socket(conn_props.sock, reverse->data);
 
     h2o_socket_read_stop(conn_props.sock);
-    h2o_socket_read_start(conn_props.sock, on_reverse_read);
+
+    // accept
+    struct timeval connected_at = h2o_gettimeofday(reverse->accept_ctx->ctx->loop);
+    if (selected_alpn == SELECTED_ALPN_H2) {
+        h2o_http2_accept(reverse->accept_ctx, conn_props.sock, connected_at);
+    } else {
+        h2o_http1_accept(reverse->accept_ctx, conn_props.sock, connected_at);
+    }
 
     return h2o_httpclient_steal_socket;
 }
