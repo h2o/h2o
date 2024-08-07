@@ -32,6 +32,8 @@ sub create_client {
         my $readlen = $socket->sysread($data, 1 << 24);
         note "client read $readlen bytes:";
         note $data;
+        like $data, qr{foo: *FOO}s;
+        like $data, qr{bar: *BAR}s;
 
         my $upgrade_resp = join("\r\n",
             'HTTP/1.1 101 Switching Protocols',
@@ -60,6 +62,9 @@ listen:
     url: https://127.0.0.1:$client_port/.well-known/reverse/tcp/127.0.0.1/$port
     ssl:
         verify-peer: OFF
+    header:
+        - "foo: FOO"
+        - "bar: BAR"
 EOT
     return +{ guard => $server, $port };
 }

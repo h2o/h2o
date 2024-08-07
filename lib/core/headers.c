@@ -41,7 +41,12 @@ static ssize_t add_header(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_iove
 
 static inline h2o_iovec_t *alloc_and_init_iovec(h2o_mem_pool_t *pool, const char *base, size_t len)
 {
-    h2o_iovec_t *iov = h2o_mem_alloc_pool(pool, *iov, 1);
+    h2o_iovec_t *iov;
+    if (pool != NULL) {
+        iov = h2o_mem_alloc_pool(pool, *iov, 1);
+    } else {
+        iov = h2o_mem_alloc(sizeof(*iov));
+    }
     iov->base = (char *)base;
     iov->len = len;
     return iov;

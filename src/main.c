@@ -227,6 +227,7 @@ struct listener_config_t {
         h2o_url_t url;
         uint64_t reconnect_interval;
         uint64_t connections_per_thread;
+        h2o_headers_t req_headers;
         h2o_socketpool_t sockpool;
     } reverse;
 
@@ -2702,7 +2703,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 {
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL, **group_node = NULL, **url_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL, **url_node = NULL, **header_node = NULL;
     int proxy_protocol = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
     uint64_t reconnect_interval = 1000;
@@ -2717,9 +2718,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **reconnect_interval_node, **connections_per_thread_node;
         if (h2o_configurator_parse_mapping(
                 cmd, node, NULL,
-                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,url:s,reconnect-interval:s,connections-per-thread:s",
+                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,url:s,reconnect-interval:s,connections-per-thread:s,header:*",
                 &host_node, &port_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &url_node, &reconnect_interval_node, &connections_per_thread_node) != 0)
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &url_node, &reconnect_interval_node, &connections_per_thread_node, &header_node) != 0)
             return -1;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
@@ -3032,6 +3033,42 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         struct listener_config_t *listener = add_listener(-1, NULL, 0, ctx->hostconf == NULL, 0, stream_sndbuf, stream_rcvbuf);
         listener->reverse.reconnect_interval = reconnect_interval;
         listener->reverse.connections_per_thread = connections_per_thread;
+
+        listener->reverse.req_headers = (h2o_headers_t){};
+        if (header_node != NULL) {
+            yoml_t **node = NULL;
+            size_t num_headers = 0;
+            switch ((*header_node)->type) {
+            case YOML_TYPE_SCALAR:
+                node = header_node;
+                num_headers = 1;
+                break;
+            case YOML_TYPE_SEQUENCE:
+                node = (*header_node)->data.sequence.elements;
+                num_headers = (*header_node)->data.sequence.size;
+                break;
+            default:
+                h2o_configurator_errprintf(cmd, *header_node,
+                                           "argument to `header` must be either a scalar or a sequence");
+                return -1;
+            }
+
+            yoml_t **end = node + num_headers;
+            for (; node != end; ++node) {
+                h2o_iovec_t *name = NULL;
+                h2o_iovec_t value = h2o_iovec_init(NULL, 0);
+                if (h2o_headers_extract_name_value((*node)->data.scalar, strlen((*node)->data.scalar), &name, &value) != 0) {
+                    h2o_configurator_errprintf(cmd, *node, "failed to parse the header; should be in form of `name: value`");
+                    return -1;
+                }
+                if (h2o_iovec_is_token(name)) {
+                    h2o_add_header(NULL, &listener->reverse.req_headers, (void *)name, NULL, value.base, value.len);
+                } else {
+                    h2o_strtolower(name->base, name->len);
+                    h2o_add_header_by_str(NULL, &listener->reverse.req_headers, name->base, name->len, 0, NULL, value.base, value.len);
+                }
+            }
+        }
 
         h2o_socketpool_target_t *target = h2o_socketpool_create_target(&parsed, NULL);
         h2o_socketpool_init_specific(&listener->reverse.sockpool, SIZE_MAX, &target, 1, NULL);
@@ -4323,6 +4360,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                 &listeners[i].accept_ctx, (h2o_reverse_config_t){
                     .reconnect_interval = listener_config->reverse.reconnect_interval,
                     .sockpool = &listener_config->reverse.sockpool,
+                    .req_headers = &listener_config->reverse.req_headers,
                     .setup_socket = setup_socket
                 }, &listeners[i]);
         }
