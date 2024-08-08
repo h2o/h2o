@@ -1461,6 +1461,30 @@ extern const char h2o_npn_protocols[];
 extern const h2o_iovec_t h2o_http2_alpn_protocols[];
 extern const h2o_iovec_t h2o_alpn_protocols[];
 
+typedef struct st_h2o_reverse_config_t {
+    uint64_t reconnect_interval;
+    h2o_socketpool_t *sockpool;
+    h2o_headers_t *req_headers;
+    void (*setup_socket)(h2o_socket_t *sock, void *data);
+} h2o_reverse_config_t;
+
+typedef struct st_h2o_reverse_ctx_t {
+    h2o_reverse_config_t config;
+    h2o_url_t *url;
+    h2o_accept_ctx_t *accept_ctx;
+    h2o_timer_t reconnect_timer;
+    void *data;
+    struct {
+        h2o_httpclient_t *client;
+        h2o_httpclient_ctx_t ctx;
+        h2o_httpclient_connection_pool_t connpool;
+        h2o_socketpool_t sockpool;
+    } httpclient;
+    h2o_mem_pool_t pool;
+} h2o_reverse_ctx_t;
+
+void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *client, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data);
+
 /**
  * accepts a connection
  */
@@ -2361,6 +2385,16 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_heade
  * rewrite headers by the command provided
  */
 void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd);
+
+
+/**
+ * extract header name from given string
+ */
+int h2o_headers_extract_name(const char *src, size_t len, h2o_iovec_t **name);
+/**
+ * extract header name and value from given string
+ */
+int h2o_headers_extract_name_value(const char *src, size_t len, h2o_iovec_t **name, h2o_iovec_t *value);
 
 /* lib/handler/http2_debug_state.c */
 
