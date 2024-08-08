@@ -4401,7 +4401,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (is_quic_listener(conf.listeners[i])) {
             listeners[i].http3.ctx.super.acceptor = NULL;
         } else if (is_reverse_listener(conf.listeners[i])) {
-            // TODO
+            /* do nothing */
         } else {
             h2o_socket_close(listeners[i].sock);
             listeners[i].sock = NULL;
