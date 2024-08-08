@@ -18,8 +18,8 @@ sub create_client {
         Proto => 'tcp',
         Listen => 1,
         Reuse => 1,
-        SSL_cert_file => '/home/ichito/work/h2o/examples/h2o/server.crt',
-        SSL_key_file => '/home/ichito/work/h2o/examples/h2o/server.key',
+        SSL_cert_file => 'examples/h2o/server.crt',
+        SSL_key_file => 'examples/h2o/server.key',
     );
     die "cannot create socket $!\n" unless $listening_socket;
     diag "reverse tunnel client is listening port $port ..";
