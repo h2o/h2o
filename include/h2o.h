@@ -871,9 +871,10 @@ struct st_h2o_ostream_t {
      */
     struct st_h2o_ostream_t *next;
     /**
-     * called by the core to send output.
-     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function if any data can be
-     * sent.
+     * Called by the core to send output.
+     * Intermediary output streams should process the given output and call the h2o_ostream_send_next function either immediately or
+     * at some time in the future.
+     * Note: this callback is invoked only when progress can be made; For details, see `h2o_send`.
      */
     void (*do_send)(struct st_h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t state);
     /**
@@ -1636,8 +1637,13 @@ void h2o_req_bind_conf(h2o_req_t *req, h2o_hostconf_t *hostconf, h2o_pathconf_t 
  */
 static int h2o_send_state_is_in_progress(h2o_send_state_t s);
 /**
- * called by the generators to send output
- * note: generators should free itself after sending the final chunk (i.e. calling the function with is_final set to true)
+ * Called by the generators to send output.
+ * When supplying a partial response (i.e., `state` being set to `H2O_SEND_STATE_IN_PROGRESS`), the caller should wait for the
+ * invocation of its `proceed` callback, then invoke `h2o_send` again to supply more data.
+ * Note `h2o_send` cannot be called to supply just an empty body in the middle of the stream. It is valid to invoke this callback
+ * with an empty body with the intent to supply response headers or the closure of the response.
+ * After supplying the full response (i.e., `state` being set to something other than `H2O_SEND_STATE_IN_PROGRESS`), generators
+ * should free itself.
  * @param req the request
  * @param bufs an array of buffers
  * @param bufcnt length of the buffers array
