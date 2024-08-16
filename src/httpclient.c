@@ -517,6 +517,12 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
     fflush(stdout);
     h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
 
+    if (num_trailers != 0) {
+        print_headers(trailers, num_trailers);
+        fprintf(stderr, "\n");
+        fflush(stderr);
+    }
+
     if (errstr == h2o_httpclient_error_is_eos) {
         h2o_mem_clear_pool(client->pool);
         free(client->pool);
@@ -526,12 +532,6 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
             ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
             create_timeout(client->ctx->loop, req_interval, on_next_request, client->ctx);
         }
-    }
-
-    if (num_trailers != 0) {
-        print_headers(trailers, num_trailers);
-        fprintf(stderr, "\n");
-        fflush(stderr);
     }
 
     return 0;
