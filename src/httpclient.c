@@ -103,6 +103,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
+static void on_next_request(h2o_timer_t *entry);
 
 static void load_session(const char *server_name, ptls_iovec_t *tls_session, quicly_transport_parameters_t *quic_tp,
                          ptls_iovec_t *quic_address_token)
@@ -288,11 +289,18 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
 }
 
-static void dispose_request(h2o_httpclient_t *client)
+static void dispose_request(h2o_httpclient_t *client, int process_next)
 {
     h2o_mem_clear_pool(client->pool);
     free(client->pool);
     client->pool = NULL;
+
+    --cnt_left;
+    if (process_next && cnt_left >= concurrency) {
+        /* next attempt */
+        ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
+        create_timeout(client->ctx->loop, req_interval, on_next_request, client->ctx);
+    }
 }
 
 static void stdin_on_read(h2o_socket_t *_sock, const char *err)
@@ -517,7 +525,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
             h2o_socket_read_stop(udp_sock);
         if (errstr != h2o_httpclient_error_is_eos) {
             on_error(client->ctx, errstr);
-            dispose_request(client);
+            dispose_request(client, 0);
             return -1;
         }
     }
@@ -532,16 +540,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
         fflush(stderr);
     }
 
-    if (errstr == h2o_httpclient_error_is_eos) {
-        h2o_mem_clear_pool(client->pool);
-        free(client->pool);
-        --cnt_left;
-        if (cnt_left >= concurrency) {
-            /* next attempt */
-            ftruncate(fileno(stdout), 0); /* ignore error when stdout is a tty */
-            create_timeout(client->ctx->loop, req_interval, on_next_request, client->ctx);
-        }
-    }
+    if (errstr == h2o_httpclient_error_is_eos)
+        dispose_request(client, 1);
 
     return 0;
 }
@@ -577,7 +577,7 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         on_error(client->ctx, errstr);
-        dispose_request(client);
+        dispose_request(client, 0);
         return NULL;
     }
 
@@ -587,8 +587,8 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
     fflush(stderr);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, "no body");
-        dispose_request(client);
+        fprintf(stderr, "no body\n");
+        dispose_request(client, 1);
         return NULL;
     }
 
@@ -623,7 +623,7 @@ static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr != NULL) {
         on_error(client->ctx, errstr);
-        dispose_request(client);
+        dispose_request(client, 0);
         return;
     }
     if (*filler_remaining_bytes(client) > 0)
@@ -639,7 +639,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     size_t i;
     if (errstr != NULL) {
         on_error(client->ctx, errstr);
-        dispose_request(client);
+        dispose_request(client, 0);
         return NULL;
     }
 
