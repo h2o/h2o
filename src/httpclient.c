@@ -45,6 +45,11 @@
 
 #define DEFAULT_IO_TIMEOUT 5000
 
+struct req_data {
+    h2o_url_t uri;
+    size_t req_bytes_remain;
+};
+
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
@@ -428,7 +433,7 @@ static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 static void start_request(h2o_httpclient_ctx_t *ctx)
 {
     h2o_mem_pool_t *pool;
-    h2o_url_t *target_uri;
+    struct req_data *req_data;
     const char *upgrade_to = NULL;
 
     /* allocate memory pool */
@@ -436,28 +441,28 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     h2o_mem_init_pool(pool);
 
     /* parse URL, or host:port if CONNECT */
-    target_uri = h2o_mem_alloc_pool(pool, *target_uri, 1);
-    *target_uri = (h2o_url_t){};
+    req_data = h2o_mem_alloc_pool(pool, *req_data, 1);
+    *req_data = (struct req_data){};
 
     if (strcmp(req.method, "CONNECT-UDP") == 0 || (strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL)) {
         /* Traditional CONNECT, either creating a TCP tunnel or a UDP tunnel in the style of masque draft-03).
          * Authority section of target is set to host:port, and `upgrade_to` specifies traditional CONNECT. When masque is used,
          * scheme and path are set accordingly. */
-        if (h2o_url_init(target_uri, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
-            target_uri->_port == 0 || target_uri->_port == 65535) {
+        if (h2o_url_init(&req_data->uri, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
+            req_data->uri._port == 0 || req_data->uri._port == 65535) {
             on_error(ctx, "CONNECT target should be in the form of host:port: %s", req.target);
             h2o_mem_clear_pool(pool);
             free(pool);
             return;
         }
         if (strcmp(req.method, "CONNECT-UDP") == 0) {
-            target_uri->scheme = &H2O_URL_SCHEME_MASQUE;
-            target_uri->path = h2o_iovec_init(H2O_STRLIT("/"));
+            req_data->uri.scheme = &H2O_URL_SCHEME_MASQUE;
+            req_data->uri.path = h2o_iovec_init(H2O_STRLIT("/"));
         }
         upgrade_to = h2o_httpclient_upgrade_to_connect;
     } else {
         /* An ordinary request or extended CONNECT. Both of them talks to origin specified by the target URI */
-        if (h2o_url_parse(pool, req.target, SIZE_MAX, target_uri) != 0) {
+        if (h2o_url_parse(pool, req.target, SIZE_MAX, &req_data->uri) != 0) {
             on_error(ctx, "unrecognized type of URL: %s", req.target);
             h2o_mem_clear_pool(pool);
             free(pool);
@@ -470,7 +475,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : target_uri, NULL);
+        h2o_socketpool_target_t *target =
+            h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : &req_data->uri, NULL);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, io_timeout);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -495,8 +501,9 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, target_uri, ctx, connpool,
-                           target_uri, upgrade_to, on_connect);
+
+    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, req_data, ctx, connpool,
+                           &req_data->uri, upgrade_to, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -601,22 +608,19 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
     return on_body;
 }
 
-static size_t *filler_remaining_bytes(h2o_httpclient_t *client)
-{
-    return (size_t *)&client->data;
-}
-
 static void filler_on_io_timeout(h2o_timer_t *entry)
 {
     struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
     h2o_httpclient_t *client = t->ptr;
     free(t);
 
+    struct req_data *req_data = client->data;
+
     h2o_iovec_t vec = iov_filler;
-    if (vec.len > *filler_remaining_bytes(client))
-        vec.len = *filler_remaining_bytes(client);
-    *filler_remaining_bytes(client) -= vec.len;
-    client->write_req(client, vec, *filler_remaining_bytes(client) == 0);
+    if (vec.len > req_data->req_bytes_remain)
+        vec.len = req_data->req_bytes_remain;
+    req_data->req_bytes_remain -= vec.len;
+    client->write_req(client, vec, req_data->req_bytes_remain == 0);
 }
 
 static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
@@ -626,7 +630,9 @@ static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
         dispose_request(client, 0);
         return;
     }
-    if (*filler_remaining_bytes(client) > 0)
+
+    struct req_data *req_data = client->data;
+    if (req_data->req_bytes_remain > 0)
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
 }
 
@@ -635,6 +641,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
                                   h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
                                   h2o_url_t *origin)
 {
+    struct req_data *req_data = client->data;
     h2o_headers_t headers_vec = {NULL};
     size_t i;
     if (errstr != NULL) {
@@ -644,7 +651,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     }
 
     *_method = h2o_iovec_init(req.method, strlen(req.method));
-    *url = *(h2o_url_t *)client->data;
+    *url = req_data->uri;
     for (i = 0; i != req.num_headers; ++i)
         h2o_add_header_by_str(client->pool, &headers_vec, req.headers[i].name.base, req.headers[i].name.len, 1, NULL,
                               req.headers[i].value.base, req.headers[i].value.len);
@@ -660,7 +667,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
             h2o_buffer_consume(&std_in.sock->input, body->len);
         }
     } else if (req.body_size > 0) {
-        *filler_remaining_bytes(client) = req.body_size;
+        req_data->req_bytes_remain = req.body_size;
         char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
