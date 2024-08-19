@@ -275,7 +275,7 @@ static void on_exit_deferred(h2o_timer_t *entry)
     exit(1);
 }
 
-static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char *fmt, ...)
+static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 {
     char errbuf[2048];
     va_list args;
@@ -286,9 +286,13 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
 
     /* defer using zero timeout to send pending GOAWAY frame */
     create_timeout(ctx->loop, 0, on_exit_deferred, NULL);
+}
 
-    h2o_mem_clear_pool(pool);
-    free(pool);
+static void dispose_request(h2o_httpclient_t *client)
+{
+    h2o_mem_clear_pool(client->pool);
+    free(client->pool);
+    client->pool = NULL;
 }
 
 static void stdin_on_read(h2o_socket_t *_sock, const char *err)
@@ -433,7 +437,9 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
          * scheme and path are set accordingly. */
         if (h2o_url_init(target_uri, NULL, h2o_iovec_init(req.target, strlen(req.target)), h2o_iovec_init(NULL, 0)) != 0 ||
             target_uri->_port == 0 || target_uri->_port == 65535) {
-            on_error(ctx, pool, "CONNECT target should be in the form of host:port: %s", req.target);
+            on_error(ctx, "CONNECT target should be in the form of host:port: %s", req.target);
+            h2o_mem_clear_pool(pool);
+            free(pool);
             return;
         }
         if (strcmp(req.method, "CONNECT-UDP") == 0) {
@@ -444,7 +450,9 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     } else {
         /* An ordinary request or extended CONNECT. Both of them talks to origin specified by the target URI */
         if (h2o_url_parse(pool, req.target, SIZE_MAX, target_uri) != 0) {
-            on_error(ctx, pool, "unrecognized type of URL: %s", req.target);
+            on_error(ctx, "unrecognized type of URL: %s", req.target);
+            h2o_mem_clear_pool(pool);
+            free(pool);
             return;
         }
         upgrade_to = upgrade_token;
@@ -508,7 +516,8 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
         if (udp_sock != NULL)
             h2o_socket_read_stop(udp_sock);
         if (errstr != h2o_httpclient_error_is_eos) {
-            on_error(client->ctx, client->pool, errstr);
+            on_error(client->ctx, errstr);
+            dispose_request(client);
             return -1;
         }
     }
@@ -567,7 +576,8 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, client->pool, errstr);
+        on_error(client->ctx, errstr);
+        dispose_request(client);
         return NULL;
     }
 
@@ -577,7 +587,8 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
     fflush(stderr);
 
     if (errstr == h2o_httpclient_error_is_eos) {
-        on_error(client->ctx, client->pool, "no body");
+        on_error(client->ctx, "no body");
+        dispose_request(client);
         return NULL;
     }
 
@@ -611,7 +622,8 @@ static void filler_on_io_timeout(h2o_timer_t *entry)
 static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr != NULL) {
-        on_error(client->ctx, client->pool, errstr);
+        on_error(client->ctx, errstr);
+        dispose_request(client);
         return;
     }
     if (*filler_remaining_bytes(client) > 0)
@@ -626,7 +638,8 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     h2o_headers_t headers_vec = {NULL};
     size_t i;
     if (errstr != NULL) {
-        on_error(client->ctx, client->pool, errstr);
+        on_error(client->ctx, errstr);
+        dispose_request(client);
         return NULL;
     }
 
