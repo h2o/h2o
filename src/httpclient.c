@@ -48,6 +48,7 @@
 struct req_data {
     h2o_url_t uri;
     size_t req_bytes_remain;
+    unsigned resp_closed : 1;
 };
 
 static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
@@ -296,6 +297,10 @@ static void on_error(h2o_httpclient_ctx_t *ctx, const char *fmt, ...)
 
 static void dispose_request(h2o_httpclient_t *client, int process_next)
 {
+    struct req_data *req_data = client->data;
+    assert(!process_next || (req_data->req_bytes_remain == 0 && req_data->resp_closed) ||
+           !"can process next request only if current one is fully closed");
+
     h2o_mem_clear_pool(client->pool);
     free(client->pool);
     client->pool = NULL;
@@ -527,7 +532,12 @@ static void print_headers(h2o_header_t *headers, size_t num_headers)
 
 static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
+    struct req_data *req_data = client->data;
+
+    assert(!req_data->resp_closed);
+
     if (errstr != NULL) {
+        req_data->resp_closed = 1;
         if (udp_sock != NULL)
             h2o_socket_read_stop(udp_sock);
         if (errstr != h2o_httpclient_error_is_eos) {
@@ -547,7 +557,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
         fflush(stderr);
     }
 
-    if (errstr == h2o_httpclient_error_is_eos)
+    if (errstr == h2o_httpclient_error_is_eos && req_data->req_bytes_remain == 0)
         dispose_request(client, 1);
 
     return 0;
@@ -582,6 +592,10 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
+    struct req_data *req_data = client->data;
+
+    assert(!req_data->resp_closed);
+
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
         on_error(client->ctx, errstr);
         dispose_request(client, 0);
@@ -594,8 +608,10 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
     fflush(stderr);
 
     if (errstr == h2o_httpclient_error_is_eos) {
+        req_data->resp_closed = 1;
         fprintf(stderr, "no body\n");
-        dispose_request(client, 1);
+        if (req_data->req_bytes_remain == 0)
+            dispose_request(client, 1);
         return NULL;
     }
 
@@ -632,8 +648,12 @@ static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
     }
 
     struct req_data *req_data = client->data;
-    if (req_data->req_bytes_remain > 0)
+
+    if (req_data->req_bytes_remain > 0) {
         create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
+    } else if (req_data->resp_closed) {
+        dispose_request(client, 1);
+    }
 }
 
 h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *_method, h2o_url_t *url,
