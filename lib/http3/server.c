@@ -1179,6 +1179,16 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
+    bool stream_was_reset = quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX;
+    if (stream_was_reset && stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY) {
+        stream->req.write_req.cb = NULL;
+        stream->req.write_req.ctx = NULL;
+        stream->req.proceed_req = NULL;
+        stream->req_streaming = 0;
+        shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
+        return;
+    }
+
     if (errstr != NULL || (quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0 &&
                            quicly_recvstate_transfer_complete(&stream->quic->recvstate))) {
         /* tidy up the request streaming */
