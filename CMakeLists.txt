@@ -170,9 +170,11 @@ ENDIF ()
 OPTION(WITH_AEGIS "enable AEGIS (requires libaegis)" ${WITH_AEGIS_DEFAULT})
 
 # determine distribution
+if (NOT CMAKE_VERSION VERSION_LESS "3.22.0")
 cmake_host_system_information(RESULT DISTRO QUERY DISTRIB_INFO)
 list(FILTER DISTRO INCLUDE REGEX "^DISTRO_ID") 
 list(GET DISTRO 0 DISTRO)
+endif()
 
 INCLUDE_DIRECTORIES(
     include
