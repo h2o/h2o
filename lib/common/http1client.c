@@ -706,6 +706,7 @@ static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end
 {
     struct st_h2o_http1client_t *client = (struct st_h2o_http1client_t *)_client;
 
+    assert(!client->body_buf.is_end_stream);
     assert(chunk.len != 0 || is_end_stream);
     assert(!h2o_socket_is_writing(client->sock));
     assert(client->body_buf.buf->size == 0);
