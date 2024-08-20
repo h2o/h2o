@@ -521,7 +521,10 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int sto
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
-        quicly_request_stop(stream->quic, stop_sending_code);
+        /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
+         * as it is allowed and might be beneficial in case ACKs are lost */
+        if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
+            quicly_request_stop(stream->quic, stop_sending_code);
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
     }
