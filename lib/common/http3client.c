@@ -209,6 +209,7 @@ static void start_pending_requests(struct st_h2o_httpclient__h3_conn_t *conn)
 
 static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *errstr)
 {
+    assert(req->proceed_req.bytes_inflight != SIZE_MAX || errstr != NULL);
     req->proceed_req.bytes_inflight = SIZE_MAX;
     req->proceed_req.cb(&req->super, errstr);
 }
@@ -617,7 +618,7 @@ static void on_send_stop(quicly_stream_t *qs, int err)
     if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
         quicly_reset_stream(req->quic, err);
 
-    if (req->proceed_req.bytes_inflight != SIZE_MAX)
+    if (req->proceed_req.cb != NULL)
         call_proceed_req(req, h2o_httpclient_error_io /* TODO better error code? */);
 
     if (!quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
@@ -695,18 +696,12 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
             destroy_request(req);
         }
     } else if (err != 0) {
+        assert(!quicly_sendstate_is_open(&req->quic->sendstate) || req->proceed_req.cb != NULL);
         notify_response_error(req, h2o_httpclient_error_io);
-        int send_is_open = quicly_sendstate_is_open(&req->quic->sendstate);
         close_stream(req, err);
-        /* immediately dispose of the request if possible, or wait for the send-side to close */
-        if (!send_is_open) {
-            destroy_request(req);
-        } else if (req->proceed_req.bytes_inflight != SIZE_MAX) {
+        if (req->proceed_req.cb != NULL)
             call_proceed_req(req, h2o_httpclient_error_io);
-            destroy_request(req);
-        } else {
-            /* wait for write_req to be called */
-        }
+        destroy_request(req);
     }
 }
 
@@ -813,16 +808,7 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
     struct st_h2o_http3client_req_t *req = (void *)_client;
 
     assert(req->proceed_req.bytes_inflight == SIZE_MAX);
-
-    /* Notify error to the application, if the stream has already been closed (due to e.g., a stream error) or if the send-side has
-     * been closed (due to STOP_SENDING). Also, destroy the request if the receive side has already been closed. */
-    if (req->quic == NULL || !quicly_sendstate_is_open(&req->quic->sendstate)) {
-        if (req->quic != NULL && quicly_recvstate_transfer_complete(&req->quic->recvstate))
-            close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
-        if (req->quic == NULL)
-            destroy_request(req);
-        return 1;
-    }
+    assert(req->quic != NULL && quicly_sendstate_is_open(&req->quic->sendstate));
 
     emit_data(req, chunk);
 
