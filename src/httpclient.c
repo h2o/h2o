@@ -46,8 +46,10 @@
 #define DEFAULT_IO_TIMEOUT 5000
 
 struct req_data {
+    h2o_httpclient_t *client;
     h2o_url_t uri;
     size_t req_bytes_remain;
+    h2o_timer_t filler_timer;
     unsigned resp_closed : 1;
 };
 
@@ -110,6 +112,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
                                          h2o_url_t *origin);
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
 static void on_next_request(h2o_timer_t *entry);
+static void filler_on_io_timeout(h2o_timer_t *entry);
 
 static void load_session(const char *server_name, ptls_iovec_t *tls_session, quicly_transport_parameters_t *quic_tp,
                          ptls_iovec_t *quic_address_token)
@@ -301,6 +304,12 @@ static void dispose_request(h2o_httpclient_t *client, int process_next)
     assert(!process_next || (req_data->req_bytes_remain == 0 && req_data->resp_closed) ||
            !"can process next request only if current one is fully closed");
 
+    if (h2o_timer_is_linked(&req_data->filler_timer))
+        h2o_timer_unlink(&req_data->filler_timer);
+
+    if (std_in.sock != NULL && std_in.sock->data == client)
+        std_in.sock->data = NULL;
+
     h2o_mem_clear_pool(client->pool);
     free(client->pool);
     client->pool = NULL;
@@ -372,9 +381,11 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     if (rret == -1)
         return;
 
-    h2o_httpclient_t *client = std_in.sock->data;
-
     /* drop datagram if the connection is not ready */
+    struct req_data *req_data = std_in.sock->data;
+    if (req_data == NULL)
+        return;
+    h2o_httpclient_t *client = req_data->client;
     if (client == NULL || client->write_req == NULL)
         return;
 
@@ -447,7 +458,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
 
     /* parse URL, or host:port if CONNECT */
     req_data = h2o_mem_alloc_pool(pool, *req_data, 1);
-    *req_data = (struct req_data){};
+    *req_data = (struct req_data){.filler_timer.cb = filler_on_io_timeout};
 
     if (strcmp(req.method, "CONNECT-UDP") == 0 || (strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL)) {
         /* Traditional CONNECT, either creating a TCP tunnel or a UDP tunnel in the style of masque draft-03).
@@ -507,8 +518,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         SSL_CTX_free(ssl_ctx);
     }
 
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, req_data, ctx, connpool,
-                           &req_data->uri, upgrade_to, on_connect);
+    h2o_httpclient_connect(&req_data->client, pool, req_data, ctx, connpool, &req_data->uri, upgrade_to, on_connect);
 }
 
 static void on_next_request(h2o_timer_t *entry)
@@ -626,11 +636,8 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
 
 static void filler_on_io_timeout(h2o_timer_t *entry)
 {
-    struct st_timeout *t = H2O_STRUCT_FROM_MEMBER(struct st_timeout, timeout, entry);
-    h2o_httpclient_t *client = t->ptr;
-    free(t);
-
-    struct req_data *req_data = client->data;
+    struct req_data *req_data = H2O_STRUCT_FROM_MEMBER(struct req_data, filler_timer, entry);
+    h2o_httpclient_t *client = req_data->client;
 
     h2o_iovec_t vec = iov_filler;
     if (vec.len > req_data->req_bytes_remain)
@@ -650,7 +657,7 @@ static void filler_proceed_request(h2o_httpclient_t *client, const char *errstr)
     struct req_data *req_data = client->data;
 
     if (req_data->req_bytes_remain > 0) {
-        create_timeout(client->ctx->loop, io_interval, filler_on_io_timeout, client);
+        h2o_timer_link(client->ctx->loop, io_interval, &req_data->filler_timer);
     } else if (req_data->resp_closed) {
         dispose_request(client, 1);
     }
@@ -697,6 +704,10 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *headers = headers_vec.entries;
     *num_headers = headers_vec.size;
     client->informational_cb = on_informational;
+
+    if (std_in.sock != NULL)
+        std_in.sock->data = req_data;
+
     return on_head;
 }
 
