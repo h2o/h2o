@@ -227,7 +227,7 @@ struct listener_config_t {
         h2o_url_t url;
         uint64_t reconnect_interval;
         uint64_t connections_per_thread;
-        h2o_headers_t req_headers;
+        H2O_VECTOR(h2o_header_t) req_headers;
         h2o_socketpool_t sockpool;
     } reverse;
 
@@ -2379,7 +2379,6 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->rcvbuf = rcvbuf;
     listener->reverse.reconnect_interval = 1000;
     listener->reverse.connections_per_thread = 1;
-    listener->reverse.req_headers = (h2o_headers_t){};
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -3071,12 +3070,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     h2o_configurator_errprintf(cmd, *node, "failed to parse the header; should be in form of `name: value`");
                     return -1;
                 }
-                if (h2o_iovec_is_token(name)) {
-                    h2o_add_header(NULL, &listener->reverse.req_headers, (void *)name, NULL, value.base, value.len);
-                } else {
-                    h2o_strtolower(name->base, name->len);
-                    h2o_add_header_by_str(NULL, &listener->reverse.req_headers, name->base, name->len, 0, NULL, value.base, value.len);
-                }
+                h2o_vector_reserve(NULL, &listener->reverse.req_headers, listener->reverse.req_headers.size + 1);
+                h2o_header_t *header = &listener->reverse.req_headers.entries[listener->reverse.req_headers.size++];
+                *header = (h2o_header_t){
+                    .name = name,
+                    .value = value,
+                };
             }
         }
 
@@ -4370,7 +4369,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                 &listeners[i].accept_ctx, (h2o_reverse_config_t){
                     .reconnect_interval = listener_config->reverse.reconnect_interval,
                     .sockpool = &listener_config->reverse.sockpool,
-                    .req_headers = &listener_config->reverse.req_headers,
+                    .req_headers = listener_config->reverse.req_headers.entries,
+                    .num_req_headers = listener_config->reverse.req_headers.size,
                     .connect_timeout = conf.globalconf.proxy.connect_timeout,
                     .first_byte_timeout = conf.globalconf.proxy.first_byte_timeout,
                     .setup_socket = setup_socket,

@@ -1121,8 +1121,8 @@ static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const
 
     h2o_headers_t headers_vec = (h2o_headers_t){};
     h2o_add_header(&reverse->pool, &headers_vec, H2O_TOKEN_ALPN, NULL, H2O_STRLIT("h2,http%2F1.1"));
-    for (size_t i = 0; i != reverse->config.req_headers->size; ++i) {
-        h2o_header_t *header = &reverse->config.req_headers->entries[i];
+    for (size_t i = 0; i != reverse->config.num_req_headers; ++i) {
+        h2o_header_t *header = &reverse->config.req_headers[i];
         h2o_add_header_by_str(&reverse->pool, &headers_vec, header->name->base, header->name->len, 1, NULL, header->value.base, header->value.len);
     }
     *headers = headers_vec.entries;
