@@ -2377,6 +2377,9 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
     listener->rcvbuf = rcvbuf;
+    listener->reverse.reconnect_interval = 1000;
+    listener->reverse.connections_per_thread = 1;
+    listener->reverse.req_headers = (h2o_headers_t){};
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -2703,11 +2706,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 {
     const char *hostname = NULL, *servname = NULL, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL, **group_node = NULL, **url_node = NULL, **header_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL, **reverse_node = NULL;
     int proxy_protocol = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
-    uint64_t reconnect_interval = 1000;
-    uint64_t connections_per_thread = 1;
 
     /* fetch servname (and hostname) */
     switch (node->type) {
@@ -2715,12 +2716,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **reconnect_interval_node, **connections_per_thread_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node;
         if (h2o_configurator_parse_mapping(
                 cmd, node, NULL,
-                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,url:s,reconnect-interval:s,connections-per-thread:s,header:*",
+                "host:s,port:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:s,sndbuf:s,rcvbuf:s,reverse:m",
                 &host_node, &port_node, &type_node, &owner_node, &group_node, &permission_node, &ssl_node, &proxy_protocol_node,
-                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &url_node, &reconnect_interval_node, &connections_per_thread_node, &header_node) != 0)
+                &quic_node, &cc_node, &initcwnd_node, &sndbuf_node, &rcvbuf_node, &reverse_node) != 0)
             return -1;
         if (host_node != NULL)
             hostname = (*host_node)->data.scalar;
@@ -2730,6 +2731,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             type = (*type_node)->data.scalar;
         } else if (quic_node != NULL) {
             type = "quic";
+        } else if (reverse_node != NULL) {
+            type = "reverse";
         }
         if (proxy_protocol_node != NULL &&
             (proxy_protocol = (int)h2o_configurator_get_one_of(cmd, *proxy_protocol_node, "OFF,ON")) == -1)
@@ -2737,10 +2740,6 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         if (sndbuf_node != NULL && h2o_configurator_scanf(cmd, *sndbuf_node, "%u", &stream_sndbuf) != 0)
             return -1;
         if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
-            return -1;
-        if (reconnect_interval_node != NULL && h2o_configurator_scanf(cmd, *reconnect_interval_node, "%" SCNu64, &reconnect_interval) != 0)
-            return -1;
-        if (connections_per_thread_node != NULL && h2o_configurator_scanf(cmd, *connections_per_thread_node, "%" SCNu64, &connections_per_thread) != 0)
             return -1;
     } break;
     default:
@@ -3019,10 +3018,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     } else if (strcmp(type, "reverse") == 0) {
 
         /* reverse http tunnel */
-        if (url_node == NULL) {
-            h2o_configurator_errprintf(cmd, node, "missing mandatory directive `url` for type `reverse`");
+        if (reverse_node == NULL) {
+            h2o_configurator_errprintf(cmd, node, "missing mandatory directive `reverse` for type `reverse`");
             return -1;
         }
+        yoml_t **url_node = NULL, **reconnect_interval_node = NULL,
+            **connections_per_thread_node = NULL, **header_node = NULL;
+
+        if (h2o_configurator_parse_mapping(cmd, *reverse_node,
+            "url:s",
+            "reconnect-interval:s,connections-per-thread:s,header:*",
+            &url_node,
+            &reconnect_interval_node, &connections_per_thread_node, &header_node) != 0)
+            return -1;
 
         h2o_url_t parsed;
         if (h2o_url_parse(NULL, (*url_node)->data.scalar, strlen((*url_node)->data.scalar), &parsed) != 0) {
@@ -3031,10 +3039,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         }
 
         struct listener_config_t *listener = add_listener(-1, NULL, 0, ctx->hostconf == NULL, 0, stream_sndbuf, stream_rcvbuf);
-        listener->reverse.reconnect_interval = reconnect_interval;
-        listener->reverse.connections_per_thread = connections_per_thread;
 
-        listener->reverse.req_headers = (h2o_headers_t){};
+        if (reconnect_interval_node != NULL && h2o_configurator_scanf(cmd, *reconnect_interval_node, "%" SCNu64, &listener->reverse.reconnect_interval) != 0)
+            return -1;
+        if (connections_per_thread_node != NULL && h2o_configurator_scanf(cmd, *connections_per_thread_node, "%" SCNu64, &listener->reverse.connections_per_thread) != 0)
+            return -1;
+
         if (header_node != NULL) {
             yoml_t **node = NULL;
             size_t num_headers = 0;
@@ -4361,7 +4371,9 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
                     .reconnect_interval = listener_config->reverse.reconnect_interval,
                     .sockpool = &listener_config->reverse.sockpool,
                     .req_headers = &listener_config->reverse.req_headers,
-                    .setup_socket = setup_socket
+                    .connect_timeout = conf.globalconf.proxy.connect_timeout,
+                    .first_byte_timeout = conf.globalconf.proxy.first_byte_timeout,
+                    .setup_socket = setup_socket,
                 }, &listeners[i]);
         }
     }

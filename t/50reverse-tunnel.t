@@ -59,12 +59,13 @@ hosts:
         file.dir: @{[ DOC_ROOT ]}
 listen:
     type: reverse
-    url: https://127.0.0.1:$client_port/.well-known/reverse/tcp/127.0.0.1/$port
     ssl:
         verify-peer: OFF
-    header:
-        - "foo: FOO"
-        - "bar: BAR"
+    reverse:
+        url: https://127.0.0.1:$client_port/.well-known/reverse/tcp/127.0.0.1/$port
+        header:
+            - "foo: FOO"
+            - "bar: BAR"
 EOT
     return +{ guard => $server, port => $port };
 }
