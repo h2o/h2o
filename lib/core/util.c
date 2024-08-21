@@ -1155,17 +1155,19 @@ void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *url, h2o_accept_ctx
     h2o_timer_init(&reverse->reconnect_timer, on_reverse_reconnect_timeout);
     reverse->data = data;
 
+    /* we cannot pass UINT64_MAX for timeout as it'll overflow */
+    #define INFINITE_TIMEOUT ((uint64_t)1000 * 86400 * 365 * 1000)
     reverse->httpclient.ctx = (h2o_httpclient_ctx_t){
         .loop = accept_ctx->ctx->loop,
         .getaddr_receiver = &accept_ctx->ctx->receivers.hostinfo_getaddr,
-        // TODO: make these parameters configurable
-        .io_timeout = 10000,
-        .connect_timeout = 10000,
-        .first_byte_timeout = 10000,
-        .keepalive_timeout = 10000,
+        .io_timeout = INFINITE_TIMEOUT,
+        .connect_timeout = config.connect_timeout,
+        .first_byte_timeout = config.first_byte_timeout,
+        .keepalive_timeout = INFINITE_TIMEOUT,
         .max_buffer_size = SIZE_MAX,
         .protocol_selector = {.ratio = { .http2 = 0, .http3 = 0}}, // now only supports h1
     };
+    #undef INFINITE_TIMEOUT
 
     h2o_socketpool_register_loop(config.sockpool, accept_ctx->ctx->loop);
     h2o_httpclient_connection_pool_init(&reverse->httpclient.connpool, config.sockpool);

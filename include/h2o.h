@@ -1464,6 +1464,8 @@ typedef struct st_h2o_reverse_config_t {
     uint64_t reconnect_interval;
     h2o_socketpool_t *sockpool;
     h2o_headers_t *req_headers;
+    uint64_t connect_timeout;
+    uint64_t first_byte_timeout;
     void (*setup_socket)(h2o_socket_t *sock, void *data);
 } h2o_reverse_config_t;
 
