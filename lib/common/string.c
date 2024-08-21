@@ -25,6 +25,7 @@
 #include <string.h>
 #include <time.h>
 #include "h2o/string_.h"
+#include "h2o/token.h"
 
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
 {
@@ -687,4 +688,46 @@ h2o_iovec_t h2o_encode_sf_string(h2o_mem_pool_t *pool, const char *s, size_t sle
     *dst++ = '"';
     *dst++ = '\0';
     return ret;
+}
+
+int h2o_extract_header_name(const char *src, size_t len, h2o_iovec_t **_name)
+{
+    h2o_iovec_t name;
+    const h2o_token_t *name_token;
+
+    name = h2o_str_stripws(src, len);
+    if (name.len == 0)
+        return -1;
+
+    name = h2o_strdup(NULL, name.base, name.len);
+    h2o_strtolower(name.base, name.len);
+
+    if ((name_token = h2o_lookup_token(name.base, name.len)) != NULL) {
+        *_name = (h2o_iovec_t *)&name_token->buf;
+        free(name.base);
+    } else {
+        *_name = h2o_mem_alloc(sizeof(**_name));
+        **_name = name;
+    }
+
+    return 0;
+}
+
+int h2o_extract_header_name_value(const char *src, size_t len, h2o_iovec_t **name, h2o_iovec_t *value)
+{
+    const char *colon, *end = src + len;
+    for (colon = src; colon != end; ++colon) {
+        if (*colon == ':')
+            break;
+    }
+
+    if (colon == end)
+        return -1;
+
+    if (h2o_extract_header_name(src, colon - src, name) != 0)
+        return -1;
+    *value = h2o_str_stripws(colon + 1, strlen(colon + 1));
+    *value = h2o_strdup(NULL, value->base, value->len);
+
+    return 0;
 }

@@ -102,7 +102,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     int i;
     for (i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
-        if (h2o_headers_extract_name_value(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name, &args[i].value) != 0) {
+        if (h2o_extract_header_name_value(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name, &args[i].value) != 0) {
             h2o_configurator_errprintf(cmd, args[i].node, "failed to parse the value; should be in form of `name: value`");
             return -1;
         }
@@ -132,7 +132,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
     for (size_t i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
         if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS) {
-            if (h2o_headers_extract_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
+            if (h2o_extract_header_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
                 h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
             }

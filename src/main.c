@@ -3066,7 +3066,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             for (; node != end; ++node) {
                 h2o_iovec_t *name = NULL;
                 h2o_iovec_t value = h2o_iovec_init(NULL, 0);
-                if (h2o_headers_extract_name_value((*node)->data.scalar, strlen((*node)->data.scalar), &name, &value) != 0) {
+                if (h2o_extract_header_name_value((*node)->data.scalar, strlen((*node)->data.scalar), &name, &value) != 0) {
                     h2o_configurator_errprintf(cmd, *node, "failed to parse the header; should be in form of `name: value`");
                     return -1;
                 }

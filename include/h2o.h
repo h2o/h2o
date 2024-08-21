@@ -2383,16 +2383,6 @@ void h2o_headers_append_command(h2o_headers_command_t **cmds, int cmd, h2o_heade
  */
 void h2o_rewrite_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, h2o_headers_command_t *cmd);
 
-
-/**
- * extract header name from given string
- */
-int h2o_headers_extract_name(const char *src, size_t len, h2o_iovec_t **name);
-/**
- * extract header name and value from given string
- */
-int h2o_headers_extract_name_value(const char *src, size_t len, h2o_iovec_t **name, h2o_iovec_t *value);
-
 /* lib/handler/http2_debug_state.c */
 
 /**
