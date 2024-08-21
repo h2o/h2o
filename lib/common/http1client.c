@@ -83,7 +83,7 @@ struct st_h2o_http1client_t {
      */
     uint64_t _socket_bytes_processed;
 
-    size_t steal_bytes;
+    size_t _steal_bytes;
 
     unsigned _is_chunked : 1;
     unsigned _seen_at_least_one_chunk : 1;
@@ -126,12 +126,14 @@ static void close_response(struct st_h2o_http1client_t *client)
     }
 }
 
-static h2o_httpclient_body_cb call_on_head(struct st_h2o_http1client_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
+static h2o_httpclient_body_cb call_on_head(struct st_h2o_http1client_t *client, const char *errstr, h2o_httpclient_on_head_t *args, size_t steal_bytes)
 {
     assert(!client->_delay_free);
     client->_delay_free = 1;
+    client->_steal_bytes = steal_bytes;
     h2o_httpclient_body_cb cb = client->super._cb.on_head(&client->super, errstr, args);
     client->_delay_free = 0;
+    client->_steal_bytes = 0;
     return cb;
 }
 
@@ -157,7 +159,7 @@ static void on_error(struct st_h2o_http1client_t *client, const char *errstr)
 {
     switch (client->state.res) {
     case STREAM_STATE_HEAD:
-        call_on_head(client, errstr, NULL);
+        call_on_head(client, errstr, NULL, 0);
         break;
     case STREAM_STATE_BODY:
         call_on_body(client, errstr);
@@ -556,13 +558,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
         on_head.pipe_reader = &client->pipe_reader;
 #endif
 
-    client->steal_bytes = (size_t)rlen;
-
     /* call the callback */
     client->super._cb.on_body =
-        call_on_head(client, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL, &on_head);
-
-    client->steal_bytes = 0;
+        call_on_head(client, client->state.res == STREAM_STATE_CLOSED ? h2o_httpclient_error_is_eos : NULL, &on_head, rlen);
 
     if (client->state.res == STREAM_STATE_CLOSED) {
         close_response(client);
@@ -1000,7 +998,7 @@ static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_con
 {
     struct st_h2o_http1client_t *client = (void *)_client;
     h2o_httpclient_set_conn_properties_of_socket(client->sock, properties);
-    properties->steal_bytes = &client->steal_bytes;
+    properties->steal_bytes = &client->_steal_bytes;
 }
 
 static void setup_client(struct st_h2o_http1client_t *client, h2o_socket_t *sock, h2o_url_t *origin)
