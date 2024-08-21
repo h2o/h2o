@@ -66,7 +66,7 @@ listen:
         - "foo: FOO"
         - "bar: BAR"
 EOT
-    return +{ guard => $server, $port };
+    return +{ guard => $server, port => $port };
 }
 
 subtest 'h1' => sub {
@@ -81,7 +81,6 @@ subtest 'h1' => sub {
     note "server read $readlen bytes:";
     note $resp;
     like $resp, qr{HTTP/[^ ]+ 200\s}is
-
 };
 
 subtest 'h2' => sub {
