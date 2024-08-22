@@ -235,6 +235,28 @@ subtest 'use-after-free of chunked encoding' => sub {
     like $output, qr{HTTP/1.1 200 }is;
 };
 
+# test httpXclient and h2o using h2o-httpclient
+subtest 'h2o-httpclient' => sub {
+    my $upstream_port = empty_port({ host => '0.0.0.0' });
+    my $server = spawn_h2o(h2o_conf($upstream_port, 0));
+    for my $set (['h1', '', 'http', $server->{port}],
+                 ['h1s', '', 'https', $server->{tls_port}],
+                 ['h2', '-2 100', 'https', $server->{tls_port}],
+                 ['h3', '-3 100', 'https', $server->{quic_port}]) {
+        subtest $set->[0] => sub {
+            my $upstream = create_upstream(
+                $upstream_port,
+                0, # only test h1, as the test h2 server does not support draining
+                +{ drain_body => 1, wait_body => 3000 },
+            );
+            my $resp = `@{[bindir]}/h2o-httpclient $set->[1] -k -m POST -b 3000 -i 1000 -c 1000 $set->[2]://127.0.0.1:$set->[3]/ 2>&1`;
+            like $resp, qr{^HTTP/.*\n\nhello$}s;
+            my ($log) = $upstream->{kill}->();
+            like $log, qr/received 3000 bytes/;
+        };
+    }
+};
+
 done_testing;
 
 sub h2o_conf {
