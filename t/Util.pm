@@ -673,7 +673,8 @@ sub spawn_forked {
 }
 
 sub spawn_h2_server {
-    my ($upstream_port, $stream_state_cbs, $stream_frame_cbs) = @_;
+    my ($upstream_port, $stream_state_cbs, $stream_frame_cbs, $opts) = @_;
+    $opts ||= {};
 
     my $upstream = IO::Socket::SSL->new(
         LocalAddr => '127.0.0.1',
@@ -742,7 +743,7 @@ sub spawn_h2_server {
                 $after_write->();
             }
         }
-    });
+    }, $opts);
 
     close $upstream;
     return $server;

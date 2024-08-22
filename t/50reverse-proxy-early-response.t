@@ -2,12 +2,30 @@ use strict;
 use warnings;
 use feature qw/say/;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
+use Getopt::Long;
 use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use IO::Socket::INET;
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
 use t::Util;
+
+if ($ENV{STANDALONE_SERVER}) {
+    my ($port, $h2, $wait_body, $drain_body) = (8080, undef, 0, 0);
+    GetOptions("port=i"  => \$port,
+               "http2"   => \$h2,
+               "wait=i"  => \$wait_body,
+               "drain"   => \$drain_body,
+    ) or die "error in command line argumengs";
+    my $upsteam = create_upstream($port, $h2, +{
+        wait_body  => $wait_body,
+        drain_body => $drain_body,
+        stdout     => undef, # no capture
+    });
+    warn "listening at port $port\n";
+    while (1) {}
+    exit 0;
+}
 
 for my $comb (0..3) {
     my $up_is_h2 = $comb & 0b01;
@@ -297,7 +315,7 @@ sub create_h1_upstream {
             $client->close;
         }
         $server->close;
-    });
+    }, $opts);
     $upstream;
 }
 
@@ -339,7 +357,7 @@ sub create_h2_upstream {
                 }
             }
         },
-    });
+    }, $opts);
 }
 
 package H1Client;
