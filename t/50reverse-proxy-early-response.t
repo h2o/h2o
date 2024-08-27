@@ -251,6 +251,7 @@ subtest 'h2o-httpclient' => sub {
             );
             my $resp = `@{[bindir]}/h2o-httpclient $set->[1] -k -m POST -b 3000 -i 1000 -c 1000 $set->[2]://127.0.0.1:$set->[3]/ 2>&1`;
             like $resp, qr{^HTTP/.*\n\nhello$}s;
+            sleep 0.5;
             my ($log) = $upstream->{kill}->();
             like $log, qr/received 3000 bytes/;
         };
