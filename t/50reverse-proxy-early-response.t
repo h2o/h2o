@@ -320,6 +320,7 @@ sub create_h1_upstream {
                     $client->syswrite(join("\r\n", (
                         "HTTP/1.1 200 OK",
                         "Content-Length: @{[length($content)]}",
+                        +($opts->{drain_body} ? "Connection: close" : ""),
                         "", ""
                     )) . $content);
                     $client->flush;
