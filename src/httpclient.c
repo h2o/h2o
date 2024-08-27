@@ -307,7 +307,7 @@ static void dispose_request(h2o_httpclient_t *client, int process_next)
     if (h2o_timer_is_linked(&req_data->filler_timer))
         h2o_timer_unlink(&req_data->filler_timer);
 
-    if (std_in.sock != NULL && std_in.sock->data == client)
+    if (std_in.sock != NULL && std_in.sock->data == req_data)
         std_in.sock->data = NULL;
 
     h2o_mem_clear_pool(client->pool);
@@ -332,10 +332,10 @@ static void stdin_on_read(h2o_socket_t *_sock, const char *err)
     if (udp_sock != NULL)
         h2o_socket_read_stop(udp_sock);
 
-    h2o_httpclient_t *client = std_in.sock->data;
+    h2o_httpclient_t *client;
 
     /* bail out if the client is not yet ready to receive data */
-    if (client == NULL || client->write_req == NULL)
+    if (std_in.sock->data == NULL || (client = ((struct req_data *)std_in.sock->data)->client) == NULL || client->write_req == NULL)
         return;
 
     if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
