@@ -513,8 +513,11 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                 if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',') &&
                     *entity_header_index == -1) {
                     /* early return if upgrading to h2 */
-                    if (upgrade_is_h2(upgrade) && conn->sock->ssl == NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2)
-                        return fixup_request_is_h2_upgrade;
+                    if (upgrade_is_h2(upgrade) && conn->sock->ssl == NULL) {
+                        if (conn->super.ctx->globalconf->http1.upgrade_to_http2)
+                            return fixup_request_is_h2_upgrade;
+                        return NULL;
+                    }
                     conn->req.upgrade = upgrade;
                     conn->req.is_tunnel_req = 1;
                     conn->req.http1_is_persistent = 0;
