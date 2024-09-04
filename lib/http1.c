@@ -424,6 +424,7 @@ static int upgrade_is_h2(h2o_iovec_t upgrade)
 }
 
 static const char fixup_request_is_h2_upgrade[] = "fixup h2 upgrade";
+static const char fixup_request_is_https_redirect[] = "fixup https redirect";
 
 static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_header *headers, size_t num_headers,
                                  int minor_version, h2o_iovec_t *expect, ssize_t *entity_header_index)
@@ -513,8 +514,11 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                 if (upgrade.base != NULL && h2o_contains_token(connection.base, connection.len, H2O_STRLIT("upgrade"), ',') &&
                     *entity_header_index == -1) {
                     /* early return if upgrading to h2 */
-                    if (upgrade_is_h2(upgrade) && conn->sock->ssl == NULL && conn->super.ctx->globalconf->http1.upgrade_to_http2)
+                    if (upgrade_is_h2(upgrade) && conn->sock->ssl == NULL) {
+                        if (!conn->super.ctx->globalconf->http1.upgrade_to_http2)
+                            return fixup_request_is_https_redirect;
                         return fixup_request_is_h2_upgrade;
+                    }
                     conn->req.upgrade = upgrade;
                     conn->req.is_tunnel_req = 1;
                     conn->req.http1_is_persistent = 0;
@@ -647,7 +651,7 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         conn->_unconsumed_request_size = reqlen;
         const char *err;
         if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != NULL &&
-            err != fixup_request_is_h2_upgrade) {
+            err != fixup_request_is_h2_upgrade && err != fixup_request_is_https_redirect) {
             clear_timeouts(conn);
             send_bad_request(conn, err);
             return;
@@ -658,6 +662,13 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
             h2o_socket_read_stop(conn->sock);
             if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
                 h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
+        } else if (err == fixup_request_is_https_redirect) {
+            clear_timeouts(conn);
+            h2o_socket_read_stop(conn->sock);
+            h2o_iovec_t dest = h2o_concat(&conn->req.pool, h2o_iovec_init(H2O_STRLIT("https://")), conn->req.input.authority,
+                                          conn->req.input.path);
+            h2o_send_redirect(&conn->req, 301, "Moved Permanently", dest.base, dest.len);
+            return;
         } else if (entity_body_header_index != -1) {
             /* Request has body, start reading it. Invocation of `h2o_process_request` is delayed to reduce backend concurrency. */
             conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
