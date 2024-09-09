@@ -26,7 +26,7 @@
 void quicly_remote_cid_init_set(quicly_remote_cid_set_t *set, ptls_iovec_t *initial_cid, void (*random_bytes)(void *, size_t))
 {
     set->cids[0] = (quicly_remote_cid_t){
-        .is_active = 1,
+        .state = QUICLY_REMOTE_CID_IN_USE,
         .sequence = 0,
     };
     if (initial_cid != NULL) {
@@ -39,27 +39,11 @@ void quicly_remote_cid_init_set(quicly_remote_cid_set_t *set, ptls_iovec_t *init
 
     for (size_t i = 1; i < PTLS_ELEMENTSOF(set->cids); i++)
         set->cids[i] = (quicly_remote_cid_t){
-            .is_active = 0,
+            .state = QUICLY_REMOTE_CID_UNAVAILABLE,
             .sequence = i,
         };
 
     set->_largest_sequence_expected = PTLS_ELEMENTSOF(set->cids) - 1;
-}
-
-/**
- * promote CID at idx_to_promote as the current CID for communication
- * i.e. swap cids[idx_to_promote] and cids[0]
- */
-static void promote_cid(quicly_remote_cid_set_t *set, size_t idx_to_promote)
-{
-    uint64_t seq_tmp = set->cids[0].sequence;
-
-    assert(idx_to_promote > 0);
-    assert(!set->cids[0].is_active);
-
-    set->cids[0] = set->cids[idx_to_promote];
-    set->cids[idx_to_promote].is_active = 0;
-    set->cids[idx_to_promote].sequence = seq_tmp;
 }
 
 static int do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
@@ -71,7 +55,7 @@ static int do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const ui
         return QUICLY_TRANSPORT_ERROR_CONNECTION_ID_LIMIT;
 
     for (size_t i = 0; i < PTLS_ELEMENTSOF(set->cids); i++) {
-        if (set->cids[i].is_active) {
+        if (set->cids[i].state != QUICLY_REMOTE_CID_UNAVAILABLE) {
             /* compare newly received CID against what we already have, to see if there is duplication/conflicts */
 
             /* If an endpoint receives a NEW_CONNECTION_ID frame that repeats a previously issued connection ID with
@@ -97,12 +81,8 @@ static int do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const ui
             set->cids[i].sequence = sequence;
             quicly_set_cid(&set->cids[i].cid, ptls_iovec_init(cid, cid_len));
             memcpy(set->cids[i].stateless_reset_token, srt, QUICLY_STATELESS_RESET_TOKEN_LEN);
-            set->cids[i].is_active = 1;
+            set->cids[i].state = QUICLY_REMOTE_CID_AVAILABLE;
             was_stored = 1;
-            if (i > 0 && !set->cids[0].is_active) {
-                /* promote this CID for communication */
-                promote_cid(set, i);
-            }
         }
     }
 
@@ -113,64 +93,31 @@ static int do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const ui
 
 static void do_unregister(quicly_remote_cid_set_t *set, size_t idx_to_unreg)
 {
-    assert(set->cids[idx_to_unreg].is_active);
-
-    set->cids[idx_to_unreg].is_active = 0;
+    set->cids[idx_to_unreg].state = QUICLY_REMOTE_CID_UNAVAILABLE;
     set->cids[idx_to_unreg].sequence = ++set->_largest_sequence_expected;
 }
 
-int quicly_remote_cid_unregister(quicly_remote_cid_set_t *set, uint64_t sequence)
+void quicly_remote_cid_unregister(quicly_remote_cid_set_t *set, uint64_t sequence)
 {
-    uint64_t min_seq = UINT64_MAX;
-    size_t min_seq_idx = SIZE_MAX;
     for (size_t i = 0; i < PTLS_ELEMENTSOF(set->cids); i++) {
         if (sequence == set->cids[i].sequence) {
             do_unregister(set, i);
-            if (i != 0)
-                return 0; /* if not retiring idx=0 (current in-use CID), simply return */
-        }
-        if (set->cids[i].is_active && min_seq > set->cids[i].sequence) {
-            /* find a CID with minimum sequence number, while iterating over the array */
-            min_seq = set->cids[i].sequence;
-            min_seq_idx = i;
+            return;
         }
     }
-
-    if (!set->cids[0].is_active) {
-        /* we have retired the current CID (idx=0) */
-        if (min_seq_idx != SIZE_MAX)
-            promote_cid(set, min_seq_idx);
-        return 0;
-    } else {
-        /* we did not unregister any slot */
-        return 1;
-    }
+    assert(!"invalid CID sequence number");
 }
 
 static size_t unregister_prior_to(quicly_remote_cid_set_t *set, uint64_t seq_unreg_prior_to,
                                   uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT])
 {
-    uint64_t min_seq = UINT64_MAX, min_seq_idx = UINT64_MAX;
     size_t num_unregistered = 0;
-    for (size_t i = 0; i < PTLS_ELEMENTSOF(set->cids); i++) {
-        if (set->cids[i].is_active) {
-            if (set->cids[i].sequence < seq_unreg_prior_to) {
-                unregistered_seqs[num_unregistered++] = set->cids[i].sequence;
-                do_unregister(set, i);
-                continue;
-            }
-            if (min_seq > set->cids[i].sequence) {
-                /* find a CID with minimum sequence number, while iterating over the array */
-                min_seq = set->cids[i].sequence;
-                min_seq_idx = i;
-            }
-        }
-    }
 
-    if (!set->cids[0].is_active) {
-        /* we have retired the current CID (idx=0) */
-        if (min_seq_idx != UINT64_MAX)
-            promote_cid(set, min_seq_idx);
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(set->cids); i++) {
+        if (set->cids[i].sequence < seq_unreg_prior_to) {
+            unregistered_seqs[num_unregistered++] = set->cids[i].sequence;
+            do_unregister(set, i);
+        }
     }
 
     return num_unregistered;
@@ -180,7 +127,7 @@ int quicly_remote_cid_register(quicly_remote_cid_set_t *set, uint64_t sequence, 
                                const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN], uint64_t retire_prior_to,
                                uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT], size_t *num_unregistered_seqs)
 {
-    quicly_remote_cid_t backup_cid = set->cids[0]; // preserve one valid entry in cids[0] to handle protocol violation
+    quicly_remote_cid_set_t backup = *set; /* preserve current state so that it can be restored to notify protocol violation */
     int ret;
 
     assert(sequence >= retire_prior_to);
@@ -189,11 +136,9 @@ int quicly_remote_cid_register(quicly_remote_cid_set_t *set, uint64_t sequence, 
      * retires active_connection_id_limit CIDs and then installs one new CID. */
     *num_unregistered_seqs = unregister_prior_to(set, retire_prior_to, unregistered_seqs);
 
-    /* Then, register given value. */
+    /* Then, register given value. If an error occurs, restore the backup and send the error. */
     if ((ret = do_register(set, sequence, cid, cid_len, srt)) != 0) {
-        /* restore the backup and send the error */
-        if (!set->cids[0].is_active)
-            set->cids[0] = backup_cid;
+        *set = backup;
         return ret;
     }
 

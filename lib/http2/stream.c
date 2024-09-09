@@ -345,7 +345,8 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
     }
 
     stream->send_state = state;
-    int is_end_stream = state == H2O_SEND_STATE_FINAL && bufcnt == 0;
+    int is_end_stream = state == H2O_SEND_STATE_FINAL && bufcnt == 0,
+        empty_payload_allowed = stream->state < H2O_HTTP2_STREAM_STATE_SEND_BODY || state != H2O_SEND_STATE_IN_PROGRESS;
 
     /* send headers */
     switch (stream->state) {
@@ -381,11 +382,13 @@ void finalostream_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *bufs,
     }
 
     /* save the contents in queue */
-    if (bufcnt != 0) {
-        h2o_vector_reserve(&req->pool, &stream->_data, bufcnt);
-        memcpy(stream->_data.entries, bufs, sizeof(*bufs) * bufcnt);
-        stream->_data.size = bufcnt;
+    h2o_vector_reserve(&req->pool, &stream->_data, bufcnt);
+    for (size_t i = 0; i < bufcnt; ++i) {
+        if (bufs[i].len == 0)
+            continue;
+        stream->_data.entries[stream->_data.size++] = bufs[i];
     }
+    assert(empty_payload_allowed || stream->_data.size != 0 || !"h2o_data must only be called when there is progress");
 
     h2o_http2_conn_register_for_proceed_callback(conn, stream);
 }

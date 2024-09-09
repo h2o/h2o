@@ -802,6 +802,13 @@ Redo:
     PUSH_U64("packets-acked-ecn-ect1", num_packets.acked_ecn_counts[1]);
     PUSH_U64("packets-acked-ecn-ce", num_packets.acked_ecn_counts[2]);
     PUSH_U64("late-acked", num_packets.late_acked);
+    PUSH_U64("initial-received", num_packets.initial_received);
+    PUSH_U64("zero-rtt-received", num_packets.zero_rtt_received);
+    PUSH_U64("handshake-received", num_packets.handshake_received);
+    PUSH_U64("initial-sent", num_packets.initial_sent);
+    PUSH_U64("zero-rtt-sent", num_packets.zero_rtt_sent);
+    PUSH_U64("handshake-sent", num_packets.handshake_sent);
+    PUSH_U64("packets-received-out-of-order", num_packets.received_out_of_order);
     PUSH_U64("bytes-received", num_bytes.received);
     PUSH_U64("bytes-sent", num_bytes.sent);
     PUSH_U64("bytes-lost", num_bytes.lost);
@@ -1654,6 +1661,8 @@ static void finalize_do_send(struct st_h2o_http3_server_stream_t *stream)
 static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_state_t send_state)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, _ostr);
+    int empty_payload_allowed =
+        stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS || send_state != H2O_SEND_STATE_IN_PROGRESS;
 
     assert(&stream->req == _req);
 
@@ -1695,23 +1704,28 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
 
     /* If vectors carrying response body are being provided, copy them, incrementing the reference count if possible (for future
      * retransmissions), as well as prepending a DATA frame header */
-    if (bufcnt != 0) {
-        h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
-        uint64_t prev_body_size = stream->sendbuf.final_body_size;
-        for (size_t i = 0; i != bufcnt; ++i) {
-            /* copy one body vector */
-            struct st_h2o_http3_server_sendvec_t *dst = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size + i + 1;
-            dst->vec = bufs[i];
-            dst->entity_offset = stream->sendbuf.final_body_size;
-            stream->sendbuf.final_body_size += bufs[i].len;
-        }
-        uint64_t payload_size = stream->sendbuf.final_body_size - prev_body_size;
+    h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1 + bufcnt);
+    size_t dst_slot = stream->sendbuf.vecs.size + 1 /* reserve slot for DATA frame header */, payload_size = 0;
+    for (size_t i = 0; i != bufcnt; ++i) {
+        if (bufs[i].len == 0)
+            continue;
+        /* copy one body vector */
+        payload_size += bufs[i].len;
+        stream->sendbuf.vecs.entries[dst_slot++] = (struct st_h2o_http3_server_sendvec_t){
+            .vec = bufs[i],
+            .entity_offset = stream->sendbuf.final_body_size,
+        };
+    }
+    if (payload_size != 0) {
         /* build DATA frame header */
         size_t header_size =
             flatten_data_frame_header(stream, stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size, payload_size);
         /* update properties */
-        stream->sendbuf.vecs.size += 1 + bufcnt;
+        stream->sendbuf.vecs.size = dst_slot;
+        stream->sendbuf.final_body_size += payload_size;
         stream->sendbuf.final_size += header_size + payload_size;
+    } else {
+        assert(empty_payload_allowed || !"h2o_data must only be called when there is progress");
     }
 
     switch (send_state) {
