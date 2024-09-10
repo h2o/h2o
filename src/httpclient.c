@@ -954,7 +954,7 @@ int main(int argc, char **argv)
             break;
         case 'W': {
             uint64_t v;
-            if (sscanf(optarg, "%" PRIu64, &v) != 1) {
+            if (sscanf(optarg, "%" SCNu64, &v) != 1) {
                 fprintf(stderr, "failed to parse HTTP/3 receive window size (-W)\n");
                 exit(EXIT_FAILURE);
             }

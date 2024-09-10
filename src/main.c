@@ -2916,10 +2916,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         listener->quic.ctx->respect_app_limited = (unsigned)on;
                     }
                     if (jumpstart_default != NULL &&
-                        h2o_configurator_scanf(cmd, *jumpstart_default, "%" PRIu32,
+                        h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
                                                &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
                         return -1;
-                    if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" PRIu32,
+                    if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32,
                                                                         &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
                         return -1;
                 }
