@@ -207,6 +207,7 @@ typedef struct st_h2o_quic_stats_t {
     func(num_bytes.received, "num-bytes.received") \
     func(num_bytes.sent, "num-bytes.sent") \
     func(num_bytes.lost, "num-bytes.lost") \
+    func(num_bytes.ack_received, "num-bytes.ack-received") \
     func(num_bytes.stream_data_sent, "num-bytes.stream-data-sent") \
     func(num_bytes.stream_data_resent, "num-bytes.stream-data-resent") \
     func(num_paths.created, "num-paths.created") \
