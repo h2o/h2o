@@ -35,6 +35,9 @@
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08819C25218C9FA90057ED23 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08819C2E218C9FF70057ED23 /* qif.c in Sources */ = {isa = PBXBuildFile; fileRef = 08819C2D218C9FF70057ED23 /* qif.c */; };
+		089341FB2C99477C005CFA53 /* alloc.c in Sources */ = {isa = PBXBuildFile; fileRef = 089341F92C99477C005CFA53 /* alloc.c */; };
+		089341FC2C99477C005CFA53 /* alloc.h in Headers */ = {isa = PBXBuildFile; fileRef = 089341FA2C99477C005CFA53 /* alloc.h */; };
+		089341FD2C99478D005CFA53 /* alloc.c in Sources */ = {isa = PBXBuildFile; fileRef = 089341F92C99477C005CFA53 /* alloc.c */; };
 		08B3297F29407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
 		08B3298029407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
 		08B3298129407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
@@ -748,6 +751,8 @@
 		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		089341F92C99477C005CFA53 /* alloc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = alloc.c; sourceTree = "<group>"; };
+		089341FA2C99477C005CFA53 /* alloc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = alloc.h; sourceTree = "<group>"; };
 		089FA83229BB6EB900F7B746 /* 50connect-inflight.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-inflight.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		089FA83329BEC70800F7B746 /* 50compress-wetag.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50compress-wetag.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08A835E42996351100D872CE /* build.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = build.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.make; };
@@ -1514,6 +1519,8 @@
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
+				089341F92C99477C005CFA53 /* alloc.c */,
+				089341FA2C99477C005CFA53 /* alloc.h */,
 				0812AB1C1D7FCFEB00004F23 /* async.c */,
 				0812AB1D1D7FCFEB00004F23 /* async.h */,
 				0812AB1E1D7FCFEB00004F23 /* hiredis.c */,
@@ -3010,6 +3017,7 @@
 				104B9A261A4A5041009EEE64 /* serverutil.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
+				089341FC2C99477C005CFA53 /* alloc.h in Headers */,
 				E9E5047A214EB26D004DC170 /* http3_common.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
 				107D4D531B5B2412004A9B21 /* file.h in Headers */,
@@ -3361,6 +3369,7 @@
 				08E86F422B5666C000F7211C /* h2olog.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
+				089341FB2C99477C005CFA53 /* alloc.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
 				E9E5048B214EC57A004DC170 /* common.c in Sources */,
 				D081373B1FD400F4004679DF /* roundrobin.c in Sources */,
@@ -3768,6 +3777,7 @@
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
 				108DD0861BA22E46004167DC /* mruby.c in Sources */,
 				E9708B5B1E52C7F30029E0A5 /* util.c in Sources */,
+				089341FD2C99478D005CFA53 /* alloc.c in Sources */,
 				E9708B681E52C80F0029E0A5 /* throttle_resp.c in Sources */,
 				E9708B251E49BADA0029E0A5 /* hmac.c in Sources */,
 				E901C410213E1C5500D17C93 /* ranges.c in Sources */,
