@@ -54,7 +54,7 @@ extern "C" {
 #define H2O_GNUC_VERSION 0
 #endif
 
-#if __STDC_VERSION__ >= 201112L
+#if __STDC_VERSION__ >= 201112L && !defined(_MUSL_LIB)
 #define H2O_NORETURN _Noreturn
 #elif defined(__clang__) || defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500
 // noreturn was not defined before gcc 2.5
