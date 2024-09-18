@@ -177,7 +177,7 @@ static void test_mozquic(void)
     quicly_stream_frame_t frame;
     static const char *mess = "\xc5\0\0\0\0\0\0\xb6\x16\x03";
     const uint8_t *p = (void *)mess, type_flags = *p++;
-    quicly_decode_stream_frame(type_flags, &p, p + 9, &frame);
+    quicly_decode_stream_frame(type_flags, SIZE_MAX, &p, p + 9, &frame);
 }
 
 void test_frame(void)
