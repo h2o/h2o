@@ -240,6 +240,25 @@ inline size_t h2o_base64_encode_capacity(size_t len)
     return (((len) + 2) / 3 * 4 + 1);
 }
 
+/**
+ * extract header name from given string
+ * @param src source string
+ * @param len length of source string
+ * @param name output of extracted header name, converted to lower-case; allocated or token
+ * @return 0 if successful
+ */
+int h2o_extract_header_name(const char *src, size_t len, h2o_iovec_t **name);
+/**
+ * extract header name and value from given string
+ * @param src source string
+ * @param len length of source string
+ * @param name output of extracted header name, converted to lower-case; allocated or token
+ * @param value output of extracted header value; allocated
+ * @return 0 if successful
+ */
+int h2o_extract_header_name_value(const char *src, size_t len, h2o_iovec_t **name, h2o_iovec_t *value);
+
+
 #ifdef __cplusplus
 }
 #endif

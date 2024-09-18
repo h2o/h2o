@@ -967,3 +967,211 @@ uint32_t h2o_cleanup_thread(uint64_t now, h2o_context_t *ctx_optional)
         return 1000;
     }
 }
+
+static inline void schedule_reconnect(h2o_reverse_ctx_t *reverse)
+{
+    h2o_timer_link(reverse->accept_ctx->ctx->loop, reverse->config.reconnect_interval, &reverse->reconnect_timer);
+}
+
+struct on_reverse_close_data_t {
+    void (*orig_cb)(void *data);
+    void *orig_data;
+    h2o_reverse_ctx_t *reverse;
+};
+
+void on_reverse_close(void *_data) {
+    struct on_reverse_close_data_t *data = (void *)_data;
+    data->orig_cb(data->orig_data);
+
+    h2o_reverse_ctx_t *reverse = data->reverse;
+    reverse->httpclient.client = NULL;
+    h2o_mem_clear_pool(&reverse->pool);
+
+    schedule_reconnect(reverse);
+}
+
+static h2o_httpclient_body_cb on_reverse_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
+{
+    h2o_reverse_ctx_t *reverse = (void *)client->data;
+
+    if (errstr != NULL) {
+        h2o_error_printf("received error in on_reverse_head: %s\n", errstr);
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+
+    if (args->status != 101) {
+        h2o_error_printf("received unexpected status in on_reverse_head: %u\n", args->status);
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+
+    enum enum_selected_alpn_t {
+        SELECTED_ALPN_NONE,
+        SELECTED_ALPN_H2,
+        SELECTED_ALPN_H1,
+    };
+
+    int found_connection_header = 0, found_upgrade_header = 0;
+    enum enum_selected_alpn_t selected_alpn = SELECTED_ALPN_NONE;
+
+    for (size_t i = 0; i != args->num_headers; ++i) {
+        h2o_header_t *header = &args->headers[i];
+        if (h2o_iovec_is_token(args->headers[i].name)) {
+            const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, args->headers[i].name);
+            if (token == H2O_TOKEN_CONNECTION) {
+                if (!h2o_lcstris(header->value.base, header->value.len, H2O_STRLIT("upgrade"))) {
+                    h2o_error_printf("unexpected connection header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
+                found_connection_header = 1;
+            } else if (token == H2O_TOKEN_UPGRADE) {
+                if (!h2o_memis(header->value.base, header->value.len, H2O_STRLIT("reverse"))) {
+                    h2o_error_printf("unexpected upgrade header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
+                found_upgrade_header = 1;
+            } else if (token == H2O_TOKEN_SELECTED_ALPN) {
+                if (h2o_memis(header->value.base, header->value.len, H2O_STRLIT("h2"))) {
+                    selected_alpn = SELECTED_ALPN_H2;
+                } else if (h2o_memis(header->value.base, header->value.len, H2O_STRLIT("http%2F1.1"))) {
+                    selected_alpn = SELECTED_ALPN_H1;
+                } else {
+                    h2o_error_printf("unexpected selected-alpn header value found: %.*s\n", (int)header->value.len, header->value.base);
+                    schedule_reconnect(reverse);
+                    return NULL;
+                }
+            }
+        }
+    }
+    if (!found_connection_header) {
+        h2o_error_printf("missing connection header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+    if (!found_upgrade_header) {
+        h2o_error_printf("missing upgrade header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+    if (selected_alpn == SELECTED_ALPN_NONE) {
+        h2o_error_printf("missing selected-alpn header\n");
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+
+    // replace sock's on_close data with our own to retry on close
+    h2o_httpclient_conn_properties_t conn_props;
+    client->get_conn_properties(client, &conn_props);
+
+    struct on_reverse_close_data_t *data = h2o_mem_alloc_pool(&reverse->pool, *data, sizeof(*data));
+    data->reverse = reverse;
+    data->orig_cb = conn_props.sock->on_close.cb;
+    data->orig_data = conn_props.sock->on_close.data;
+    conn_props.sock->on_close.cb = on_reverse_close;
+    conn_props.sock->on_close.data = data;
+    conn_props.sock->data = reverse;
+
+    // we only use http1 and it must set steal_bytes
+    assert(conn_props.steal_bytes != NULL);
+    h2o_buffer_consume(&conn_props.sock->input, *conn_props.steal_bytes);
+
+    if (reverse->config.setup_socket != NULL)
+        reverse->config.setup_socket(conn_props.sock, reverse->data);
+
+    h2o_socket_read_stop(conn_props.sock);
+
+    // accept
+    struct timeval connected_at = h2o_gettimeofday(reverse->accept_ctx->ctx->loop);
+    if (selected_alpn == SELECTED_ALPN_H2) {
+        h2o_http2_accept(reverse->accept_ctx, conn_props.sock, connected_at);
+    } else {
+        h2o_http1_accept(reverse->accept_ctx, conn_props.sock, connected_at);
+    }
+
+    return h2o_httpclient_steal_socket;
+}
+
+// this callback is actually never called, but needed just to signal that streaming mode is enabled
+static void reverse_proceed_request(h2o_httpclient_t *client, const char *errstr)
+{
+    if (errstr != NULL)
+        h2o_error_printf("reverse_proceed_request failed: %s\n", errstr);
+}
+
+
+static h2o_httpclient_head_cb on_reverse_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
+                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                         h2o_url_t *origin)
+{
+    h2o_reverse_ctx_t *reverse = (void *)client->data;
+
+    if (errstr != NULL) {
+        h2o_error_printf("error in on_reverse_connect: %s\n", errstr);
+        schedule_reconnect(reverse);
+        return NULL;
+    }
+
+    // setup request
+    *method = h2o_iovec_init(H2O_STRLIT("GET"));
+    *url = *reverse->url;
+
+    h2o_headers_t headers_vec = (h2o_headers_t){};
+    h2o_add_header(&reverse->pool, &headers_vec, H2O_TOKEN_ALPN, NULL, H2O_STRLIT("h2,http%2F1.1"));
+    for (size_t i = 0; i != reverse->config.num_req_headers; ++i) {
+        h2o_header_t *header = &reverse->config.req_headers[i];
+        h2o_add_header_by_str(&reverse->pool, &headers_vec, header->name->base, header->name->len, 1, NULL, header->value.base, header->value.len);
+    }
+    *headers = headers_vec.entries;
+    *num_headers = headers_vec.size;
+    *body = h2o_iovec_init(NULL, 0);
+    *proceed_req_cb = reverse_proceed_request;
+
+    return on_reverse_head;
+}
+
+static void start_listening(h2o_reverse_ctx_t *reverse)
+{
+    h2o_mem_init_pool(&reverse->pool);
+    h2o_httpclient_connect(&reverse->httpclient.client, &reverse->pool,
+        reverse, &reverse->httpclient.ctx, &reverse->httpclient.connpool,
+        reverse->url, "reverse", on_reverse_connect);
+}
+
+static void on_reverse_reconnect_timeout(h2o_timer_t *timer)
+{
+    h2o_reverse_ctx_t *reverse = H2O_STRUCT_FROM_MEMBER(h2o_reverse_ctx_t, reconnect_timer, timer);
+    start_listening(reverse);
+}
+
+void h2o_reverse_init(h2o_reverse_ctx_t *reverse, h2o_url_t *url, h2o_accept_ctx_t *accept_ctx, h2o_reverse_config_t config, void *data)
+{
+    reverse->url = url;
+    reverse->config = config;
+    reverse->accept_ctx = accept_ctx;
+    h2o_timer_init(&reverse->reconnect_timer, on_reverse_reconnect_timeout);
+    reverse->data = data;
+
+    /* we cannot pass UINT64_MAX for timeout as it'll overflow */
+    #define INFINITE_TIMEOUT ((uint64_t)1000 * 86400 * 365 * 1000)
+    reverse->httpclient.ctx = (h2o_httpclient_ctx_t){
+        .loop = accept_ctx->ctx->loop,
+        .getaddr_receiver = &accept_ctx->ctx->receivers.hostinfo_getaddr,
+        .io_timeout = INFINITE_TIMEOUT,
+        .connect_timeout = config.connect_timeout,
+        .first_byte_timeout = config.first_byte_timeout,
+        .keepalive_timeout = INFINITE_TIMEOUT,
+        .max_buffer_size = SIZE_MAX,
+        .protocol_selector = {.ratio = { .http2 = 0, .http3 = 0}}, // now only supports h1
+    };
+    #undef INFINITE_TIMEOUT
+
+    h2o_socketpool_register_loop(config.sockpool, accept_ctx->ctx->loop);
+    h2o_httpclient_connection_pool_init(&reverse->httpclient.connpool, config.sockpool);
+
+    start_listening(reverse);
+}
+
