@@ -393,8 +393,12 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
                         *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
-                        expect->base = (char *)src[i].value;
-                        expect->len = src[i].value_len;
+                        if (expect != NULL) {
+                            expect->base = (char *)src[i].value;
+                            expect->len = src[i].value_len;
+                        } else {
+                            h2o_add_header(pool, headers, name_token, orig_case, src[i].value, src[i].value_len);
+                        }
                     } else if (name_token == H2O_TOKEN_UPGRADE) {
                         upgrade->base = (char *)src[i].value;
                         upgrade->len = src[i].value_len;
@@ -432,8 +436,10 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     enum { METHOD_NORMAL, METHOD_CONNECT, METHOD_CONNECT_UDP } method_type;
     const char *ret;
 
-    expect->base = NULL;
-    expect->len = 0;
+    if (expect != NULL) {
+        expect->base = NULL;
+        expect->len = 0;
+    }
 
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
@@ -649,7 +655,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
     default: { // parse complete
         conn->_unconsumed_request_size = reqlen;
         const char *err;
-        if ((err = fixup_request(conn, headers, num_headers, minor_version, &expect, &entity_body_header_index)) != NULL &&
+        int forward_expect = h2o_req_should_forward_expect(&conn->req);
+        if ((err = fixup_request(conn, headers, num_headers, minor_version, forward_expect ? NULL : &expect, &entity_body_header_index)) != NULL &&
             err != fixup_request_is_h2_upgrade) {
             clear_timeouts(conn);
             send_bad_request(conn, err);
