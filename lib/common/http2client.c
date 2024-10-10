@@ -104,7 +104,7 @@ struct st_h2o_http2client_stream_t {
     } input;
 
     int *notify_destroyed;
-    int _use_expect;
+    int use_expect;
 };
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
