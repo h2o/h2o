@@ -1173,8 +1173,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->_use_expect && stream->state.req == STREAM_STATE_BODY)
+        if (stream->_use_expect && stream->state.req == STREAM_STATE_BODY) {
+            h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
             continue;
+        }
 
         /* request the app to send more, unless the stream is already closed (note: invocation of `proceed_req` might invoke
          * `do_write_req` synchronously) */
