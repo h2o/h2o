@@ -1018,7 +1018,7 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
                                uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_iovec_t protocol,
                                const h2o_header_t *headers, size_t num_headers, int is_end_stream, int use_expect)
 {
-    static const h2o_iovec_t hundred_continue = h2o_iovec_init(H2O_STRLIT("100-continue"));
+    static const h2o_iovec_t hundred_continue = (h2o_iovec_t){H2O_STRLIT("100-continue")};
     int old_style_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")) && protocol.base == NULL;
 
     size_t capacity = calc_headers_capacity(headers, num_headers);
