@@ -60,6 +60,9 @@ extern ptls_key_exchange_algorithm_t *ptls_mbedtls_key_exchanges[];
 
 void ptls_mbedtls_random_bytes(void *buf, size_t len);
 
+int ptls_mbedtls_load_private_key(ptls_context_t *ctx, char const *pem_fname);
+void ptls_mbedtls_dispose_sign_certificate(ptls_sign_certificate_t *_self);
+
 #ifdef __cplusplus
 }
 #endif

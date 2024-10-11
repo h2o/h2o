@@ -224,6 +224,7 @@ extern "C" {
 #define PTLS_ALERT_MISSING_EXTENSION 109
 #define PTLS_ALERT_UNSUPPORTED_EXTENSION 110
 #define PTLS_ALERT_UNRECOGNIZED_NAME 112
+#define PTLS_ALERT_UNKNOWN_PSK_IDENTITY 115
 #define PTLS_ALERT_CERTIFICATE_REQUIRED 116
 #define PTLS_ALERT_NO_APPLICATION_PROTOCOL 120
 #define PTLS_ALERT_ECH_REQUIRED 121
@@ -344,9 +345,10 @@ typedef struct st_ptls_key_exchange_context_t {
     ptls_iovec_t pubkey;
     /**
      * This function can be used for deriving a shared secret or for destroying the context.
-     * When `secret` is non-NULL, this callback derives the shared secret using the public key of the context and the peer key being
+     * When `secret` is non-NULL, this callback derives the shared secret using the private key of the context and the peer key being
      * given, and sets the value in `secret`. The memory pointed to by `secret->base` must be freed by the caller by calling `free`.
      * When `release` is set, the callee frees resources allocated to the context and set *keyex to NULL.
+     * Upon failure (i.e., when an PTLS error code is returned), `*pubkey` and `*secret` either remain unchanged or are zero-cleared.
      */
     int (*on_exchange)(struct st_ptls_key_exchange_context_t **keyex, int release, ptls_iovec_t *secret, ptls_iovec_t peerkey);
 } ptls_key_exchange_context_t;
@@ -365,9 +367,10 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      */
     int (*create)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **ctx);
     /**
-     * Implements synchronous key exchange. Called when receiving a ServerHello.
-     * Given a public key provided by the peer (`peerkey`), this callback returns a empheral public key (`pubkey`) and a secret
-     * (`secret) `derived from the two public keys.
+     * Implements synchronous key exchange. Called when ServerHello is generated.
+     * Given a public key provided by the peer (`peerkey`), this callback generates an ephemeral private and public key, and returns
+     * the public key (`pubkey`) and a secret (`secret`) derived from the peerkey and private key.
+     * Upon failure (i.e., when an PTLS error code is returned), `*pubkey` and `*secret` either remain unchanged or are zero-cleared.
      */
     int (*exchange)(const struct st_ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *pubkey, ptls_iovec_t *secret,
                     ptls_iovec_t peerkey);
@@ -671,6 +674,12 @@ typedef const struct st_ptls_hpke_cipher_suite_t {
         ret (*cb)(struct st_ptls_##name##_t * self, __VA_ARGS__);                                                                  \
     } ptls_##name##_t
 
+typedef struct st_ptls_client_hello_psk_identity_t {
+    ptls_iovec_t identity;
+    uint32_t obfuscated_ticket_age;
+    ptls_iovec_t binder;
+} ptls_client_hello_psk_identity_t;
+
 /**
  * arguments passsed to the on_client_hello callback
  */
@@ -706,6 +715,10 @@ typedef struct st_ptls_on_client_hello_parameters_t {
         const uint8_t *list;
         size_t count;
     } server_certificate_types;
+    struct {
+        const ptls_client_hello_psk_identity_t *list;
+        size_t count;
+    } psk_identities;
     /**
      * set to 1 if ClientHello is too old (or too new) to be handled by picotls
      */
@@ -849,6 +862,18 @@ struct st_ptls_context_t {
         ptls_iovec_t *list;
         size_t count;
     } certificates;
+    /**
+     * External pre-shared key used for mutual authentication. Unless when using PSK, all the fields must be set to NULL / 0.
+     */
+    struct {
+        ptls_iovec_t identity;
+        ptls_iovec_t secret;
+        /**
+         * (mandatory) hash algorithm associated to the PSK; cipher-suites not sharing the same `ptls_hash_algorithm_t` will be
+         * ignored
+         */
+        ptls_hash_algorithm_t *hash;
+    } pre_shared_key;
     /**
      * ECH
      */
