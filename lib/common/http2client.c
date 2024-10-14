@@ -453,14 +453,12 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     struct st_h2o_http2client_stream_t *stream;
     int hret;
 
-
     if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_CLIENT_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
     if (frame.type != H2O_HTTP2_FRAME_TYPE_CONTINUATION) {
         *err_desc = "expected CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-
 
     stream = get_stream(conn, frame.stream_id);
     if (stream != NULL && stream->state.res == STREAM_STATE_CLOSED) {
@@ -600,7 +598,6 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     h2o_http2_headers_payload_t payload;
     struct st_h2o_http2client_stream_t *stream;
     int ret;
-
 
     /* decode */
     if ((ret = h2o_http2_decode_headers_payload(&payload, frame, err_desc)) != 0)
