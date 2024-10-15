@@ -151,7 +151,7 @@ See also <a href="https://github.com/h2o/h2o/wiki/macOS">wiki/macOS</a> to use D
 </dl>
 <dt><code>-DWITH_H2OLOG=<i>on</i>|<i>off</i></code></dt>
 <dd>
-This option instructs whether or not to enable <code>h2olog(1)</code>> support.
+This option instructs whether or not to enable <code>h2olog(1)</code> support.
 It is turned on by default if the prerequisites are found.
 See also <a href="./configure/h2olog.html">h2olog</a> for details.
 </dl>
@@ -169,6 +169,14 @@ As an example, <a href="https://en.wikipedia.org/wiki/AddressSanitizer">AddressS
 <dd>
 This option specifies the build type, <code>Release</code> or <code>Debug</code>.
 The default is <code>Release</code>.
+</dd>
+<dt><code>-DCMAKE_SHARED_LIBS=on|off</code></dt>
+<dd>
+This option indicates whether or not to build shared library (<code>libh2o.so</code>), it defaults to <code>OFF</code> which means it builds only static library (<code>libh2o.a</code>). If the value is <code>ON</code>, make sure the prerequisites are ready (for example, the shared libraries such as <code>libuv.so</code>, <code>libbrotlidec.so</code> ... etc. depends on your setup), and add the path of pkgconfig file (usually with suffix .pc) to the environment variable <a href="https://linux.die.net/man/1/pkg-config">PKG_CONFIG_PATH</a>.
+</dd>
+<dt><code>-DWITH_FUSION=on|off</code></dt>
+<dd>
+This option enables (<code>ON</code>) or disables (<code>OFF</code>) the support for accelerating <a href="https://en.wikipedia.org/wiki/Authenticated_encryption">AEAD</a> operation within the standalone server.
 </dd>
 </p>
 <h3 id="binary">Installing a Binary Package</h3>
