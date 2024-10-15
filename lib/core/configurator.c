@@ -140,6 +140,7 @@ struct st_check_command_order_record {
     yoml_t *value;
     unsigned defer_level;
     size_t mapping_pos;
+    unsigned supports_request_streaming;
 };
 
 typedef H2O_VECTOR(struct st_check_command_order_record) check_command_order_records_t;
@@ -169,12 +170,17 @@ static void check_command_order_after_cb(struct st_check_command_order *cco, h2o
 {
     if (ctx->pathconf != NULL) {
         if (ctx->pathconf->handlers.size > cco->nhandlers_before) {
-            h2o_vector_reserve(NULL, &cco->handlers, cco->handlers.size + 1);
-            cco->handlers.entries[cco->handlers.size++] = (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos};
+            for (size_t i = cco->nhandlers_before; i < ctx->pathconf->handlers.size; ++i) {
+                h2o_vector_reserve(NULL, &cco->handlers, cco->handlers.size + 1);
+                const h2o_handler_t *h = ctx->pathconf->handlers.entries[i];
+                cco->handlers.entries[cco->handlers.size++] =
+                    (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos, h->supports_request_streaming};
+            }
         }
         if (ctx->pathconf->_filters.size > cco->nfilters_before) {
             h2o_vector_reserve(NULL, &cco->filters, cco->filters.size + 1);
-            cco->filters.entries[cco->filters.size++] = (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos};
+            cco->filters.entries[cco->filters.size++] =
+                (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos};
         }
     }
 }
@@ -218,12 +224,36 @@ static int check_command_order_evaluate_impl(const check_command_order_records_t
     return ret;
 }
 
-static int check_command_order_evaluate(struct st_check_command_order *cco)
+static int check_command_order_request_body_streaming(struct st_check_command_order *cco, h2o_configurator_context_t *ctx)
+{
+    if (ctx->pathconf == NULL)
+        return 0;
+    if (!ctx->pathconf->misc.request_body_streaming)
+        return 0;
+
+    int ret = 0;
+    const check_command_order_records_t *records = &cco->handlers;
+    for (size_t i = 0; i < records->size; ++i) {
+        const struct st_check_command_order_record *record = records->entries + i;
+        if (!record->supports_request_streaming) {
+            ret = -1;
+            h2o_configurator_errprintf(
+                record->cmd, record->value,
+                "This path has `request-body-streaming: ON` yet the handler `%s` does not implement request body streaming",
+                record->cmd->name);
+        }
+    }
+    return ret;
+}
+
+static int check_command_order_evaluate(struct st_check_command_order *cco, h2o_configurator_context_t *ctx)
 {
     int ret = 0;
     if (check_command_order_evaluate_impl(&cco->handlers, "handler") != 0)
         ret = -1;
     if (check_command_order_evaluate_impl(&cco->filters, "filter") != 0)
+        ret = -1;
+    if (check_command_order_request_body_streaming(cco, ctx) != 0)
         ret = -1;
     free(cco->handlers.entries);
     free(cco->filters.entries);
@@ -335,7 +365,7 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             check_command_order_after_cb(&cco, pair->cmd, ctx, pair->value, 2, pair->mapping_pos);
         }
 
-        if (check_command_order_evaluate(&cco) != 0)
+        if (check_command_order_evaluate(&cco, ctx) != 0)
             goto Exit;
     }
 
@@ -1122,6 +1152,21 @@ static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o
     return 0;
 }
 
+static int on_config_request_body_streaming(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_pathconf_t *pathconf = ctx->pathconf;
+    ssize_t on;
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    if (on) {
+        pathconf->misc.request_body_streaming = 1;
+    } else if (pathconf->misc.request_body_streaming) {
+        h2o_configurator_errprintf(cmd, node, "cannot be set to OFF once set to ON");
+        return -1;
+    }
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -1272,6 +1317,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "usdt-selective-tracing",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_usdt_selective_tracing);
+        h2o_configurator_define_command(&c->super, "request-body-streaming",
+                                        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_request_body_streaming);
     }
 }
 
