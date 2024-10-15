@@ -983,6 +983,34 @@ See <a href="configure/base_directives.html#hosts"><code>hosts</code></a>.
 
 <?
 $ctx->{directive}->(
+    name     => "request-body-streaming",
+    levels   => [ qw(path) ],
+    desc     => q{A boolean flag that enables a configuration check that only allows handlers that support request body streaming to be configured for this path.},
+    default  => q{request-body-streaming: OFF},
+)->(sub {
+?>
+<p>
+When this flag is set to <code>ON</code> for a path and a handler is configured for this path that does not support request body streaming, then the <code>h2o</code> configuration will be rejected as invalid.
+</p><p>
+A handler that supports request body streaming will run without waiting for the request body to be received.
+Currently, among the built-in handlers, only <a href="configure/proxy_directives.html#proxy.reverse.url"><code>proxy.reverse.url</code></a>
+and <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>
+support request body streaming.
+Not all configurations rely on this support.  <code>request-body-streaming: ON</code> for a path indicates that request body streaming is critical for the application at this path
+and that configurations that inadvertently break this functionality should be treated as invalid.
+</p><p>
+By default, without <code>request-body-streaming: ON</code> set for the path, if a non-streaming handler precedes a streaming handler,
+then request body streaming will not take place.
+When <code>request-body-streaming: ON</code> is in effect for the path, then such a configuration will be rejected.
+</p><p>
+By default, without <code>request-body-streaming: ON</code> set for the path, if a streaming handler declines and the following handler is a non-streaming handler,
+then the non-streaming handler may not see the complete request body.
+When <code>request-body-streaming: ON</code> is in effect for the path, then such a configuration will be rejected.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "tcp-reuseport",
     levels  => [ qw(global) ],
     desc    => "A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.",

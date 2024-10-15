@@ -1449,6 +1449,33 @@ See hosts.
 .RE
 .RE
 
+.SS request-body-streaming
+A boolean flag that enables a configuration check that only allows handlers that support request body streaming to be configured for this path.
+
+.PP
+
+
+When this flag is set to ON for a path and a handler is configured for this path that does not support request body streaming, then the h2o configuration will be rejected as invalid.
+
+A handler that supports request body streaming will run without waiting for the request body to be received.
+Currently, among the built-in handlers, only proxy.reverse.url
+and proxy.connect
+support request body streaming.
+Not all configurations rely on this support.  request-body-streaming: ON for a path indicates that request body streaming is critical for the application at this path
+and that configurations that inadvertently break this functionality should be treated as invalid.
+
+By default, without request-body-streaming: ON set for the path, if a non-streaming handler precedes a streaming handler,
+then request body streaming will not take place.
+When request-body-streaming: ON is in effect for the path, then such a configuration will be rejected.
+
+By default, without request-body-streaming: ON set for the path, if a streaming handler declines and the following handler is a non-streaming handler,
+then the non-streaming handler may not see the complete request body.
+When request-body-streaming: ON is in effect for the path, then such a configuration will be rejected.
+
+
+.RE
+.RE
+
 .SS tcp-reuseport
 A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.
 
