@@ -1560,10 +1560,6 @@ int h2o_req_validate_pseudo_headers(h2o_req_t *req);
  */
 void h2o_process_request(h2o_req_t *req);
 /**
- * returns the first handler that will be used for the request
- */
-h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
-/**
  * delegates the request to the next handler
  */
 void h2o_delegate_request(h2o_req_t *req);
@@ -1892,9 +1888,9 @@ h2o_iovec_t h2o_push_path_in_link_header(h2o_req_t *req, const char *value, size
  */
 void h2o_send_informational(h2o_req_t *req);
 /**
- *
+ * see h2o_handler_t::supports_request_streaming for details
  */
-static int h2o_req_can_stream_request(h2o_req_t *req);
+int h2o_req_can_stream_request(h2o_req_t *req);
 /**
  * resolves internal redirect url for dest regarding req's hostconf
  */
@@ -2543,12 +2539,6 @@ inline void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*di
 static inline void h2o_context_set_logger_context(h2o_context_t *ctx, h2o_logger_t *logger, void *logger_ctx)
 {
     ctx->_module_configs[logger->_config_slot] = logger_ctx;
-}
-
-inline int h2o_req_can_stream_request(h2o_req_t *req)
-{
-    h2o_handler_t *first_handler = h2o_get_first_handler(req);
-    return first_handler != NULL && first_handler->supports_request_streaming;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
