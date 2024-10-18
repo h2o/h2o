@@ -13,44 +13,6 @@ struct headers_util_configurator_t {
     h2o_configurator_get_headers_commands_cb get_commands;
 };
 
-static int extract_name(const char *src, size_t len, h2o_iovec_t **_name)
-{
-    h2o_iovec_t name;
-    const h2o_token_t *name_token;
-
-    name = h2o_str_stripws(src, len);
-    if (name.len == 0)
-        return -1;
-
-    name = h2o_strdup(NULL, name.base, name.len);
-    h2o_strtolower(name.base, name.len);
-
-    if ((name_token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        *_name = (h2o_iovec_t *)&name_token->buf;
-        free(name.base);
-    } else {
-        *_name = h2o_mem_alloc(sizeof(**_name));
-        **_name = name;
-    }
-
-    return 0;
-}
-
-static int extract_name_value(const char *src, h2o_iovec_t **name, h2o_iovec_t *value)
-{
-    const char *colon = strchr(src, ':');
-
-    if (colon == NULL)
-        return -1;
-
-    if (extract_name(src, colon - src, name) != 0)
-        return -1;
-    *value = h2o_str_stripws(colon + 1, strlen(colon + 1));
-    *value = h2o_strdup(NULL, value->base, value->len);
-
-    return 0;
-}
-
 static int is_list_cmd(int cmd_id)
 {
     return cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS || cmd_id == H2O_HEADERS_CMD_COOKIE_UNSET ||
@@ -140,7 +102,7 @@ static int on_config_header_2arg(h2o_configurator_command_t *cmd, h2o_configurat
     int i;
     for (i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
-        if (extract_name_value(args[i].node->data.scalar, &args[i].name, &args[i].value) != 0) {
+        if (h2o_extract_header_name_value(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name, &args[i].value) != 0) {
             h2o_configurator_errprintf(cmd, args[i].node, "failed to parse the value; should be in form of `name: value`");
             return -1;
         }
@@ -170,7 +132,7 @@ static int on_config_unset_core(h2o_configurator_command_t *cmd, h2o_configurato
     for (size_t i = 0; i != num_headers; ++i) {
         args[i].node = headers[i];
         if (cmd_id == H2O_HEADERS_CMD_UNSET || cmd_id == H2O_HEADERS_CMD_UNSETUNLESS) {
-            if (extract_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
+            if (h2o_extract_header_name(args[i].node->data.scalar, strlen(args[i].node->data.scalar), &args[i].name) != 0) {
                 h2o_configurator_errprintf(cmd, args[i].node, "invalid header name");
                 return -1;
             }
