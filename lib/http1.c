@@ -362,7 +362,7 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
 
 static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
                                 h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, h2o_iovec_t *expect,
-                                ssize_t *entity_header_index)
+                                char *expect_orig_name, ssize_t *entity_header_index)
 {
     *entity_header_index = -1;
 
@@ -395,6 +395,7 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                     } else if (name_token == H2O_TOKEN_EXPECT) {
                         expect->base = (char *)src[i].value;
                         expect->len = src[i].value_len;
+                        strncpy(expect_orig_name, orig_case, sizeof(orig_case));
                     } else if (name_token == H2O_TOKEN_UPGRADE) {
                         upgrade->base = (char *)src[i].value;
                         upgrade->len = src[i].value_len;
@@ -434,6 +435,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     expect->base = NULL;
     expect->len = 0;
+    char expect_orig_case[sizeof("expect") - 1];
 
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
     conn->req.version = 0x100 | (minor_version != 0);
@@ -451,8 +453,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     }
 
     /* init headers */
-    if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade, expect,
-                            entity_header_index)) != NULL)
+    if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade,
+                            expect, expect_orig_case, entity_header_index)) != NULL)
         return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
@@ -471,6 +473,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             host = h2o_strdup(&conn->req.pool, host.base, host.len);
         if (upgrade.base != NULL)
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
+        if (expect->base != NULL)
+            *expect = h2o_strdup(&conn->req.pool, expect->base, expect->len);
     }
 
     if (method_type == METHOD_CONNECT) {
@@ -530,6 +534,13 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
                 conn->req.http1_is_persistent = 0;
         }
+    }
+
+    /* in forward mode, expect header is treated like other normal headers */
+    if (expect->base != NULL && h2o_req_should_forward_expect(&conn->req)) {
+          h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, expect_orig_case, expect->base, expect->len);
+          expect->base = NULL;
+          expect->len = 0;
     }
 
     return NULL;

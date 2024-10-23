@@ -1548,8 +1548,12 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_417, "Expectation Failed",
                                                                "unknown expectation", err_desc);
         }
-        stream->req.res.status = 100;
-        h2o_send_informational(&stream->req);
+        if (h2o_req_should_forward_expect(&stream->req)) {
+            h2o_add_header(&stream->req.pool, &stream->req.headers, H2O_TOKEN_EXPECT, NULL, expect.base, expect.len);
+        } else {
+            stream->req.res.status = 100;
+            h2o_send_informational(&stream->req);
+        }
     }
 
     return 0;

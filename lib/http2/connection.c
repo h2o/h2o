@@ -703,8 +703,12 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             h2o_send_error_417(&stream->req, "Expectation Failed", "unknown expectation", 0);
             return 0;
         }
-        stream->req.res.status = 100;
-        h2o_send_informational(&stream->req);
+        if (h2o_req_should_forward_expect(&stream->req)) {
+            h2o_add_header(&stream->req.pool, &stream->req.headers, H2O_TOKEN_EXPECT, NULL, expect.base, expect.len);
+        } else {
+            stream->req.res.status = 100;
+            h2o_send_informational(&stream->req);
+        }
     }
 
     /* handle the request */
