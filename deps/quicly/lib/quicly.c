@@ -1919,6 +1919,9 @@ static int promote_path(quicly_conn_t *conn, size_t path_index)
 
     do_delete_path(conn, path);
 
+    /* rearm the loss timer, now that the RTT estimate has been changed */
+    setup_next_send(conn);
+
     return 0;
 }
 
@@ -2530,6 +2533,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->crypto.tls = tls;
     if (new_path(conn, 0, remote_addr, local_addr) != 0) {
         unlock_now(conn);
+        if (pacer != NULL)
+            free(pacer);
         ptls_free(tls);
         free(conn);
         return NULL;
@@ -5192,7 +5197,7 @@ static int send_other_control_frames(quicly_conn_t *conn, quicly_send_context_t 
 
 static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
 {
-    int restrict_sending = 0, ack_only = 0, ret;
+    int restrict_sending = 0, ack_only = 0, ret = 0;
     size_t min_packets_to_send = 0, orig_bytes_inflight = 0;
 
     /* handle timeouts */
@@ -5281,11 +5286,13 @@ static int do_send(quicly_conn_t *conn, quicly_send_context_t *s)
      *  * quicly running as a client sends either a Handshake probe (or data) if the handshake keys are available, or else an
      *    Initial probe (or data).
      *  * quicly running as a server sends both Initial and Handshake probes (or data) if the corresponding keys are available. */
-    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
-                                   min_packets_to_send != 0 && (!quicly_is_client(conn) || conn->handshake == NULL))) != 0)
-        goto Exit;
-    if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only, min_packets_to_send != 0)) != 0)
-        goto Exit;
+    if (s->path_index == 0) {
+        if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
+                                       min_packets_to_send != 0 && (!quicly_is_client(conn) || conn->handshake == NULL))) != 0)
+            goto Exit;
+        if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only, min_packets_to_send != 0)) != 0)
+            goto Exit;
+    }
 
     /* setup 0-RTT or 1-RTT send context (as the availability of the two epochs are mutually exclusive, we can try 1-RTT first as an
      * optimization), then send application data if that succeeds */
@@ -5445,7 +5452,7 @@ Exit:
         if (conn->application == NULL || conn->application->super.unacked_count == 0)
             conn->egress.send_ack_at = INT64_MAX; /* we have sent ACKs for every epoch (or before address validation) */
         int can_send_stream_data = scheduler_can_send(conn);
-        update_send_alarm(conn, can_send_stream_data, 1);
+        update_send_alarm(conn, can_send_stream_data, s->path_index == 0);
         update_ratemeter(conn, can_send_stream_data && conn->super.remote.address_validation.validated &&
                                    (s->num_datagrams == s->max_datagrams ||
                                     conn->egress.loss.sentmap.bytes_in_flight >= conn->egress.cc.cwnd ||
@@ -5551,7 +5558,8 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
      * more than one path at a time) */
     if (conn->egress.send_probe_at <= conn->stash.now) {
         for (s.path_index = 1; s.path_index < PTLS_ELEMENTSOF(conn->paths); ++s.path_index) {
-            if (conn->paths[s.path_index] == NULL || conn->stash.now < conn->paths[s.path_index]->path_challenge.send_at)
+            if (conn->paths[s.path_index] == NULL || !(conn->stash.now >= conn->paths[s.path_index]->path_challenge.send_at ||
+                                                       conn->paths[s.path_index]->path_response.send_))
                 continue;
             if (conn->paths[s.path_index]->path_challenge.num_sent > conn->super.ctx->max_probe_packets) {
                 delete_path(conn, s.path_index);
@@ -5567,6 +5575,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
             }
             if ((ret = do_send(conn, &s)) != 0)
                 goto Exit;
+            assert(conn->stash.now < conn->paths[s.path_index]->path_challenge.send_at);
             if (s.num_datagrams != 0)
                 break;
         }
@@ -5580,7 +5589,7 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
         ret = 0;
     }
 
-    assert_consistency(conn, 1);
+    assert_consistency(conn, s.path_index == 0);
 
 Exit:
     if (s.path_index == 0)
@@ -6201,8 +6210,8 @@ static int handle_path_challenge_frame(quicly_conn_t *conn, struct st_quicly_han
     if ((ret = quicly_decode_path_challenge_frame(&state->src, state->end, &frame)) != 0)
         return ret;
 
-    QUICLY_PROBE(PATH_CHALLENGE_RECEIVE, conn, conn->stash.now, frame.data, sizeof(frame.data));
-    QUICLY_LOG_CONN(path_challenge_receive, conn, { PTLS_LOG_ELEMENT_HEXDUMP(data, frame.data, sizeof(frame.data)); });
+    QUICLY_PROBE(PATH_CHALLENGE_RECEIVE, conn, conn->stash.now, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN);
+    QUICLY_LOG_CONN(path_challenge_receive, conn, { PTLS_LOG_ELEMENT_HEXDUMP(data, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN); });
 
     /* schedule the emission of PATH_RESPONSE frame */
     struct st_quicly_conn_path_t *path = conn->paths[state->path_index];
@@ -6221,14 +6230,15 @@ static int handle_path_response_frame(quicly_conn_t *conn, struct st_quicly_hand
     if ((ret = quicly_decode_path_challenge_frame(&state->src, state->end, &frame)) != 0)
         return ret;
 
-    QUICLY_PROBE(PATH_RESPONSE_RECEIVE, conn, conn->stash.now, frame.data, sizeof(frame.data));
-    QUICLY_LOG_CONN(path_response_receive, conn, { PTLS_LOG_ELEMENT_HEXDUMP(data, frame.data, sizeof(frame.data)); });
+    QUICLY_PROBE(PATH_RESPONSE_RECEIVE, conn, conn->stash.now, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN);
+    QUICLY_LOG_CONN(path_response_receive, conn, { PTLS_LOG_ELEMENT_HEXDUMP(data, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN); });
 
     struct st_quicly_conn_path_t *path = conn->paths[state->path_index];
 
     if (ptls_mem_equal(path->path_challenge.data, frame.data, QUICLY_PATH_CHALLENGE_DATA_LEN)) {
         /* Path validation succeeded, stop sending PATH_CHALLENGEs. Active path might become changed in `quicly_receive`. */
         path->path_challenge.send_at = INT64_MAX;
+        recalc_send_probe_at(conn);
         conn->super.stats.num_paths.validated += 1;
     }
 
@@ -6930,7 +6940,9 @@ int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *
 Exit:
     if (*conn != NULL) {
         if (ret == 0) {
-            (*conn)->super.state = QUICLY_STATE_CONNECTED;
+            /* if CONNECTION_CLOSE was found and the state advanced to DRAINING, we need to retain that state */
+            if ((*conn)->super.state < QUICLY_STATE_CONNECTED)
+                (*conn)->super.state = QUICLY_STATE_CONNECTED;
         } else {
             initiate_close(*conn, ret, offending_frame_type, "");
             ret = 0;
@@ -6995,8 +7007,10 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
         if (conn->paths[path_index] != NULL && compare_socket_address(src_addr, &conn->paths[path_index]->address.remote.sa) == 0)
             break;
     if (path_index == PTLS_ELEMENTSOF(conn->paths) &&
-        conn->super.stats.num_paths.validation_failed >= conn->super.ctx->max_path_validation_failures)
-        return QUICLY_ERROR_PACKET_IGNORED;
+        conn->super.stats.num_paths.validation_failed >= conn->super.ctx->max_path_validation_failures) {
+        ret = QUICLY_ERROR_PACKET_IGNORED;
+        goto Exit;
+    }
 
     /* add unconditionally, as packet->datagram_size is set only for the first packet within the UDP datagram */
     conn->super.stats.num_bytes.received += packet->datagram_size;
