@@ -5,6 +5,7 @@ use Time::HiRes;
 use t::Util;
 use IO::Select;
 use IO::Socket::INET;
+use Net::EmptyPort qw(check_port);
 
 plan skip_all => "h2get not found"
     unless h2get_exists();
@@ -192,6 +193,42 @@ EOT
 
 subtest 'h3 upstream' => sub {
     plan skip_all => 'TODO';
+};
+
+subtest 'forward' => sub {
+    my $upstream_port = empty_port();
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.expect: FORWARD
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $upstream = spawn_server(
+        argv => [
+            qw(plackup -s Standalone --access-log /dev/null --listen), "127.0.0.1:$upstream_port", ASSETS_DIR . "/upstream.psgi",
+        ],
+        is_ready => sub {
+            check_port($upstream_port);
+        },
+    );
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($headers, $body);
+
+        ($headers, $body) = run_prog("$curl -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/echo-headers");
+        like $headers, qr{^HTTP/[0-9.]+ 200}is, '200 status';
+        like $body, qr{^expect: 100-continue$}im, 'upstream received forwarded expect header';
+
+        ($headers, $body) = run_prog("$curl -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/echo");
+        like $headers, qr{^HTTP/[0-9.]+ 200}is, '200 status';
+        is $body, 'request body', 'body works';
+
+        ($headers, $body) = run_prog("$curl --verbose -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/1xx");
+        like $headers, qr{Done waiting for 100-continue.+HTTP/[0-9.]+ 200}is, '100 then 200 status';
+    });
 };
 
 done_testing;
