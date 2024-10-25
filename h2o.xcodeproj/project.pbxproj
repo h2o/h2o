@@ -759,6 +759,8 @@
 		08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu1604; sourceTree = "<group>"; };
 		08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2004; sourceTree = "<group>"; };
 		08A835E729964B5C00D872CE /* Dockerfile.ubuntu2204 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2204; sourceTree = "<group>"; };
+		08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-qlog.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2406,7 +2408,9 @@
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
 				E90C514D230BB28800D6AD8E /* 90dtrace.t */,
 				E9D49A5225FB562800F4A80D /* 90h2olog.t */,
+				08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */,
 				086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */,
+				08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
