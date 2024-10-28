@@ -9,18 +9,30 @@ use IO::Socket::UNIX;
 use JSON;
 use Socket qw(SOCK_STREAM);
 
-my ($unix_socket, @addresses, $include_appdata, $http_mode, @snis, @resp_headers, @tracepoints);
+my ($unix_socket, $http_mode, @query);
 my $sample_rate = 1;
 
 GetOptions(
     'u|unix=s'            => \$unix_socket,
-    'A|address=s'         => \@addresses,
-    'a|application-data'  => \$include_appdata,
+    'A|address=s'         => sub {
+        push @query, "address=" . uri_escape($_[1]);
+    },
+    'a|application-data'  => sub {
+        push @query, "application-data=1";
+    },
     'H|http'              => \$http_mode,
-    'N|sni=s'             => \@snis,
-    's|response-header=s' => \@resp_headers,
-    'S|sample-rate=f'     => \$sample_rate,
-    't|trace=s'           => \@tracepoints,
+    'N|sni=s'             => sub {
+        push @query, "sni=" . uri_escape($_[1]);
+    },
+    's|response-header=s' => sub {
+        push @query, "response-header=" . uri_escape($_[1]);
+    },
+    'S|sample-rate=f'     => sub {
+        push @query, "sample-rate=" . uri_escape($_[1]);
+    },
+    't|trace=s'           => sub {
+        push @query, "trace=" . uri_escape($_[1]);
+    },
     'h|help'              => \&print_help,
 ) or die "Error in command line arguments\n";
 
@@ -29,8 +41,8 @@ die "mandatory option -u[nix] not set\n"
 
 # in case of HTTP mode, set the necessary tracepoints
 if ($http_mode) {
-    die "-h and -t cannot be used together\n" if @tracepoints;
-    @tracepoints = map { "h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
+    die "-h and -t cannot be used together\n" if grep { /^trace=/ } @query;
+    push @query, map { "trace=h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
 }
 
 # open socket
@@ -40,7 +52,7 @@ my $sock = IO::Socket::UNIX->new(
 ) or die "failed to open unix socket:$?";
 
 # send request; HTTP/1.0 is used to avoid chunked encoding, etc.
-print $sock "GET /.well-known/h2olog HTTP/1.0\r\n\r\n";
+print $sock "GET /.well-known/h2olog?@{[join '&', @query]} HTTP/1.0\r\n\r\n";
 
 # read the respose header section
 my $resp = "";
@@ -94,4 +106,10 @@ EOT
 sub stringify_http_version {
     my $ver256 = shift;
     return 'HTTP/' . int($ver256 / 256) . "." . ($ver256 % 256);
+}
+
+sub uri_escape {
+    my $s = shift;
+    $s =~ s/([^A-Za-z0-9\-_.!~*'()])/'%' . sprintf("%02X", ord($1))/eg;
+    return $s;
 }
