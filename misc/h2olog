@@ -6,6 +6,7 @@ use strict;
 use warnings;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use IO::Socket::UNIX;
+use JSON;
 use Socket qw(SOCK_STREAM);
 
 my ($unix_socket, @addresses, $include_appdata, $http_mode, @snis, @resp_headers, @tracepoints);
@@ -26,6 +27,12 @@ GetOptions(
 die "mandatory option -u[nix] not set\n"
     unless defined $unix_socket;
 
+# in case of HTTP mode, set the necessary tracepoints
+if ($http_mode) {
+    die "-h and -t cannot be used together\n" if @tracepoints;
+    @tracepoints = map { "h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
+}
+
 # open socket
 my $sock = IO::Socket::UNIX->new(
     Type => SOCK_STREAM,
@@ -45,7 +52,22 @@ my $exit_status = $resp =~ m{^HTTP/1\.[0-9] 200 }s ? 0 : 1;
 
 # forward all response to the client, then exit
 while (my $line = <$sock>) {
-    print $line;
+    if ($http_mode) {
+        my $json = decode_json($line);
+        if ($json->{module} eq 'h2o') {
+            if ($json->{type} eq 'receive_request') {
+                print "$json->{conn_id} $json->{req_id} RxProtocol @{[stringify_http_version($json->{http_version})]}\n";
+            } elsif ($json->{type} eq 'receive_request_header') {
+                print "$json->{conn_id} $json->{req_id} RxHeader   $json->{name} $json->{value}\n";
+            } elsif ($json->{type} eq 'send_response_header') {
+                print "$json->{conn_id} $json->{req_id} TxHeader   $json->{name} $json->{value}\n";
+            } elsif ($json->{type} eq 'send_response') {
+                print "$json->{conn_id} $json->{req_id} TxStatus   $json->{status}\n";
+            }
+        }
+    } else {
+        print $line;
+    }
 }
 exit $exit_status;
 
@@ -65,4 +87,9 @@ Options:
   -h,--help              print this help
 EOT
     exit 0;
+}
+
+sub stringify_http_version {
+    my $ver256 = shift;
+    return 'HTTP/' . int($ver256 / 256) . "." . ($ver256 % 256);
 }
