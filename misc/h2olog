@@ -7,9 +7,10 @@ use warnings;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use IO::Socket::UNIX;
 use JSON;
+use POSIX qw(strftime);
 use Socket qw(SOCK_STREAM);
 
-my ($unix_socket, $http_mode, @query);
+my ($unix_socket, $debug, $http_mode, $write_file, @query);
 my $sample_rate = 1;
 
 GetOptions(
@@ -20,6 +21,7 @@ GetOptions(
     'a|application-data'  => sub {
         push @query, "application-data=1";
     },
+    'd|debug'             => \$debug,
     'H|http'              => \$http_mode,
     'N|sni=s'             => sub {
         push @query, "sni=" . uri_escape($_[1]);
@@ -33,6 +35,7 @@ GetOptions(
     't|trace=s'           => sub {
         push @query, "trace=" . uri_escape($_[1]);
     },
+    'w|write=s'           => \$write_file,
     'h|help'              => \&print_help,
 ) or die "Error in command line arguments\n";
 
@@ -43,6 +46,11 @@ die "mandatory option -u[nix] not set\n"
 if ($http_mode) {
     die "-h and -t cannot be used together\n" if grep { /^trace=/ } @query;
     push @query, map { "trace=h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
+}
+
+if (defined $write_file) {
+    open STDOUT, '>', $write_file
+        or die "failed to open $write_file:$!";
 }
 
 # open socket
@@ -61,6 +69,9 @@ while (my $line = <$sock>) {
     $resp .= $line;
 }
 my $exit_status = $resp =~ m{^HTTP/1\.[0-9] 200 }s ? 0 : 1;
+if ($exit_status == 0 && $debug) {
+    print STDERR strftime('%FT%FZ', localtime), " Attaching $unix_socket\n";
+}
 
 # forward all response to the client, then exit
 while (my $line = <$sock>) {
@@ -98,6 +109,7 @@ Options:
   -s,--response-header=<name>
                          log only the specified reponse headers
   -T,--trace=<point>     log only the tracepoints being specified
+  -w,--write=<file>      output file (default: STDOUT)
   -h,--help              print this help
 EOT
     exit 0;
