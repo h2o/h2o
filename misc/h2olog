@@ -76,7 +76,7 @@ if ($exit_status == 0 && $debug) {
 # forward all response to the client, then exit
 $| = 1;
 while (my $line = <$sock>) {
-    if ($http_mode) {
+    if ($http_mode && $exit_status == 0) {
         my $json = decode_json($line);
         if ($json->{module} eq 'h2o') {
             if ($json->{type} eq 'receive_request') {
