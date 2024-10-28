@@ -74,6 +74,7 @@ if ($exit_status == 0 && $debug) {
 }
 
 # forward all response to the client, then exit
+$| = 1;
 while (my $line = <$sock>) {
     if ($http_mode) {
         my $json = decode_json($line);
