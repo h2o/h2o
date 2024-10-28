@@ -81,6 +81,8 @@ Options:
   -a|--application-data  log application data too
   -H,--http              use HTTP mode
   -N,--sni=<name>        log only the connections with the specified SNIs
+  -S,--sample-rate=<ratio>
+                         sample ratio (between 0 and 1)
   -s,--response-header=<name>
                          log only the specified reponse headers
   -T,--trace=<point>     log only the tracepoints being specified
