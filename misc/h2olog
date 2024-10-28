@@ -1,0 +1,68 @@
+#! /bin/sh
+exec ${H2O_PERL:-perl} -x $0 "$@"
+#! perl
+
+use strict;
+use warnings;
+use Getopt::Long qw(:config no_ignore_case bundling);
+use IO::Socket::UNIX;
+use Socket qw(SOCK_STREAM);
+
+my ($unix_socket, @addresses, $include_appdata, $http_mode, @snis, @resp_headers, @tracepoints);
+my $sample_rate = 1;
+
+GetOptions(
+    'u|unix=s'            => \$unix_socket,
+    'A|address=s'         => \@addresses,
+    'a|application-data'  => \$include_appdata,
+    'H|http'              => \$http_mode,
+    'N|sni=s'             => \@snis,
+    's|response-header=s' => \@resp_headers,
+    'S|sample-rate=f'     => \$sample_rate,
+    't|trace=s'           => \@tracepoints,
+    'h|help'              => \&print_help,
+) or die "Error in command line arguments\n";
+
+die "mandatory option -u[nix] not set\n"
+    unless defined $unix_socket;
+
+# open socket
+my $sock = IO::Socket::UNIX->new(
+    Type => SOCK_STREAM,
+    Peer => $unix_socket,
+) or die "failed to open unix socket:$?";
+
+# send request; HTTP/1.0 is used to avoid chunked encoding, etc.
+print $sock "GET /.well-known/h2olog HTTP/1.0\r\n\r\n";
+
+# read the respose header section
+my $resp = "";
+while (my $line = <$sock>) {
+    last if $line =~ /^[\r\n]/;
+    $resp .= $line;
+}
+my $exit_status = $resp =~ m{^HTTP/1\.[0-9] 200 }s ? 0 : 1;
+
+# forward all response to the client, then exit
+while (my $line = <$sock>) {
+    print $line;
+}
+exit $exit_status;
+
+die "failed to exec curl:$?";
+
+sub print_help {
+    print << "EOT";
+Usage: $0 -u <unix-socket> [options]
+Options:
+  -A,--address=<addr>    log only the connections from the specified addresses
+  -a|--application-data  log application data too
+  -H,--http              use HTTP mode
+  -N,--sni=<name>        log only the connections with the specified SNIs
+  -s,--response-header=<name>
+                         log only the specified reponse headers
+  -T,--trace=<point>     log only the tracepoints being specified
+  -h,--help              print this help
+EOT
+    exit 0;
+}
