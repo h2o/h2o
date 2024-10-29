@@ -3,6 +3,7 @@
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
+use File::Temp qw(tempdir);
 use Test::More;
 use JSON;
 use t::Util;
@@ -10,19 +11,19 @@ use t::Util;
 get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
 run_as_root();
 
-my $h2olog_prog = bindir() . "/h2olog";
+my $h2olog_prog = "misc/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
 unless ($ENV{DTRACE_TESTS})  {
-  plan skip_all => "$h2olog_prog not found"
-      unless -e $h2olog_prog;
-
   plan skip_all => "$client_prog not found"
       unless -e $client_prog;
 
   plan skip_all => 'dtrace support is off'
       unless server_features()->{dtrace};
 }
+
+my $tempdir = tempdir(CLEANUP => 1);
+my $h2olog_socket = "$tempdir/h2olog.sock";
 
 my $server = spawn_h2o({
     opts => [qw(--mode=worker)],
@@ -33,12 +34,18 @@ hosts:
     paths:
       /:
         file.dir: t/assets/doc_root
+  h2olog:
+    h2olog: appdata
+    listen:
+      - type: unix
+        port: $h2olog_socket
+    paths: {}
 EOT
 });
 
 subtest "h2olog", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => [],
   });
 
@@ -46,50 +53,54 @@ subtest "h2olog", sub {
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
-  until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
+  until (($trace .= $tracer->get_trace()) =~ m{h3s_destroy}) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
   }
 
   my @events = map { decode_json($_) } split /\n/, $trace;
-  is scalar(grep { $_->{type} && $_->{tid} && $_->{seq} } @events), scalar(@events), "each event has type, tid and seq";
+  is scalar(grep { $_->{type} } @events), scalar(@events), "each event has type (but tid and seq omitted by v2)";
 
-  my($h3s_accept) = grep { $_->{type} eq "h3s-accept" } @events;
-  ok is_uuidv4($h3s_accept->{"conn-uuid"}), "h3s-accept has a UUIDv4 field `conn-uuid`"
+  my($h3s_accept) = grep { $_->{type} eq "h3s_accept" } @events;
+  ok is_uuidv4($h3s_accept->{conn_uuid}), "h3s_accept has a UUIDv4 field `conn_uuid`"
 };
 
-subtest "h2olog -t", sub {
-  my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
-    args => [
-      "-t", "h2o:send_response_header",
-      "-t", "h2o:receive_request_header",
-      "-t", "h2o:h3s_destroy",
-    ],
-  });
+TODO: {
+  local $TODO = "reenable after adding support for -t";
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
-  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
+  subtest "h2olog -t", sub {
+    my $tracer = H2ologTracer->new({
+      path => $h2olog_socket,
+      args => [
+        "-t", "h2o:send_response_header",
+        "-t", "h2o:receive_request_header",
+        "-t", "h2o:h3s_destroy",
+      ],
+    });
 
-  my $trace;
-  until (($trace = $tracer->get_trace()) =~ m{"h3s-destroy"}) {}
+    my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+    like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
-  if ($ENV{H2OLOG_DEBUG}) {
-    diag "h2olog output:\n", $trace;
-  }
+    my $trace;
+    until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy"}) {diag $trace}
 
-  my %group_by;
-  foreach my $event (map { decode_json($_) } split /\n/, $trace) {
-    $group_by{$event->{"type"}}++;
-  }
+    if ($ENV{H2OLOG_DEBUG}) {
+      diag "h2olog output:\n", $trace;
+    }
 
-  is_deeply [sort keys %group_by], [sort qw(h3s-destroy send-response-header receive-request-header)];
-};
+    my %group_by;
+    foreach my $event (map { decode_json($_) } split /\n/, $trace) {
+      $group_by{$event->{"type"}}++;
+    }
+
+    is_deeply [sort keys %group_by], [sort qw(h3s_destroy send_response_header receive_request_header)];
+  };
+}
 
 subtest "h2olog -H", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-H"],
   });
 
@@ -97,7 +108,7 @@ subtest "h2olog -H", sub {
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
-  until (($trace = $tracer->get_trace()) =~ m{\bRxProtocol\b}) {}
+  until (($trace .= $tracer->get_trace()) =~ m{\bRxProtocol\b}) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
