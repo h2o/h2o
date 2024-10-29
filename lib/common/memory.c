@@ -97,7 +97,7 @@ static H2O_NORETURN void default_h2o_fatal(const char *file, int line, const cha
     abort();
 }
 
-H2O_NORETURN void (*h2o__fatal)(const char *, int, const char *, ...) = default_h2o_fatal;
+H2O_NORETURN_PTR void (*h2o__fatal)(const char *, int, const char *, ...) = default_h2o_fatal;
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
