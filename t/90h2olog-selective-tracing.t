@@ -3,82 +3,45 @@
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";
+use File::Temp qw(tempdir);
 use Test::More;
 use JSON;
 use Time::HiRes qw(sleep);
 use t::Util;
 
-get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
-run_as_root();
-
-my $h2olog_prog = bindir() . "/h2olog";
+my $h2olog_prog = "misc/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
-unless ($ENV{DTRACE_TESTS})  {
-  plan skip_all => "$h2olog_prog not found"
-      unless -e $h2olog_prog;
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
 
-  plan skip_all => "$client_prog not found"
-      unless -e $client_prog;
+my $tempdir = tempdir(CLEANUP => 1);
+my $h2olog_socket = "$tempdir/h2olog.sock";
 
-  plan skip_all => 'dtrace support is off'
-      unless server_features()->{dtrace};
-  plan skip_all => 'capabilities(7) support is off'
-      unless server_features()->{capabilities};
-}
+our $TODO = "TODO until selective tracing is implemented in h2olog v2";
 
-# make sure the h2o_return map does not exist at first,
-# but don't unlink it elsewhere to make sure `h2o_return` stuff works if the map already exists.
-unlink("/sys/fs/bpf/h2o_return");
-
-sub spawn_my_h2o {
-  return spawn_h2o({
-    opts => [qw(--mode=worker)],
-    user => scalar(getpwuid($ENV{SUDO_UID})),
-    conf => << "EOT",
+my $server = spawn_h2o({
+  opts => [qw(--mode=worker)],
+  conf => << "EOT",
 # an attempt to reduce flakiness (at least that caused by there being many worker threads)
 num-threads: 1
-# Either CAP_BPF or CAP_NET_ADMIN is required to use selective tracing if `kernel.unplivileged_bpf_disable` is set to true to
-# mitigate CVE-2022-0001 and CVE-2022-0001.
-capabilities:
-  - CAP_SYS_ADMIN
-usdt-selective-tracing: ON
 hosts:
   default:
     paths:
       /:
         file.dir: t/assets/doc_root
+  h2olog:
+    h2olog: appdata
+    listen:
+      - type: unix
+        port: $h2olog_socket
+    paths: {}
 EOT
 });
-}
-
-subtest "h2olog should be able to start when h2o has no `usdt-selective-tracing: ON`", sub {
-  my $server = spawn_h2o(<<'EOT');
-hosts:
-  default:
-    paths:
-      /:
-        file.dir: t/assets/doc_root
-EOT
-
-  my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
-    args => [],
-  });
-
-  my ($headers) = run_prog("$client_prog http://127.0.0.1:$server->{port}/");
-  like $headers, qr{^HTTP/1\.1 200\b}, "req: HTTP/1";
-
-  my $trace;
-  until (($trace = $tracer->get_trace()) =~ /\n/) {}
-  pass "h2olog has startded successfully";
-};
-
-my $server = spawn_my_h2o();
 
 subtest "h2olog -S=1.00", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-S", "1.0"],
   });
   subtest "TCP", sub {
@@ -109,7 +72,7 @@ subtest "h2olog -S=1.00", sub {
 
 subtest "h2olog -S=0.00", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-S", "0.0"],
   });
 
@@ -156,7 +119,7 @@ subtest "h2olog -S=0.00", sub {
 
 subtest "h2olog -A=127.0.0.2", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-A", "127.0.0.2"],
   });
 
@@ -218,7 +181,7 @@ subtest "h2olog -A=127.0.0.2", sub {
 
 subtest "h2olog -N=localhost.examp1e.net", sub {
   my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-N", "localhost.examp1e.net"],
   });
 
@@ -272,11 +235,11 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
 };
 subtest "multiple h2olog with sampling filters", sub {
   my $tracer1 = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-S", "0.0"],
   });
   my $tracer2 = H2ologTracer->new({
-    pid => $server->{pid},
+    path => $h2olog_socket,
     args => ["-S", "0.0"],
   });
 
@@ -295,32 +258,7 @@ subtest "multiple h2olog with sampling filters", sub {
   pass "multiple tracers can attach to the same h2o process";
 };
 
-# wait until the server and the tracer exits
 diag "shutting down ...";
 undef $server;
-
-subtest "h2o_return exists", sub {
-  ok -f "/sys/fs/bpf/h2o_return", "h2o_return does exist";
-
-  my $server = spawn_my_h2o();
-
-  my $tracer = H2ologTracer->new({
-    pid => $server->{pid},
-    args => ["-S", "0.0"],
-  });
-
-  my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
-  like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
-
-  my $trace;
-  until (($trace = $tracer->get_trace()) =~ /\n/) {}
-  my @logs = map { decode_json($_) } split /\n/, $trace;
-
-  is scalar(
-    grep {
-      $_->{type} eq "h3s-accept"
-    } @logs
-  ), 0, "no h3s-accept header in logs";
-};
 
 done_testing();
