@@ -85,7 +85,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #define H2O_USE_KQUEUE 1
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
-#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY) && defined(MSG_ZEROCOPY)
 #define H2O_USE_MSG_ZEROCOPY 1
 #endif
 #else

@@ -119,7 +119,7 @@
 #define H2O_USE_REUSEPORT 0
 #endif
 
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__FreeBSD__) || defined(__NetBSD__)
 #define H2O_HAS_PTHREAD_SETAFFINITY_NP 1
 #endif
 
@@ -3122,7 +3122,7 @@ static inline int on_config_num_threads_add_cpu(h2o_configurator_command_t *cmd,
     const char *cpu_spec = node->data.scalar;
     unsigned cpu_low, cpu_high, cpu_num;
     int pos;
-    if (index(cpu_spec, '-') == NULL) {
+    if (strchr(cpu_spec, '-') == NULL) {
         if (sscanf(cpu_spec, "%u%n", &cpu_low, &pos) != 1 || pos != strlen(cpu_spec))
             goto Error;
         cpu_high = cpu_low;
