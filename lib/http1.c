@@ -365,6 +365,7 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                                 ssize_t *expect_header_index, ssize_t *entity_header_index)
 {
     *entity_header_index = -1;
+    *expect_header_index = -1;
 
     assert(headers->size == 0);
 
@@ -450,7 +451,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
     }
 
     /* init headers */
-    ssize_t expect_header_index = -1;
+    ssize_t expect_header_index;
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade,
                             &expect_header_index, entity_header_index)) != NULL)
         return ret;
@@ -471,9 +472,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
             host = h2o_strdup(&conn->req.pool, host.base, host.len);
         if (upgrade.base != NULL)
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
-        if (expect_header_index != -1) {
+        if (expect_header_index != -1)
             *expect = h2o_strdup(&conn->req.pool, conn->req.headers.entries[expect_header_index].value.base, conn->req.headers.entries[expect_header_index].value.len);
-        }
     }
 
     if (method_type == METHOD_CONNECT) {
