@@ -86,7 +86,7 @@ struct st_h2o_http1client_t {
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
     unsigned _app_prefers_pipe_reader : 1;
-    unsigned _use_expect : 1;
+    unsigned _send_own_expect : 1;
 };
 
 static void on_body_to_pipe(h2o_socket_t *_sock, const char *err);
@@ -456,7 +456,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
 
         if (http_status == 101) {
-            if (client->_use_expect) {
+            if (client->_send_own_expect) {
                 /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
                 on_error(client, h2o_httpclient_error_unexpected_101);
                 return;
@@ -465,8 +465,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         } else if (http_status == 100 || http_status >= 200) {
             /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
              * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634. */
-            if (client->_use_expect) {
-                client->_use_expect = 0;
+            if (client->_send_own_expect) {
+                client->_send_own_expect = 0;
                 req_body_send(client);
             }
             if (http_status >= 200)
@@ -801,7 +801,7 @@ static h2o_iovec_t build_request(struct st_h2o_http1client_t *client, h2o_iovec_
         APPEND_HEADER(&h);
     }
 
-    if (client->_use_expect) {
+    if (client->_send_own_expect) {
         h2o_header_t h = {&H2O_TOKEN_EXPECT->buf, NULL, h2o_iovec_init(H2O_STRLIT("100-continue"))};
         APPEND_HEADER(&h);
     }
@@ -833,8 +833,8 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
     if (props->proxy_protocol->base != NULL)
         reqbufs[reqbufcnt++] = *props->proxy_protocol;
 
-    if (props->use_expect && (client->proceed_req != NULL || body.len != 0) && client->super.upgrade_to == NULL)
-        client->_use_expect = 1; /* this must be set before calling build_request */
+    if (props->send_own_expect && (client->proceed_req != NULL || body.len != 0) && client->super.upgrade_to == NULL)
+        client->_send_own_expect = 1; /* this must be set before calling build_request */
 
     h2o_iovec_t header = build_request(client, method, url, *props->connection_header, headers, num_headers);
     reqbufs[reqbufcnt++] = header;
@@ -850,7 +850,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
             on_whole_request_sent(client->sock, h2o_httpclient_error_internal);
             return;
         }
-        if (client->_use_expect) {
+        if (client->_send_own_expect) {
             h2o_socket_write(client->sock, reqbufs, reqbufcnt, on_header_sent_wait_100);
         } else {
             size_t bytes_written;
@@ -860,7 +860,7 @@ static void start_request(struct st_h2o_http1client_t *client, h2o_iovec_t metho
         }
     } else if (body.len != 0) {
         assert(!client->_is_chunked);
-        if (client->_use_expect) {
+        if (client->_send_own_expect) {
             h2o_buffer_init(&client->body_buf.buf, &h2o_socket_buffer_prototype);
             client->body_buf.is_end_stream = 1;
             if (!h2o_buffer_try_append(&client->body_buf.buf, body.base, body.len)) {
