@@ -201,7 +201,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     self->super.supports_request_streaming = 1;
-    self->super.supports_expect = config->expect_mode == H2O_PROXY_EXPECT_FORWARD;
+    self->super.handles_expect = config->expect_mode == H2O_PROXY_EXPECT_FORWARD;
     self->config = *config;
     self->sockpool = sockpool;
 }

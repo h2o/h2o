@@ -137,7 +137,7 @@ typedef struct st_h2o_handler_t {
     /**
      *
      */
-    unsigned supports_expect : 1;
+    unsigned handles_expect : 1;
 } h2o_handler_t;
 
 /**
@@ -2572,7 +2572,7 @@ inline int h2o_req_can_stream_request(h2o_req_t *req)
 inline int h2o_req_should_forward_expect(h2o_req_t *req)
 {
     h2o_handler_t *first_handler = h2o_get_first_handler(req);
-    return first_handler != NULL && first_handler->supports_expect;
+    return first_handler != NULL && first_handler->handles_expect;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \
