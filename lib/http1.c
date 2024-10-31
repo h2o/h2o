@@ -473,7 +473,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
         if (upgrade.base != NULL)
             upgrade = h2o_strdup(&conn->req.pool, upgrade.base, upgrade.len);
         if (expect_header_index != -1)
-            *expect = h2o_strdup(&conn->req.pool, conn->req.headers.entries[expect_header_index].value.base, conn->req.headers.entries[expect_header_index].value.len);
+            *expect = h2o_strdup(&conn->req.pool, headers[expect_header_index].value, headers[expect_header_index].value_len);
     }
 
     if (method_type == METHOD_CONNECT) {
@@ -537,7 +537,9 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     /* in forward mode, expect header is treated like other normal headers */
     if (expect->base != NULL && h2o_req_should_forward_expect(&conn->req)) {
-          h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, conn->req.headers.entries[expect_header_index].orig_name, expect->base, expect->len);
+          char orig_case[sizeof("expect")] = {0};
+          h2o_memcpy(orig_case, headers[expect_header_index].name, headers[expect_header_index].name_len);
+          h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case, expect->base, expect->len);
           expect->base = NULL;
           expect->len = 0;
     }
