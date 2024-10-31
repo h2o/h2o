@@ -357,19 +357,11 @@ int h2o_req_validate_pseudo_headers(h2o_req_t *req)
 
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
-    h2o_handler_t **handlers;
-    size_t size = h2o_get_handlers(req, &handlers);
-    return size == 0 ? NULL : handlers[0];
-}
-
-size_t h2o_get_handlers(h2o_req_t *req, h2o_handler_t ***out)
-{
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
         setup_pathconf(req, hostconf);
     }
-    *out = req->pathconf->handlers.entries;
-    return req->pathconf->handlers.size;
+    return req->pathconf->handlers.size != 0 ? req->pathconf->handlers.entries[0] : NULL;
 }
 
 void h2o_process_request(h2o_req_t *req)
