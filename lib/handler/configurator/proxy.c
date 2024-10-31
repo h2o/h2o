@@ -619,8 +619,6 @@ static int on_config_expect(h2o_configurator_command_t *cmd, h2o_configurator_co
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON,FORWARD");
-    if (ret == -1)
-        return -1;
     switch (ret) {
     case 0:
         self->vars->conf.expect_mode = H2O_PROXY_EXPECT_DISABLED;
