@@ -14,25 +14,16 @@ use File::Temp qw(tempdir);
 use File::Path qw(make_path);
 use t::Util;
 
-get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
-run_as_root();
-
 my $h2olog_prog = "misc/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 my $qlog_adapter = "./deps/quicly/misc/qlog-adapter.py";
 
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
+
 my $tempdir = tempdir(CLEANUP => 1);
 my $qlog_dir = $ENV{TEST_QLOG_DIR} || $tempdir;
 make_path($qlog_dir);
-
-
-unless ($ENV{DTRACE_TESTS})  {
-  plan skip_all => "$h2olog_prog not found"
-      unless -e $h2olog_prog;
-
-  plan skip_all => "$client_prog not found"
-      unless -e $client_prog;
-}
 
 sub spawn_h2o_with_quic {
   my ($h2olog_args, $logfile) = @_;
@@ -44,7 +35,6 @@ sub spawn_h2o_with_quic {
 
   my $server = spawn_h2o({
   opts => [qw(--mode=worker)],
-  user => scalar(getpwuid($ENV{SUDO_UID})),
   conf => << "EOT",
 listen:
   type: quic

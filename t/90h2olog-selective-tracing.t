@@ -1,5 +1,4 @@
 #!perl
-# DTRACE_TEST=1 to skip to check prereqisites except for OS
 # H2OLOG_DEBUG=1 for more runtime logs
 use strict;
 use warnings FATAL => "all";

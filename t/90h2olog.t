@@ -13,13 +13,8 @@ use t::Util;
 my $h2olog_prog = "misc/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
-unless ($ENV{DTRACE_TESTS})  {
-  plan skip_all => "$client_prog not found"
-      unless -e $client_prog;
-
-  plan skip_all => 'dtrace support is off'
-      unless server_features()->{dtrace};
-}
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
 
 my $tempdir = tempdir(CLEANUP => 1);
 my $h2olog_socket = "$tempdir/h2olog.sock";
