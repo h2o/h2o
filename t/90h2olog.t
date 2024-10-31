@@ -8,9 +8,6 @@ use Test::More;
 use JSON;
 use t::Util;
 
-get_exclusive_lock(); # take exclusive lock before sudo closes LOCKFD
-run_as_root();
-
 my $h2olog_prog = "misc/h2olog";
 my $client_prog = bindir() . "/h2o-httpclient";
 
@@ -27,7 +24,6 @@ my $h2olog_socket = "$tempdir/h2olog.sock";
 
 my $server = spawn_h2o({
     opts => [qw(--mode=worker)],
-    user => scalar(getpwuid($ENV{SUDO_UID})),
     conf => << "EOT",
 hosts:
   default:
