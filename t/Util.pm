@@ -5,6 +5,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use Fcntl qw(:flock);
 use File::Temp qw(tempfile tempdir);
+use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -937,28 +938,26 @@ sub get_tracer {
     my $tracer_pid = shift;
     my $fn = shift;
     my $read_trace;
-    while (1) {
-        sleep 1;
-        if (open my $fh, "<", $fn) {
-            my $off = 0;
-            $read_trace = sub {
-                seek $fh, $off, 0
-                    or die "seek failed:$!";
-                read $fh, my $bytes, 1048576;
-                $bytes = ''
-                    unless defined $bytes;
-                $off += length $bytes;
-                if ($^O ne 'linux') {
-                    $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
-                }
-                return $bytes;
-            };
-            last;
-        }
-        die "bpftrace failed to start\n"
+
+    while (!-e $fn) {
+        die "tracer failed to start\n"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+        sleep 0.1;
     }
-    return $read_trace;
+
+    open my $fh, '-|', 'tail', '-c', '+1', '-f', $fn
+        or die "failed invoke tail opening $fn:$?";
+
+    return sub {
+        IO::Select->new($fh)->can_read(1);
+        sysread $fh, my $bytes, 1048576;
+        $bytes = ''
+            unless defined $bytes;
+        if ($bytes eq '' && waitpid($tracer_pid, WNOHANG) == $tracer_pid) {
+            die "tracer died with status $? and there would be no more data";
+        }
+        $bytes;
+    };
 }
 
 sub run_picotls_client {
