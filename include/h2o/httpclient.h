@@ -99,6 +99,7 @@ typedef void (*h2o_httpclient_proceed_req_cb)(h2o_httpclient_t *client, const ch
 typedef int (*h2o_httpclient_body_cb)(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers);
 typedef h2o_httpclient_body_cb (*h2o_httpclient_head_cb)(h2o_httpclient_t *client, const char *errstr,
                                                          h2o_httpclient_on_head_t *args);
+extern const h2o_httpclient_body_cb h2o_httpclient_steal_socket;
 /**
  * Called when the protocol stack is ready to issue a request. Application must set all the output parameters (i.e. all except
  * `client`, `errstr`, `origin`) and return a callback that will be called when the protocol stack receives the response headers
@@ -228,6 +229,11 @@ typedef struct st_h2o_httpclient_conn_properties_t {
      * Underlying TCP connection, if any.
      */
     h2o_socket_t *sock;
+    /**
+     * Length of bytes which should be consumed if on_head callback returns h2o_httpclient_steal_socket.
+     * This is available only in http1, otherwise set to NULL.
+     */
+     size_t *steal_bytes;
 } h2o_httpclient_conn_properties_t;
 
 struct st_h2o_httpclient_t {
