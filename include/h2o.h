@@ -1585,10 +1585,6 @@ void h2o_process_request(h2o_req_t *req);
  */
 h2o_handler_t *h2o_get_first_handler(h2o_req_t *req);
 /**
- * returns list of handlers and its size that will be used for the request
- */
-size_t h2o_get_handlers(h2o_req_t *req, h2o_handler_t ***out);
-/**
  * delegates the request to the next handler
  */
 void h2o_delegate_request(h2o_req_t *req);
