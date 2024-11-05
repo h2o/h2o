@@ -343,13 +343,13 @@ typedef enum h2o_proxy_zerocopy_mode {
 
 typedef enum h2o_proxy_expect_mode {
     /**
-     * Proxy doesn't handle anything related to Exeect header or 100 continue responses.
+     * Proxy doesn't handle anything related to Expect header or 100 continue responses.
      */
-    H2O_PROXY_EXPECT_DISABLED,
+    H2O_PROXY_EXPECT_OFF,
     /**
      * Proxy adds its own expect header and suspend sending req body until it receives 100 response from the server.
      */
-    H2O_PROXY_EXPECT_ENABLED,
+    H2O_PROXY_EXPECT_ON,
     /**
      * Proxy forwards expect req header to the server and 100 continue response to the client.
      * This also lets protocol handlers neither remove expect header from req headers nor

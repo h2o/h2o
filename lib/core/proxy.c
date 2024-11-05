@@ -818,7 +818,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
-        props->send_own_expect = req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_ENABLED;
+        props->send_own_expect = req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_ON;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
