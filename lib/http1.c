@@ -537,9 +537,10 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     /* in forward mode, expect header is treated like other normal headers */
     if (expect->base != NULL && h2o_req_should_forward_expect(&conn->req)) {
-        char orig_case[sizeof("expect")] = {0};
-        h2o_memcpy(orig_case, headers[expect_header_index].name, headers[expect_header_index].name_len);
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case, expect->base, expect->len);
+        char orig_case_cstr[sizeof("expect")] = {0};
+        assert(sizeof(orig_case_cstr) - 1 == headers[expect_header_index].name_len);
+        h2o_memcpy(orig_case_cstr, headers[expect_header_index].name, sizeof(orig_case_cstr) - 1);
+        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case_cstr, expect->base, expect->len);
         expect->base = NULL;
         expect->len = 0;
     }
