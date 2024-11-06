@@ -23,7 +23,7 @@
     <ProjectGuid>{559AC085-1BEF-450A-A62D-0D370561D596}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>picotlsminicrypto</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.17763.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.18362.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">

@@ -69,6 +69,7 @@
 #define PTLS_EXTENSION_TYPE_PSK_KEY_EXCHANGE_MODES 45
 #define PTLS_EXTENSION_TYPE_CERTIFICATE_AUTHORITIES 47
 #define PTLS_EXTENSION_TYPE_KEY_SHARE 51
+#define PTLS_EXTENSION_TYPE_TICKET_REQUEST 58
 #define PTLS_EXTENSION_TYPE_ECH_OUTER_EXTENSIONS 0xfd00
 #define PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO 0xfe0d
 
@@ -294,7 +295,7 @@ struct st_ptls_t {
         struct {
             uint8_t pending_traffic_secret[PTLS_MAX_DIGEST_SIZE];
             uint32_t early_data_skipped_bytes; /* if not UINT32_MAX, the server is skipping early data */
-            unsigned can_send_session_ticket : 1;
+            uint8_t num_tickets_to_send;
             ptls_async_job_t *async_job;
         } server;
     };
@@ -359,6 +360,10 @@ struct st_ptls_client_hello_t {
         size_t count;
     } server_certificate_types;
     unsigned status_request : 1;
+    struct {
+        uint8_t new_session_count;
+        uint8_t resumption_count;
+    } ticket_request;
     /**
      * ECH: payload.base != NULL indicates that the extension was received
      */
@@ -2258,6 +2263,13 @@ static int encode_client_hello(ptls_context_t *ctx, ptls_buffer_t *sendbuf, enum
                     ptls_buffer_push_block(sendbuf, 1, { ptls_buffer_push(sendbuf, PTLS_CERTIFICATE_TYPE_RAW_PUBLIC_KEY); });
                 });
             }
+            if (ctx->save_ticket != NULL &&
+                (ctx->ticket_requests.client.new_session_count != 0 || ctx->ticket_requests.client.resumption_count != 0)) {
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_TICKET_REQUEST, {
+                    ptls_buffer_push(sendbuf, ctx->ticket_requests.client.new_session_count,
+                                     ctx->ticket_requests.client.resumption_count);
+                });
+            }
             if ((ret = push_additional_extensions(properties, sendbuf)) != 0)
                 goto Exit;
             if (ctx->save_ticket != NULL || psk_secret.base != NULL) {
@@ -3822,6 +3834,14 @@ static int decode_client_hello(ptls_context_t *ctx, struct st_ptls_client_hello_
         case PTLS_EXTENSION_TYPE_STATUS_REQUEST:
             ch->status_request = 1;
             break;
+        case PTLS_EXTENSION_TYPE_TICKET_REQUEST:
+            if (end - src != 2) {
+                ret = PTLS_ALERT_DECODE_ERROR;
+                goto Exit;
+            }
+            ch->ticket_request.new_session_count = *src++;
+            ch->ticket_request.resumption_count = *src++;
+            break;
         case PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO:
             if ((ret = ptls_decode8(&ch->ech.type, &src, end)) != 0)
                 goto Exit;
@@ -4660,7 +4680,23 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             properties->server.selected_psk_binder.len = selected->len;
         }
     }
-    tls->server.can_send_session_ticket = ch->psk.ke_modes != 0;
+
+    /* determine number of tickets to send */
+    if (ch->psk.ke_modes != 0 && tls->ctx->ticket_lifetime != 0) {
+        if (ch->ticket_request.new_session_count != 0) {
+            tls->server.num_tickets_to_send =
+                tls->is_psk_handshake ? ch->ticket_request.resumption_count : ch->ticket_request.new_session_count;
+        } else {
+            tls->server.num_tickets_to_send = 1;
+        }
+        uint8_t max_tickets = tls->ctx->ticket_requests.server.max_count;
+        if (max_tickets == 0)
+            max_tickets = PTLS_DEFAULT_MAX_TICKETS_TO_SERVE;
+        if (tls->server.num_tickets_to_send > max_tickets)
+            tls->server.num_tickets_to_send = max_tickets;
+    } else {
+        tls->server.num_tickets_to_send = 0;
+    }
 
     if (accept_early_data && tls->ctx->max_early_data_size != 0 && psk_index == 0) {
         if ((tls->pending_handshake_secret = malloc(PTLS_MAX_DIGEST_SIZE)) == NULL) {
@@ -4776,6 +4812,9 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                 buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_ENCRYPTED_CLIENT_HELLO, {
                     ptls_buffer_pushv(sendbuf, tls->ctx->ech.server.retry_configs.base, tls->ctx->ech.server.retry_configs.len);
                 });
+            if (ch->ticket_request.new_session_count != 0 && tls->server.num_tickets_to_send != 0)
+                buffer_push_extension(sendbuf, PTLS_EXTENSION_TYPE_TICKET_REQUEST,
+                                      { ptls_buffer_push(sendbuf, tls->server.num_tickets_to_send); });
             if ((ret = push_additional_extensions(properties, sendbuf)) != 0)
                 goto Exit;
         });
@@ -4888,9 +4927,11 @@ static int server_finish_handshake(ptls_t *tls, ptls_message_emitter_t *emitter,
     }
 
     /* send session ticket if necessary */
-    if (tls->server.can_send_session_ticket && tls->ctx->ticket_lifetime != 0) {
-        if ((ret = send_session_ticket(tls, emitter)) != 0)
-            goto Exit;
+    if (tls->server.num_tickets_to_send != 0) {
+        assert(tls->ctx->ticket_lifetime != 0);
+        for (uint8_t i = 0; i < tls->server.num_tickets_to_send; ++i)
+            if ((ret = send_session_ticket(tls, emitter)) != 0)
+                goto Exit;
     }
 
     if (tls->ctx->require_client_authentication) {

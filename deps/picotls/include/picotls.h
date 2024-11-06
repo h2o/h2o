@@ -308,6 +308,11 @@ extern "C" {
 #define PTLS_TO__STR(n) #n
 #define PTLS_TO_STR(n) PTLS_TO__STR(n)
 
+/**
+ * default maximum of tickets to send (see ptls_context_t::ticket_requests.server.max_count)
+ */
+#define PTLS_DEFAULT_MAX_TICKETS_TO_SERVE 4
+
 typedef struct st_ptls_t ptls_t;
 typedef struct st_ptls_context_t ptls_context_t;
 typedef struct st_ptls_key_schedule_t ptls_key_schedule_t;
@@ -1021,6 +1026,26 @@ struct st_ptls_context_t {
         const ptls_iovec_t *list;
         size_t count;
     } client_ca_names;
+    /**
+     * (optional)
+     */
+    struct {
+        /**
+         * if set to non-zero and if the save_ticket callback is provided, a ticket_request extension containing the specified
+         * values is sent
+         */
+        struct {
+            uint8_t new_session_count;
+            uint8_t resumption_count;
+        } client;
+        /**
+         * if set to non-zero, the maximum number of tickets being sent is capped to the specifed value; if set to zero, the maximum
+         * adopted is PTLS_DEFAULT_MAX_TICKETS_TO_SERVE.
+         */
+        struct {
+            uint8_t max_count;
+        } server;
+    } ticket_requests;
 };
 
 typedef struct st_ptls_raw_extension_t {

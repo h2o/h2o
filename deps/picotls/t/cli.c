@@ -96,7 +96,10 @@ static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server
     ptls_buffer_init(&encbuf, "", 0);
     ptls_buffer_init(&ptbuf, "", 0);
 
-    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    if (fcntl(sockfd, F_SETFL, O_NONBLOCK) == -1) {
+        perror("fcntl");
+        goto Exit;
+    }
 
     if (input_file == input_file_is_benchmark) {
         if (!ptls_is_server(tls))
@@ -388,6 +391,8 @@ static void usage(const char *cmd)
            "  -p psk-identity      name of the PSK key; if set, -c and -C specify the\n"
            "                       pre-shared secret\n"
            "  -P psk-hash          hash function associated to the PSK (default: sha256)\n"
+           "  -T new_session_count,resumption_count\n"
+           "                       set number of session tickets to request\n"
            "  -u                   update the traffic key when handshake is complete\n"
            "  -v                   verify peer using the default certificates\n"
            "  -V CA-root-file      verify peer using the CA Root File\n"
@@ -456,7 +461,7 @@ int main(int argc, char **argv)
     int family = 0;
     const char *raw_pub_key_file = NULL, *cert_location = NULL;
 
-    while ((ch = getopt(argc, argv, "46abBC:c:i:Ij:k:nN:es:Sr:p:P:E:K:l:y:vV:h")) != -1) {
+    while ((ch = getopt(argc, argv, "46abBC:c:i:Ij:k:nN:es:Sr:p:P:E:K:l:T:uy:vV:h")) != -1) {
         switch (ch) {
         case '4':
             family = AF_INET;
@@ -591,6 +596,13 @@ int main(int argc, char **argv)
             }
             cipher_suites[slot] = added;
         } break;
+        case 'T':
+            if (sscanf(optarg, "%" SCNu8 ",%" SCNu8, &ctx.ticket_requests.client.new_session_count,
+                       &ctx.ticket_requests.client.resumption_count) != 2) {
+                fprintf(stderr, "invalid argument passed to -T, should be in the form of <new_session_count>,<resumption_count>\n");
+                exit(1);
+            }
+            break;
         case 'h':
             usage(argv[0]);
             exit(0);

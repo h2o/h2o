@@ -976,10 +976,10 @@
 				EXECUTABLE_PREFIX = lib;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -990,10 +990,10 @@
 				EXECUTABLE_PREFIX = lib;
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/openssl/lib;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -1041,8 +1041,9 @@
 				HEADER_SEARCH_PATHS = (
 					include,
 					/usr/local/include,
+					/opt/homebrew/opt/brotli/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/brotli/lib;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1087,8 +1088,9 @@
 				HEADER_SEARCH_PATHS = (
 					include,
 					/usr/local/include,
+					/opt/homebrew/opt/brotli/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/brotli/lib;
 				MACOSX_DEPLOYMENT_TARGET = 10.11;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = macosx;
@@ -1100,10 +1102,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1114,10 +1116,10 @@
 			buildSettings = {
 				GCC_PREPROCESSOR_DEFINITIONS = "$(inherited)";
 				HEADER_SEARCH_PATHS = (
-					/usr/local/opt/openssl/include,
-					include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
-				LIBRARY_SEARCH_PATHS = /usr/local/opt/openssl/lib;
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/opt/openssl/lib;
 				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -1149,13 +1151,12 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					include,
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lcrypto",
@@ -1175,13 +1176,12 @@
 					"$(inherited)",
 				);
 				HEADER_SEARCH_PATHS = (
-					include,
-					/usr/local/opt/openssl/include,
-					/usr/local/include,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/include,
 				);
 				LIBRARY_SEARCH_PATHS = (
-					/usr/local/opt/openssl/lib,
-					/usr/local/lib,
+					"$(inherited)",
+					/opt/homebrew/opt/openssl/lib,
 				);
 				OTHER_LDFLAGS = (
 					"-lcrypto",
