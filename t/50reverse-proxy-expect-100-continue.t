@@ -198,6 +198,7 @@ subtest 'h3 upstream' => sub {
 subtest 'forward' => sub {
     my $upstream_port = empty_port();
     my $server = spawn_h2o(<< "EOT");
+send-informational: all
 hosts:
   default:
     paths:
@@ -205,29 +206,68 @@ hosts:
         proxy.expect: FORWARD
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
-    my $upstream = spawn_server(
-        argv => [
-            qw(plackup -s Standalone --access-log /dev/null --listen), "127.0.0.1:$upstream_port", ASSETS_DIR . "/upstream.psgi",
-        ],
-        is_ready => sub {
-            check_port($upstream_port);
-        },
-    );
+    my $upstream = spawn_forked(sub {
+        my $server = IO::Socket::INET->new(
+            LocalHost => '127.0.0.1',
+            LocalPort => $upstream_port,
+            Proto => 'tcp',
+            Listen => 1,
+            Reuse => 1
+        ) or die $!;
+        while (my $client = $server->accept) {
+            my $header = '';
+            my $body = undef;
+            my $chunk;
+            my $req_content_length = undef;
+            while ($client->sysread($chunk, 65536)) {
+                if (!defined($body)) {
+                    $header .= $chunk;
+                    if ($header =~ /\r\n\r\n/) {
+                        ($header, $body) = split("\r\n\r\n", $header);
+                        $body ||= '';
+
+                        ($req_content_length) = $header =~ /content-length: *([0-9]+)/i;
+
+                        if ($header =~ /expect: *100-continue/) {
+                            $client->syswrite(join("\r\n", (
+                                "HTTP/1.1 100 Continue",
+                                "", ""
+                            )));
+                            $client->flush;
+                        }
+                    }
+                } else {
+                    $body .= $chunk;
+                }
+
+                if (length($body) >= $req_content_length) {
+                    # echo headers and body
+                    my $content = join("\r\n---\r\n", $header, $body);
+                    $client->syswrite(join("\r\n", (
+                        "HTTP/1.1 200 OK",
+                        "connection: close",
+                        "content-length: @{[length($content)]}",
+                        "", ""
+                    )) . $content);
+                    $client->flush;
+                    last;
+                }
+            }
+            $client->close;
+        }
+        $server->close;
+    });
 
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my ($headers, $body);
 
-        ($headers, $body) = run_prog("$curl -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/echo-headers");
-        like $headers, qr{^HTTP/[0-9.]+ 200}is, '200 status';
-        like $body, qr{^expect: 100-continue$}im, 'upstream received forwarded expect header';
-
-        ($headers, $body) = run_prog("$curl -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/echo");
-        like $headers, qr{^HTTP/[0-9.]+ 200}is, '200 status';
-        is $body, 'request body', 'body works';
-
-        ($headers, $body) = run_prog("$curl --verbose -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/1xx");
-        like $headers, qr{Done waiting for 100-continue.+HTTP/[0-9.]+ 200}is, '100 then 200 status';
+        ($headers, $body) = run_prog("$curl --expect100-timeout 999 -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+        like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+        like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+        like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+        is $req_body, 'request body', 'body works';
     });
 };
 
