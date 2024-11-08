@@ -2578,6 +2578,12 @@ inline int h2o_req_can_stream_request(h2o_req_t *req)
 
 inline int h2o_req_should_forward_expect(h2o_req_t *req)
 {
+    /* Request streaming is necessary to forward expect, otherwise
+     * h2o waits to receive whole body from the client (that is what non-streaming mode means)
+     * while it waits for 100-continue */
+    if (!h2o_req_can_stream_request(req))
+        return 0;
+
     h2o_handler_t *first_handler = h2o_get_first_handler(req);
     return first_handler != NULL && first_handler->handles_expect;
 }
