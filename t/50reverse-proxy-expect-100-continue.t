@@ -215,6 +215,7 @@ EOT
             Reuse => 1
         ) or die $!;
         while (my $client = $server->accept) {
+            my $req_line = undef;
             my $header = '';
             my $body = undef;
             my $chunk;
@@ -224,7 +225,13 @@ EOT
                     $header .= $chunk;
                     if ($header =~ /\r\n\r\n/) {
                         ($header, $body) = split("\r\n\r\n", $header);
+                        ($req_line, $header) = split("\r\n", $header, 2);
                         $body ||= '';
+
+                        if ($req_line =~ /sleep=([0-9.]+)/) {
+                            my $sleep_sec = $1;
+                            Time::HiRes::sleep($sleep_sec);
+                        }
 
                         ($req_content_length) = $header =~ /content-length: *([0-9]+)/i;
 
@@ -261,9 +268,19 @@ EOT
     run_with_curl($server, sub {
         my ($proto, $port, $curl) = @_;
         my ($headers, $body);
+        my ($req_headers, $req_body);
 
+        note 'client waits for 100-continue';
         ($headers, $body) = run_prog("$curl --expect100-timeout 999 -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
-        my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+        ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+        like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+        like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+        like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+        is $req_body, 'request body', 'body works';
+
+        note 'client starts sending body without waiting for 100-continue';
+        ($headers, $body) = run_prog("$curl --expect100-timeout 0.1 -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/?sleep=0.5");
+        ($req_headers, $req_body) = split("\r\n---\r\n", $body);
         like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
         like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
         like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
