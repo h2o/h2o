@@ -1550,6 +1550,15 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
         }
         if (h2o_req_should_forward_expect(&stream->req)) {
             h2o_add_header(&stream->req.pool, &stream->req.headers, H2O_TOKEN_EXPECT, NULL, expect.base, expect.len);
+
+            stream->req_streaming = 1;
+            ++conn->num_streams_req_streaming;
+            h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
+            stream->req.entity = h2o_iovec_init("", 0);
+            stream->req.proceed_req = proceed_request_streaming;
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
+            quicly_stream_set_receive_window(stream->quic, get_conn(stream)->super.ctx->globalconf->http3.active_stream_window_size);
+            h2o_process_request(&stream->req);
         } else {
             stream->req.res.status = 100;
             h2o_send_informational(&stream->req);
