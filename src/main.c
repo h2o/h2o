@@ -1296,7 +1296,8 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
                                               ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
                                               int server_cipher_preference, int use_neverbleed,
-                                              ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs)
+                                              ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs,
+                                              uint8_t max_tickets)
 {
     static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
@@ -1346,6 +1347,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .server_cipher_preference = server_cipher_preference,
+                .ticket_requests.server.max_count = max_tickets,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -1849,7 +1851,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
         **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file, **ech_node;
+        **http2_origin_frame_node, **client_ca_file, **ech_node, **max_tickets_node;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
@@ -1861,6 +1863,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ptls_ech_create_opener_t *create_opener;
         ptls_iovec_t retry_configs;
     } ech = {NULL};
+    uint8_t max_tickets = 0;
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -1882,11 +1885,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
                                            "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
                                            "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s,ech:a",
+                                           "http2-origin-frame:*,client-ca-file:s,ech:a,max-tickets:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
                                            &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
                                            &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node) != 0)
+                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node,
+                                           &max_tickets_node) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -2076,6 +2080,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ech.retry_configs = base->ech.server.retry_configs;
     }
 
+    if (max_tickets_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *max_tickets_node, "%" SCNu8, &max_tickets) != 0)
+            goto Error;
+        if (!use_picotls) {
+            h2o_configurator_errprintf(cmd, *max_tickets_node, "ticket-requests extension requires use of TLS 1.3");
+            goto Error;
+        }
+    }
+
     /* create a new entry in the SSL context list */
     struct listener_ssl_config_t *ssl_config = h2o_mem_alloc(sizeof(*ssl_config));
     memset(ssl_config, 0, sizeof(*ssl_config));
@@ -2163,7 +2176,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         if (use_picotls) {
             const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
                                                             !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), use_neverbleed,
-                                                            ech.create_opener, ech.retry_configs);
+                                                            ech.create_opener, ech.retry_configs, max_tickets);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {

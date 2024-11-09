@@ -242,6 +242,11 @@ Default is <code>14400</code> (4 hours).
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
+<dt id="max-tickets">max-tickets:</dt>
+<dd>
+maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
+Default is 4.
+</dd>
 <dt id="ech">ech:</dt>
 <dd>
 This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
