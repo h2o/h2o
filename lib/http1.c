@@ -686,14 +686,19 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         return;
     }
     h2o_probe_log_request(&conn->req, conn->_req_index);
+
+    /* handle H2 upgrade */
     if (err == fixup_request_is_h2_upgrade) {
         clear_timeouts(conn);
         h2o_socket_read_stop(conn->sock);
         if (h2o_http2_handle_upgrade(&conn->req, conn->super.connected_at) != 0)
             h2o_send_error_400(&conn->req, "Invalid Request", "Broken upgrade request to HTTP/2", 0);
-    } else if (entity_body_header_index != -1) {
-        /* Request has body, start reading it */
+        return;
+    }
 
+    /* handle request with body */
+    if (entity_body_header_index != -1) {
+        /* Request has body, start reading it */
         conn->req.timestamps.request_body_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
         if (create_entity_reader(conn, headers + entity_body_header_index) != 0)
             return;
@@ -701,7 +706,6 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
         conn->req.write_req.cb = write_req_first;
         conn->req.write_req.ctx = &conn->req;
-
         if (expect_header_index != -1) {
             h2o_iovec_t expect_value = h2o_iovec_init(headers[expect_header_index].value, headers[expect_header_index].value_len);
             if (!h2o_lcstris(expect_value.base, expect_value.len, H2O_STRLIT("100-continue"))) {
@@ -716,35 +720,26 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 assert(sizeof(orig_case_cstr) - 1 == headers[expect_header_index].name_len);
                 h2o_memcpy(orig_case_cstr, headers[expect_header_index].name, sizeof(orig_case_cstr) - 1);
                 expect_value = h2o_strdup(&conn->req.pool, expect_value.base, expect_value.len);
-
                 h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case_cstr, expect_value.base,
                                expect_value.len);
-
-                h2o_buffer_consume(&conn->sock->input, reqlen);
-                conn->req.write_req.cb = write_req_connect_first;
-                conn->req.write_req.ctx = &conn->req;
-                conn->req.proceed_req = proceed_request;
-                conn->_req_entity_reader->handle_incoming_entity(
-                    conn); /* read payload received early before submitting the request */
-                if (conn->req.entity.base == NULL)
-                    conn->req.entity = h2o_iovec_init("", 0); /* if nothing was read, still indicate that body exists */
-                h2o_socket_read_stop(conn->sock);
-                clear_timeouts(conn);
-                h2o_process_request(&conn->req);
-            } else {
-                h2o_buffer_consume(&conn->sock->input, reqlen);
-                static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
-                h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
-                /* processing of the incoming entity is postponed until the 100 response is sent */
-                h2o_socket_read_stop(conn->sock);
+                goto ProcessImmediately;
             }
+            /* not in forward mode, send out own 100-continue */
+            h2o_buffer_consume(&conn->sock->input, reqlen);
+            static const h2o_iovec_t res = {H2O_STRLIT("HTTP/1.1 100 Continue\r\n\r\n")};
+            h2o_socket_write(conn->sock, (void *)&res, 1, on_continue_sent);
+            /* processing of the incoming entity is postponed until the 100 response is sent */
+            h2o_socket_read_stop(conn->sock);
         } else {
             h2o_buffer_consume(&conn->sock->input, reqlen);
-
             /* Invocation of `h2o_process_request` is delayed to reduce backend concurrency */
             conn->_req_entity_reader->handle_incoming_entity(conn);
         }
-    } else if (conn->req.is_tunnel_req) {
+        return;
+    }
+
+    /* handle tunnel request */
+    if (conn->req.is_tunnel_req) {
         /* Is a CONNECT request or an upgrade (e.g., WebSocket). Request is submitted immediately and body is streamed. */
         if (!h2o_req_can_stream_request(&conn->req) &&
             h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
@@ -756,22 +751,27 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         conn->_unconsumed_request_size = 0;
         h2o_buffer_consume(&conn->sock->input, reqlen);
         h2o_buffer_init(&conn->req_body, &h2o_socket_buffer_prototype);
-        conn->req.write_req.cb = write_req_connect_first;
-        conn->req.write_req.ctx = &conn->req;
-        conn->req.proceed_req = proceed_request;
-        conn->_req_entity_reader->handle_incoming_entity(conn); /* read payload received early before submitting the request */
-        if (conn->req.entity.base == NULL)
-            conn->req.entity = h2o_iovec_init("", 0); /* if nothing was read, still indicate that body exists */
-        /* stop reading (this might or might not be done by `handle_incoming_entity`) until HTTP response is given */
-        h2o_socket_read_stop(conn->sock);
-        clear_timeouts(conn);
-        h2o_process_request(&conn->req);
-    } else {
-        /* Ordinary request without request body. */
-        clear_timeouts(conn);
-        h2o_socket_read_stop(conn->sock);
-        h2o_process_request(&conn->req);
+        goto ProcessImmediately;
     }
+
+    /* handle ordinary request without request body */
+    clear_timeouts(conn);
+    h2o_socket_read_stop(conn->sock);
+    h2o_process_request(&conn->req);
+    return;
+
+ProcessImmediately:
+    conn->req.write_req.cb = write_req_connect_first;
+    conn->req.write_req.ctx = &conn->req;
+    conn->req.proceed_req = proceed_request;
+    conn->_req_entity_reader->handle_incoming_entity(conn); /* read payload received early before submitting the request */
+    if (conn->req.entity.base == NULL)
+        conn->req.entity = h2o_iovec_init("", 0); /* if nothing was read, still indicate that body exists */
+    /* stop reading (this might or might not be done by `handle_incoming_entity`) until HTTP response is given */
+    h2o_socket_read_stop(conn->sock);
+    clear_timeouts(conn);
+    h2o_process_request(&conn->req);
+    return;
 }
 
 void reqread_on_read(h2o_socket_t *sock, const char *err)
