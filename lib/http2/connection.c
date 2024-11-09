@@ -687,11 +687,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
             return send_invalid_request_error(conn, stream, "Invalid CONNECT request");
         /* handle the request */
         stream->req.is_tunnel_req = 1;
-        stream->req.entity = h2o_iovec_init("", 0); /* setting to non-NULL pointer indicates the presence of HTTP payload */
-        stream->req.proceed_req = proceed_request;
-        h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
-        set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
-        process_request(conn, stream);
+        goto ProcessImmediately;
         return 0;
     }
 
@@ -705,12 +701,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         }
         if (h2o_req_should_forward_expect(&stream->req)) {
             h2o_add_header(&stream->req.pool, &stream->req.headers, H2O_TOKEN_EXPECT, NULL, expect.base, expect.len);
-            stream->req.entity = h2o_iovec_init("", 0); /* setting to non-NULL pointer indicates the presence of HTTP payload */
-            stream->req.proceed_req = proceed_request;
-            h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
-            set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
-            process_request(conn, stream);
-            return 0;
+            goto ProcessImmediately;
         } else {
             stream->req.res.status = 100;
             h2o_send_informational(&stream->req);
@@ -729,6 +720,14 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 SendRSTStream:
     stream_send_error(conn, stream->stream_id, ret);
     h2o_http2_stream_reset(conn, stream);
+    return 0;
+
+ProcessImmediately:
+    stream->req.entity = h2o_iovec_init("", 0); /* setting to non-NULL pointer indicates the presence of HTTP payload */
+    stream->req.proceed_req = proceed_request;
+    h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_RECV_BODY);
+    set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_OPEN);
+    process_request(conn, stream);
     return 0;
 }
 
