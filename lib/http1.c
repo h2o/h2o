@@ -719,9 +719,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
                 char orig_case_cstr[sizeof("expect")] = {0};
                 assert(sizeof(orig_case_cstr) - 1 == headers[expect_header_index].name_len);
                 h2o_memcpy(orig_case_cstr, headers[expect_header_index].name, sizeof(orig_case_cstr) - 1);
-                expect_value = h2o_strdup(&conn->req.pool, expect_value.base, expect_value.len);
-                h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case_cstr, expect_value.base,
-                               expect_value.len);
+                h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_EXPECT, orig_case_cstr,
+                               h2o_strdup(&conn->req.pool, expect_value.base, expect_value.len).base, expect_value.len);
                 goto ProcessImmediately;
             }
             /* not in forward mode, send out own 100-continue */
