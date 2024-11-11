@@ -235,7 +235,7 @@ EOT
 
                         ($req_content_length) = $header =~ /content-length: *([0-9]+)/i;
 
-                        if ($header =~ /expect: *100-continue/) {
+                        if ($header =~ /expect: *100-continue/i) {
                             $client->syswrite(join("\r\n", (
                                 "HTTP/1.1 100 Continue",
                                 "", ""
@@ -286,6 +286,61 @@ EOT
         like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
         is $req_body, 'request body', 'body works';
     });
+
+    subtest 'send req headers and body simultaneously' => sub {
+        subtest 'h1' => sub {
+            my $conn = IO::Socket::INET->new(
+                PeerHost => q(127.0.0.1),
+                PeerPort => $server->{port},
+                Proto    => q(tcp),
+            ) or die "failed to connect to host:$!";
+            $conn->syswrite(join("\r\n", (
+                "POST / HTTP/1.1",
+                "connection: close",
+                "content-length: 12",
+                "expect: 100-continue",
+                "", ""
+            )) . 'request body');
+            my $buf = '';
+            while ($conn->sysread(my $chunk, 4096)) {
+                $buf .= $chunk;
+            }
+            my ($headers1, $headers2, $body) = split("\r\n\r\n", $buf);
+            my $headers = join("\r\n\r\n", $headers1, $headers2);
+            my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+            like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+            like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+            like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+            is $req_body, 'request body', 'body works';
+        };
+
+        subtest 'h2' => sub {
+            plan skip_all => "h2get not found" unless h2get_exists();
+            my $output = run_with_h2get_simple($server, <<"EOS");
+                req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                    "content-length" => "12", "expect" => "100-continue",
+                }
+                h2g.send_headers(req, 1, END_HEADERS)
+                h2g.send_data(1, END_STREAM, "request body")
+                seen_body = false;
+                h2g.read_loop(300) do |f|
+                    if f.type == 'HEADERS'
+                        puts f.to_s
+                    elsif f.type == 'DATA'
+                        puts '-------' unless seen_body;
+                        seen_body = true;
+                        print f.payload
+                    end
+                end
+EOS
+            my ($headers, $body) = split('-------', $output);
+            my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+            like $headers, qr{':status' => '100'}im, '100 status';
+            like $headers, qr{':status' => '200'}im, '200 status';
+            like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+            is $req_body, 'request body', 'body works';
+        };
+    };
 };
 
 done_testing;

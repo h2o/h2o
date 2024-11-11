@@ -527,7 +527,11 @@ class H2
         while true
             f = self.read(timeout)
             return nil if f == nil
-            puts f.to_s
+            if block_given?
+                yield f
+            else
+                puts f.to_s
+            end
             if f.type == "DATA" && f.len > 0
                 self.send_window_update(0, f.len)
                 self.send_window_update(f.stream_id, f.len)
