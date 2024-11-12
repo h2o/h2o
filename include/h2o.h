@@ -134,6 +134,10 @@ typedef struct st_h2o_handler_t {
      * `req->entity` already contains a complete request body by checking if `req->proceed_req` is NULL.
      */
     unsigned supports_request_streaming : 1;
+    /**
+     *
+     */
+    unsigned handles_expect : 1;
 } h2o_handler_t;
 
 /**
@@ -336,6 +340,23 @@ typedef enum h2o_proxy_zerocopy_mode {
     H2O_PROXY_ZEROCOPY_ENABLED,
     H2O_PROXY_ZEROCOPY_ALWAYS
 } h2o_proxy_zerocopy_mode_t;
+
+typedef enum h2o_proxy_expect_mode {
+    /**
+     * Proxy doesn't handle anything related to Expect header or 100 continue responses.
+     */
+    H2O_PROXY_EXPECT_OFF,
+    /**
+     * Proxy adds its own expect header and suspend sending req body until it receives 100 response from the server.
+     */
+    H2O_PROXY_EXPECT_ON,
+    /**
+     * Proxy forwards expect req header to the server and 100 continue response to the client.
+     * This also lets protocol handlers neither remove expect header from req headers nor
+     * respond with 100 continue on its own, unlike when other values are set.
+     */
+    H2O_PROXY_EXPECT_FORWARD,
+} h2o_proxy_expect_mode_t;
 
 struct st_h2o_globalconf_t {
     /**
@@ -1122,6 +1143,10 @@ typedef struct st_h2o_req_overrides_t {
         h2o_iovec_t path_prefix;
     } location_rewrite;
     /**
+     * whether the proxied request sends expect: 100-continue and wait 100 response before sending request body
+     */
+    h2o_proxy_expect_mode_t proxy_expect_mode;
+    /**
      * whether if the PROXY header should be sent
      */
     unsigned use_proxy_protocol : 1;
@@ -1129,10 +1154,6 @@ typedef struct st_h2o_req_overrides_t {
      * whether the proxied request should preserve host
      */
     unsigned proxy_preserve_host : 1;
-    /**
-     * whether the proxied request sends expect: 100-continue and wait 100 response before sending request body
-     */
-    unsigned proxy_use_expect : 1;
     /**
      * a boolean flag if set to true, instructs the proxy to close the frontend h1 connection on behalf of the upstream
      */
@@ -1896,6 +1917,10 @@ void h2o_send_informational(h2o_req_t *req);
  */
 static int h2o_req_can_stream_request(h2o_req_t *req);
 /**
+ *
+ */
+static int h2o_req_should_forward_expect(h2o_req_t *req);
+/**
  * resolves internal redirect url for dest regarding req's hostconf
  */
 int h2o_req_resolve_internal_redirect_url(h2o_req_t *req, h2o_iovec_t dest, h2o_url_t *resolved);
@@ -2242,8 +2267,8 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t name_resolution_delay;
         uint64_t connection_attempt_delay;
     } happy_eyeballs;
+    h2o_proxy_expect_mode_t expect_mode;
     unsigned preserve_host : 1;
-    unsigned use_expect : 1;
     unsigned use_proxy_protocol : 1;
     unsigned tunnel_enabled : 1;
     unsigned connect_proxy_status_enabled : 1;
@@ -2549,6 +2574,18 @@ inline int h2o_req_can_stream_request(h2o_req_t *req)
 {
     h2o_handler_t *first_handler = h2o_get_first_handler(req);
     return first_handler != NULL && first_handler->supports_request_streaming;
+}
+
+inline int h2o_req_should_forward_expect(h2o_req_t *req)
+{
+    /* Request streaming is necessary to forward expect, otherwise
+     * h2o waits to receive whole body from the client (that is what non-streaming mode means)
+     * while it waits for 100-continue */
+    if (!h2o_req_can_stream_request(req))
+        return 0;
+
+    h2o_handler_t *first_handler = h2o_get_first_handler(req);
+    return first_handler != NULL && first_handler->handles_expect;
 }
 
 #define COMPUTE_DURATION(name, from, until)                                                                                        \

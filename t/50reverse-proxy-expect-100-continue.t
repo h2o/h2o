@@ -5,6 +5,7 @@ use Time::HiRes;
 use t::Util;
 use IO::Select;
 use IO::Socket::INET;
+use Net::EmptyPort qw(check_port);
 
 plan skip_all => "h2get not found"
     unless h2get_exists();
@@ -192,6 +193,135 @@ EOT
 
 subtest 'h3 upstream' => sub {
     plan skip_all => 'TODO';
+};
+
+subtest 'forward' => sub {
+    my $upstream_port = empty_port();
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.expect: FORWARD
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $upstream = spawn_forked(sub {
+        my $server = IO::Socket::INET->new(
+            LocalHost => '127.0.0.1',
+            LocalPort => $upstream_port,
+            Proto => 'tcp',
+            Listen => 1,
+            Reuse => 1
+        ) or die $!;
+        while (my $client = $server->accept) {
+            my $req_line = undef;
+            my $header = '';
+            my $body = undef;
+            my $chunk;
+            my $req_content_length = undef;
+            while ($client->sysread($chunk, 65536)) {
+                if (!defined($body)) {
+                    $header .= $chunk;
+                    if ($header =~ /\r\n\r\n/) {
+                        ($header, $body) = split("\r\n\r\n", $header);
+                        ($req_line, $header) = split("\r\n", $header, 2);
+                        $body ||= '';
+
+                        if ($req_line =~ /sleep=([0-9.]+)/) {
+                            my $sleep_sec = $1;
+                            Time::HiRes::sleep($sleep_sec);
+                        }
+
+                        ($req_content_length) = $header =~ /content-length: *([0-9]+)/i;
+
+                        if ($header =~ /expect: *100-continue/i) {
+                            $client->syswrite(join("\r\n", (
+                                "HTTP/1.1 100 Continue",
+                                "", ""
+                            )));
+                            $client->flush;
+                        }
+                    }
+                } else {
+                    $body .= $chunk;
+                }
+
+                if (length($body) >= $req_content_length) {
+                    # echo headers and body
+                    my $content = join("\r\n---\r\n", $header, $body);
+                    $client->syswrite(join("\r\n", (
+                        "HTTP/1.1 200 OK",
+                        "connection: close",
+                        "content-length: @{[length($content)]}",
+                        "", ""
+                    )) . $content);
+                    $client->flush;
+                    last;
+                }
+            }
+            $client->close;
+        }
+        $server->close;
+    });
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my ($headers, $body);
+        my ($req_headers, $req_body);
+
+        note 'client waits for 100-continue';
+        ($headers, $body) = run_prog("$curl --expect100-timeout 999 -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
+        ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+        like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+        like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+        like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+        is $req_body, 'request body', 'body works';
+
+        note 'client starts sending body without waiting for 100-continue';
+        ($headers, $body) = run_prog("$curl --expect100-timeout 0.1 -H 'expect: 100-continue' --data 'request body' --silent --dump-header /dev/stderr $proto://127.0.0.1:$port/?sleep=0.5");
+        ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+        like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+        like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+        like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+        is $req_body, 'request body', 'body works';
+    });
+
+    subtest 'send req headers and body simultaneously' => sub {
+        subtest 'h1' => sub {
+            my $conn = IO::Socket::INET->new(
+                PeerHost => q(127.0.0.1),
+                PeerPort => $server->{port},
+                Proto    => q(tcp),
+            ) or die "failed to connect to host:$!";
+            $conn->syswrite(join("\r\n", (
+                "POST / HTTP/1.1",
+                "connection: close",
+                "content-length: 12",
+                "expect: 100-continue",
+                "", ""
+            )) . 'request body');
+            my $buf = '';
+            while ($conn->sysread(my $chunk, 4096)) {
+                $buf .= $chunk;
+            }
+            my ($headers1, $headers2, $body) = split("\r\n\r\n", $buf);
+            my $headers = join("\r\n\r\n", $headers1, $headers2);
+            my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
+            like $headers, qr{^HTTP/[0-9.]+ 100}im, '100 status';
+            like $headers, qr{^HTTP/[0-9.]+ 200}im, '200 status';
+            like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
+            is $req_body, 'request body', 'body works';
+        };
+
+        subtest 'h2' => sub {
+            plan skip_all => 'TODO';
+        };
+
+        subtest 'h3' => sub {
+            plan skip_all => 'TODO';
+        };
+    };
 };
 
 done_testing;
