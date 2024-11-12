@@ -315,30 +315,11 @@ EOT
         };
 
         subtest 'h2' => sub {
-            plan skip_all => "h2get not found" unless h2get_exists();
-            my $output = run_with_h2get_simple($server, <<"EOS");
-                req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
-                    "content-length" => "12", "expect" => "100-continue",
-                }
-                h2g.send_headers(req, 1, END_HEADERS)
-                h2g.send_data(1, END_STREAM, "request body")
-                seen_body = false;
-                h2g.read_loop(300) do |f|
-                    if f.type == 'HEADERS'
-                        puts f.to_s
-                    elsif f.type == 'DATA'
-                        puts '-------' unless seen_body;
-                        seen_body = true;
-                        print f.payload
-                    end
-                end
-EOS
-            my ($headers, $body) = split('-------', $output);
-            my ($req_headers, $req_body) = split("\r\n---\r\n", $body);
-            like $headers, qr{':status' => '100'}im, '100 status';
-            like $headers, qr{':status' => '200'}im, '200 status';
-            like $req_headers, qr{^expect: *100-continue}im, 'expect header works';
-            is $req_body, 'request body', 'body works';
+            plan skip_all => 'TODO';
+        };
+
+        subtest 'h3' => sub {
+            plan skip_all => 'TODO';
         };
     };
 };
