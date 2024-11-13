@@ -54,24 +54,11 @@ extern "C" {
 #define H2O_GNUC_VERSION 0
 #endif
 
-#if __STDC_VERSION__ >= 201112L
-#define H2O_NORETURN _Noreturn
-#elif defined(__clang__) || defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500
 // noreturn was not defined before gcc 2.5
+#if __STDC_VERSION__ >= 201112L || defined(__clang__) || (defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500)
 #define H2O_NORETURN __attribute__((noreturn))
 #else
 #define H2O_NORETURN
-#endif
-
-#if defined(__clang__) && H2O_GNUC_VERSION >= 0x20500
-#define H2O_NORETURN_PTR __attribute__((noreturn))
-#elif __STDC_VERSION__ >= 201112L
-#define H2O_NORETURN_PTR _Noreturn
-#elif defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500
-// noreturn was not defined before gcc 2.5
-#define H2O_NORETURN_PTR __attribute__((noreturn))
-#else
-#define H2O_NORETURN_PTR
 #endif
 
 #if !defined(__clang__) && defined(__GNUC__) && H2O_GNUC_VERSION >= 0x40900
@@ -195,7 +182,7 @@ extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 /**
  * prints an error message and aborts. h2o_fatal can be modified by setting the function pointer it expands to, which is h2o__fatal.
  */
-extern H2O_NORETURN_PTR void (*h2o__fatal)(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+extern H2O_NORETURN void (*h2o__fatal)(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
 #ifndef h2o_fatal
 #define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
 #endif
