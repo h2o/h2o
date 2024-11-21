@@ -409,6 +409,9 @@ static void usage(const char *cmd)
 #if PTLS_OPENSSL_HAVE_X25519
            ", X25519"
 #endif
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+           ", X5519MLKEM768"
+#endif
            "\n"
            "Supported signature algorithms: rsa, secp256r1"
 #if PTLS_OPENSSL_HAVE_SECP384R1
@@ -545,29 +548,18 @@ int main(int argc, char **argv)
                 /* disable use of key exchanges entirely */
                 ctx.key_exchanges = NULL;
             } else {
-                ptls_key_exchange_algorithm_t *algo = NULL;
-#define MATCH(name)                                                                                                                \
-    if (algo == NULL && strcasecmp(optarg, #name) == 0)                                                                            \
-    algo = (&ptls_openssl_##name)
-                MATCH(secp256r1);
-#if PTLS_OPENSSL_HAVE_SECP384R1
-                MATCH(secp384r1);
-#endif
-#if PTLS_OPENSSL_HAVE_SECP521R1
-                MATCH(secp521r1);
-#endif
-#if PTLS_OPENSSL_HAVE_X25519
-                MATCH(x25519);
-#endif
-#undef MATCH
-                if (algo == NULL) {
+                ptls_key_exchange_algorithm_t **named;
+                for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                    if (strcasecmp((*named)->name, optarg) == 0)
+                        break;
+                if (*named == NULL) {
                     fprintf(stderr, "could not find key exchange: %s\n", optarg);
                     return 1;
                 }
                 size_t i;
                 for (i = 0; key_exchanges[i] != NULL; ++i)
                     ;
-                key_exchanges[i++] = algo;
+                key_exchanges[i++] = *named;
             }
             break;
         case 'u':

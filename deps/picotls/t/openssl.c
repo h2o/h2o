@@ -141,6 +141,10 @@ static void test_key_exchanges(void)
     subtest("x25519-to-minicrypto", test_key_exchange, &ptls_openssl_x25519, &ptls_minicrypto_x25519);
     subtest("x25519-from-minicrypto", test_key_exchange, &ptls_minicrypto_x25519, &ptls_openssl_x25519);
 #endif
+
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+    subtest("x25519mlkem768", test_key_exchange, &ptls_openssl_x25519mlkem768, &ptls_openssl_x25519mlkem768);
+#endif
 }
 
 static void test_sign_verify(EVP_PKEY *key, const ptls_openssl_signature_scheme_t *schemes)
