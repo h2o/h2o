@@ -1294,18 +1294,11 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 #endif
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
-                                              ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference, int use_neverbleed,
+                                              ptls_iovec_t raw_public_key, ptls_key_exchange_algorithm_t **key_exchanges,
+                                              ptls_cipher_suite_t **cipher_suites, int server_cipher_preference, int use_neverbleed,
                                               ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs,
                                               uint8_t max_tickets)
 {
-    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
-#if PTLS_OPENSSL_HAVE_X25519
-        &ptls_openssl_x25519,
-#else
-        &ptls_minicrypto_x25519,
-#endif
-        &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -1321,6 +1314,18 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     STACK_OF(X509) * cert_chain;
     int ret;
     int use_client_verify = 0;
+
+    if (key_exchanges == NULL) {
+        static ptls_key_exchange_algorithm_t *default_key_exchanges[] = {
+#if PTLS_OPENSSL_HAVE_X25519
+            &ptls_openssl_x25519,
+#else
+            &ptls_minicrypto_x25519,
+#endif
+            &ptls_openssl_secp256r1, NULL};
+        key_exchanges = default_key_exchanges;
+    }
+
     if (cipher_suites == NULL)
         cipher_suites = ptls_openssl_cipher_suites;
 
@@ -1849,8 +1854,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
-    yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
-        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
+    yoml_t **dh_file, **min_version, **max_version, **key_exchange_tls13_node, **cipher_suite, **cipher_suite_tls13_node,
+        **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
         **http2_origin_frame_node, **client_ca_file, **ech_node, **max_tickets_node;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
@@ -1858,6 +1863,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
+    ptls_key_exchange_algorithm_t **key_exchange_tls13 = NULL;
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
     struct {
         ptls_ech_create_opener_t *create_opener;
@@ -1883,14 +1889,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         yoml_t **identity_node, **certificate_file, **key_file;
         if (h2o_configurator_parse_mapping(cmd, *ssl_node, NULL,
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
-                                           "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
-                                           "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s,ech:a,max-tickets:s",
+                                           "maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,cipher-suite-tls1.3:a,"
+                                           "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,"
+                                           "cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
+                                           "max-tickets:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
-                                           &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
-                                           &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node,
-                                           &max_tickets_node) != 0)
+                                           &max_version, &key_exchange_tls13_node, &cipher_suite, &cipher_suite_tls13_node,
+                                           &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file,
+                                           &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &client_ca_file,
+                                           &ech_node, &max_tickets_node) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -2053,6 +2060,37 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
+        if (key_exchange_tls13_node != NULL) {
+            assert((*key_exchange_tls13_node)->type == YOML_TYPE_SEQUENCE);
+            if ((*key_exchange_tls13_node)->data.sequence.size == 0) {
+                h2o_configurator_errprintf(cmd, *key_exchange_tls13_node, "key-exchanges-tls1.3 cannot be empty");
+                goto Error;
+            }
+            key_exchange_tls13 = h2o_mem_alloc(((*key_exchange_tls13_node)->data.sequence.size + 1) * sizeof(*key_exchange_tls13));
+            size_t slot;
+            for (slot = 0; slot < (*key_exchange_tls13_node)->data.sequence.size; ++slot) {
+                yoml_t *element = (*key_exchange_tls13_node)->data.sequence.elements[slot];
+                if (element->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, element, "elements of key-exchanges-tls1.3 must be a scalar");
+                    goto Error;
+                }
+                ptls_key_exchange_algorithm_t **named;
+                for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                    if (strcasecmp((*named)->name, element->data.scalar) == 0)
+                        break;
+                if (named != NULL) {
+                    key_exchange_tls13[slot] = *named;
+#if !PTLS_OPENSSL_HAVE_X25519
+                } else if (strcasecmp(ptls_minicrypto_x25519.name, element->data.scalar) == 0) {
+                    key_exchange_tls13[slot] = &ptls_minicrypto_x25519;
+#endif
+                } else {
+                    h2o_configurator_errprintf(cmd, element, "key-exchange not found: %s", element->data.scalar);
+                    goto Error;
+                }
+            }
+            key_exchange_tls13[slot] = NULL;
+        }
         if (cipher_suite_tls13_node != NULL &&
             (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
@@ -2174,7 +2212,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
 
         if (use_picotls) {
-            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
+            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, key_exchange_tls13, cipher_suite_tls13,
                                                             !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), use_neverbleed,
                                                             ech.create_opener, ech.retry_configs, max_tickets);
             if (errstr != NULL) {
