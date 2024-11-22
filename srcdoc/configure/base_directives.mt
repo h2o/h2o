@@ -232,6 +232,8 @@ path of a PEM file containing the Diffie-Hellman parameters to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
+<dt id="key-exchange-tls1.3">key-exchange-tls1.3:</dt>
+<dd>list of TLS 1.3 key exchange algorithms to use; the list must be a YAML sequence of algorithms. <code>x25519</code> and <code>secp256r1</code> are supported and enabled by default. In addition, <code>secp384r1</code>, <code>secp521r1</code>, and <code>x25519mlkem768</code> might be available if they are supported by libcrypto.</dd>
 <dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
