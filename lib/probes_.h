@@ -149,7 +149,8 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     });
 
     PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
-    if (PTLS_UNLIKELY(H2O_RECEIVE_REQUEST_HEADER_ENABLED()) || ptls_log_point_is_active(&receive_request_header_logpoint)) {
+    if (PTLS_UNLIKELY(H2O_RECEIVE_REQUEST_HEADER_ENABLED()) ||
+        (ptls_log_point_is_active(&receive_request_header_logpoint) && !req->conn->callbacks->skip_tracing(req->conn))) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -174,7 +175,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
     });
     PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
-    if (PTLS_UNLIKELY(H2O_SEND_RESPONSE_HEADER_ENABLED()) || ptls_log_point_is_active(&send_response_header_logpoint)) {
+    if (PTLS_UNLIKELY(H2O_SEND_RESPONSE_HEADER_ENABLED()) ||
+        (ptls_log_point_is_active(&send_response_header_logpoint) && !req->conn->callbacks->skip_tracing(req->conn))) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);
