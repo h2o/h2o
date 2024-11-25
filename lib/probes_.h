@@ -54,29 +54,25 @@ struct st_h2o_conn_t;
 struct st_h2o_tunnel_t;
 #include "h2o-probes.h"
 
-#define H2O_CONN_IS_PROBED(label, conn) (PTLS_UNLIKELY(H2O_##label##_ENABLED()) && !conn->callbacks->skip_tracing(conn))
-
 #define H2O_PROBE_CONN0(label, conn)                                                                                               \
     do {                                                                                                                           \
-        h2o_conn_t *_conn = (conn);                                                                                                \
-        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            H2O_##label(_conn->id);                                                                                                \
+        if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
+            H2O_##label((conn)->id);                                                                                               \
         }                                                                                                                          \
     } while (0)
 
 #define H2O_PROBE_CONN(label, conn, ...)                                                                                           \
     do {                                                                                                                           \
-        h2o_conn_t *_conn = (conn);                                                                                                \
-        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
-            H2O_##label(_conn->id, __VA_ARGS__);                                                                                   \
+        if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
+            H2O_##label((conn)->id, __VA_ARGS__);                                                                                  \
         }                                                                                                                          \
     } while (0)
 
 #define H2O_PROBE_REQUEST0(label, req)                                                                                             \
     do {                                                                                                                           \
-        h2o_req_t *_req = (req);                                                                                                   \
-        h2o_conn_t *_conn = _req->conn;                                                                                            \
-        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
+        if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
+            h2o_req_t *_req = (req);                                                                                               \
+            h2o_conn_t *_conn = _req->conn;                                                                                        \
             uint64_t _req_id = _conn->callbacks->get_req_id(_req);                                                                 \
             H2O_##label(_conn->id, _req_id);                                                                                       \
         }                                                                                                                          \
@@ -84,9 +80,9 @@ struct st_h2o_tunnel_t;
 
 #define H2O_PROBE_REQUEST(label, req, ...)                                                                                         \
     do {                                                                                                                           \
-        h2o_req_t *_req = (req);                                                                                                   \
-        h2o_conn_t *_conn = _req->conn;                                                                                            \
-        if (H2O_CONN_IS_PROBED(label, _conn)) {                                                                                    \
+        if (PTLS_UNLIKELY(H2O_##label##_ENABLED())) {                                                                              \
+            h2o_req_t *_req = (req);                                                                                               \
+            h2o_conn_t *_conn = _req->conn;                                                                                        \
             uint64_t _req_id = _conn->callbacks->get_req_id(_req);                                                                 \
             H2O_##label(_conn->id, _req_id, __VA_ARGS__);                                                                          \
         }                                                                                                                          \
@@ -153,7 +149,7 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     });
 
     PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
-    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn) || ptls_log_point_is_active(&receive_request_header_logpoint)) {
+    if (PTLS_UNLIKELY(H2O_RECEIVE_REQUEST_HEADER_ENABLED()) || ptls_log_point_is_active(&receive_request_header_logpoint)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -178,7 +174,7 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
     });
     PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
-    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn) || ptls_log_point_is_active(&send_response_header_logpoint)) {
+    if (PTLS_UNLIKELY(H2O_SEND_RESPONSE_HEADER_ENABLED()) || ptls_log_point_is_active(&send_response_header_logpoint)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);

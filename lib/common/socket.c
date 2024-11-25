@@ -67,12 +67,7 @@
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 #pragma GCC diagnostic pop
 
-#define SOCKET_PROBE(label, sock, ...)                                                                                             \
-    do {                                                                                                                           \
-        h2o_socket_t *_sock = (sock);                                                                                              \
-        if (!_sock->_skip_tracing)                                                                                                 \
-            H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__);                                                                          \
-    } while (0)
+#define SOCKET_PROBE(label, sock, ...) H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__)
 
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
