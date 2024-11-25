@@ -24,12 +24,28 @@
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct sockaddr_storage local;
+    char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
 
     /* delegate the request to the next handler unless the request is accepted on a UNIX socket */
     if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX))
         return -1;
+
+    /* parse params */
+    if (req->query_at != SIZE_MAX) {
+        h2o_iovec_t iter = h2o_iovec_init(req->path.base + req->query_at + 1, req->path.len - (req->query_at + 1)), value;
+        const char *name;
+        size_t name_len;
+        while ((name = h2o_next_token(&iter, '&', '&', &name_len, &value)) != NULL) {
+            if (h2o_memis(name, name_len, H2O_STRLIT("trace"))) {
+                h2o_memcpy(trace_tail, value.base, value.len);
+                trace_tail += value.len;
+                *trace_tail++ = '\0';
+            }
+        }
+        *trace_tail = '\0';
+    }
 
     if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
@@ -42,7 +58,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
 
     /* register log fd after writing HTTP response, as log is written by multiple threads */
-    if (ptls_log_add_fd(export_info.fd) != 0)
+    if (ptls_log_add_fd(export_info.fd, trace) != 0)
         h2o_fatal("failed to add fd to h2olog");
 
     return 0;

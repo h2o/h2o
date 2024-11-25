@@ -25,14 +25,15 @@
 #include "picotls.h"
 
 #define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
-#define H2O_LOG_CONN(_type, _conn, _block)                                                                                         \
+#define H2O_LOG_CONN(_name, _conn, _block)                                                                                         \
     do {                                                                                                                           \
-        if (!ptls_log.is_active)                                                                                                   \
+        PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \
+        if (!ptls_log_point_is_active(&logpoint))                                                                                  \
             break;                                                                                                                 \
         h2o_conn_t *conn_ = (_conn);                                                                                               \
         if (conn_->callbacks->skip_tracing(conn_))                                                                                 \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(h2o, _type, {                                                                                             \
+        PTLS_LOG__DO_LOG(h2o, _name, {                                                                                             \
             PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
             do {                                                                                                                   \
                 _block                                                                                                             \
@@ -150,7 +151,9 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
         PTLS_LOG_ELEMENT_SIGNED(http_version, req->version);
     });
-    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn) || ptls_log.is_active) {
+
+    PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
+    if (H2O_CONN_IS_PROBED(RECEIVE_REQUEST_HEADER, req->conn) || ptls_log_point_is_active(&receive_request_header_logpoint)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -174,7 +177,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
         PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
         PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
     });
-    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn) || ptls_log.is_active) {
+    PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
+    if (H2O_CONN_IS_PROBED(SEND_RESPONSE_HEADER, req->conn) || ptls_log_point_is_active(&send_response_header_logpoint)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);
