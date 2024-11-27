@@ -897,6 +897,16 @@ enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out
     return ssl_private_key_success;
 }
 
+static void async_nb_boringssl_setup_key_method(SSL_CTX *ctx)
+{
+    EVP_PKEY *pkey = SSL_CTX_get0_privatekey(ctx);
+    EVP_PKEY_up_ref(pkey);
+    SSL_CTX_set_ex_data(ctx, async_nb_boringssl_get_key_index(), pkey);
+    static const SSL_PRIVATE_KEY_METHOD meth = {
+        .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
+    SSL_CTX_set_private_key_method(ctx, &meth);
+}
+
 #endif
 
 static int on_openssl_print_errors(const char *str, size_t len, void *fp)
@@ -1661,14 +1671,8 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     /* Boringssl+neverbleed: transplant the private key to exdata and set SSL_PRIVATE_KEY_METHOD that uses that exdata. We do so
      * because, as of commit 52a2c00, boringssl allows only one of EVP_PKEY and SSL_PRIVATE_KEY_METHOD to be set. */
 #ifdef OPENSSL_IS_BORINGSSL
-    if (use_neverbleed) {
-        EVP_PKEY *pkey = SSL_CTX_get0_privatekey(ssl_ctx);
-        EVP_PKEY_up_ref(pkey);
-        SSL_CTX_set_ex_data(ssl_ctx, async_nb_boringssl_get_key_index(), pkey);
-        static const SSL_PRIVATE_KEY_METHOD meth = {
-            .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
-        SSL_CTX_set_private_key_method(ssl_ctx, &meth);
-    }
+    if (use_neverbleed)
+        async_nb_boringssl_setup_key_method(ssl_ctx);
 #endif
 
     return 0;
