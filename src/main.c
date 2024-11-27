@@ -827,13 +827,26 @@ static quicly_async_handshake_t async_nb_quic_handler = {async_nb_quic_start};
 
 #ifdef OPENSSL_IS_BORINGSSL
 
+static void async_nb_boringssl_free_key_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    if (ptr != NULL)
+        EVP_PKEY_free(ptr);
+}
+
+static int async_nb_boringssl_get_key_index(void)
+{
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, async_nb_boringssl_free_key_callback); });
+    return index;
+}
+
 enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
                                                       uint16_t signature_algorithm, const uint8_t *in, size_t len)
 {
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
 
-    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    EVP_PKEY *key = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), async_nb_boringssl_get_key_index());
     const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
     int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
 
@@ -851,7 +864,7 @@ enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out,
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
 
-    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    EVP_PKEY *key = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), async_nb_boringssl_get_key_index());
 
     struct async_nb_job_t *job = async_nb_job_new();
     neverbleed_start_decrypt(&job->buf, key, in, len);
@@ -1381,10 +1394,17 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(identity->ossl);
         assert(fakeconn != NULL);
-        key = SSL_get_privatekey(fakeconn);
-        assert(key != NULL);
         if ((cert = SSL_get_certificate(fakeconn)) != NULL)
             X509_up_ref(cert); /* boringssl calls the destructor when SSL_free is called */
+#ifdef OPENSSL_IS_BORINGSSL
+        if (use_neverbleed) {
+            key = SSL_CTX_get_ex_data(identity->ossl, async_nb_boringssl_get_key_index());
+        } else
+#endif
+        {
+            key = SSL_get_privatekey(fakeconn);
+        }
+        assert(key != NULL);
         /* obtain peer verify mode */
         use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
@@ -1637,6 +1657,19 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
+
+    /* Boringssl+neverbleed: transplant the private key to exdata and set SSL_PRIVATE_KEY_METHOD that uses that exdata. We do so
+     * because, as of commit 52a2c00, boringssl allows only one of EVP_PKEY and SSL_PRIVATE_KEY_METHOD to be set. */
+#ifdef OPENSSL_IS_BORINGSSL
+    if (use_neverbleed) {
+        EVP_PKEY *pkey = SSL_CTX_get0_privatekey(ssl_ctx);
+        EVP_PKEY_up_ref(pkey);
+        SSL_CTX_set_ex_data(ssl_ctx, async_nb_boringssl_get_key_index(), pkey);
+        static const SSL_PRIVATE_KEY_METHOD meth = {
+            .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
+        SSL_CTX_set_private_key_method(ssl_ctx, &meth);
+    }
+#endif
 
     return 0;
 }
@@ -2159,15 +2192,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_min_proto_version(identity->ossl, TLS1_VERSION);
 #endif
         SSL_CTX_set_options(identity->ossl, ssl_options);
+
+        /* Turn on async signing, if available. In case of boringssl, SSL_PRIVAKE_KEY_METHOD is set up after RSA private keys are
+         * obtained. */
 #if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
-#elif defined(OPENSSL_IS_BORINGSSL)
-        if (use_neverbleed) {
-            static const SSL_PRIVATE_KEY_METHOD meth = {
-                .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
-            SSL_CTX_set_private_key_method(identity->ossl, &meth);
-        }
 #endif
 
         setup_ecc_key(identity->ossl);
