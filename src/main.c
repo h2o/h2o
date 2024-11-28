@@ -2115,7 +2115,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
                     if (strcasecmp((*named)->name, element->data.scalar) == 0)
                         break;
-                if (named != NULL) {
+                if (*named != NULL) {
                     key_exchange_tls13[slot] = *named;
 #if !PTLS_OPENSSL_HAVE_X25519
                 } else if (strcasecmp(ptls_minicrypto_x25519.name, element->data.scalar) == 0) {
