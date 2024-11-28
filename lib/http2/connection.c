@@ -1620,11 +1620,11 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return h2o_socket_get_ptls(conn->sock);
 }
 
-static int skip_tracing(h2o_conn_t *_conn)
+static float log_random(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
     assert(conn->sock != NULL && "it never becomes NULL, right?");
-    return h2o_socket_skip_tracing(conn->sock);
+    return h2o_socket_log_random(conn->sock);
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -1756,7 +1756,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .get_ptls = get_ptls,
-        .skip_tracing = skip_tracing,
+        .log_random = log_random,
         .get_req_id = get_req_id,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,

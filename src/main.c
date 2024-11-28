@@ -910,6 +910,7 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 
 static void on_sni_update_tracing(void *conn, int is_quic, const char *server_name, size_t server_name_len)
 {
+#if 0 /* FIXME */
     int cur_skip_tracing;
 
     if (is_quic) {
@@ -930,6 +931,7 @@ static void on_sni_update_tracing(void *conn, int is_quic, const char *server_na
             h2o_socket_set_skip_tracing(conn, new_skip_tracing);
         }
     }
+#endif
 }
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
@@ -3909,16 +3911,6 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-struct init_ebpf_key_info_t {
-    struct sockaddr *local, *remote;
-};
-
-static int init_ebpf_key(h2o_ebpf_map_key_t *key, void *_info)
-{
-    struct init_ebpf_key_info_t *info = _info;
-    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
-}
-
 static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token)
 {
@@ -3970,12 +3962,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         return NULL;
     }
 
-    struct init_ebpf_key_info_t ebpf_key_info = {
-        .local = &destaddr->sa,
-        .remote = &srcaddr->sa,
-    };
-    uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
-
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
 
@@ -3999,18 +3985,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
 
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
-        int send_retry = ctx->send_retry;
-        switch (flags & H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) {
-        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON:
-            send_retry = 1;
-            break;
-        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF:
-            send_retry = 0;
-            break;
-        default:
-            break;
-        }
-        if (send_retry) {
+        if (ctx->send_retry) {
             static __thread struct {
                 ptls_aead_context_t *v1;
                 ptls_aead_context_t *draft29;
@@ -4048,8 +4023,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
-                                   &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         goto Exit;
     } else if (conn == &h2o_http3_accept_conn_closed) {
@@ -4943,10 +4917,6 @@ int main(int argc, char **argv)
 #endif
 
     setup_signal_handlers();
-    if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
-        h2o_error_printf("usdt-selective-tracing is set to ON but failed to setup eBPF\n");
-        return EX_CONFIG;
-    }
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {

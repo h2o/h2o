@@ -37,7 +37,6 @@ extern "C" {
 #include "picotls.h"
 #include "picotls/openssl.h" /* for H2O_CAN_OSSL_ASYNC */
 #include "h2o/cache.h"
-#include "h2o/ebpf.h"
 #include "h2o/memory.h"
 #include "h2o/openssl_backport.h"
 #include "h2o/string_.h"
@@ -188,9 +187,9 @@ struct st_h2o_socket_t {
      */
     uint64_t bytes_written;
     /**
-     * boolean flag to indicate if sock is NOT being traced
+     * see ptls_log
      */
-    unsigned _skip_tracing : 1;
+    float _log_random;
     struct {
         void (*cb)(void *data);
         void *data;
@@ -486,11 +485,11 @@ int h2o_socket_set_df_bit(int fd, int domain);
 /**
  * helper to check if socket the socket is target of tracing
  */
-static int h2o_socket_skip_tracing(h2o_socket_t *sock);
+static float h2o_socket_log_random(h2o_socket_t *sock);
 /**
  *
  */
-void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing);
+void h2o_socket_set_log_random(h2o_socket_t *sock, float r);
 
 #if H2O_CAN_OSSL_ASYNC
 /**
@@ -531,28 +530,6 @@ int h2o_socket_recycle_is_empty(void);
  * @return number of bytes written (zero is a valid value indicating that the send buffer is full), or SIZE_MAX on error
  */
 size_t h2o_sendfile(int sockfd, int filefd, off_t off, size_t len);
-
-/**
- * Prepares eBPF maps. Requires root privileges and thus should be called before dropping the privileges. Returns a boolean
- * indicating if operation succeeded.
- */
-int h2o_socket_ebpf_setup(void);
-/**
- * Function to lookup if the connection is tagged for special treatment. The result is a union of `H2O_EBPF_FLAGS_*`.
- */
-uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata);
-/**
- *
- */
-uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len);
-/**
- * function for initializing the ebpf lookup key from raw information
- */
-int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote);
-/**
- * callback for initializing the ebpf lookup key from `h2o_socket_t`
- */
-int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock);
 
 #ifdef OPENSSL_IS_BORINGSSL
 /**
@@ -640,9 +617,9 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
     counter->cur.start_at = now;
 }
 
-inline int h2o_socket_skip_tracing(h2o_socket_t *sock)
+inline float h2o_socket_log_random(h2o_socket_t *sock)
 {
-    return sock->_skip_tracing;
+    return sock->_log_random;
 }
 
 #ifdef __cplusplus

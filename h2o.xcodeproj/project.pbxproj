@@ -534,7 +534,6 @@
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
 		E9F677D720077603006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373E1FD40431004679DF /* roundrobin.c */; };
-		E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */ = {isa = PBXBuildFile; fileRef = E908A2A923163CB70039BCEE /* ebpf.h */; };
 		E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BE24C5AA52002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
@@ -1118,7 +1117,6 @@
 		E901C439213E59A000D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
-		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E908A2AE2320AE4C0039BCEE /* check.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = check.mk; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
@@ -1993,7 +1991,6 @@
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
-				E908A2A923163CB70039BCEE /* ebpf.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
 				7D2DF4ED20297EE0004AD361 /* header.h */,
@@ -2961,7 +2958,6 @@
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				E901C3E6213E1C3600D17C93 /* ranges.h in Headers */,
 				E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */,
-				E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,

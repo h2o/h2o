@@ -376,11 +376,6 @@ struct st_h2o_globalconf_t {
      */
     char *user;
     /**
-     * sets up the h2o_return map if true.
-     */
-    int usdt_selective_tracing;
-
-    /**
      * SSL handshake timeout
      */
     uint64_t handshake_timeout;
@@ -935,9 +930,9 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     ptls_t *(*get_ptls)(h2o_conn_t *conn);
     /**
-     * returns if the connection is target of tracing
+     * returns a random number between 0 and 1, unique to the connection (see ptls_log for how it is being used)
      */
-    int (*skip_tracing)(h2o_conn_t *conn);
+    float (*log_random)(h2o_conn_t *conn);
     /**
      * optional (i.e. may be NULL) callback for server push
      */
