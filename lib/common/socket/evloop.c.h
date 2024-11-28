@@ -699,21 +699,18 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     int fd;
     h2o_socket_t *sock;
 
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
-#if H2O_USE_EBPF_MAP
+    /* cache the remote address, if that can be done at marginal cost */
+    struct sockaddr_storage *peeraddr = NULL;
+    socklen_t *peeraddrlen = NULL;
+
+#if H2O_USE_ACCEPT4
     struct {
         struct sockaddr_storage storage;
         socklen_t len;
     } _peeraddr;
     _peeraddr.len = sizeof(_peeraddr.storage);
-    struct sockaddr_storage *peeraddr = &_peeraddr.storage;
-    socklen_t *peeraddrlen = &_peeraddr.len;
-#else
-    struct sockaddr_storage *peeraddr = NULL;
-    socklen_t *peeraddrlen = NULL;
-#endif
-
-#if H2O_USE_ACCEPT4
+    peeraddr = &_peeraddr.storage;
+    peeraddrlen = &_peeraddr.len;
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
