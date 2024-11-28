@@ -29,8 +29,8 @@ GetOptions(
     's|response-header=s' => sub {
         push @query, "response-header=" . uri_escape($_[1]);
     },
-    'S|sample-rate=f'     => sub {
-        push @query, "sample-rate=" . uri_escape($_[1]);
+    'S|sample-ratio=f'     => sub {
+        push @query, "sample-ratio=" . uri_escape($_[1]);
     },
     't|trace=s'           => sub {
         push @query, "trace=" . uri_escape($_[1]);
