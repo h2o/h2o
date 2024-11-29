@@ -1255,7 +1255,6 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .cipher = log_ssl_cipher,
                 .cipher_bits = log_ssl_cipher_bits,
                 .session_id = log_ssl_session_id,
-                .server_name = log_ssl_server_name,
                 .negotiated_protocol = log_ssl_negotiated_protocol,
                 .ech_config_id = log_ssl_ech_config_id,
                 .ech_kem = log_ssl_ech_kem,
