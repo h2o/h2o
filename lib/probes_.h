@@ -28,10 +28,15 @@
 #define H2O_LOG_CONN(_name, _conn, _block)                                                                                         \
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \
-        if (!ptls_log_point_is_active(&logpoint))                                                                                  \
+        uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \
+        if (active == 0)                                                                                                           \
             break;                                                                                                                 \
         h2o_conn_t *conn_ = (_conn);                                                                                               \
-        PTLS_LOG__DO_LOG(h2o, _name, conn_->callbacks->log_random(conn_), {                                                        \
+        ptls_log_conn_state_t *conn_state = conn_->callbacks->log_state(conn_);                                                    \
+        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_);   \
+        if (active == 0)                                                                                                           \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_, {          \
             PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
             do {                                                                                                                   \
                 _block                                                                                                             \
@@ -148,8 +153,8 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 
     PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
     if (PTLS_UNLIKELY(H2O_RECEIVE_REQUEST_HEADER_ENABLED()) ||
-        (ptls_log_point_is_active(&receive_request_header_logpoint) &&
-         req->conn->callbacks->log_random(req->conn) < ptls_log__max_sample_ratio)) {
+        ((ptls_log_point_maybe_active(&receive_request_header_logpoint) &
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), NULL, req->conn)) != 0)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -175,8 +180,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
     });
     PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
     if (PTLS_UNLIKELY(H2O_SEND_RESPONSE_HEADER_ENABLED()) ||
-        (ptls_log_point_is_active(&send_response_header_logpoint) &&
-         req->conn->callbacks->log_random(req->conn) < ptls_log__max_sample_ratio)) {
+        ((ptls_log_point_maybe_active(&send_response_header_logpoint) &
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), NULL, req->conn)) != 0)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);

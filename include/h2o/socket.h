@@ -189,7 +189,7 @@ struct st_h2o_socket_t {
     /**
      * see ptls_log
      */
-    float _log_random;
+    ptls_log_conn_state_t _log_state;
     struct {
         void (*cb)(void *data);
         void *data;
@@ -485,11 +485,7 @@ int h2o_socket_set_df_bit(int fd, int domain);
 /**
  * helper to check if socket the socket is target of tracing
  */
-static float h2o_socket_log_random(h2o_socket_t *sock);
-/**
- *
- */
-void h2o_socket_set_log_random(h2o_socket_t *sock, float r);
+static ptls_log_conn_state_t *h2o_socket_log_state(h2o_socket_t *sock);
 
 #if H2O_CAN_OSSL_ASYNC
 /**
@@ -617,9 +613,9 @@ inline void h2o_sliding_counter_start(h2o_sliding_counter_t *counter, uint64_t n
     counter->cur.start_at = now;
 }
 
-inline float h2o_socket_log_random(h2o_socket_t *sock)
+inline ptls_log_conn_state_t *h2o_socket_log_state(h2o_socket_t *sock)
 {
-    return sock->_log_random;
+    return &sock->_log_state;
 }
 
 #ifdef __cplusplus

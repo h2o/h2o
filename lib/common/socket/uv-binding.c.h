@@ -375,7 +375,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->close_cb = close_cb;
     sock->handle->data = sock;
     h2o_timer_init(&sock->write_cb_timer, on_call_write_success);
-    sock->super._log_random = ptls_generate_log_random(ptls_openssl_random_bytes);
+    ptls_log_init_conn_state(&sock->super._log_state, ptls_openssl_random_bytes);
     return &sock->super;
 }
 

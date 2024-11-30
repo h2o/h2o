@@ -908,30 +908,9 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 #endif
 }
 
-static void on_sni_update_tracing(void *conn, int is_quic, const char *server_name, size_t server_name_len)
+static void recalc_log_state(void *conn, int is_quic)
 {
-#if 0 /* FIXME */
-    int cur_skip_tracing;
-
-    if (is_quic) {
-        cur_skip_tracing = ptls_skip_tracing(quicly_get_tls(conn));
-    } else {
-        cur_skip_tracing = h2o_socket_skip_tracing(conn);
-    }
-
-    uint64_t flags = cur_skip_tracing ? H2O_EBPF_FLAGS_SKIP_TRACING_BIT : 0;
-    flags = h2o_socket_ebpf_lookup_flags_sni(conf.threads[thread_index].ctx.loop, flags, server_name, server_name_len);
-
-    int new_skip_tracing = (flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0;
-
-    if (cur_skip_tracing != new_skip_tracing) {
-        if (is_quic) {
-            ptls_set_skip_tracing(quicly_get_tls(conn), new_skip_tracing);
-        } else {
-            h2o_socket_set_skip_tracing(conn, new_skip_tracing);
-        }
-    }
-#endif
+    ptls_log_recalc_conn_state(is_quic ? ptls_get_log_state(quicly_get_tls(conn)) : h2o_socket_log_state(conn));
 }
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
@@ -978,12 +957,12 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     if (server_name != NULL) {
         size_t server_name_len = strlen(server_name);
         h2o_socket_t *sock = SSL_get_app_data(ssl);
-        on_sni_update_tracing(sock, 0, server_name, server_name_len);
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->identities[0].ossl != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->identities[0].ossl);
             set_tcp_congestion_controller(sock, resolved->cc.tcp);
         }
+        recalc_log_state(sock, 0);
     }
 
     return SSL_TLSEXT_ERR_OK;
@@ -1009,9 +988,9 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     /* determine ssl_config based on SNI */
     if (params->server_name.base != NULL) {
-        on_sni_update_tracing(conn, conn_is_quic, (const char *)params->server_name.base, params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+        recalc_log_state(conn, conn_is_quic);
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);

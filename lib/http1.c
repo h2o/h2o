@@ -1151,10 +1151,16 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return h2o_socket_get_ptls(conn->sock);
 }
 
-static float log_random(h2o_conn_t *_conn)
+static const char *get_ssl_server_name(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    return h2o_socket_log_random(conn->sock);
+    return h2o_socket_get_ssl_server_name(conn->sock);
+}
+
+static ptls_log_conn_state_t *log_state(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    return h2o_socket_log_state(conn->sock);
 }
 
 static int can_zerocopy(h2o_conn_t *_conn)
@@ -1228,7 +1234,8 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_sockname = get_sockname,
     .get_peername = get_peername,
     .get_ptls = get_ptls,
-    .log_random = log_random,
+    .get_ssl_server_name = get_ssl_server_name,
+    .log_state = log_state,
     .close_idle_connection = close_idle_connection,
     .foreach_request = foreach_request,
     .request_shutdown = initiate_graceful_shutdown,

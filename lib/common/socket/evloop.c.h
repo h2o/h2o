@@ -725,7 +725,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
     if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
         h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    sock->_log_random = ptls_generate_log_random(ptls_openssl_random_bytes);
+    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
     return sock;
 }
 

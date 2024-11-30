@@ -930,9 +930,13 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     ptls_t *(*get_ptls)(h2o_conn_t *conn);
     /**
+     * returns TLS SNI value being adopted (or NULL if SNI was not provided or adopted)
+     */
+    const char *(*get_ssl_server_name)(h2o_conn_t *conn);
+    /**
      * returns a random number between 0 and 1, unique to the connection (see ptls_log for how it is being used)
      */
-    float (*log_random)(h2o_conn_t *conn);
+    ptls_log_conn_state_t *(*log_state)(h2o_conn_t *conn);
     /**
      * optional (i.e. may be NULL) callback for server push
      */

@@ -26,6 +26,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     struct sockaddr_storage local;
     float sample_ratio = 1;
     char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
+    char *sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *sni_tail = sni;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
 
@@ -50,9 +51,15 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 h2o_memcpy(trace_tail, unescaped.base, unescaped.len);
                 trace_tail += value.len;
                 *trace_tail++ = '\0';
+            } else if (h2o_memis(name, name_len, H2O_STRLIT("sni"))) {
+                h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
+                h2o_memcpy(sni_tail, unescaped.base, unescaped.len);
+                sni_tail += value.len;
+                *sni_tail++ = '\0';
             }
         }
         *trace_tail = '\0';
+        *sni_tail = '\0';
     }
 
     if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
@@ -66,7 +73,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
 
     /* register log fd after writing HTTP response, as log is written by multiple threads */
-    if (ptls_log_add_fd(export_info.fd, sample_ratio, trace) != 0)
+    if (ptls_log_add_fd(export_info.fd, sample_ratio, trace, sni) != 0)
         h2o_fatal("failed to add fd to h2olog");
 
     return 0;

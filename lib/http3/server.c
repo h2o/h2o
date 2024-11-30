@@ -561,10 +561,16 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.super.quic);
 }
 
-static float log_random(h2o_conn_t *conn)
+static const char *get_ssl_server_name(h2o_conn_t *conn)
 {
     ptls_t *ptls = get_ptls(conn);
-    return ptls_log_random(ptls);
+    return ptls_get_server_name(ptls);
+}
+
+static ptls_log_conn_state_t *log_state(h2o_conn_t *conn)
+{
+    ptls_t *ptls = get_ptls(conn);
+    return ptls_get_log_state(ptls);
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -2156,7 +2162,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .get_ptls = get_ptls,
-        .log_random = log_random,
+        .get_ssl_server_name = get_ssl_server_name,
+        .log_state = log_state,
         .get_req_id = get_req_id,
         .close_idle_connection = close_idle_connection,
         .foreach_request = foreach_request,

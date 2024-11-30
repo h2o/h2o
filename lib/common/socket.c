@@ -1557,8 +1557,10 @@ static void switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
                                        h2o_socket_get_ssl_server_name(sock),
                                        ptls_iovec_init(negotiated_protocol.base, negotiated_protocol.len)) != 0)
         goto Exit;
+    ptls_log_conn_state_override = &sock->_log_state;
     if ((ret = ptls_import(ptls_ctx, &sock->ssl->ptls, ptls_iovec_init(params.base, params.off))) != 0)
         h2o_fatal("failed to import TLS params built using the same context:%d", ret);
+    ptls_log_conn_state_override = NULL;
 
     if (sock->ssl->ptls != NULL) {
         SSL_set_shutdown(sock->ssl->ossl, SSL_SENT_SHUTDOWN); /* close the session so that it can be resumed */
@@ -1941,9 +1943,9 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     ptls_buffer_t wbuf;
     ptls_buffer_init(&wbuf, "", 0);
 
-    ptls_log_random_override = &sock->_log_random;
+    ptls_log_conn_state_override = &sock->_log_state;
     ptls_t *ptls = ptls_new(ptls_ctx, 1);
-    ptls_log_random_override = NULL;
+    ptls_log_conn_state_override = NULL;
     if (ptls == NULL)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
@@ -2293,13 +2295,6 @@ int h2o_socket_set_df_bit(int fd, int domain)
     return 1;
 
 #undef SETSOCKOPT
-}
-
-void h2o_socket_set_log_random(h2o_socket_t *sock, float r)
-{
-    sock->_log_random = r;
-    if (sock->ssl != NULL && sock->ssl->ptls != NULL)
-        ptls_set_log_random(sock->ssl->ptls, r);
 }
 
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
