@@ -154,7 +154,8 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
     if (PTLS_UNLIKELY(H2O_RECEIVE_REQUEST_HEADER_ENABLED()) ||
         ((ptls_log_point_maybe_active(&receive_request_header_logpoint) &
-          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), NULL, req->conn)) != 0)) {
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn),
+                                     (const char *(*)(void *))req->conn->callbacks->get_ssl_server_name, req->conn)) != 0)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -181,7 +182,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
     PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
     if (PTLS_UNLIKELY(H2O_SEND_RESPONSE_HEADER_ENABLED()) ||
         ((ptls_log_point_maybe_active(&send_response_header_logpoint) &
-          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), NULL, req->conn)) != 0)) {
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn),
+                                     (const char *(*)(void *))req->conn->callbacks->get_ssl_server_name, req->conn)) != 0)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);
