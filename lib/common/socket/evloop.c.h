@@ -671,7 +671,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 }
 
 /**
- * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function isto reduce number of
+ * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function is to reduce number of
  * unnecessary system calls. Therefore, we skip setting TCP_NODELAY when it is certain that the socket is not a TCP socket,
  * otherwise call setsockopt.
  */
