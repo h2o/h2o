@@ -698,34 +698,45 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
     h2o_socket_t *sock;
-
-    /* cache the remote address, if that can be done at marginal cost */
-    struct sockaddr_storage *peeraddr = NULL;
-    socklen_t *peeraddrlen = NULL;
+    union {
+        struct sockaddr sa;
+        struct sockaddr_in sin4;
+        struct sockaddr_in6 sin6;
+    } peeraddr;
+    socklen_t peeraddrlen = sizeof(peeraddr);
 
 #if H2O_USE_ACCEPT4
-    struct {
-        struct sockaddr_storage storage;
-        socklen_t len;
-    } _peeraddr;
-    _peeraddr.len = sizeof(_peeraddr.storage);
-    peeraddr = &_peeraddr.storage;
-    peeraddrlen = &_peeraddr.len;
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
-    if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
+    if ((fd = cloexec_accept(listener->fd, &peeraddr.sa, &peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
-    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
 
-    if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
-        h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
+    if (peeraddrlen <= sizeof(peeraddr)) {
+        h2o_socket_setpeername(sock, &peeraddr.sa, peeraddrlen);
+    } else {
+        peeraddr.sa.sa_family = AF_UNSPEC;
+    }
+
+    set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
+
     ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
+    switch (peeraddr.sa.sa_family) {
+    case AF_INET: /* store as v6-mapped v4 address */
+        ptls_build_mapped_v4_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
+        break;
+    case AF_INET6:
+        sock->_log_state.address = peeraddr.sin6.sin6_addr;
+        break;
+    default:
+        break;
+    }
+
     return sock;
 }
 
