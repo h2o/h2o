@@ -28,6 +28,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
     char *sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *sni_tail = sni;
     char *address = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *address_tail = address;
+    int appdata = 0;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
 
@@ -62,6 +63,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 h2o_memcpy(address_tail, unescaped.base, unescaped.len);
                 address_tail += value.len;
                 *address_tail++ = '\0';
+            } else if (h2o_memis(name, name_len, H2O_STRLIT("application-data"))) {
+                appdata = 1;
             }
         }
         *trace_tail = '\0';
@@ -80,7 +83,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
 
     /* register log fd after writing HTTP response, as log is written by multiple threads */
-    if (ptls_log_add_fd(export_info.fd, sample_ratio, trace, sni, address) != 0)
+    if (ptls_log_add_fd(export_info.fd, sample_ratio, trace, sni, address, appdata) != 0)
         h2o_fatal("failed to add fd to h2olog");
 
     return 0;
