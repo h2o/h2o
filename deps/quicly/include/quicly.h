@@ -1405,14 +1405,19 @@ void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
 
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
-#define QUICLY_LOG_CONN(_type, _conn, _block)                                                                                      \
+#define QUICLY_LOG_CONN(_name, _conn, _block)                                                                                      \
     do {                                                                                                                           \
-        if (!ptls_log.is_active)                                                                                                   \
+        PTLS_LOG_DEFINE_POINT(quicly, _name, logpoint);                                                                            \
+        uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \
+        if (active == 0)                                                                                                           \
             break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
-        if (ptls_skip_tracing(_c->crypto.tls))                                                                                     \
+        ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
+        ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
+        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
+        if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _type, {                                                                                          \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, {                         \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
             PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                          \
             do {                                                                                                                   \
