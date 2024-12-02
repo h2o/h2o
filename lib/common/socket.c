@@ -196,7 +196,6 @@ __thread h2o_mem_recycle_t h2o_socket_zerocopy_buffer_allocator = {&h2o_socket_s
 __thread size_t h2o_socket_num_zerocopy_buffers_inflight;
 
 int h2o_socket_use_ktls = 0;
-uint16_t h2o_socket_trace_ratio = UINT16_MAX;
 
 const char h2o_socket_error_out_of_memory[] = "out of memory";
 const char h2o_socket_error_io[] = "I/O error";
