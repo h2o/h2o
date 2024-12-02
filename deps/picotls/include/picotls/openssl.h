@@ -69,6 +69,12 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #define PTLS_OPENSSL_HAVE_X25519 0
 #define PTLS_OPENSSL_HAS_X25519 0 /* deprecated; use HAVE_ */
 #endif
+#ifdef OPENSSL_IS_BORINGSSL
+#define PTLS_OPENSSL_HAVE_X25519MLKEM768 1
+extern ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768;
+#else
+#define PTLS_OPENSSL_HAVE_X25519MLKEM768 0
+#endif
 
 /* when boringssl is used, existence of libdecrepit is assumed */
 #if !defined(OPENSSL_NO_BF) || defined(OPENSSL_IS_BORINGSSL)
@@ -78,6 +84,7 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #endif
 
 extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[];
+extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges_all[];
 
 extern ptls_cipher_algorithm_t ptls_openssl_aes128ecb;
 extern ptls_cipher_algorithm_t ptls_openssl_aes128ctr;
