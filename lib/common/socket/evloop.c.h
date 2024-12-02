@@ -707,7 +707,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
 
 #if H2O_USE_ACCEPT4
     /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
-    if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, &peeraddr.sa, &peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
