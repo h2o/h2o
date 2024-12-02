@@ -51,17 +51,17 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
             } else if (h2o_memis(name, name_len, H2O_STRLIT("trace"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
                 h2o_memcpy(trace_tail, unescaped.base, unescaped.len);
-                trace_tail += value.len;
+                trace_tail += unescaped.len;
                 *trace_tail++ = '\0';
             } else if (h2o_memis(name, name_len, H2O_STRLIT("sni"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
                 h2o_memcpy(sni_tail, unescaped.base, unescaped.len);
-                sni_tail += value.len;
+                sni_tail += unescaped.len;
                 *sni_tail++ = '\0';
             } else if (h2o_memis(name, name_len, H2O_STRLIT("address"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
                 h2o_memcpy(address_tail, unescaped.base, unescaped.len);
-                address_tail += value.len;
+                address_tail += unescaped.len;
                 *address_tail++ = '\0';
             } else if (h2o_memis(name, name_len, H2O_STRLIT("application-data"))) {
                 appdata = 1;
