@@ -1379,6 +1379,20 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
     return 0;
 }
 
+static int handle_input_expect_headers_process_request_immediately(struct st_h2o_http3_server_stream_t *stream,
+                                                                   const char **err_desc)
+{
+    h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
+    stream->req.entity = h2o_iovec_init("", 0);
+    stream->read_blocked = 1;
+    stream->req.proceed_req = proceed_request_streaming;
+    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
+    quicly_stream_set_receive_window(stream->quic, get_conn(stream)->super.ctx->globalconf->http3.active_stream_window_size);
+    h2o_process_request(&stream->req);
+
+    return 0;
+}
+
 static int handle_input_expect_headers_process_connect(struct st_h2o_http3_server_stream_t *stream, uint64_t datagram_flow_id,
                                                        const char **err_desc)
 {
@@ -1387,17 +1401,10 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
                                                            "CONNECT request cannot have request body", err_desc);
 
     stream->req.is_tunnel_req = 1;
-    h2o_buffer_init(&stream->req_body, &h2o_socket_buffer_prototype);
-    stream->req.entity = h2o_iovec_init("", 0);
-    stream->read_blocked = 1;
-    stream->req.proceed_req = proceed_request_streaming;
     stream->datagram_flow_id = datagram_flow_id;
     ++get_conn(stream)->num_streams_tunnelling;
-    set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
-    quicly_stream_set_receive_window(stream->quic, get_conn(stream)->super.ctx->globalconf->http3.active_stream_window_size);
-    h2o_process_request(&stream->req);
 
-    return 0;
+    return handle_input_expect_headers_process_request_immediately(stream, err_desc);
 }
 
 static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -1546,8 +1553,15 @@ static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stre
             return handle_input_expect_headers_send_http_error(stream, h2o_send_error_417, "Expectation Failed",
                                                                "unknown expectation", err_desc);
         }
-        stream->req.res.status = 100;
-        h2o_send_informational(&stream->req);
+        if (h2o_req_should_forward_expect(&stream->req)) {
+            h2o_add_header(&stream->req.pool, &stream->req.headers, H2O_TOKEN_EXPECT, NULL, expect.base, expect.len);
+            stream->req_streaming = 1;
+            ++conn->num_streams_req_streaming;
+            return handle_input_expect_headers_process_request_immediately(stream, err_desc);
+        } else {
+            stream->req.res.status = 100;
+            h2o_send_informational(&stream->req);
+        }
     }
 
     return 0;

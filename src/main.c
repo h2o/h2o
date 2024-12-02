@@ -827,13 +827,26 @@ static quicly_async_handshake_t async_nb_quic_handler = {async_nb_quic_start};
 
 #ifdef OPENSSL_IS_BORINGSSL
 
+static void async_nb_boringssl_free_key_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    if (ptr != NULL)
+        EVP_PKEY_free(ptr);
+}
+
+static int async_nb_boringssl_get_key_index(void)
+{
+    static volatile int index;
+    H2O_MULTITHREAD_ONCE({ index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, async_nb_boringssl_free_key_callback); });
+    return index;
+}
+
 enum ssl_private_key_result_t async_nb_boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
                                                       uint16_t signature_algorithm, const uint8_t *in, size_t len)
 {
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
 
-    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    EVP_PKEY *key = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), async_nb_boringssl_get_key_index());
     const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
     int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
 
@@ -851,7 +864,7 @@ enum ssl_private_key_result_t async_nb_boringssl_decrypt(SSL *ssl, uint8_t *out,
     if (h2o_socket_boringssl_async_resumption_in_flight(ssl))
         return ssl_private_key_failure;
 
-    EVP_PKEY *key = SSL_get_privatekey(ssl);
+    EVP_PKEY *key = SSL_CTX_get_ex_data(SSL_get_SSL_CTX(ssl), async_nb_boringssl_get_key_index());
 
     struct async_nb_job_t *job = async_nb_job_new();
     neverbleed_start_decrypt(&job->buf, key, in, len);
@@ -882,6 +895,16 @@ enum ssl_private_key_result_t async_nb_boringssl_complete(SSL *ssl, uint8_t *out
     free(digest);
 
     return ssl_private_key_success;
+}
+
+static void async_nb_boringssl_setup_key_method(SSL_CTX *ctx)
+{
+    EVP_PKEY *pkey = SSL_CTX_get0_privatekey(ctx);
+    EVP_PKEY_up_ref(pkey);
+    SSL_CTX_set_ex_data(ctx, async_nb_boringssl_get_key_index(), pkey);
+    static const SSL_PRIVATE_KEY_METHOD meth = {
+        .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
+    SSL_CTX_set_private_key_method(ctx, &meth);
 }
 
 #endif
@@ -1275,17 +1298,11 @@ static ptls_cipher_suite_t **replace_ciphersuites(ptls_cipher_suite_t **input, p
 #endif
 
 static const char *listener_setup_ssl_picotls(struct listener_config_t *listener, struct listener_ssl_identity_t *identity,
-                                              ptls_iovec_t raw_public_key, ptls_cipher_suite_t **cipher_suites,
-                                              int server_cipher_preference, int use_neverbleed,
-                                              ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs)
+                                              ptls_iovec_t raw_public_key, ptls_key_exchange_algorithm_t **key_exchanges,
+                                              ptls_cipher_suite_t **cipher_suites, int server_cipher_preference, int use_neverbleed,
+                                              ptls_ech_create_opener_t *ech_create_opener, ptls_iovec_t ech_retry_configs,
+                                              uint8_t max_tickets)
 {
-    static const ptls_key_exchange_algorithm_t *key_exchanges[] = {
-#if PTLS_OPENSSL_HAVE_X25519
-        &ptls_openssl_x25519,
-#else
-        &ptls_minicrypto_x25519,
-#endif
-        &ptls_openssl_secp256r1, NULL};
     struct st_fat_context_t {
         ptls_context_t ctx;
         struct st_on_client_hello_ptls_t ch;
@@ -1301,6 +1318,18 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     STACK_OF(X509) * cert_chain;
     int ret;
     int use_client_verify = 0;
+
+    if (key_exchanges == NULL) {
+        static ptls_key_exchange_algorithm_t *default_key_exchanges[] = {
+#if PTLS_OPENSSL_HAVE_X25519
+            &ptls_openssl_x25519,
+#else
+            &ptls_minicrypto_x25519,
+#endif
+            &ptls_openssl_secp256r1, NULL};
+        key_exchanges = default_key_exchanges;
+    }
+
     if (cipher_suites == NULL)
         cipher_suites = ptls_openssl_cipher_suites;
 
@@ -1327,6 +1356,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .require_client_authentication = 0,
                 .omit_end_of_early_data = 0,
                 .server_cipher_preference = server_cipher_preference,
+                .ticket_requests.server.max_count = max_tickets,
                 .encrypt_ticket = NULL, /* initialized later */
                 .save_ticket = NULL,    /* initialized later */
                 .log_event = NULL,
@@ -1355,10 +1385,17 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     { /* obtain key and cert (via fake connection for libressl compatibility) */
         SSL *fakeconn = SSL_new(identity->ossl);
         assert(fakeconn != NULL);
-        key = SSL_get_privatekey(fakeconn);
-        assert(key != NULL);
         if ((cert = SSL_get_certificate(fakeconn)) != NULL)
             X509_up_ref(cert); /* boringssl calls the destructor when SSL_free is called */
+#ifdef OPENSSL_IS_BORINGSSL
+        if (use_neverbleed) {
+            key = SSL_CTX_get_ex_data(identity->ossl, async_nb_boringssl_get_key_index());
+        } else
+#endif
+        {
+            key = SSL_get_privatekey(fakeconn);
+        }
+        assert(key != NULL);
         /* obtain peer verify mode */
         use_client_verify = (SSL_get_verify_mode(fakeconn) & SSL_VERIFY_PEER) ? 1 : 0;
         SSL_free(fakeconn);
@@ -1612,6 +1649,13 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
         assert(ret == 1);
     }
 
+    /* Boringssl+neverbleed: transplant the private key to exdata and set SSL_PRIVATE_KEY_METHOD that uses that exdata. We do so
+     * because, as of commit 52a2c00, boringssl allows only one of EVP_PKEY and SSL_PRIVATE_KEY_METHOD to be set. */
+#ifdef OPENSSL_IS_BORINGSSL
+    if (use_neverbleed)
+        async_nb_boringssl_setup_key_method(ssl_ctx);
+#endif
+
     return 0;
 }
 
@@ -1828,20 +1872,22 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                               yoml_t **ssl_node, yoml_t **cc_node, yoml_t **initcwnd_node, struct listener_config_t *listener,
                               int listener_is_new)
 {
-    yoml_t **dh_file, **min_version, **max_version, **cipher_suite, **cipher_suite_tls13_node, **ocsp_update_cmd,
-        **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
-        **http2_origin_frame_node, **client_ca_file, **ech_node;
+    yoml_t **dh_file, **min_version, **max_version, **key_exchange_tls13_node, **cipher_suite, **cipher_suite_tls13_node,
+        **ocsp_update_cmd, **ocsp_update_interval_node, **ocsp_max_failures_node, **cipher_preference_node, **neverbleed_node,
+        **http2_origin_frame_node, **client_ca_file, **ech_node, **max_tickets_node;
     struct listener_ssl_parsed_identity_t *parsed_identities;
     size_t num_parsed_identities;
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
     int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
+    ptls_key_exchange_algorithm_t **key_exchange_tls13 = NULL;
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
     struct {
         ptls_ech_create_opener_t *create_opener;
         ptls_iovec_t retry_configs;
     } ech = {NULL};
+    uint8_t max_tickets = 0;
 
     if (!listener_is_new) {
         if (listener->ssl.size != 0 && ssl_node == NULL) {
@@ -1861,13 +1907,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         yoml_t **identity_node, **certificate_file, **key_file;
         if (h2o_configurator_parse_mapping(cmd, *ssl_node, NULL,
                                            "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
-                                           "maximum-version:s,cipher-suite:s,cipher-suite-tls1.3:a,ocsp-update-cmd:s,"
-                                           "ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,cipher-preference:*,neverbleed:*,"
-                                           "http2-origin-frame:*,client-ca-file:s,ech:a",
+                                           "maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,cipher-suite-tls1.3:a,"
+                                           "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,"
+                                           "cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
+                                           "max-tickets:s",
                                            &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
-                                           &max_version, &cipher_suite, &cipher_suite_tls13_node, &ocsp_update_cmd,
-                                           &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file, &cipher_preference_node,
-                                           &neverbleed_node, &http2_origin_frame_node, &client_ca_file, &ech_node) != 0)
+                                           &max_version, &key_exchange_tls13_node, &cipher_suite, &cipher_suite_tls13_node,
+                                           &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file,
+                                           &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &client_ca_file,
+                                           &ech_node, &max_tickets_node) != 0)
             return -1;
         if (identity_node != NULL) {
             if (certificate_file != NULL || key_file != NULL) {
@@ -2030,6 +2078,37 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
 
     if (use_picotls) {
+        if (key_exchange_tls13_node != NULL) {
+            assert((*key_exchange_tls13_node)->type == YOML_TYPE_SEQUENCE);
+            if ((*key_exchange_tls13_node)->data.sequence.size == 0) {
+                h2o_configurator_errprintf(cmd, *key_exchange_tls13_node, "key-exchanges-tls1.3 cannot be empty");
+                goto Error;
+            }
+            key_exchange_tls13 = h2o_mem_alloc(((*key_exchange_tls13_node)->data.sequence.size + 1) * sizeof(*key_exchange_tls13));
+            size_t slot;
+            for (slot = 0; slot < (*key_exchange_tls13_node)->data.sequence.size; ++slot) {
+                yoml_t *element = (*key_exchange_tls13_node)->data.sequence.elements[slot];
+                if (element->type != YOML_TYPE_SCALAR) {
+                    h2o_configurator_errprintf(cmd, element, "elements of key-exchanges-tls1.3 must be a scalar");
+                    goto Error;
+                }
+                ptls_key_exchange_algorithm_t **named;
+                for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                    if (strcasecmp((*named)->name, element->data.scalar) == 0)
+                        break;
+                if (*named != NULL) {
+                    key_exchange_tls13[slot] = *named;
+#if !PTLS_OPENSSL_HAVE_X25519
+                } else if (strcasecmp(ptls_minicrypto_x25519.name, element->data.scalar) == 0) {
+                    key_exchange_tls13[slot] = &ptls_minicrypto_x25519;
+#endif
+                } else {
+                    h2o_configurator_errprintf(cmd, element, "key-exchange not found: %s", element->data.scalar);
+                    goto Error;
+                }
+            }
+            key_exchange_tls13[slot] = NULL;
+        }
         if (cipher_suite_tls13_node != NULL &&
             (cipher_suite_tls13 = parse_tls13_ciphers(cmd, *cipher_suite_tls13_node, listener->quic.ctx != NULL)) == NULL)
             goto Error;
@@ -2055,6 +2134,15 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         ptls_context_t *base = listener->ssl.entries[0]->identities[0].ptls.ctx;
         ech.create_opener = base->ech.server.create_opener;
         ech.retry_configs = base->ech.server.retry_configs;
+    }
+
+    if (max_tickets_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *max_tickets_node, "%" SCNu8, &max_tickets) != 0)
+            goto Error;
+        if (!use_picotls) {
+            h2o_configurator_errprintf(cmd, *max_tickets_node, "ticket-requests extension requires use of TLS 1.3");
+            goto Error;
+        }
     }
 
     /* create a new entry in the SSL context list */
@@ -2089,15 +2177,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         SSL_CTX_set_min_proto_version(identity->ossl, TLS1_VERSION);
 #endif
         SSL_CTX_set_options(identity->ossl, ssl_options);
+
+        /* Turn on async signing, if available. In case of boringssl, SSL_PRIVAKE_KEY_METHOD is set up after RSA private keys are
+         * obtained. */
 #if H2O_CAN_OSSL_ASYNC
         if (use_neverbleed)
             SSL_CTX_set_mode(identity->ossl, SSL_CTX_get_mode(identity->ossl) | SSL_MODE_ASYNC);
-#elif defined(OPENSSL_IS_BORINGSSL)
-        if (use_neverbleed) {
-            static const SSL_PRIVATE_KEY_METHOD meth = {
-                .sign = async_nb_boringssl_sign, .decrypt = async_nb_boringssl_decrypt, .complete = async_nb_boringssl_complete};
-            SSL_CTX_set_private_key_method(identity->ossl, &meth);
-        }
 #endif
 
         setup_ecc_key(identity->ossl);
@@ -2142,9 +2227,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             goto Error;
 
         if (use_picotls) {
-            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, cipher_suite_tls13,
+            const char *errstr = listener_setup_ssl_picotls(listener, identity, raw_pubkey, key_exchange_tls13, cipher_suite_tls13,
                                                             !!(ssl_options & SSL_OP_CIPHER_SERVER_PREFERENCE), use_neverbleed,
-                                                            ech.create_opener, ech.retry_configs);
+                                                            ech.create_opener, ech.retry_configs, max_tickets);
             if (errstr != NULL) {
                 /* It is a fatal error to setup TLS 1.3 context, when setting up alternative identities, or a QUIC context. */
                 if (identity != ssl_config->identities || listener->quic.ctx != NULL) {

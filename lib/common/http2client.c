@@ -104,7 +104,7 @@ struct st_h2o_http2client_stream_t {
     } input;
 
     int *notify_destroyed;
-    int use_expect;
+    int send_own_expect;
 };
 
 static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn);
@@ -346,9 +346,9 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
             goto Failed;
         }
-        if (stream->input.status == 100 && stream->use_expect) {
+        if (stream->input.status == 100 && stream->send_own_expect) {
             stream->input.status = 0;
-            stream->use_expect = 0;
+            stream->send_own_expect = 0;
             if (stream->output.buf != NULL && !h2o_linklist_is_linked(&stream->output.sending_link)) {
                 h2o_linklist_insert(&stream->conn->output.sending_streams, &stream->output.sending_link);
                 request_write(stream->conn);
@@ -1112,8 +1112,8 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
         stream->input.message_body_forbidden = 1;
     }
 
-    if (props.use_expect && (stream->output.proceed_req != NULL || body.len != 0))
-        stream->use_expect = 1;
+    if (props.send_own_expect && (stream->output.proceed_req != NULL || body.len != 0))
+        stream->send_own_expect = 1;
 
     /* send headers */
     h2o_hpack_flatten_request(&conn->output.buf, &conn->output.header_table, conn->peer_settings.header_table_size,
@@ -1121,7 +1121,7 @@ static void on_connection_ready(struct st_h2o_http2client_stream_t *stream, stru
                               stream->super.upgrade_to != NULL && stream->super.upgrade_to != h2o_httpclient_upgrade_to_connect
                                   ? h2o_iovec_init(stream->super.upgrade_to, strlen(stream->super.upgrade_to))
                                   : h2o_iovec_init(NULL, 0),
-                              headers, num_headers, stream->state.req == STREAM_STATE_CLOSED, stream->use_expect);
+                              headers, num_headers, stream->state.req == STREAM_STATE_CLOSED, stream->send_own_expect);
 
     if (stream->state.req == STREAM_STATE_BODY) {
         h2o_buffer_init(&stream->output.buf, &h2o_socket_buffer_prototype);
@@ -1170,7 +1170,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, link);
         h2o_linklist_unlink(link);
 
-        if (stream->use_expect && stream->state.req == STREAM_STATE_BODY) {
+        if (stream->send_own_expect && stream->state.req == STREAM_STATE_BODY) {
             h2o_timer_link(stream->super.ctx->loop, stream->super.ctx->first_byte_timeout, &stream->super._timeout);
             continue;
         }
@@ -1262,12 +1262,12 @@ static void do_emit_writereq(struct st_h2o_http2client_conn_t *conn)
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_stream_t, output.sending_link, pending.next);
         h2o_linklist_unlink(&stream->output.sending_link);
 
-        if (stream->output.buf != NULL && !stream->use_expect)
+        if (stream->output.buf != NULL && !stream->send_own_expect)
             stream_emit_pending_data(stream);
 
         if (stream->output.buf == NULL || stream->output.buf->size == 0) {
             h2o_linklist_insert(&conn->output.sent_streams, &stream->output.sending_link);
-        } else if (h2o_http2_window_get_avail(&stream->output.window) > 0 && !stream->use_expect) {
+        } else if (h2o_http2_window_get_avail(&stream->output.window) > 0 && !stream->send_own_expect) {
             /* re-insert to tail so that streams would be sent round-robin */
             h2o_linklist_insert(&conn->output.sending_streams, &stream->output.sending_link);
         } else {

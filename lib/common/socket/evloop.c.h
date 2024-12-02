@@ -671,7 +671,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 }
 
 /**
- * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function isto reduce number of
+ * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function is to reduce number of
  * unnecessary system calls. Therefore, we skip setting TCP_NODELAY when it is certain that the socket is not a TCP socket,
  * otherwise call setsockopt.
  */
@@ -706,7 +706,6 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     socklen_t peeraddrlen = sizeof(peeraddr);
 
 #if H2O_USE_ACCEPT4
-    /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
     if ((fd = accept4(listener->fd, &peeraddr.sa, &peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
@@ -716,13 +715,14 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
-
     if (peeraddrlen <= sizeof(peeraddr)) {
         h2o_socket_setpeername(sock, &peeraddr.sa, peeraddrlen);
     } else {
         peeraddr.sa.sa_family = AF_UNSPEC;
     }
 
+    /* note: even on linux, the accepted socket might not inherit TCP_NODELAY from the listening socket; see
+     * https://github.com/h2o/h2o/pull/2542#issuecomment-760700859 */
     set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
 
     ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
