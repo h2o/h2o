@@ -6987,7 +6987,7 @@ void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point
         uint32_t new_active = 0;
         for (size_t slot = 0; slot < PTLS_ELEMENTSOF(logctx.conns); ++slot)
             if (logctx.conns[slot].points != NULL && is_in_stringlist(logctx.conns[slot].points, point->name))
-                new_active = (uint32_t)1 << slot;
+                new_active |= (uint32_t)1 << slot;
         point->state.active_conns = new_active;
         point->state.generation = ptls_log._generation;
     }
@@ -7012,7 +7012,7 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
             if (logctx.conns[slot].points != NULL && conn->random_ < logctx.conns[slot].sample_ratio &&
                 is_in_stringlist(logctx.conns[slot].snis, sni) &&
                 is_in_addresslist(logctx.conns[slot].addresses, &conn->address)) {
-                new_active = (uint32_t)1 << slot;
+                new_active |= (uint32_t)1 << slot;
             }
         }
         conn->state.active_conns = new_active;
