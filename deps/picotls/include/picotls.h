@@ -1421,10 +1421,10 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
 
 #define PTLS_LOG(module, name, block)                                                                                              \
     do {                                                                                                                           \
-        PTLS_LOG_DEFINE_POINT(module, name);                                                                                       \
-        if (ptls_log__active_connections(&logpoint) == 0)                                                                          \
+        PTLS_LOG_DEFINE_POINT(module, name, logpoint);                                                                             \
+        if (ptls_log_point_maybe_active(&logpoint) == 0)                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG((module), (type), (block));                                                                               \
+        PTLS_LOG__DO_LOG(module, name, NULL, NULL, NULL, {block});                                                                 \
     } while (0)
 
 #define PTLS_LOG_CONN(name, tls, block)                                                                                            \
