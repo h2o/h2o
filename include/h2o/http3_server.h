@@ -55,6 +55,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                                           quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
                                           int skip_tracing, const h2o_http3_conn_callbacks_t *h3_callbacks);
 /**
+ *
+ */
+void h2o_http3_accept_on_streams(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
+/**
  * amends the quicly context so that it could be used for the server
  */
 void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic);
