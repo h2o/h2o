@@ -149,6 +149,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         conn_callbacks.super.destroy_connection = on_destroy_connection;
 
+        ptls_log._generation = 0; /* disable tracing */
+
         quic_init_context(&server_ctx.super, ctx.loop);
         h2o_http3_server_amend_quicly_context(&config, server_ctx.super.quic);
         if (pthread_create(&tupstream, NULL, upstream_thread, dirname) != 0) {
