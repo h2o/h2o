@@ -154,6 +154,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#strict-match">
 <code>strict-match</code>
 </a></li>
+<li><a href="configure/base_directives.html#request-body-streaming">
+<code>request-body-streaming</code>
+</a></li>
 <li><a href="configure/base_directives.html#tcp-reuseport">
 <code>tcp-reuseport</code>
 </a></li>
@@ -1438,6 +1441,43 @@ See <a href="configure/base_directives.html#hosts"><code>hosts</code></a>.
 <dd>host</dd>
 <dt>Default:</dt>
 <dd><code><pre>strict-match: OFF</pre></code>
+</dl>
+
+<div id="request-body-streaming" class="directive-head">
+<h3><a href="configure/base_directives.html#request-body-streaming"><code>"request-body-streaming"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag that enables a configuration check that only allows handlers that support request body streaming to be configured for this path.
+</p>
+
+<p>
+When this flag is set to <code>ON</code> for a path and a handler is configured for this path that does not support request body streaming, then the <code>h2o</code> configuration will be rejected as invalid.
+</p><p>
+A handler that supports request body streaming will run without waiting for the request body to be received.
+Currently, among the built-in handlers, only <a href="configure/proxy_directives.html#proxy.reverse.url"><code>proxy.reverse.url</code></a>
+and <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>
+support request body streaming.
+Not all configurations rely on this support.  <code>request-body-streaming: ON</code> for a path indicates that request body streaming is critical for the application at this path
+and that configurations that inadvertently break this functionality should be treated as invalid.
+</p><p>
+By default, without <code>request-body-streaming: ON</code> set for the path, if a non-streaming handler precedes a streaming handler,
+then request body streaming will not take place.
+When <code>request-body-streaming: ON</code> is in effect for the path, then such a configuration will be rejected.
+</p><p>
+By default, without <code>request-body-streaming: ON</code> set for the path, if a streaming handler declines and the following handler is a non-streaming handler,
+then the non-streaming handler may not see the complete request body.
+When <code>request-body-streaming: ON</code> is in effect for the path, then such a configuration will be rejected.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+<dt>Default:</dt>
+<dd><code><pre>request-body-streaming: OFF</pre></code>
 </dl>
 
 <div id="tcp-reuseport" class="directive-head">

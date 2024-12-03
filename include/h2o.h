@@ -248,6 +248,9 @@ struct st_h2o_pathconf_t {
          */
         unsigned emit_request_errors : 1;
     } error_log;
+    struct {
+        unsigned request_body_streaming : 1;
+    } misc;
 };
 
 struct st_h2o_hostconf_t {

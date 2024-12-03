@@ -135,11 +135,137 @@ static int config_timeout(h2o_configurator_command_t *cmd, yoml_t *node, uint64_
     return 0;
 }
 
+struct st_check_command_order_record {
+    h2o_configurator_command_t *cmd;
+    yoml_t *value;
+    unsigned defer_level;
+    size_t mapping_pos;
+    unsigned supports_request_streaming;
+};
+
+typedef H2O_VECTOR(struct st_check_command_order_record) check_command_order_records_t;
+
+struct st_check_command_order {
+    size_t nhandlers_before;
+    size_t nfilters_before;
+    check_command_order_records_t handlers;
+    check_command_order_records_t filters;
+};
+
+static void check_command_order_init(struct st_check_command_order *cco)
+{
+    *cco = (struct st_check_command_order ){};
+}
+
+static void check_command_order_before_cb(struct st_check_command_order *cco, h2o_configurator_context_t *ctx)
+{
+    if (ctx->pathconf != NULL) {
+        cco->nhandlers_before = ctx->pathconf->handlers.size;
+        cco->nfilters_before = ctx->pathconf->_filters.size;
+    }
+}
+
+static void check_command_order_after_cb(struct st_check_command_order *cco, h2o_configurator_command_t *cmd,
+                                         h2o_configurator_context_t *ctx, yoml_t *value, unsigned defer_level, size_t mapping_pos)
+{
+    if (ctx->pathconf != NULL) {
+        if (ctx->pathconf->handlers.size > cco->nhandlers_before) {
+            for (size_t i = cco->nhandlers_before; i < ctx->pathconf->handlers.size; ++i) {
+                h2o_vector_reserve(NULL, &cco->handlers, cco->handlers.size + 1);
+                const h2o_handler_t *h = ctx->pathconf->handlers.entries[i];
+                cco->handlers.entries[cco->handlers.size++] =
+                    (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos, h->supports_request_streaming};
+            }
+        }
+        if (ctx->pathconf->_filters.size > cco->nfilters_before) {
+            h2o_vector_reserve(NULL, &cco->filters, cco->filters.size + 1);
+            cco->filters.entries[cco->filters.size++] =
+                (struct st_check_command_order_record){cmd, value, defer_level, mapping_pos};
+        }
+    }
+}
+
+static const char *defer_level_str(unsigned defer_level)
+{
+    switch (defer_level) {
+    case 0:
+        return "not deferred";
+    case 1:
+        return "semi-deferred";
+    case 2:
+        return "deferred";
+    default:
+        return "unknown";
+    }
+}
+
+static int check_command_order_evaluate_impl(const check_command_order_records_t *records, const char *type_str)
+{
+    int ret = 0;
+    if (records->size >= 2) {
+        size_t prev_mapping_pos = records->entries[0].mapping_pos;
+        for (size_t i = 1; i < records->size; ++i) {
+            const struct st_check_command_order_record *prev_record = records->entries + i - 1;
+            const struct st_check_command_order_record *record = records->entries + i;
+            size_t this_mapping_pos = record->mapping_pos;
+            if (this_mapping_pos < prev_mapping_pos) {
+                ret = -1;
+                h2o_configurator_errprintf(record->cmd, record->value,
+                                           "misleading configuration order: %s appears before %s but the %s %s would run after the "
+                                           "%s %s because the command %s is %s and the command %s is %s",
+                                           record->cmd->name, prev_record->cmd->name, type_str, record->cmd->name, type_str,
+                                           prev_record->cmd->name, record->cmd->name, defer_level_str(record->defer_level),
+                                           prev_record->cmd->name, defer_level_str(prev_record->defer_level));
+            } else {
+                prev_mapping_pos = this_mapping_pos;
+            }
+        }
+    }
+    return ret;
+}
+
+static int check_command_order_request_body_streaming(struct st_check_command_order *cco, h2o_configurator_context_t *ctx)
+{
+    if (ctx->pathconf == NULL)
+        return 0;
+    if (!ctx->pathconf->misc.request_body_streaming)
+        return 0;
+
+    int ret = 0;
+    const check_command_order_records_t *records = &cco->handlers;
+    for (size_t i = 0; i < records->size; ++i) {
+        const struct st_check_command_order_record *record = records->entries + i;
+        if (!record->supports_request_streaming) {
+            ret = -1;
+            h2o_configurator_errprintf(
+                record->cmd, record->value,
+                "This path has `request-body-streaming: ON` yet the handler `%s` does not implement request body streaming",
+                record->cmd->name);
+        }
+    }
+    return ret;
+}
+
+static int check_command_order_evaluate(struct st_check_command_order *cco, h2o_configurator_context_t *ctx)
+{
+    int ret = 0;
+    if (check_command_order_evaluate_impl(&cco->handlers, "handler") != 0)
+        ret = -1;
+    if (check_command_order_evaluate_impl(&cco->filters, "filter") != 0)
+        ret = -1;
+    if (check_command_order_request_body_streaming(cco, ctx) != 0)
+        ret = -1;
+    free(cco->handlers.entries);
+    free(cco->filters.entries);
+    return ret;
+}
+
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands)
 {
     struct st_cmd_value_t {
         h2o_configurator_command_t *cmd;
         yoml_t *value;
+        size_t mapping_pos;
     };
     H2O_VECTOR(struct st_cmd_value_t) deferred = {NULL}, semi_deferred = {NULL};
     int ret = -1;
@@ -155,8 +281,12 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
 
     /* handle the configuration commands */
     if (node != NULL) {
+        struct st_check_command_order cco;
+        check_command_order_init(&cco);
+
         size_t i;
         for (i = 0; i != node->data.mapping.size; ++i) {
+            size_t mapping_pos = i;
             yoml_t *key = node->data.mapping.elements[i].key, *value = node->data.mapping.elements[i].value;
             h2o_configurator_command_t *cmd;
             /* obtain the target command */
@@ -208,26 +338,35 @@ int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *nod
             /* handle the command (or keep it for later execution) */
             if ((cmd->flags & H2O_CONFIGURATOR_FLAG_SEMI_DEFERRED) != 0) {
                 h2o_vector_reserve(NULL, &semi_deferred, semi_deferred.size + 1);
-                semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value};
+                semi_deferred.entries[semi_deferred.size++] = (struct st_cmd_value_t){cmd, value, mapping_pos};
             } else if ((cmd->flags & H2O_CONFIGURATOR_FLAG_DEFERRED) != 0) {
                 h2o_vector_reserve(NULL, &deferred, deferred.size + 1);
-                deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value};
+                deferred.entries[deferred.size++] = (struct st_cmd_value_t){cmd, value, mapping_pos};
             } else {
+                check_command_order_before_cb(&cco, ctx);
                 if (cmd->cb(cmd, ctx, value) != 0)
                     goto Exit;
+                check_command_order_after_cb(&cco, cmd, ctx, value, 0, mapping_pos);
             }
         SkipCommand:;
         }
         for (i = 0; i != semi_deferred.size; ++i) {
             struct st_cmd_value_t *pair = semi_deferred.entries + i;
+            check_command_order_before_cb(&cco, ctx);
             if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
                 goto Exit;
+            check_command_order_after_cb(&cco, pair->cmd, ctx, pair->value, 1, pair->mapping_pos);
         }
         for (i = 0; i != deferred.size; ++i) {
             struct st_cmd_value_t *pair = deferred.entries + i;
+            check_command_order_before_cb(&cco, ctx);
             if (pair->cmd->cb(pair->cmd, ctx, pair->value) != 0)
                 goto Exit;
+            check_command_order_after_cb(&cco, pair->cmd, ctx, pair->value, 2, pair->mapping_pos);
         }
+
+        if (check_command_order_evaluate(&cco, ctx) != 0)
+            goto Exit;
     }
 
     /* call on_exit of every configurator */
@@ -1013,6 +1152,21 @@ static int on_config_usdt_selective_tracing(h2o_configurator_command_t *cmd, h2o
     return 0;
 }
 
+static int on_config_request_body_streaming(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    h2o_pathconf_t *pathconf = ctx->pathconf;
+    ssize_t on;
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    if (on) {
+        pathconf->misc.request_body_streaming = 1;
+    } else if (pathconf->misc.request_body_streaming) {
+        h2o_configurator_errprintf(cmd, node, "cannot be set to OFF once set to ON");
+        return -1;
+    }
+    return 0;
+}
+
 void h2o_configurator__init_core(h2o_globalconf_t *conf)
 {
     /* check if already initialized */
@@ -1163,6 +1317,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "usdt-selective-tracing",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_usdt_selective_tracing);
+        h2o_configurator_define_command(&c->super, "request-body-streaming",
+                                        H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_request_body_streaming);
     }
 }
 
