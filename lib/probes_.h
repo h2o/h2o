@@ -24,7 +24,6 @@
 
 #include "picotls.h"
 
-#define H2O_LOG(_type, _block) PTLS_LOG(h2o, _type, _block)
 #define H2O_LOG_CONN(_name, _conn, _block)                                                                                         \
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \

@@ -3811,6 +3811,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         }
         H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
+        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(node_id, *node_id); });
         return 0;
     NodeFound:;
     } else {
@@ -3821,6 +3822,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
                 return 0;
             }
         } else {
@@ -3828,6 +3830,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
                 return 0;
             }
         }
@@ -3849,6 +3852,12 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         for (i = 0; i != num_packets; ++i)
             num_bytes += packets[i].octets.len;
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
+        PTLS_LOG(h2o, h3_packet_forward, {
+            /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
+            PTLS_LOG_ELEMENT_UNSIGNED(num_packets, num_packets);
+            PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
+            PTLS_LOG_ELEMENT_SIGNED(fd, fd);
+        });
     }
 #endif
 
@@ -3906,6 +3915,10 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     *ttl = encapsulated.ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
+    PTLS_LOG(h2o, h3_forwarded_packet_receive, {
+        /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
+        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, msg->msg_iov[0].iov_len);
+    });
     return 1;
 }
 
