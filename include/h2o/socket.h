@@ -50,7 +50,7 @@ extern "C" {
 #endif
 #endif
 
-#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY) && defined(MSG_ZEROCOPY)
 #define H2O_USE_MSG_ZEROCOPY 1
 #endif
 

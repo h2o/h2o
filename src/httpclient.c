@@ -902,7 +902,7 @@ int main(int argc, char **argv)
             break;
         case 'H': {
             const char *colon, *value_start;
-            if ((colon = index(optarg, ':')) == NULL) {
+            if ((colon = strchr(optarg, ':')) == NULL) {
                 fprintf(stderr, "no `:` found in -H\n");
                 exit(EXIT_FAILURE);
             }
