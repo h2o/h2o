@@ -177,6 +177,9 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
         } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
+        H2O_LOG_SOCK(writev, &sock->super, {
+            PTLS_LOG_ELEMENT_SIGNED(ret, wret);
+        });
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
@@ -336,6 +339,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* operation completed or failed, schedule notification */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    H2O_LOG_SOCK(write_complete, &sock->super, {
+        PTLS_LOG_ELEMENT_BOOL(success, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    });
     sock->bytes_written.cur_loop = sock->super.bytes_written;
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);

@@ -24,6 +24,24 @@
 
 #include "picotls.h"
 
+#define H2O_LOG_SOCK(_name, _sock, _block) \
+    do {                                                                                                                           \
+        PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \
+        uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \
+        if (active == 0)                                                                                                           \
+            break;                                                                                                                 \
+        h2o_socket_t *sock_ = (_sock);                                                                                             \
+        ptls_log_conn_state_t *conn_state = h2o_socket_log_state(sock_);                                                           \
+        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_);          \
+        if (active == 0)                                                                                                           \
+            break;                                                                                                                 \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_, {                 \
+            PTLS_LOG_ELEMENT_PTR(sock, sock_);                                                                                     \
+            do {                                                                                                                   \
+                _block                                                                                                             \
+            } while (0);                                                                                                           \
+        });                                                                                                                        \
+    } while (0)
 #define H2O_LOG_CONN(_name, _conn, _block)                                                                                         \
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \
