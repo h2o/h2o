@@ -67,10 +67,12 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 appdata = 1;
             }
         }
-        *trace_tail = '\0';
-        *sni_tail = '\0';
-        *address_tail = '\0';
     }
+
+    /* termninate lists */
+    *trace_tail = '\0';
+    *sni_tail = '\0';
+    *address_tail = '\0';
 
     if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
