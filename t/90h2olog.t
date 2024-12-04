@@ -61,37 +61,33 @@ subtest "h2olog", sub {
   ok is_uuidv4($h3s_accept->{conn_uuid}), "h3s_accept has a UUIDv4 field `conn_uuid`"
 };
 
-TODO: {
-  local $TODO = "reenable after adding support for -t";
+subtest "h2olog -t", sub {
+  my $tracer = H2ologTracer->new({
+    path => $h2olog_socket,
+    args => [
+      "-t", "h2o:send_response_header",
+      "-t", "h2o:receive_request_header",
+      "-t", "h2o:h3s_destroy",
+    ],
+  });
 
-  subtest "h2olog -t", sub {
-    my $tracer = H2ologTracer->new({
-      path => $h2olog_socket,
-      args => [
-        "-t", "h2o:send_response_header",
-        "-t", "h2o:receive_request_header",
-        "-t", "h2o:h3s_destroy",
-      ],
-    });
+  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
-    my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
-    like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
+  my $trace;
+  until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy"}) {diag $trace}
 
-    my $trace;
-    until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy"}) {diag $trace}
+  if ($ENV{H2OLOG_DEBUG}) {
+    diag "h2olog output:\n", $trace;
+  }
 
-    if ($ENV{H2OLOG_DEBUG}) {
-      diag "h2olog output:\n", $trace;
-    }
+  my %group_by;
+  foreach my $event (map { decode_json($_) } split /\n/, $trace) {
+    $group_by{$event->{"type"}}++;
+  }
 
-    my %group_by;
-    foreach my $event (map { decode_json($_) } split /\n/, $trace) {
-      $group_by{$event->{"type"}}++;
-    }
-
-    is_deeply [sort keys %group_by], [sort qw(h3s_destroy send_response_header receive_request_header)];
-  };
-}
+  is_deeply [sort keys %group_by], [sort qw(h3s_destroy send_response_header receive_request_header)];
+};
 
 subtest "h2olog -H", sub {
   my $tracer = H2ologTracer->new({
