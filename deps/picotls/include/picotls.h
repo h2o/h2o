@@ -1403,17 +1403,13 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         do {                                                                                                                       \
             char smallbuf[128];                                                                                                    \
             ptls_buffer_t ptlslogbuf;                                                                                              \
-            ptls_buffer_init(&ptlslogbuf, smallbuf, sizeof(smallbuf));                                                             \
-            PTLS_LOG__DO_PUSH_SAFESTR("{\"module\":\"" PTLS_TO_STR(module) "\",\"type\":\"" PTLS_TO_STR(name) "\"");               \
+            ptls_log__do_write_start(&logpoint, &ptlslogbuf, smallbuf, sizeof(smallbuf));                                          \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
-            PTLS_LOG__DO_PUSH_SAFESTR("}\n");                                                                                      \
-            if (!ptlslog_skip)                                                                                                     \
-                ptlslog_include_appdata =                                                                                          \
-                    ptls_log__do_write(&logpoint, (conn_state), (get_sni), (get_sni_arg), &ptlslogbuf, ptlslog_include_appdata);   \
-            ptls_buffer_dispose(&ptlslogbuf);                                                                                      \
-        } while (!ptlslog_skip && ptlslog_include_appdata);                                                                        \
+            ptlslog_include_appdata = ptls_log__do_write_end(ptlslog_skip ? NULL : &logpoint, (conn_state), (get_sni),             \
+                                                             (get_sni_arg), &ptlslogbuf, ptlslog_include_appdata);                 \
+        } while (ptlslog_include_appdata);                                                                                         \
     } while (0)
 
 #define PTLS_LOG_DEFINE_POINT(_module, _name, _var)                                                                                \
@@ -1640,8 +1636,9 @@ int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v);
 int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v);
 int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v);
 int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v);
-int ptls_log__do_write(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                       void *get_sni_arg, const ptls_buffer_t *buf, int includes_appdata);
+void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize);
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
+                           void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata);
 
 /**
  * create a client object to handle new TLS connection
