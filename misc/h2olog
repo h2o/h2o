@@ -7,10 +7,11 @@ use warnings;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use IO::Socket::UNIX;
 use JSON;
+use List::Util qw(first);
 use POSIX qw(strftime);
 use Socket qw(SOCK_STREAM);
 
-my ($unix_socket, $debug, $http_mode, $write_file, @query);
+my ($unix_socket, $debug, $http_mode, @allowed_response_headers, $write_file, @query);
 my $sample_rate = 1;
 
 GetOptions(
@@ -27,7 +28,7 @@ GetOptions(
         push @query, "sni=" . uri_escape($_[1]);
     },
     's|response-header=s' => sub {
-        push @query, "response-header=" . uri_escape($_[1]);
+        push @allowed_response_headers, $_[1];
     },
     'S|sample-ratio=f'     => sub {
         push @query, "sample-ratio=" . uri_escape($_[1]);
@@ -44,8 +45,10 @@ die "mandatory option -u[nix] not set\n"
 
 # in case of HTTP mode, set the necessary tracepoints
 if ($http_mode) {
-    die "-h and -t cannot be used together\n" if grep { /^trace=/ } @query;
+    die "-H and -t cannot be used together\n" if grep { /^trace=/ } @query;
     push @query, map { "trace=h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
+} else {
+    die "-s is available only when -h is used\n" if @allowed_response_headers;
 }
 
 if (defined $write_file) {
@@ -84,7 +87,9 @@ while (my $line = <$sock>) {
             } elsif ($json->{type} eq 'receive_request_header') {
                 print "$json->{conn_id} $json->{req_id} RxHeader   $json->{name} $json->{value}\n";
             } elsif ($json->{type} eq 'send_response_header') {
-                print "$json->{conn_id} $json->{req_id} TxHeader   $json->{name} $json->{value}\n";
+                if (@allowed_response_headers == 0 or first { $_ eq $json->{name} } @allowed_response_headers) {
+                    print "$json->{conn_id} $json->{req_id} TxHeader   $json->{name} $json->{value}\n";
+                }
             } elsif ($json->{type} eq 'send_response') {
                 print "$json->{conn_id} $json->{req_id} TxStatus   $json->{status}\n";
             }
