@@ -1176,10 +1176,16 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return h2o_socket_get_ptls(conn->sock);
 }
 
-static int skip_tracing(h2o_conn_t *_conn)
+static const char *get_ssl_server_name(h2o_conn_t *_conn)
 {
     struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    return h2o_socket_skip_tracing(conn->sock);
+    return h2o_socket_get_ssl_server_name(conn->sock);
+}
+
+static ptls_log_conn_state_t *log_state(h2o_conn_t *_conn)
+{
+    struct st_h2o_http1_conn_t *conn = (void *)_conn;
+    return h2o_socket_log_state(conn->sock);
 }
 
 static int can_zerocopy(h2o_conn_t *_conn)
@@ -1220,7 +1226,6 @@ DEFINE_LOGGER(ssl_session_reused)
 DEFINE_LOGGER(ssl_cipher)
 DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
-DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
 DEFINE_LOGGER(ssl_ech_config_id)
 DEFINE_LOGGER(ssl_ech_kem)
@@ -1253,7 +1258,8 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .get_sockname = get_sockname,
     .get_peername = get_peername,
     .get_ptls = get_ptls,
-    .skip_tracing = skip_tracing,
+    .get_ssl_server_name = get_ssl_server_name,
+    .log_state = log_state,
     .close_idle_connection = close_idle_connection,
     .foreach_request = foreach_request,
     .request_shutdown = initiate_graceful_shutdown,
@@ -1273,7 +1279,6 @@ static const h2o_conn_callbacks_t h1_callbacks = {
                 .cipher = log_ssl_cipher,
                 .cipher_bits = log_ssl_cipher_bits,
                 .session_id = log_ssl_session_id,
-                .server_name = log_ssl_server_name,
                 .negotiated_protocol = log_ssl_negotiated_protocol,
                 .ech_config_id = log_ssl_ech_config_id,
                 .ech_kem = log_ssl_ech_kem,
