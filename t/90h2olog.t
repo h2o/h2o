@@ -55,7 +55,7 @@ subtest "h2olog", sub {
   }
 
   my @events = map { decode_json($_) } split /\n/, $trace;
-  is scalar(grep { $_->{type} } @events), scalar(@events), "each event has type (but tid and seq omitted by v2)";
+  is scalar(grep { $_->{type} && $_->{tid} && $_->{time} } @events), scalar(@events), "each event has type, tid, and time";
 
   my($h3s_accept) = grep { $_->{type} eq "h3s_accept" } @events;
   ok is_uuidv4($h3s_accept->{conn_uuid}), "h3s_accept has a UUIDv4 field `conn_uuid`"
