@@ -35,7 +35,7 @@
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_);          \
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_, {                 \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_, 1, {              \
             PTLS_LOG_ELEMENT_PTR(sock, sock_);                                                                                     \
             do {                                                                                                                   \
                 _block                                                                                                             \
@@ -53,7 +53,7 @@
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_);   \
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_, {          \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_, 1, {       \
             PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
             do {                                                                                                                   \
                 _block                                                                                                             \
