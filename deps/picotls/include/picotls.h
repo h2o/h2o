@@ -1397,13 +1397,13 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         ptls_decode_assert_block_close((src), end);                                                                                \
     } while (0)
 
-#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, block)                                                    \
+#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, add_time, block)                                          \
     do {                                                                                                                           \
         int ptlslog_skip = 0, ptlslog_include_appdata = 0;                                                                         \
         do {                                                                                                                       \
             char smallbuf[128];                                                                                                    \
             ptls_buffer_t ptlslogbuf;                                                                                              \
-            ptls_log__do_write_start(&logpoint, &ptlslogbuf, smallbuf, sizeof(smallbuf));                                          \
+            ptls_log__do_write_start(&logpoint, &ptlslogbuf, smallbuf, sizeof(smallbuf), (add_time));                              \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
@@ -1420,7 +1420,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         PTLS_LOG_DEFINE_POINT(module, name, logpoint);                                                                             \
         if (ptls_log_point_maybe_active(&logpoint) == 0)                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(module, name, NULL, NULL, NULL, {block});                                                                 \
+        PTLS_LOG__DO_LOG(module, name, NULL, NULL, NULL, 1, {block});                                                              \
     } while (0)
 
 #define PTLS_LOG_CONN(name, tls, block)                                                                                            \
@@ -1434,7 +1434,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(picotls, name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, {                         \
+        PTLS_LOG__DO_LOG(picotls, name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, 1, {                      \
             PTLS_LOG_ELEMENT_PTR(tls, _tls);                                                                                       \
             do {                                                                                                                   \
                 block                                                                                                              \
@@ -1636,7 +1636,8 @@ int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v);
 int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v);
 int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v);
 int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v);
-void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize);
+void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
+                              int add_time);
 int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
                            void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata);
 
