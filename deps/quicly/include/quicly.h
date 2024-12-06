@@ -1417,9 +1417,10 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, 0, {                      \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, _c->stash.now == 0, {     \
+            if (_c->stash.now != 0)                                                                                                \
+                PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
-            PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                          \
             do {                                                                                                                   \
                 _block                                                                                                             \
             } while (0);                                                                                                           \
