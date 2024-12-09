@@ -1629,11 +1629,18 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return h2o_socket_get_ptls(conn->sock);
 }
 
-static int skip_tracing(h2o_conn_t *_conn)
+static const char *get_ssl_server_name(h2o_conn_t *_conn)
 {
     struct st_h2o_http2_conn_t *conn = (void *)_conn;
     assert(conn->sock != NULL && "it never becomes NULL, right?");
-    return h2o_socket_skip_tracing(conn->sock);
+    return h2o_socket_get_ssl_server_name(conn->sock);
+}
+
+static ptls_log_conn_state_t *log_state(h2o_conn_t *_conn)
+{
+    struct st_h2o_http2_conn_t *conn = (void *)_conn;
+    assert(conn->sock != NULL && "it never becomes NULL, right?");
+    return h2o_socket_log_state(conn->sock);
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -1665,7 +1672,6 @@ DEFINE_LOGGER(ssl_session_reused)
 DEFINE_LOGGER(ssl_cipher)
 DEFINE_LOGGER(ssl_cipher_bits)
 DEFINE_LOGGER(ssl_session_id)
-DEFINE_LOGGER(ssl_server_name)
 DEFINE_LOGGER(ssl_negotiated_protocol)
 DEFINE_LOGGER(ssl_ech_config_id)
 DEFINE_LOGGER(ssl_ech_kem)
@@ -1765,7 +1771,8 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .get_ptls = get_ptls,
-        .skip_tracing = skip_tracing,
+        .get_ssl_server_name = get_ssl_server_name,
+        .log_state = log_state,
         .get_req_id = get_req_id,
         .push_path = push_path,
         .get_debug_state = h2o_http2_get_debug_state,
@@ -1786,7 +1793,6 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
                     .cipher = log_ssl_cipher,
                     .cipher_bits = log_ssl_cipher_bits,
                     .session_id = log_ssl_session_id,
-                    .server_name = log_ssl_server_name,
                     .negotiated_protocol = log_ssl_negotiated_protocol,
                     .ech_config_id = log_ssl_ech_config_id,
                     .ech_kem = log_ssl_ech_kem,

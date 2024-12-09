@@ -921,6 +921,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
+            PTLS_LOG(h2o, h3_frame_receive, {
+                PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+                PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+            });
             *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
@@ -931,6 +935,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     }
 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
+    PTLS_LOG(h2o, h3_frame_receive, {
+        PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+        PTLS_LOG_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
+    });
 
     /* validate frame type */
     switch (frame->type) {

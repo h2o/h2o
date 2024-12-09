@@ -1,0 +1,134 @@
+#! /bin/sh
+exec ${H2O_PERL:-perl} -x $0 "$@"
+#! perl
+
+use strict;
+use warnings;
+use Getopt::Long qw(:config no_ignore_case bundling);
+use IO::Socket::UNIX;
+use JSON;
+use List::Util qw(first);
+use POSIX qw(strftime);
+use Socket qw(SOCK_STREAM);
+
+my ($unix_socket, $debug, $http_mode, @allowed_response_headers, $write_file, @query);
+my $sample_rate = 1;
+
+GetOptions(
+    'u|unix=s'            => \$unix_socket,
+    'A|address=s'         => sub {
+        push @query, "address=" . uri_escape($_[1]);
+    },
+    'a|application-data'  => sub {
+        push @query, "application-data=1";
+    },
+    'd|debug'             => \$debug,
+    'H|http'              => \$http_mode,
+    'N|sni=s'             => sub {
+        push @query, "sni=" . uri_escape($_[1]);
+    },
+    's|response-header=s' => sub {
+        push @allowed_response_headers, $_[1];
+    },
+    'S|sample-ratio=f'     => sub {
+        push @query, "sample-ratio=" . uri_escape($_[1]);
+    },
+    't|trace=s'           => sub {
+        push @query, "trace=" . uri_escape($_[1]);
+    },
+    'w|write=s'           => \$write_file,
+    'h|help'              => \&print_help,
+) or die "Error in command line arguments\n";
+
+die "mandatory option -u[nix] not set\n"
+    unless defined $unix_socket;
+
+# in case of HTTP mode, set the necessary tracepoints
+if ($http_mode) {
+    die "-H and -t cannot be used together\n" if grep { /^trace=/ } @query;
+    push @query, map { "trace=h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
+    push @query, "application-data=1"; # otherwise header names / values are hidden
+} else {
+    die "-s is available only when -h is used\n" if @allowed_response_headers;
+}
+
+if (defined $write_file) {
+    open STDOUT, '>', $write_file
+        or die "failed to open $write_file:$!";
+}
+
+# open socket
+my $sock = IO::Socket::UNIX->new(
+    Type => SOCK_STREAM,
+    Peer => $unix_socket,
+) or die "failed to open unix socket:$?";
+
+# send request; HTTP/1.0 is used to avoid chunked encoding, etc.
+print $sock "GET /.well-known/h2olog?@{[join '&', @query]} HTTP/1.0\r\n\r\n";
+
+# read the respose header section
+my $resp = "";
+while (my $line = <$sock>) {
+    last if $line =~ /^[\r\n]/;
+    $resp .= $line;
+}
+my $exit_status = $resp =~ m{^HTTP/1\.[0-9] 200 }s ? 0 : 1;
+if ($exit_status == 0 && $debug) {
+    print STDERR strftime('%FT%FZ', localtime), " Attaching $unix_socket\n";
+}
+
+# forward all response to the client, then exit
+$| = 1;
+while (my $line = <$sock>) {
+    if ($http_mode && $exit_status == 0) {
+        my $json = decode_json($line);
+        if ($json->{module} eq 'h2o') {
+            if ($json->{type} eq 'receive_request') {
+                print "$json->{conn_id} $json->{req_id} RxProtocol @{[stringify_http_version($json->{http_version})]}\n";
+            } elsif ($json->{type} eq 'receive_request_header') {
+                print "$json->{conn_id} $json->{req_id} RxHeader   $json->{name} $json->{value}\n";
+            } elsif ($json->{type} eq 'send_response_header') {
+                if (@allowed_response_headers == 0 or first { $_ eq $json->{name} } @allowed_response_headers) {
+                    print "$json->{conn_id} $json->{req_id} TxHeader   $json->{name} $json->{value}\n";
+                }
+            } elsif ($json->{type} eq 'send_response') {
+                print "$json->{conn_id} $json->{req_id} TxStatus   $json->{status}\n";
+            }
+        }
+    } else {
+        print $line;
+    }
+}
+exit $exit_status;
+
+die "failed to exec curl:$?";
+
+sub print_help {
+    print << "EOT";
+Usage: $0 -u <unix-socket> [options]
+Options:
+  -A,--address=<addr>    log only the connections from the specified addresses
+  -a|--application-data  log application data too
+  -H,--http              use HTTP mode
+  -N,--sni=<name>        log only the connections with the specified SNIs
+  -S,--sample-rate=<ratio>
+                         sample ratio (between 0 and 1)
+  -s,--response-header=<name>
+                         log only the specified reponse headers
+  -T,--trace=<point>     log only the tracepoints being specified
+  -w,--write=<file>      output file (default: STDOUT)
+  -h,--help              print this help
+EOT
+    exit 0;
+}
+
+sub stringify_http_version {
+    my $ver256 = shift;
+    return 'HTTP/' . int($ver256 / 256) . "." . ($ver256 % 256);
+}
+
+sub uri_escape {
+    my $s = shift;
+    $s =~ s/([^A-Za-z0-9\-_.!~*'()])/'%' . sprintf("%02X", ord($1))/eg;
+    return $s;
+}

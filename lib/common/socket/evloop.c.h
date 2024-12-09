@@ -177,6 +177,9 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
         } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
+        H2O_LOG_SOCK(writev, &sock->super, {
+            PTLS_LOG_ELEMENT_SIGNED(ret, wret);
+        });
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
@@ -336,6 +339,9 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* operation completed or failed, schedule notification */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    H2O_LOG_SOCK(write_complete, &sock->super, {
+        PTLS_LOG_ELEMENT_BOOL(success, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    });
     sock->bytes_written.cur_loop = sock->super.bytes_written;
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
@@ -698,40 +704,45 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
     h2o_socket_t *sock;
-
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
-#if H2O_USE_EBPF_MAP
-    struct {
-        struct sockaddr_storage storage;
-        socklen_t len;
-    } _peeraddr;
-    _peeraddr.len = sizeof(_peeraddr.storage);
-    struct sockaddr_storage *peeraddr = &_peeraddr.storage;
-    socklen_t *peeraddrlen = &_peeraddr.len;
-#else
-    struct sockaddr_storage *peeraddr = NULL;
-    socklen_t *peeraddrlen = NULL;
-#endif
+    union {
+        struct sockaddr sa;
+        struct sockaddr_in sin4;
+        struct sockaddr_in6 sin6;
+    } peeraddr;
+    socklen_t peeraddrlen = sizeof(peeraddr);
 
 #if H2O_USE_ACCEPT4
-    if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, &peeraddr.sa, &peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
-    if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
+    if ((fd = cloexec_accept(listener->fd, &peeraddr.sa, &peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
+    if (peeraddrlen <= sizeof(peeraddr)) {
+        h2o_socket_setpeername(sock, &peeraddr.sa, peeraddrlen);
+    } else {
+        peeraddr.sa.sa_family = AF_UNSPEC;
+    }
+
     /* note: even on linux, the accepted socket might not inherit TCP_NODELAY from the listening socket; see
      * https://github.com/h2o/h2o/pull/2542#issuecomment-760700859 */
-    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
+    set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
 
-    if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
-        h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
-    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
-        sock->_skip_tracing = 1;
+    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
+    switch (peeraddr.sa.sa_family) {
+    case AF_INET: /* store as v6-mapped v4 address */
+        ptls_build_v4_mapped_v6_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
+        break;
+    case AF_INET6:
+        sock->_log_state.address = peeraddr.sin6.sin6_addr;
+        break;
+    default:
+        break;
+    }
+
     return sock;
 }
 

@@ -56,10 +56,6 @@
 #define TCP_NOTSENT_LOWAT 25
 #endif
 
-#if H2O_USE_DTRACE && defined(__linux__)
-#define H2O_USE_EBPF_MAP 1
-#endif
-
 #define OPENSSL_HOSTNAME_VALIDATION_LINKAGE static
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -67,12 +63,7 @@
 #include "../../deps/ssl-conservatory/openssl/openssl_hostname_validation.c"
 #pragma GCC diagnostic pop
 
-#define SOCKET_PROBE(label, sock, ...)                                                                                             \
-    do {                                                                                                                           \
-        h2o_socket_t *_sock = (sock);                                                                                              \
-        if (!_sock->_skip_tracing)                                                                                                 \
-            H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__);                                                                          \
-    } while (0)
+#define SOCKET_PROBE(label, sock, ...) H2O_PROBE(SOCKET_##label, sock, __VA_ARGS__)
 
 struct st_h2o_socket_ssl_t {
     SSL_CTX *ssl_ctx;
@@ -860,6 +851,10 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
     }
 
     SOCKET_PROBE(WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
+    H2O_LOG_SOCK(write_tls_record, sock, {
+        PTLS_LOG_ELEMENT_UNSIGNED(write_size, tls_write_size);
+        PTLS_LOG_ELEMENT_UNSIGNED(bytes_buffered, sock->ssl->output.buf.off);
+    });
     return tls_write_size;
 }
 
@@ -915,6 +910,14 @@ size_t flatten_sendvec(h2o_socket_t *sock, h2o_sendvec_t *sendvec)
 void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_socket_cb cb)
 {
     SOCKET_PROBE(WRITE, sock, bufs, bufcnt, cb);
+    H2O_LOG_SOCK(write, sock, {
+        size_t num_bytes = 0;
+        for (size_t i = 0; i < bufcnt; ++i)
+            num_bytes += bufs[i].len;
+        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(bufcnt, bufcnt);
+        PTLS_LOG_ELEMENT_PTR(cb, cb);
+    });
 
     assert(sock->_cb.write == NULL);
     sock->_cb.write = cb;
@@ -1565,8 +1568,10 @@ static void switch_to_picotls(h2o_socket_t *sock, uint16_t csid)
                                        h2o_socket_get_ssl_server_name(sock),
                                        ptls_iovec_init(negotiated_protocol.base, negotiated_protocol.len)) != 0)
         goto Exit;
+    ptls_log_conn_state_override = &sock->_log_state;
     if ((ret = ptls_import(ptls_ctx, &sock->ssl->ptls, ptls_iovec_init(params.base, params.off))) != 0)
         h2o_fatal("failed to import TLS params built using the same context:%d", ret);
+    ptls_log_conn_state_override = NULL;
 
     if (sock->ssl->ptls != NULL) {
         SSL_set_shutdown(sock->ssl->ossl, SSL_SENT_SHUTDOWN); /* close the session so that it can be resumed */
@@ -1949,14 +1954,9 @@ static void proceed_handshake_undetermined(h2o_socket_t *sock)
     ptls_buffer_t wbuf;
     ptls_buffer_init(&wbuf, "", 0);
 
-#if PICOTLS_USE_DTRACE
-    unsigned ptls_skip_tracing_backup = ptls_default_skip_tracing;
-    ptls_default_skip_tracing = sock->_skip_tracing;
-#endif
+    ptls_log_conn_state_override = &sock->_log_state;
     ptls_t *ptls = ptls_new(ptls_ctx, 1);
-#if PICOTLS_USE_DTRACE
-    ptls_default_skip_tracing = ptls_skip_tracing_backup;
-#endif
+    ptls_log_conn_state_override = NULL;
     if (ptls == NULL)
         h2o_fatal("no memory");
     *ptls_get_data_ptr(ptls) = sock;
@@ -2308,13 +2308,6 @@ int h2o_socket_set_df_bit(int fd, int domain)
 #undef SETSOCKOPT
 }
 
-void h2o_socket_set_skip_tracing(h2o_socket_t *sock, int skip_tracing)
-{
-    sock->_skip_tracing = skip_tracing;
-    if (sock->ssl != NULL && sock->ssl->ptls != NULL)
-        ptls_set_skip_tracing(sock->ssl->ptls, skip_tracing);
-}
-
 void h2o_sliding_counter_stop(h2o_sliding_counter_t *counter, uint64_t now)
 {
     uint64_t elapsed;
@@ -2455,332 +2448,6 @@ int h2o_socket_recycle_is_empty(void)
     return h2o_mem_recycle_is_empty(&h2o_socket_ssl_buffer_allocator) &&
            h2o_mem_recycle_is_empty(&h2o_socket_zerocopy_buffer_allocator);
 }
-
-#if H2O_USE_EBPF_MAP
-#include <linux/bpf.h>
-#include <linux/unistd.h>
-#include <sys/stat.h>
-#include "h2o/multithread.h"
-#include "h2o-probes.h"
-
-static int ebpf_map_create(uint32_t map_type, uint32_t key_size, uint32_t value_size, uint32_t max_entries, const char *map_name)
-{
-    union bpf_attr attr = {
-        .map_type = map_type,
-        .key_size = key_size,
-        .value_size = value_size,
-        .max_entries = max_entries,
-    };
-    strncpy(attr.map_name, map_name, sizeof(attr.map_name));
-    return syscall(SYS_bpf, BPF_MAP_CREATE, &attr, sizeof(attr));
-}
-
-static int ebpf_obj_pin(int bpf_fd, const char *pathname)
-{
-    union bpf_attr attr = {
-        .bpf_fd = (uint32_t)bpf_fd,
-        .pathname = (uint64_t)pathname,
-    };
-    return syscall(SYS_bpf, BPF_OBJ_PIN, &attr, sizeof(attr));
-}
-
-static int ebpf_obj_get(const char *pathname)
-{
-    union bpf_attr attr = {
-        .pathname = (uint64_t)pathname,
-    };
-    return syscall(SYS_bpf, BPF_OBJ_GET, &attr, sizeof(attr));
-}
-
-static int ebpf_obj_get_info_by_fd(int fd, struct bpf_map_info *info)
-{
-    union bpf_attr attr = {
-        .info =
-            {
-                .bpf_fd = fd,
-                .info = (uint64_t)info,
-                .info_len = sizeof(*info),
-            },
-    };
-    return syscall(SYS_bpf, BPF_OBJ_GET_INFO_BY_FD, &attr, sizeof(attr));
-}
-
-static int ebpf_map_lookup(int fd, const void *key, void *value)
-{
-    union bpf_attr attr = {
-        .map_fd = fd,
-        .key = (uint64_t)key,
-        .value = (uint64_t)value,
-    };
-    return syscall(SYS_bpf, BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
-}
-
-static int ebpf_map_delete(int fd, const void *key)
-{
-    union bpf_attr attr = {
-        .map_fd = fd,
-        .key = (uint64_t)key,
-    };
-    return syscall(SYS_bpf, BPF_MAP_DELETE_ELEM, &attr, sizeof(attr));
-}
-
-static int return_map_fd = -1; // for h2o_return
-
-int h2o_socket_ebpf_setup(void)
-{
-    const struct {
-        int type;
-        uint32_t key_size;
-        uint32_t value_size;
-    } map_attr = {
-        .type = BPF_MAP_TYPE_LRU_HASH,
-        .key_size = sizeof(pid_t),
-        .value_size = sizeof(uint64_t),
-    };
-
-    int fd = -1;
-    if (getuid() != 0) {
-        h2o_error_printf("failed to set up eBPF maps because bpf(2) requires root privileges\n");
-        goto Error;
-    }
-
-    fd = ebpf_obj_get(H2O_EBPF_RETURN_MAP_PATH);
-    if (fd < 0) {
-        if (errno != ENOENT) {
-            h2o_perror("BPF_OBJ_GET failed");
-            goto Error;
-        }
-        /* Pinned eBPF map does not exist. Create one and pin it to the BPF filesystem. */
-        fd = ebpf_map_create(map_attr.type, map_attr.key_size, map_attr.value_size, H2O_EBPF_RETURN_MAP_SIZE,
-                             H2O_EBPF_RETURN_MAP_NAME);
-        if (fd < 0) {
-            if (errno == EPERM) {
-                h2o_error_printf("BPF_MAP_CREATE failed with EPERM, maybe because RLIMIT_MEMLOCK is too small.\n");
-            } else {
-                h2o_perror("BPF_MAP_CREATE failed");
-            }
-            goto Error;
-        }
-        if (ebpf_obj_pin(fd, H2O_EBPF_RETURN_MAP_PATH) != 0) {
-            if (errno == ENOENT) {
-                h2o_error_printf("BPF_OBJ_PIN failed with ENOENT, because /sys/fs/bpf is not mounted as a BPF filesystem.\n");
-            } else {
-                h2o_perror("BPF_OBJ_PIN failed");
-            }
-            goto Error;
-        }
-    } else {
-        /* BPF_OBJ_GET successfully opened a pinned eBPF map. Make sure the critical attributes (type, key size, value size) are
-         * correct, otherwise usdt-selective-tracing does not work. */
-        struct bpf_map_info m;
-        if (ebpf_obj_get_info_by_fd(fd, &m) != 0) {
-            h2o_perror("BPF_OBJ_GET_INFO_BY_FD failed");
-            goto Error;
-        }
-        if (m.type != map_attr.type) {
-            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map type: expected %d but got %d\n", map_attr.type,
-                             m.type);
-            goto Error;
-        }
-        if (m.key_size != map_attr.key_size) {
-            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map key size: expected %" PRIu32 " but got %" PRIu32 "\n",
-                             map_attr.key_size, m.key_size);
-            goto Error;
-        }
-        if (m.value_size != map_attr.value_size) {
-            h2o_error_printf(H2O_EBPF_RETURN_MAP_PATH " has an unexpected map value size: expected %" PRIu32 " but got %" PRIu32
-                                                      "\n",
-                             map_attr.value_size, m.value_size);
-            goto Error;
-        }
-    }
-
-    /* success */
-    return_map_fd = fd;
-    return 1;
-
-Error:
-    if (fd >= 0)
-        close(fd);
-    return 0;
-}
-
-static void get_map_fd(h2o_loop_t *loop, const char *map_path, int *fd, uint64_t *last_attempt)
-{
-    // only check every second
-    uint64_t now = h2o_now(loop);
-    if (*last_attempt - now < 1000)
-        return;
-
-    *last_attempt = now;
-
-    struct stat s;
-    if (stat(map_path, &s) != 0) {
-        // map path unavailable, cleanup fd if needed and leave
-        if (*fd >= 0) {
-            close(*fd);
-            *fd = -1;
-        }
-        return;
-    }
-
-    if (*fd >= 0)
-        return; // map still exists and we have a fd
-
-    // map exists, try connect
-    *fd = ebpf_obj_get(map_path);
-    if (*fd < 0)
-        h2o_perror("BPF_OBJ_GET failed");
-}
-
-static int get_tracing_map_fd(h2o_loop_t *loop)
-{
-    static __thread int fd = -1;
-    static __thread uint64_t last_attempt = 0;
-    get_map_fd(loop, H2O_EBPF_MAP_PATH, &fd, &last_attempt);
-    return fd;
-}
-
-static inline int set_ebpf_map_key_tuples(const struct sockaddr *sa, h2o_ebpf_address_t *ea)
-{
-    if (sa->sa_family == AF_INET) {
-        struct sockaddr_in *sin = (void *)sa;
-        memcpy(ea->ip, &sin->sin_addr, sizeof(sin->sin_addr));
-        ea->port = sin->sin_port;
-        return 1;
-    } else if (sa->sa_family == AF_INET6) {
-        struct sockaddr_in6 *sin = (void *)sa;
-        memcpy(ea->ip, &sin->sin6_addr, sizeof(sin->sin6_addr));
-        ea->port = sin->sin6_port;
-        return 1;
-    } else {
-        return 0;
-    }
-}
-
-int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
-{
-    memset(key, 0, sizeof(*key));
-    if (!set_ebpf_map_key_tuples(local, &key->local))
-        return 0;
-    if (!set_ebpf_map_key_tuples(remote, &key->remote))
-        return 0;
-    key->family = local->sa_family == AF_INET6 ? 6 : 4;
-    key->protocol = sock_type;
-    return 1;
-}
-
-int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *_sock)
-{
-    h2o_socket_t *sock = _sock;
-    struct sockaddr_storage local, remote;
-    unsigned int sock_type, sock_type_len = sizeof(sock_type_len);
-
-    /* fetch info */
-    if (h2o_socket_getsockname(sock, (void *)&local) == 0)
-        return 0;
-    if (h2o_socket_getpeername(sock, (void *)&remote) == 0)
-        return 0;
-    if (getsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_TYPE, &sock_type, &sock_type_len) != 0) /* can't the info be cached? */
-        return 0;
-
-    return h2o_socket_ebpf_init_key_raw(key, sock_type, (void *)&local, (void *)&remote);
-}
-
-static void report_ebpf_lookup_errors(h2o_error_reporter_t *reporter, uint64_t total_successes, uint64_t cur_successes)
-{
-    fprintf(stderr,
-            "BPF_MAP_LOOKUP_ELEM failed with ENOENT %" PRIu64 " time%s, succeeded: %" PRIu64 " time%s, over the last minute.\n",
-            reporter->cur_errors, reporter->cur_errors > 1 ? "s" : "", cur_successes, cur_successes > 1 ? "s" : "");
-}
-
-static h2o_error_reporter_t track_ebpf_lookup = H2O_ERROR_REPORTER_INITIALIZER(report_ebpf_lookup_errors);
-
-#define DO_EBPF_RETURN_LOOKUP(func)                                                                                                \
-    do {                                                                                                                           \
-        if (return_map_fd >= 0) {                                                                                                  \
-            pid_t tid = (pid_t)syscall(SYS_gettid); /* gettid() was not available until glibc 2.30 (2019) */                       \
-            /* Make sure old flags do not exist, otherwise the subsequent logic will be unreliable. */                             \
-            if (ebpf_map_delete(return_map_fd, &tid) == 0 || errno == ENOENT) {                                                    \
-                do {                                                                                                               \
-                    func                                                                                                           \
-                } while (0);                                                                                                       \
-                if (ebpf_map_lookup(return_map_fd, &tid, &flags) == 0) {                                                           \
-                    h2o_error_reporter_record_success(&track_ebpf_lookup);                                                         \
-                } else {                                                                                                           \
-                    if (errno == ENOENT) {                                                                                         \
-                        /* ENOENT could be issued in some reasons even if BPF tries to insert the entry, for example:              \
-                         *  * the entry in LRU hash was evicted                                                                    \
-                         *  * the insert operation in BPF program failed with ENOMEM                                               \
-                         * We don't know the frequency for this ENOENT, so cap the number of logs.                                 \
-                         *                                                                                                         \
-                         * Other than the above reasons, ENOENT is issued when the tracer does not set the flags via h2o_return    \
-                         * map, See h2o:_private_socket_lookup_flags handler in h2olog for details. */                             \
-                        h2o_error_reporter_record_error(loop, &track_ebpf_lookup, 60000, 0);                                       \
-                    } else {                                                                                                       \
-                        h2o_perror("BPF_MAP_LOOKUP failed");                                                                       \
-                    }                                                                                                              \
-                }                                                                                                                  \
-            } else {                                                                                                               \
-                h2o_perror("BPF_MAP_DELETE failed");                                                                               \
-            }                                                                                                                      \
-        }                                                                                                                          \
-    } while (0)
-
-uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
-{
-    uint64_t flags = 0;
-
-    int tracing_map_fd = get_tracing_map_fd(loop);
-    h2o_ebpf_map_key_t key;
-    if ((tracing_map_fd >= 0 || H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED()) && init_key(&key, cbdata)) {
-        if (tracing_map_fd >= 0)
-            ebpf_map_lookup(tracing_map_fd, &key, &flags);
-
-        if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_ENABLED())
-            DO_EBPF_RETURN_LOOKUP({ H2O__PRIVATE_SOCKET_LOOKUP_FLAGS(tid, flags, &key); });
-    }
-
-    return flags;
-}
-
-uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
-{
-    if (H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI_ENABLED())
-        DO_EBPF_RETURN_LOOKUP({ H2O__PRIVATE_SOCKET_LOOKUP_FLAGS_SNI(tid, flags, server_name, server_name_len); });
-    return flags;
-}
-
-#undef DO_EBPF_RETURN_LOOKUP
-
-#else
-
-int h2o_socket_ebpf_setup(void)
-{
-    return 0;
-}
-
-int h2o_socket_ebpf_init_key_raw(h2o_ebpf_map_key_t *key, int sock_type, struct sockaddr *local, struct sockaddr *remote)
-{
-    h2o_fatal("unimplemented");
-}
-
-int h2o_socket_ebpf_init_key(h2o_ebpf_map_key_t *key, void *sock)
-{
-    h2o_fatal("unimplemented");
-}
-
-uint64_t h2o_socket_ebpf_lookup_flags(h2o_loop_t *loop, int (*init_key)(h2o_ebpf_map_key_t *key, void *cbdata), void *cbdata)
-{
-    return 0;
-}
-
-uint64_t h2o_socket_ebpf_lookup_flags_sni(h2o_loop_t *loop, uint64_t flags, const char *server_name, size_t server_name_len)
-{
-    return flags;
-}
-
-#endif
 
 #ifdef OPENSSL_IS_BORINGSSL
 
