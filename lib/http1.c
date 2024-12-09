@@ -133,8 +133,10 @@ static void init_request(struct st_h2o_http1_conn_t *conn)
 
 static void close_connection(struct st_h2o_http1_conn_t *conn, int close_socket)
 {
-    if (conn->sock != NULL)
+    if (conn->sock != NULL) {
         H2O_PROBE_CONN0(H1_CLOSE, &conn->super);
+        H2O_LOG_CONN(h1_close, &conn->super, {});
+    }
     h2o_timer_unlink(&conn->_timeout_entry);
     h2o_timer_unlink(&conn->_io_timeout_entry);
     if (conn->req_body != NULL)
@@ -1311,6 +1313,10 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     sock->data = conn;
 
     H2O_PROBE_CONN(H1_ACCEPT, &conn->super, conn->sock, &conn->super, h2o_conn_get_uuid(&conn->super));
+    H2O_LOG_CONN(h1_accept, &conn->super, {
+        PTLS_LOG_ELEMENT_PTR(sock, conn->sock);
+        PTLS_LOG_ELEMENT_SAFESTR(uuid, h2o_conn_get_uuid(&conn->super));
+    });
 
     init_request(conn);
     reqread_start(conn);

@@ -17,8 +17,6 @@ plan skip_all => "$client_prog not found"
 my $tempdir = tempdir(CLEANUP => 1);
 my $h2olog_socket = "$tempdir/h2olog.sock";
 
-our $TODO = "TODO until selective tracing is implemented in h2olog v2";
-
 my $server = spawn_h2o({
   opts => [qw(--mode=worker)],
   conf => << "EOT",
@@ -53,7 +51,7 @@ subtest "h2olog -S=1.00", sub {
       diag "h2olog output:\n", $trace;
     }
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    ok scalar(grep { $_->{type} eq "h1-accept" } @logs), "h1-accept has been logged";
+    ok scalar(grep { $_->{type} eq "h1_accept" } @logs), "h1-accept has been logged";
   };
   subtest "QUIC", sub {
     my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
@@ -65,7 +63,7 @@ subtest "h2olog -S=1.00", sub {
       diag "h2olog output:\n", $trace;
     }
     my @logs = map { decode_json($_) } split /\n/, $trace;
-    ok scalar(grep { $_->{type} eq "h3s-accept" } @logs), "h3s-accept has been logged";
+    ok scalar(grep { $_->{type} eq "h3s_accept" } @logs), "h3s-accept has been logged";
   };
 };
 
@@ -165,11 +163,11 @@ subtest "h2olog -A=127.0.0.2", sub {
     my @logs = map { decode_json($_) } split /\n/, $trace;
 
     is_deeply scalar(grep {
-        $_->{type} eq "h1-accept"
+        $_->{type} eq "h1_accept"
       } @logs), 1, "h1-accept header in logs";
 
     is_deeply scalar(grep {
-        $_->{type} eq "h1-close"
+        $_->{type} eq "h1_close"
       } @logs), 1, "h1-close header in logs";
 
     diag $trace
@@ -199,13 +197,13 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
 
     is_deeply [
       grep {
-        $_->{type} eq "h3s-accept"
+        $_->{type} eq "h3s_accept"
       } @logs
     ], [], "no h3s-accept header in logs";
 
     is_deeply [
       grep {
-        $_->{type} eq "h3s-destroy"
+        $_->{type} eq "h3s_destroy"
       } @logs
     ], [], "no h3s-destroy header in logs";
   };
@@ -224,11 +222,11 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
     my @logs = map { decode_json($_) } split /\n/, $trace;
 
     is_deeply scalar(grep {
-        $_->{type} eq "h3s-accept"
+        $_->{type} eq "h3s_accept"
       } @logs), 1, "h3s-accept header in logs";
 
     is_deeply scalar(grep {
-        $_->{type} eq "h3s-destroy"
+        $_->{type} eq "h3s_destroy"
       } @logs), 1, "h3s-destroy header in logs";
   };
 };
