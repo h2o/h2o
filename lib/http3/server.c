@@ -561,10 +561,16 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.super.quic);
 }
 
-static int get_skip_tracing(h2o_conn_t *conn)
+static const char *get_ssl_server_name(h2o_conn_t *conn)
 {
     ptls_t *ptls = get_ptls(conn);
-    return ptls_skip_tracing(ptls);
+    return ptls_get_server_name(ptls);
+}
+
+static ptls_log_conn_state_t *log_state(h2o_conn_t *conn)
+{
+    ptls_t *ptls = get_ptls(conn);
+    return ptls_get_log_state(ptls);
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -654,14 +660,6 @@ static h2o_iovec_t log_session_id(h2o_req_t *_req)
 {
     /* FIXME */
     return h2o_iovec_init(NULL, 0);
-}
-
-static h2o_iovec_t log_server_name(h2o_req_t *req)
-{
-    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
-    const char *server_name = ptls_get_server_name(tls);
-    return server_name != NULL ? h2o_iovec_init(server_name, strlen(server_name)) : h2o_iovec_init(NULL, 0);
 }
 
 static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
@@ -2164,13 +2162,14 @@ void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_
 
 h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                           quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                                          int skip_tracing, const h2o_http3_conn_callbacks_t *h3_callbacks)
+                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     static const h2o_conn_callbacks_t conn_callbacks = {
         .get_sockname = get_sockname,
         .get_peername = get_peername,
         .get_ptls = get_ptls,
-        .skip_tracing = get_skip_tracing,
+        .get_ssl_server_name = get_ssl_server_name,
+        .log_state = log_state,
         .get_req_id = get_req_id,
         .close_idle_connection = close_idle_connection,
         .foreach_request = foreach_request,
@@ -2191,7 +2190,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .cipher = log_cipher,
                     .cipher_bits = log_cipher_bits,
                     .session_id = log_session_id,
-                    .server_name = log_server_name,
                     .negotiated_protocol = log_negotiated_protocol,
                     .ech_config_id = log_ech_config_id,
                     .ech_kem = log_ech_kem,
@@ -2232,18 +2230,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
 
     /* accept connection */
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
-#if PICOTLS_USE_DTRACE
-    unsigned orig_skip_tracing = ptls_default_skip_tracing;
-    ptls_default_skip_tracing = skip_tracing;
-#endif
     quicly_conn_t *qconn;
     int accept_ret = quicly_accept(
         &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, ctx->super.next_cid,
         &conn->handshake_properties,
         &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
-#if PICOTLS_USE_DTRACE
-    ptls_default_skip_tracing = orig_skip_tracing;
-#endif
     if (accept_ret != 0) {
         h2o_http3_conn_t *ret = NULL;
         if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)

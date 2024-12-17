@@ -1603,8 +1603,8 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to open file:%s:%s\n", optarg, strerror(errno));
                 exit(1);
             }
-            ptls_log_add_fd(fd);
-            ptls_log.include_appdata = 1;
+            ptls_log_add_fd(fd, 1., NULL, NULL, NULL, 1);
+            ptls_log.may_include_appdata = 1;
         } break;
         case 'f': {
             double fraction;
@@ -1707,27 +1707,17 @@ int main(int argc, char **argv)
             raw_pubkey_file = optarg;
             break;
         case 'x': {
-            size_t i;
-            for (i = 0; key_exchanges[i] != NULL; ++i)
-                ;
-#define MATCH(name)                                                                                                                \
-    if (key_exchanges[i] == NULL && strcasecmp(optarg, #name) == 0)                                                                \
-    key_exchanges[i] = &ptls_openssl_##name
-            MATCH(secp256r1);
-#if PTLS_OPENSSL_HAVE_SECP384R1
-            MATCH(secp384r1);
-#endif
-#if PTLS_OPENSSL_HAVE_SECP521R1
-            MATCH(secp521r1);
-#endif
-#if PTLS_OPENSSL_HAVE_X25519
-            MATCH(x25519);
-#endif
-#undef MATCH
-            if (key_exchanges[i] == NULL) {
+            ptls_key_exchange_algorithm_t **named, **slot;
+            for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                if (strcasecmp((*named)->name, optarg) == 0)
+                    break;
+            if (*named == NULL) {
                 fprintf(stderr, "unknown key exchange: %s\n", optarg);
                 exit(1);
             }
+            for (slot = key_exchanges; *slot != NULL; ++slot)
+                ;
+            *slot = *named;
         } break;
         case 'X':
             if (sscanf(optarg, "%" SCNu64, &ctx.transport_params.max_streams_bidi) != 1) {

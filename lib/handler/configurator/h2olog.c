@@ -33,7 +33,7 @@ static int on_config_h2olog(h2o_configurator_command_t *cmd, h2o_configurator_co
     case 1: /* ON */
         break;
     case 2: /* appdata */
-        ptls_log.include_appdata = 1;
+        ptls_log.may_include_appdata = 1;
         break;
     default:
         return -1;

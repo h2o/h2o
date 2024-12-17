@@ -931,28 +931,9 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
 #endif
 }
 
-static void on_sni_update_tracing(void *conn, int is_quic, const char *server_name, size_t server_name_len)
+static void recalc_log_state(void *conn, int is_quic)
 {
-    int cur_skip_tracing;
-
-    if (is_quic) {
-        cur_skip_tracing = ptls_skip_tracing(quicly_get_tls(conn));
-    } else {
-        cur_skip_tracing = h2o_socket_skip_tracing(conn);
-    }
-
-    uint64_t flags = cur_skip_tracing ? H2O_EBPF_FLAGS_SKIP_TRACING_BIT : 0;
-    flags = h2o_socket_ebpf_lookup_flags_sni(conf.threads[thread_index].ctx.loop, flags, server_name, server_name_len);
-
-    int new_skip_tracing = (flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0;
-
-    if (cur_skip_tracing != new_skip_tracing) {
-        if (is_quic) {
-            ptls_set_skip_tracing(quicly_get_tls(conn), new_skip_tracing);
-        } else {
-            h2o_socket_set_skip_tracing(conn, new_skip_tracing);
-        }
-    }
+    ptls_log_recalc_conn_state(is_quic ? ptls_get_log_state(quicly_get_tls(conn)) : h2o_socket_log_state(conn));
 }
 
 static struct listener_ssl_config_t *resolve_sni(struct listener_config_t *listener, const char *name, size_t name_len)
@@ -999,12 +980,12 @@ static int on_sni_callback(SSL *ssl, int *ad, void *arg)
     if (server_name != NULL) {
         size_t server_name_len = strlen(server_name);
         h2o_socket_t *sock = SSL_get_app_data(ssl);
-        on_sni_update_tracing(sock, 0, server_name, server_name_len);
         struct listener_ssl_config_t *resolved = resolve_sni(listener, server_name, server_name_len);
         if (resolved->identities[0].ossl != SSL_get_SSL_CTX(ssl)) {
             SSL_set_SSL_CTX(ssl, resolved->identities[0].ossl);
             set_tcp_congestion_controller(sock, resolved->cc.tcp);
         }
+        recalc_log_state(sock, 0);
     }
 
     return SSL_TLSEXT_ERR_OK;
@@ -1030,9 +1011,9 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
 
     /* determine ssl_config based on SNI */
     if (params->server_name.base != NULL) {
-        on_sni_update_tracing(conn, conn_is_quic, (const char *)params->server_name.base, params->server_name.len);
         ssl_config = resolve_sni(self->listener, (const char *)params->server_name.base, params->server_name.len);
         ptls_set_server_name(tls, (const char *)params->server_name.base, params->server_name.len);
+        recalc_log_state(conn, conn_is_quic);
     } else {
         ssl_config = self->listener->ssl.entries[0];
         assert(ssl_config != NULL);
@@ -3830,6 +3811,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         }
         H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
+        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(node_id, *node_id); });
         return 0;
     NodeFound:;
     } else {
@@ -3840,6 +3822,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
                 return 0;
             }
         } else {
@@ -3847,6 +3830,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
                 return 0;
             }
         }
@@ -3868,6 +3852,12 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         for (i = 0; i != num_packets; ++i)
             num_bytes += packets[i].octets.len;
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
+        PTLS_LOG(h2o, h3_packet_forward, {
+            /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
+            PTLS_LOG_ELEMENT_UNSIGNED(num_packets, num_packets);
+            PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
+            PTLS_LOG_ELEMENT_SIGNED(fd, fd);
+        });
     }
 #endif
 
@@ -3925,6 +3915,10 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     *ttl = encapsulated.ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
+    PTLS_LOG(h2o, h3_forwarded_packet_receive, {
+        /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
+        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, msg->msg_iov[0].iov_len);
+    });
     return 1;
 }
 
@@ -3994,16 +3988,6 @@ static void on_accept(h2o_socket_t *listener, const char *err)
     } while (--num_accepts != 0);
 }
 
-struct init_ebpf_key_info_t {
-    struct sockaddr *local, *remote;
-};
-
-static int init_ebpf_key(h2o_ebpf_map_key_t *key, void *_info)
-{
-    struct init_ebpf_key_info_t *info = _info;
-    return h2o_socket_ebpf_init_key_raw(key, SOCK_DGRAM, info->local, info->remote);
-}
-
 static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token)
 {
@@ -4055,12 +4039,6 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
         return NULL;
     }
 
-    struct init_ebpf_key_info_t ebpf_key_info = {
-        .local = &destaddr->sa,
-        .remote = &srcaddr->sa,
-    };
-    uint64_t flags = h2o_socket_ebpf_lookup_flags(ctx->super.loop, init_ebpf_key, &ebpf_key_info);
-
     quicly_address_token_plaintext_t *token = NULL, token_buf;
     h2o_http3_conn_t *conn = NULL;
 
@@ -4084,18 +4062,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
 
     /* send retry if necessary */
     if (token == NULL || token->type != QUICLY_ADDRESS_TOKEN_TYPE_RETRY) {
-        int send_retry = ctx->send_retry;
-        switch (flags & H2O_EBPF_FLAGS_QUIC_SEND_RETRY_MASK) {
-        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_ON:
-            send_retry = 1;
-            break;
-        case H2O_EBPF_FLAGS_QUIC_SEND_RETRY_BITS_OFF:
-            send_retry = 0;
-            break;
-        default:
-            break;
-        }
-        if (send_retry) {
+        if (ctx->send_retry) {
             static __thread struct {
                 ptls_aead_context_t *v1;
                 ptls_aead_context_t *draft29;
@@ -4133,8 +4100,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
-    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, (H2O_EBPF_FLAGS_SKIP_TRACING_BIT & flags) != 0,
-                                   &conf.quic.conn_callbacks);
+    conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         goto Exit;
     } else if (conn == &h2o_http3_accept_conn_closed) {
@@ -5028,10 +4994,6 @@ int main(int argc, char **argv)
 #endif
 
     setup_signal_handlers();
-    if (conf.globalconf.usdt_selective_tracing && !h2o_socket_ebpf_setup()) {
-        h2o_error_printf("usdt-selective-tracing is set to ON but failed to setup eBPF\n");
-        return EX_CONFIG;
-    }
 
     /* open the log file to redirect STDIN/STDERR to, before calling setuid */
     if (conf.error_log != NULL) {

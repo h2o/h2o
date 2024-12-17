@@ -88,7 +88,7 @@ KHASH_MAP_INIT_INT64(quicly_stream_t, quicly_stream_t *)
 #define QUICLY_PROBE(label, conn, ...)                                                                                             \
     do {                                                                                                                           \
         quicly_conn_t *_conn = (conn);                                                                                             \
-        if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()) && !ptls_skip_tracing(_conn->crypto.tls))                                    \
+        if (PTLS_UNLIKELY(QUICLY_##label##_ENABLED()))                                                                             \
             QUICLY_##label(_conn, __VA_ARGS__);                                                                                    \
         QUICLY_TRACER(label, _conn, __VA_ARGS__);                                                                                  \
     } while (0)
@@ -1837,7 +1837,11 @@ static int new_path(quicly_conn_t *conn, size_t path_index, struct sockaddr *rem
 
     conn->paths[path_index] = path;
 
-    if (QUICLY_PROBE_ENABLED(NEW_PATH) || ptls_log.is_active) {
+    PTLS_LOG_DEFINE_POINT(quicly, new_path, new_path_logpoint);
+    if (QUICLY_PROBE_ENABLED(NEW_PATH) ||
+        (ptls_log_point_maybe_active(&new_path_logpoint) & ptls_log_conn_maybe_active(ptls_get_log_state(conn->crypto.tls),
+                                                                                      (const char *(*)(void *))ptls_get_server_name,
+                                                                                      conn->crypto.tls)) != 0) {
         char remote[sizeof(LONGEST_ADDRESS_STR)];
         stringify_address(remote, &path->address.remote.sa);
         QUICLY_PROBE(NEW_PATH, conn, conn->stash.now, path_index, remote);
@@ -2497,6 +2501,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
                                         const quicly_cid_plaintext_t *local_cid, ptls_handshake_properties_t *handshake_properties,
                                         void *appdata, uint32_t initcwnd)
 {
+    ptls_log_conn_state_t log_state_override;
     ptls_t *tls;
     quicly_conn_t *conn;
     quicly_pacer_t *pacer = NULL;
@@ -2506,8 +2511,24 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     if (ctx->transport_params.max_datagram_frame_size != 0)
         assert(ctx->receive_datagram_frame != NULL);
 
+    /* build log state */
+    ptls_log_init_conn_state(&log_state_override, ctx->tls->random_bytes);
+    switch (remote_addr->sa_family) {
+    case AF_INET:
+        ptls_build_v4_mapped_v6_address(&log_state_override.address, &((struct sockaddr_in *)remote_addr)->sin_addr);
+        break;
+    case AF_INET6:
+        log_state_override.address = ((struct sockaddr_in6 *)remote_addr)->sin6_addr;
+        break;
+    default:
+        break;
+    }
+
     /* create TLS context */
-    if ((tls = ptls_new(ctx->tls, server_name == NULL)) == NULL)
+    ptls_log_conn_state_override = &log_state_override;
+    tls = ptls_new(ctx->tls, server_name == NULL);
+    ptls_log_conn_state_override = NULL;
+    if (tls == NULL)
         return NULL;
     if (server_name != NULL && ptls_set_server_name(tls, server_name, strlen(server_name)) != 0) {
         ptls_free(tls);
@@ -5512,7 +5533,11 @@ int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *s
         assert(success);
     }
 
-    if ((QUICLY_PROBE_ENABLED(SEND) || ptls_log.is_active) && !ptls_skip_tracing(conn->crypto.tls)) {
+    PTLS_LOG_DEFINE_POINT(quicly, send, send_logpoint);
+    if (QUICLY_PROBE_ENABLED(SEND) ||
+        (ptls_log_point_maybe_active(&send_logpoint) & ptls_log_conn_maybe_active(ptls_get_log_state(conn->crypto.tls),
+                                                                                  (const char *(*)(void *))ptls_get_server_name,
+                                                                                  conn->crypto.tls)) != 0) {
         const quicly_cid_t *dcid = get_dcid(conn, 0);
         QUICLY_PROBE(SEND, conn, conn->stash.now, conn->super.state, QUICLY_PROBE_HEXDUMP(dcid->cid, dcid->len));
         QUICLY_LOG_CONN(send, conn, {
@@ -7735,7 +7760,11 @@ const quicly_stream_callbacks_t quicly_stream_noop_callbacks = {
 
 void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, const char *fmt, ...)
 {
-    if (QUICLY_PROBE_ENABLED(DEBUG_MESSAGE) || ptls_log.is_active) {
+    PTLS_LOG_DEFINE_POINT(quicly, debug_message, debug_message_logpoint);
+    if (QUICLY_PROBE_ENABLED(DEBUG_MESSAGE) ||
+        (ptls_log_point_maybe_active(&debug_message_logpoint) &
+         ptls_log_conn_maybe_active(ptls_get_log_state(conn->crypto.tls), (const char *(*)(void *))ptls_get_server_name,
+                                    conn->crypto.tls)) != 0) {
         char buf[1024];
         va_list args;
 

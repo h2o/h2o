@@ -397,11 +397,6 @@ struct st_h2o_globalconf_t {
      */
     char *user;
     /**
-     * sets up the h2o_return map if true.
-     */
-    int usdt_selective_tracing;
-
-    /**
      * SSL handshake timeout
      */
     uint64_t handshake_timeout;
@@ -956,9 +951,13 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     ptls_t *(*get_ptls)(h2o_conn_t *conn);
     /**
-     * returns if the connection is target of tracing
+     * returns TLS SNI value being adopted (or NULL if SNI was not provided or adopted)
      */
-    int (*skip_tracing)(h2o_conn_t *conn);
+    const char *(*get_ssl_server_name)(h2o_conn_t *conn);
+    /**
+     * returns trace state (see ptls_log for how it is being used)
+     */
+    ptls_log_conn_state_t *(*log_state)(h2o_conn_t *conn);
     /**
      * optional (i.e. may be NULL) callback for server push
      */
@@ -1023,7 +1022,6 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*cipher)(h2o_req_t *req);
                 h2o_iovec_t (*cipher_bits)(h2o_req_t *req);
                 h2o_iovec_t (*session_id)(h2o_req_t *req);
-                h2o_iovec_t (*server_name)(h2o_req_t *req);
                 h2o_iovec_t (*negotiated_protocol)(h2o_req_t *req);
                 h2o_iovec_t (*ech_config_id)(h2o_req_t *req);
                 h2o_iovec_t (*ech_kem)(h2o_req_t *req);

@@ -34,6 +34,9 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #endif
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 #include "picotls.h"
 #if PICOTLS_USE_DTRACE
 #include "picotls-probes.h"
@@ -104,18 +107,15 @@ static const char ech_info_prefix[8] = "tls ech";
 #endif
 
 #if PICOTLS_USE_DTRACE
-#define PTLS_SHOULD_PROBE(LABEL, tls) (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()) && !(tls)->skip_tracing)
 #define PTLS_PROBE0(LABEL, tls)                                                                                                    \
     do {                                                                                                                           \
-        ptls_t *_tls = (tls);                                                                                                      \
-        if (PTLS_SHOULD_PROBE(LABEL, _tls))                                                                                        \
-            PICOTLS_##LABEL(_tls);                                                                                                 \
+        if (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()))                                                                            \
+            PICOTLS_##LABEL(tls);                                                                                                  \
     } while (0)
 #define PTLS_PROBE(LABEL, tls, ...)                                                                                                \
     do {                                                                                                                           \
-        ptls_t *_tls = (tls);                                                                                                      \
-        if (PTLS_SHOULD_PROBE(LABEL, _tls))                                                                                        \
-            PICOTLS_##LABEL(_tls, __VA_ARGS__);                                                                                    \
+        if (PTLS_UNLIKELY(PICOTLS_##LABEL##_ENABLED()))                                                                            \
+            PICOTLS_##LABEL((tls), __VA_ARGS__);                                                                                   \
     } while (0)
 #else
 #define PTLS_PROBE0(LABEL, tls)
@@ -276,7 +276,16 @@ struct st_ptls_t {
     unsigned send_change_cipher_spec : 1;
     unsigned needs_key_update : 1;
     unsigned key_update_send_request : 1;
-    unsigned skip_tracing : 1;
+#if PTLS_HAVE_LOG
+    /**
+     * see ptls_log
+     */
+    ptls_log_conn_state_t log_state;
+#endif
+    struct {
+        uint32_t active_conns;
+        uint32_t generation;
+    } log_sni;
     /**
      * misc.
      */
@@ -5136,7 +5145,15 @@ static ptls_t *new_instance(ptls_context_t *ctx, int is_server)
     *tls = (ptls_t){ctx};
     tls->is_server = is_server;
     tls->send_change_cipher_spec = ctx->send_change_cipher_spec;
-    tls->skip_tracing = ptls_default_skip_tracing;
+
+#if PTLS_HAVE_LOG
+    if (ptls_log_conn_state_override != NULL) {
+        tls->log_state = *ptls_log_conn_state_override;
+    } else {
+        ptls_log_init_conn_state(&tls->log_state, ctx->random_bytes);
+    }
+#endif
+
     return tls;
 }
 
@@ -5582,14 +5599,13 @@ void **ptls_get_data_ptr(ptls_t *tls)
     return &tls->data_ptr;
 }
 
-int ptls_skip_tracing(ptls_t *tls)
+ptls_log_conn_state_t *ptls_get_log_state(ptls_t *tls)
 {
-    return tls->skip_tracing;
-}
-
-void ptls_set_skip_tracing(ptls_t *tls, int skip_tracing)
-{
-    tls->skip_tracing = skip_tracing;
+#if PTLS_HAVE_LOG
+    return &tls->log_state;
+#else
+    return &ptls_log.dummy_conn_state;
+#endif
 }
 
 static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_iovec_t message, int is_end_of_record,
@@ -6534,9 +6550,6 @@ static uint64_t get_time(ptls_get_time_t *self)
 }
 
 ptls_get_time_t ptls_get_time = {get_time};
-#if PICOTLS_USE_DTRACE
-PTLS_THREADLOCAL unsigned ptls_default_skip_tracing = 0;
-#endif
 
 int ptls_is_server(ptls_t *tls)
 {
@@ -6755,6 +6768,12 @@ char *ptls_jsonescape(char *buf, const char *unsafe_str, size_t len)
     return dst;
 }
 
+void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *v4)
+{
+    *v6 = (struct in6_addr){.s6_addr[10] = 0xff, .s6_addr[11] = 0xff};
+    memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
+}
+
 int ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
 {
     if (ptls_buffer_reserve(buf, l) != 0)
@@ -6818,72 +6837,385 @@ int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
     return ptls_log__do_pushv(buf, s, (size_t)len);
 }
 
+struct st_ptls_log_t ptls_log = {
+    .dummy_conn_state = {.random_ = 1 /* never log */},
+    ._generation = 1, /* starts from 1 so that recalc can be forced by setting to zero (i.e., the initial) */
+};
+PTLS_THREADLOCAL ptls_log_conn_state_t *ptls_log_conn_state_override = NULL;
+
 #if PTLS_HAVE_LOG
 
-volatile ptls_log_t ptls_log = {};
-
 static struct {
-    int *fds;
-    size_t num_fds;
+    /**
+     * list of connections; the slot is connected if points != NULL
+     */
+    struct {
+        /**
+         * file descriptor
+         */
+        int fd;
+        /**
+         * see `ptls_log_add_fd`
+         */
+        char *points;
+        /**
+         *
+         */
+        char *snis;
+        /**
+         * list of addresses terminated by ip6addr_any
+         */
+        struct in6_addr *addresses;
+        /**
+         *
+         */
+        float sample_ratio;
+        /**
+         *
+         */
+        unsigned appdata : 1;
+    } conns[sizeof(((struct st_ptls_log_state_t *)NULL)->active_conns) * 8];
+    /**
+     * counts the number of writes that failed
+     */
     size_t num_lost;
+    /**
+     * anchor of the single-linked list of log points; the tail refers to itself (i.e., point->next == point)
+     */
+    struct st_ptls_log_point_t *points;
+    /**
+     *
+     */
     pthread_mutex_t mutex;
 } logctx = {.mutex = PTHREAD_MUTEX_INITIALIZER};
 
-size_t ptls_log_num_lost(void)
+static void close_log_fd(size_t slot)
 {
-    return logctx.num_lost;
+    assert(logctx.conns[slot].fd >= 0 && logctx.conns[slot].points != NULL);
+
+    close(logctx.conns[slot].fd);
+
+    /* clear the connection information */
+    logctx.conns[slot].fd = -1;
+    logctx.conns[slot].sample_ratio = 0;
+    free(logctx.conns[slot].points);
+    logctx.conns[slot].points = NULL;
+    free(logctx.conns[slot].snis);
+    logctx.conns[slot].snis = NULL;
+    free(logctx.conns[slot].addresses);
+    logctx.conns[slot].addresses = NULL;
+    logctx.conns[slot].appdata = 0;
+    ++ptls_log._generation;
 }
 
-int ptls_log_add_fd(int fd)
+static char *duplicate_stringlist(const char *input)
 {
+    if (input == NULL)
+        return strdup("");
+
+    char *result;
+    const char *in_tail;
+
+    for (in_tail = input; in_tail[0] != '\0'; in_tail += strlen(in_tail) + 1)
+        ;
+    ++in_tail;
+    if ((result = malloc(in_tail - input)) == NULL)
+        return NULL;
+    memcpy(result, input, in_tail - input);
+    return result;
+}
+
+static int is_in_stringlist(const char *list, const char *search_for)
+{
+    if (list[0] == '\0')
+        return 1;
+
+    if (search_for == NULL)
+        return 0;
+
+    for (const char *element = list; element[0] != '\0'; element += strlen(element) + 1)
+        if (strcmp(element, search_for) == 0)
+            return 1;
+    return 0;
+}
+
+static int is_in_addresslist(const struct in6_addr *list, const struct in6_addr *search_for)
+{
+#define IS_EQUAL(x, y) (memcmp((x), (y), sizeof(struct in6_addr)) == 0)
+
+    if (IS_EQUAL(&list[0], &in6addr_any))
+        return 1;
+
+    if (IS_EQUAL(search_for, &in6addr_any))
+        return 0;
+
+    for (const struct in6_addr *element = list; !IS_EQUAL(element, &in6addr_any); ++element)
+        if (IS_EQUAL(element, search_for))
+            return 1;
+    return 0;
+
+#undef IS_EQUAL
+}
+
+#endif
+
+void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t))
+{
+    uint32_t r;
+    random_bytes(&r, sizeof(r));
+
+    *state = (ptls_log_conn_state_t){
+        .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
+        .address = in6addr_any,
+    };
+}
+
+size_t ptls_log_num_lost(void)
+{
+#if PTLS_HAVE_LOG
+    return logctx.num_lost;
+#else
+    return 0;
+#endif
+}
+
+void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point)
+{
+#if PTLS_HAVE_LOG
+    if (!caller_locked)
+        pthread_mutex_lock(&logctx.mutex);
+
+    if (point->state.generation != ptls_log._generation) {
+        /* update active bitmap */
+        uint32_t new_active = 0;
+        for (size_t slot = 0; slot < PTLS_ELEMENTSOF(logctx.conns); ++slot)
+            if (logctx.conns[slot].points != NULL && is_in_stringlist(logctx.conns[slot].points, point->name))
+                new_active |= (uint32_t)1 << slot;
+        point->state.active_conns = new_active;
+        point->state.generation = ptls_log._generation;
+    }
+
+    if (!caller_locked)
+        pthread_mutex_unlock(&logctx.mutex);
+#endif
+}
+
+void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
+                           void *get_sni_arg)
+{
+#if PTLS_HAVE_LOG
+    if (!caller_locked)
+        pthread_mutex_lock(&logctx.mutex);
+
+    if (conn->state.generation != ptls_log._generation) {
+        /* update active bitmap */
+        uint32_t new_active = 0;
+        const char *sni = get_sni != NULL ? get_sni(get_sni_arg) : NULL;
+        for (size_t slot = 0; slot < PTLS_ELEMENTSOF(logctx.conns); ++slot) {
+            if (logctx.conns[slot].points != NULL && conn->random_ < logctx.conns[slot].sample_ratio &&
+                is_in_stringlist(logctx.conns[slot].snis, sni) && is_in_addresslist(logctx.conns[slot].addresses, &conn->address)) {
+                new_active |= (uint32_t)1 << slot;
+            }
+        }
+        conn->state.active_conns = new_active;
+        conn->state.generation = ptls_log._generation;
+    }
+
+    if (!caller_locked)
+        pthread_mutex_unlock(&logctx.mutex);
+#endif
+}
+
+int ptls_log_add_fd(int fd, float sample_ratio, const char *_points, const char *_snis, const char *_addresses, int appdata)
+{
+#if PTLS_HAVE_LOG
+
+    char *points = NULL, *snis = NULL;
+    struct in6_addr *addresses = NULL;
     int ret;
 
     pthread_mutex_lock(&logctx.mutex);
 
-    int *newfds;
-    if ((newfds = realloc(logctx.fds, sizeof(logctx.fds[0]) * (logctx.num_fds + 1))) == NULL) {
+    if ((points = duplicate_stringlist(_points)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
-    logctx.fds = newfds;
-    logctx.fds[logctx.num_fds++] = fd;
-    ptls_log.is_active = 1;
+    if ((snis = duplicate_stringlist(_snis)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    {
+        size_t num_addresses = 0;
+        for (const char *input = _addresses; input != NULL && *input != '\0'; input += strlen(input) + 1)
+            ++num_addresses;
+        if ((addresses = malloc(sizeof(*addresses) * (num_addresses + 1))) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        size_t index = 0;
+        for (const char *input = _addresses; input != NULL && *input != '\0'; input += strlen(input) + 1) {
+            /* note: for consistency to the handling of points, erroneous input is ignored. V4 addresses will use the mapped form
+             * (::ffff:192.0.2.1) */
+            if (!inet_pton(AF_INET6, input, &addresses[index])) {
+                struct in_addr v4;
+                if (!inet_pton(AF_INET, input, &v4))
+                    continue;
+                ptls_build_v4_mapped_v6_address(&addresses[index], &v4);
+            }
+            if (memcmp(&addresses[index], &in6addr_any, sizeof(struct in6_addr)) == 0)
+                continue;
+            ++index;
+        }
+        addresses[index] = in6addr_any;
+    }
+
+    /* find slot, or return if not available */
+    size_t slot_index;
+    for (slot_index = 0; slot_index < PTLS_ELEMENTSOF(logctx.conns); ++slot_index)
+        if (logctx.conns[slot_index].points == NULL)
+            break;
+    if (slot_index == PTLS_ELEMENTSOF(logctx.conns)) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* setup the slot */
+    logctx.conns[slot_index].fd = fd;
+    logctx.conns[slot_index].points = points;
+    logctx.conns[slot_index].snis = snis;
+    logctx.conns[slot_index].addresses = addresses;
+    logctx.conns[slot_index].sample_ratio = sample_ratio;
+    logctx.conns[slot_index].appdata = appdata;
+    ++ptls_log._generation;
 
     ret = 0; /* success */
 
 Exit:
     pthread_mutex_unlock(&logctx.mutex);
+    if (ret != 0) {
+        free(points);
+        free(snis);
+        free(addresses);
+    }
     return ret;
+
+#else
+    return PTLS_ERROR_NOT_AVAILABLE;
+#endif
 }
 
+void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
+                              int add_time)
+{
+    ptls_buffer_init(buf, smallbuf, smallbufsize);
+
+    /* add module and type name */
+    const char *colon_at = strchr(point->name, ':');
+    int written = snprintf((char *)buf->base, buf->capacity, "{\"module\":\"%.*s\",\"type\":\"%s\"", (int)(colon_at - point->name),
+                           point->name, colon_at + 1);
+
+#if defined(__linux__) || defined(__APPLE__)
+    /* obtain and stringify thread id once */
+    static PTLS_THREADLOCAL struct {
+        char buf[sizeof(",\"tid\":-9223372036854775808")];
+        size_t len;
+    } tid;
+    if (tid.len == 0) {
+        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+        pthread_mutex_lock(&mutex);
+        if (tid.len == 0) {
+#if defined(__linux__)
+            int l = sprintf(tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
+#elif defined(__APPLE__)
+            uint64_t t = 0;
+            (void)pthread_threadid_np(NULL, &t);
+            int l = sprintf(tid.buf, ",\"tid\":%" PRIu64, t);
+#else
+#error "unexpected platform"
+#endif
+            __sync_synchronize();
+            tid.len = (size_t)l;
+        }
+        pthread_mutex_unlock(&mutex);
+    }
+    /* append tid */
+    assert(written > 0 && written + tid.len < buf->capacity);
+    memcpy((char *)buf->base + written, tid.buf, tid.len + 1);
+    written += tid.len;
 #endif
 
-void ptls_log__do_write(const ptls_buffer_t *buf)
+    /* append time if requested */
+    if (add_time) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        written += snprintf((char *)buf->base + written, buf->capacity - written, ",\"time\":%" PRIu64,
+                            (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000);
+    }
+    assert(written > 0 && written < buf->capacity && "caller MUST provide smallbuf suffient to emit the prefix");
+
+    buf->off = (size_t)written;
+}
+
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
+                           void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata)
 {
+    int needs_appdata = 0;
+
 #if PTLS_HAVE_LOG
+    uint32_t active;
+
+    /* point == NULL indicates skip */
+    if (point == NULL || ptls_buffer_reserve(buf, 2) != 0)
+        goto Exit;
+    buf->base[buf->off++] = '}';
+    buf->base[buf->off++] = '\n';
+
     pthread_mutex_lock(&logctx.mutex);
 
-    for (size_t fd_index = 0; fd_index < logctx.num_fds;) {
-        ssize_t ret;
-        while ((ret = write(logctx.fds[fd_index], buf->base, buf->off)) == -1 && errno == EINTR)
+    /* calc the active conn bits, updating stale information if necessary */
+    if (point->state.generation != ptls_log._generation)
+        ptls_log__recalc_point(1, point);
+    active = point->state.active_conns;
+    if (conn != NULL && conn->state.generation != ptls_log._generation) {
+        ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
+        active &= conn->state.active_conns;
+    }
+
+    /* iterate through the active connctions */
+    for (size_t slot = 0; active != 0; ++slot, active >>= 1) {
+        if ((active & 1) == 0)
+            continue;
+
+        assert(logctx.conns[slot].points != NULL);
+
+        if (logctx.conns[slot].appdata != includes_appdata) {
+            if (!includes_appdata && ptls_log.may_include_appdata)
+                needs_appdata = 1;
+            continue;
+        }
+
+        /* write */
+        ssize_t wret;
+        while ((wret = write(logctx.conns[slot].fd, buf->base, buf->off)) == -1 && errno == EINTR)
             ;
-        if (ret == buf->off) {
+        if (wret == buf->off) {
             /* success */
-            ++fd_index;
-        } else if (ret > 0 || (ret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+        } else if (wret > 0 || (wret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
             /* partial write or buffer full */
             ++logctx.num_lost;
-            ++fd_index;
         } else {
-            /* write error; close and remove that fd from array */
-            close(logctx.fds[fd_index]);
-            logctx.fds[fd_index] = logctx.fds[logctx.num_fds - 1];
-            --logctx.num_fds;
-            if (logctx.num_fds == 0)
-                ptls_log.is_active = 0;
+            /* write error; close and unregister the connection */
+            close_log_fd(slot);
         }
     }
 
     pthread_mutex_unlock(&logctx.mutex);
+
+    if (includes_appdata)
+        assert(!needs_appdata);
 #endif
+
+Exit:
+    ptls_buffer_dispose(buf);
+    return needs_appdata;
 }

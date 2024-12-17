@@ -74,7 +74,8 @@ static void setup_ptlslog(const char *fn)
         fprintf(stderr, "failed to open file:%s:%s\n", fn, strerror(errno));
         exit(1);
     }
-    ptls_log_add_fd(fd);
+    ptls_log_add_fd(fd, 1., NULL, NULL, NULL, 1);
+    ptls_log.may_include_appdata = 1;
 }
 
 static int handle_connection(int sockfd, ptls_context_t *ctx, const char *server_name, const char *input_file,
