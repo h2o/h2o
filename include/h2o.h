@@ -955,7 +955,7 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     const char *(*get_ssl_server_name)(h2o_conn_t *conn);
     /**
-     * returns a random number between 0 and 1, unique to the connection (see ptls_log for how it is being used)
+     * returns trace state (see ptls_log for how it is being used)
      */
     ptls_log_conn_state_t *(*log_state)(h2o_conn_t *conn);
     /**

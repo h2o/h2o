@@ -187,7 +187,8 @@ struct st_h2o_socket_t {
      */
     uint64_t bytes_written;
     /**
-     * see ptls_log
+     * trace state; when picotls is used as the TLS stack, this state is duplicated to that of picotls to achieve consistent
+     * behavior across layers
      */
     ptls_log_conn_state_t _log_state;
     struct {
@@ -483,7 +484,7 @@ void h2o_ssl_register_npn_protocols(SSL_CTX *ctx, const char *protocols);
  */
 int h2o_socket_set_df_bit(int fd, int domain);
 /**
- * helper to check if socket the socket is target of tracing
+ * returns trace state
  */
 static ptls_log_conn_state_t *h2o_socket_log_state(h2o_socket_t *sock);
 
