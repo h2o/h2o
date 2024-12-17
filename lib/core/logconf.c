@@ -899,7 +899,11 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_SSL_SERVER_NAME: {
             const char *name =
                 req->conn->callbacks->get_ssl_server_name != NULL ? req->conn->callbacks->get_ssl_server_name(req->conn) : NULL;
-            APPEND_SAFE_STRING(pos, name);
+            if (name == NULL)
+                goto EmitNull;
+            size_t name_len = strlen(name);
+            RESERVE(name_len * unsafe_factor);
+            pos = append_unsafe_string(pos, name, name_len);
         } break;
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
