@@ -25,9 +25,9 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct sockaddr_storage local;
     float sample_ratio = 1;
-    char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
-    char *sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *sni_tail = sni;
-    char *address = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *address_tail = address;
+    char *trace = h2o_mem_alloc_pool(&req->pool, char, req->path.len + 2 /* should be enough */), *trace_tail = trace;
+    char *sni = h2o_mem_alloc_pool(&req->pool, char, req->path.len + 2 /* should be enough */), *sni_tail = sni;
+    char *address = h2o_mem_alloc_pool(&req->pool, char, req->path.len + 2 /* should be enough */), *address_tail = address;
     int appdata = 0;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
