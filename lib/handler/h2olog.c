@@ -28,13 +28,15 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
     char *sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *sni_tail = sni;
     char *address = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *address_tail = address;
-    int appdata = 0;
+    int appdata = 0, ret;
     h2o_socket_t *sock;
     h2o_socket_export_t export_info;
 
     /* delegate the request to the next handler unless the request is accepted on a UNIX socket */
-    if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX))
-        return -1;
+    if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX)) {
+        ret = -1;
+        goto Exit;
+    }
 
     /* parse params */
     if (req->query_at != SIZE_MAX) {
@@ -74,9 +76,11 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     *sni_tail = '\0';
     *address_tail = '\0';
 
+    /* steal the socket (NOTE: request, including `req->pool` is dipsosed of here, do we want to delay?) */
     if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
-        return 0;
+        ret = 0;
+        goto Exit;
     }
 
     if (h2o_socket_export(sock, &export_info) != 0)
@@ -88,7 +92,13 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (ptls_log_add_fd(export_info.fd, sample_ratio, trace, sni, address, appdata) != 0)
         h2o_fatal("failed to add fd to h2olog");
 
-    return 0;
+    ret = 0;
+
+Exit:
+    free(trace);
+    free(sni);
+    free(address);
+    return ret;
 }
 
 void h2o_log_register(h2o_hostconf_t *hostconf)
