@@ -6775,93 +6775,82 @@ void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *
     memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
 }
 
-static int expand_logbuf_or_invalidate(ptls_buffer_t *buf, size_t l)
+static int expand_logbuf_or_invalidate(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity)
 {
     if (buf->base == NULL)
         return 0;
 
-    if (ptls_buffer_reserve(buf, l) != 0) {
+    if (ptls_buffer_reserve(buf, prefix_len + capacity) != 0) {
         ptls_buffer_dispose(buf);
         assert(buf->base == NULL);
         return 0;
     }
 
+    if (prefix_len != 0) {
+        memcpy(buf->base + buf->off, prefix, prefix_len);
+        buf->off += prefix_len;
+    }
+
     return 1;
 }
 
-static int pushf_element(ptls_buffer_t *buf, size_t value_capacity, const char *fmt, ...)
+static void pushf_element(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity, const char *fmt, ...)
 {
-    size_t capacity = 16 /* max for ,"name": */ + value_capacity;
-
-    if (!expand_logbuf_or_invalidate(buf, capacity))
-        return 0;
+    if (!expand_logbuf_or_invalidate(buf, prefix, prefix_len, capacity))
+        return;
 
     va_list args;
     va_start(args, fmt);
-    int l = vsnprintf((char *)buf->base + buf->off, capacity, fmt, args);
+    int l = vsnprintf((char *)buf->base + buf->off, buf->capacity - buf->off, fmt, args);
     va_end(args);
 
-    assert(l < capacity && "insufficent capacity");
+    assert(l < buf->capacity - buf->off && "insufficent capacity");
 
     buf->off += l;
-    return 1;
 }
 
-void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *name, const char *s, size_t l)
+void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
 {
-    pushf_element(buf, l + 2, ",\"%s\":\"%s\"", name, s);
+    pushf_element(buf, prefix, prefix_len, l + 2, "\"%s\"", s);
 }
 
-void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *name, const char *s, size_t l)
+void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
 {
-    if (pushf_element(buf, l * (sizeof("\\uXXXX") - 1) + 2, ",\"%s\":\"", name)) {
+    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l * (sizeof("\\uXXXX") - 1) + 2)) {
+        buf->base[buf->off++] = '"';
         buf->off = (uint8_t *)ptls_jsonescape((char *)buf->base + buf->off, s, l) - buf->base;
-        buf->base[buf->off++] += '"';
+        buf->base[buf->off++] = '"';
     }
 }
 
-void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *name, const void *s, size_t l)
+void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const void *s, size_t l)
 {
-    if (pushf_element(buf, l * 2 + 2, ",\"%s\":\"", name)) {
+    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l * 2 + 2)) {
+        buf->base[buf->off++] = '"';
         ptls_hexdump((char *)buf->base + buf->off, s, l);
         buf->off += l * 2;
-        buf->base[buf->off++] += '"';
+        buf->base[buf->off++] = '"';
     }
 }
 
-void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *name, int32_t v)
+void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int32_t v)
 {
-    pushf_element(buf, sizeof("-2147483648"), ",\"%s\":%" PRId32, name, v);
+    pushf_element(buf, prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
 }
 
-void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *name, int64_t v)
+void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int64_t v)
 {
-    pushf_element(buf, sizeof("-9223372036854775808"), ",\"%s\":%" PRId64, name, v);
+    pushf_element(buf, prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
 }
 
-void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *name, uint32_t v)
+void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint32_t v)
 {
-    pushf_element(buf, sizeof("4294967295"), ",\"%s\":%" PRIu32, name, v);
+    pushf_element(buf, prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
 }
 
-void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *name, uint64_t v)
+void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint64_t v)
 {
-    pushf_element(buf, sizeof("18446744073709551615"), ",\"%s\":%" PRIu64, name, v);
-}
-
-void ptls_log__do_push_appdata_element_unsafestr(ptls_buffer_t *buf, int includes_appdata, const char *name, const char *s,
-                                                 size_t l)
-{
-    if (includes_appdata)
-        ptls_log__do_push_element_unsafestr(buf, name, s, l);
-    pushf_element(buf, sizeof("_len" "18446744073709551615") - 1, ",\"%s_len\":%" PRIu64, name, l);
-}
-
-void ptls_log__do_push_appdata_element_hexdump(ptls_buffer_t *buf, int includes_appdata, const char *name, const void *s, size_t l)
-{
-    if (includes_appdata)
-        ptls_log__do_push_element_hexdump(buf, name, s, l);
-    pushf_element(buf, sizeof("_len" "18446744073709551615") - 1, ",\"%s_len\":%" PRIu64, name, l);
+    pushf_element(buf, prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
 }
 
 struct st_ptls_log_t ptls_log = {
@@ -7188,10 +7177,8 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 {
 #if PTLS_HAVE_LOG
 
-    if (!expand_logbuf_or_invalidate(buf, 2))
+    if (!expand_logbuf_or_invalidate(buf, "}\n", 2, 0))
         return 0;
-    buf->base[buf->off++] = '}';
-    buf->base[buf->off++] = '\n';
 
     int needs_appdata = 0;
 
