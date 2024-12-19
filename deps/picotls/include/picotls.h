@@ -1409,7 +1409,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
             } while (0);                                                                                                           \
             ptlslog_include_appdata =                                                                                              \
                 ptls_log__do_write_end(&logpoint, (conn_state), (get_sni), (get_sni_arg), &ptlslogbuf, ptlslog_include_appdata);   \
-        } while (ptlslog_include_appdata);                                                                                         \
+        } while (PTLS_UNLIKELY(ptlslog_include_appdata));                                                                          \
     } while (0)
 
 #define PTLS_LOG_DEFINE_POINT(_module, _name, _var)                                                                                \
@@ -1418,7 +1418,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
 #define PTLS_LOG(module, name, block)                                                                                              \
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(module, name, logpoint);                                                                             \
-        if (ptls_log_point_maybe_active(&logpoint) == 0)                                                                           \
+        if (PTLS_LIKELY(ptls_log_point_maybe_active(&logpoint) == 0))                                                              \
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(module, name, NULL, NULL, NULL, 1, {block});                                                              \
     } while (0)
@@ -1427,12 +1427,12 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(picotls, name, logpoint);                                                                            \
         uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \
-        if (active == 0)                                                                                                           \
+        if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         ptls_t *_tls = (tls);                                                                                                      \
         ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
-        if (active == 0)                                                                                                           \
+        if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(picotls, name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, 1, {                      \
             PTLS_LOG_ELEMENT_PTR(tls, _tls);                                                                                       \
