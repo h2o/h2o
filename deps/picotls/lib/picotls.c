@@ -6858,6 +6858,19 @@ void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix
     pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
 }
 
+void ptls_log__do_push_element_bool(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int v)
+{
+    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, 5)) {
+        if (v) {
+            memcpy(buf->base + buf->off, "true", 4);
+            buf->off += 4;
+        } else {
+            memcpy(buf->base + buf->off, "false", 5);
+            buf->off += 5;
+        }
+    }
+}
+
 struct st_ptls_log_t ptls_log = {
     .dummy_conn_state = {.random_ = 1 /* never log */},
     ._generation = 1, /* starts from 1 so that recalc can be forced by setting to zero (i.e., the initial) */

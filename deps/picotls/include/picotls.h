@@ -1471,7 +1471,8 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         }                                                                                                                          \
     } while (0)
 #define PTLS_LOG_ELEMENT_UNSIGNED(name, value) PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name), (value))
-#define PTLS_LOG_ELEMENT_BOOL(name, value) PTLS_LOG_ELEMENT_SAFESTR(name, (value) ? "true" : "false")
+#define PTLS_LOG_ELEMENT_BOOL(name, value)                                                                                         \
+    ptls_log__do_push_element_bool(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value))
 #define PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, value, value_len)                                                                 \
     do {                                                                                                                           \
         if (ptlslog_include_appdata) {                                                                                             \
@@ -1591,6 +1592,7 @@ void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *prefix, 
 void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int64_t v);
 void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint32_t v);
 void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint64_t v);
+void ptls_log__do_push_element_bool(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int v);
 void ptls_log__do_push_appdata_element_unsafestr(ptls_buffer_t *buf, int includes_appdata, const char *prefix, size_t prefix_len,
                                                  const char *s, size_t l);
 void ptls_log__do_push_appdata_element_hexdump(ptls_buffer_t *buf, int includes_appdata, const char *prefix, size_t prefix_len,
