@@ -6774,68 +6774,59 @@ void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *
     memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
 }
 
-int ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
+static int expand_logbuf_or_invalidate(ptls_buffer_t *buf, size_t l)
 {
-    if (ptls_buffer_reserve(buf, l) != 0)
+    if (buf->base == NULL)
         return 0;
 
-    memcpy(buf->base + buf->off, p, l);
-    buf->off += l;
-    return 1;
-}
-
-int ptls_log__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
-{
-    if (ptls_buffer_reserve(buf, l * (sizeof("\\uXXXX") - 1) + 1) != 0)
+    if (ptls_buffer_reserve(buf, l) != 0) {
+        ptls_buffer_dispose(buf);
+        assert(buf->base == NULL);
         return 0;
-
-    buf->off = (uint8_t *)ptls_jsonescape((char *)(buf->base + buf->off), s, l) - buf->base;
+    }
 
     return 1;
 }
 
-int ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
+void ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
 {
-    if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
-        return 0;
-
-    ptls_hexdump((char *)(buf->base + buf->off), s, l);
-    buf->off += l * 2;
-
-    return 1;
+    if (expand_logbuf_or_invalidate(buf, l)) {
+        memcpy(buf->base + buf->off, p, l);
+        buf->off += l;
+    }
 }
 
-int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v)
+void ptls_log__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
 {
-    /* TODO optimize */
-    char s[sizeof("-2147483648")];
-    int len = snprintf(s, sizeof(s), "%" PRId32, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
+    if (expand_logbuf_or_invalidate(buf, l * (sizeof("\\uXXXX") - 1) + 1))
+        buf->off = (uint8_t *)ptls_jsonescape((char *)buf->base + buf->off, s, l) - buf->base;
 }
 
-int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v)
+void ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
 {
-    /* TODO optimize */
-    char s[sizeof("-9223372036854775808")];
-    int len = snprintf(s, sizeof(s), "%" PRId64, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
+    if (expand_logbuf_or_invalidate(buf, l * 2 + 1)) {
+        ptls_hexdump((char *)buf->base + buf->off, s, l);
+        buf->off += l * 2;
+    }
 }
 
-int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("4294967295")];
-    int len = snprintf(s, sizeof(s), "%" PRIu32, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
+#define PTLS_LOG__DO_PUSH_INT(name, type, longest_strlit, fmt)                                                                     \
+    void ptls_log__do_push_##name(ptls_buffer_t *buf, type v)                                                                      \
+    {                                                                                                                              \
+        const size_t max_capacity = sizeof(longest_strlit);                                                                        \
+        if (expand_logbuf_or_invalidate(buf, max_capacity)) {                                                                      \
+            int l = snprintf((char *)buf->base + buf->off, max_capacity, "%" fmt, v);                                              \
+            assert(l < max_capacity);                                                                                              \
+            buf->off += l;                                                                                                         \
+        }                                                                                                                          \
+    }
 
-int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("18446744073709551615")];
-    int len = snprintf(s, sizeof(s), "%" PRIu64, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
+PTLS_LOG__DO_PUSH_INT(signed32, int32_t, "-2147483648", PRId32);
+PTLS_LOG__DO_PUSH_INT(signed64, int64_t, "-9223372036854775808", PRId64);
+PTLS_LOG__DO_PUSH_INT(unsigned32, uint32_t, "4294967295", PRIu32);
+PTLS_LOG__DO_PUSH_INT(unsigned64, uint64_t, "18446744073709551615", PRIu64);
+
+#undef PTLS_LOG__DO_PUSH_INT
 
 struct st_ptls_log_t ptls_log = {
     .dummy_conn_state = {.random_ = 1 /* never log */},
@@ -7159,23 +7150,21 @@ void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *
 int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
                            void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata)
 {
-    int needs_appdata = 0;
-
 #if PTLS_HAVE_LOG
-    uint32_t active;
 
-    /* point == NULL indicates skip */
-    if (point == NULL || ptls_buffer_reserve(buf, 2) != 0)
-        goto Exit;
+    if (!expand_logbuf_or_invalidate(buf, 2))
+        return 0;
     buf->base[buf->off++] = '}';
     buf->base[buf->off++] = '\n';
+
+    int needs_appdata = 0;
 
     pthread_mutex_lock(&logctx.mutex);
 
     /* calc the active conn bits, updating stale information if necessary */
     if (point->state.generation != ptls_log._generation)
         ptls_log__recalc_point(1, point);
-    active = point->state.active_conns;
+    uint32_t active = point->state.active_conns;
     if (conn != NULL && conn->state.generation != ptls_log._generation) {
         ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
         active &= conn->state.active_conns;
@@ -7213,9 +7202,14 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
     if (includes_appdata)
         assert(!needs_appdata);
-#endif
 
-Exit:
     ptls_buffer_dispose(buf);
     return needs_appdata;
+
+#else
+
+    ptls_buffer_dispose(buf);
+    return 0;
+
+#endif
 }
