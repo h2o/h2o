@@ -1442,37 +1442,52 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         });                                                                                                                        \
     } while (0)
 
+#define PTLS_LOG__ELEMENT_PREFIX_CORE(lit) ",\"" lit "\":"
+#define PTLS_LOG__ELEMENT_PREFIX(lit) PTLS_LOG__ELEMENT_PREFIX_CORE(lit), sizeof(PTLS_LOG__ELEMENT_PREFIX_CORE(lit)) - 1
 #define PTLS_LOG_ELEMENT_SAFESTR(name, value)                                                                                      \
     do {                                                                                                                           \
         const char *value_ = (value);                                                                                              \
-        ptls_log__do_push_element_safestr(&ptlslogbuf, PTLS_TO_STR(name), (value_), strlen(value_));                               \
+        ptls_log__do_push_element_safestr(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value_), strlen(value_));     \
     } while (0)
 #define PTLS_LOG_ELEMENT_UNSAFESTR(name, value, value_len)                                                                         \
-    ptls_log__do_push_element_unsafestr(&ptlslogbuf, PTLS_TO_STR(name), (value), (value_len))
+    ptls_log__do_push_element_unsafestr(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value), (value_len))
 #define PTLS_LOG_ELEMENT_HEXDUMP(name, value, value_len)                                                                           \
-    ptls_log__do_push_element_hexdump(&ptlslogbuf, PTLS_TO_STR(name), (value), (value_len))
+    ptls_log__do_push_element_hexdump(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value), (value_len))
 #define PTLS_LOG_ELEMENT_PTR(name, value) PTLS_LOG_ELEMENT_UNSIGNED(name, (uint64_t)(value))
 #define PTLS_LOG_ELEMENT_SIGNED(name, value)                                                                                       \
     do {                                                                                                                           \
         if (sizeof(value) <= sizeof(int32_t)) {                                                                                    \
-            ptls_log__do_push_element_signed32(&ptlslogbuf, PTLS_TO_STR(name), (value));                                           \
+            ptls_log__do_push_element_signed32(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value));                 \
         } else {                                                                                                                   \
-            ptls_log__do_push_element_signed64(&ptlslogbuf, PTLS_TO_STR(name), (value));                                           \
+            ptls_log__do_push_element_signed64(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value));                 \
         }                                                                                                                          \
     } while (0)
-#define PTLS_LOG_ELEMENT_UNSIGNED(name, value)                                                                                     \
+#define PTLS_LOG__DO_ELEMENT_UNSIGNED(lit, value)                                                                                  \
     do {                                                                                                                           \
         if (sizeof(value) <= sizeof(uint32_t)) {                                                                                   \
-            ptls_log__do_push_element_unsigned32(&ptlslogbuf, PTLS_TO_STR(name), (value));                                         \
+            ptls_log__do_push_element_unsigned32(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(lit), (value));                             \
         } else {                                                                                                                   \
-            ptls_log__do_push_element_unsigned64(&ptlslogbuf, PTLS_TO_STR(name), (value));                                         \
+            ptls_log__do_push_element_unsigned64(&ptlslogbuf, PTLS_LOG__ELEMENT_PREFIX(lit), (value));                             \
         }                                                                                                                          \
     } while (0)
-#define PTLS_LOG_ELEMENT_BOOL(name, value) PTLS_LOG_ELEMENT_SAFESTR((name), (value) ? "true" : "false")
+#define PTLS_LOG_ELEMENT_UNSIGNED(name, value) PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name), (value))
+#define PTLS_LOG_ELEMENT_BOOL(name, value) PTLS_LOG_ELEMENT_SAFESTR(name, (value) ? "true" : "false")
 #define PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, value, value_len)                                                                 \
-    ptls_log__do_push_appdata_element_unsafestr(&ptlslogbuf, ptlslog_include_appdata, PTLS_TO_STR(name), (value), (value_len))
+    do {                                                                                                                           \
+        if (ptlslog_include_appdata) {                                                                                             \
+            PTLS_LOG_ELEMENT_UNSAFESTR(name, value, value_len);                                                                    \
+        } else {                                                                                                                   \
+            PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                    \
+        }                                                                                                                          \
+    } while (0)
 #define PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(name, value, value_len)                                                                   \
-    ptls_log__do_push_appdata_element_hexdump(&ptlslogbuf, ptlslog_include_appdata, PTLS_TO_STR(name), (value), (value_len))
+    do {                                                                                                                           \
+        if (ptlslog_include_appdata) {                                                                                             \
+            PTLS_LOG_ELEMENT_HEXDUMP(name, value, value_len);                                                                      \
+        } else {                                                                                                                   \
+            PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                    \
+        }                                                                                                                          \
+    } while (0)
 
 /**
  * retains a list of connections that are bound to the object
@@ -1569,16 +1584,17 @@ int ptls_log_add_fd(int fd, float sample_ratio, const char *points, const char *
 void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point);
 void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
                            void *get_sni_arg);
-void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *name, const char *s, size_t l);
-void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *name, const char *s, size_t l);
-void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *name, const void *s, size_t l);
-void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *name, int32_t v);
-void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *name, int64_t v);
-void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *name, uint32_t v);
-void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *name, uint64_t v);
-void ptls_log__do_push_appdata_element_unsafestr(ptls_buffer_t *buf, int includes_appdata, const char *name, const char *s,
-                                                 size_t l);
-void ptls_log__do_push_appdata_element_hexdump(ptls_buffer_t *buf, int includes_appdata, const char *name, const void *s, size_t l);
+void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l);
+void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l);
+void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const void *s, size_t l);
+void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int32_t v);
+void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int64_t v);
+void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint32_t v);
+void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint64_t v);
+void ptls_log__do_push_appdata_element_unsafestr(ptls_buffer_t *buf, int includes_appdata, const char *prefix, size_t prefix_len,
+                                                 const char *s, size_t l);
+void ptls_log__do_push_appdata_element_hexdump(ptls_buffer_t *buf, int includes_appdata, const char *prefix, size_t prefix_len,
+                                               const void *s, size_t l);
 void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
                               int add_time);
 int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
