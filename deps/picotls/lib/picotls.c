@@ -6794,7 +6794,8 @@ static int expand_logbuf_or_invalidate(ptls_buffer_t *buf, const char *prefix, s
     return 1;
 }
 
-static void pushf_element(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity, const char *fmt, ...)
+__attribute__((format(printf, 5, 6))) static void
+pushf_logbuf_or_invalidate(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity, const char *fmt, ...)
 {
     if (!expand_logbuf_or_invalidate(buf, prefix, prefix_len, capacity))
         return;
@@ -6805,13 +6806,17 @@ static void pushf_element(ptls_buffer_t *buf, const char *prefix, size_t prefix_
     va_end(args);
 
     assert(l < buf->capacity - buf->off && "insufficent capacity");
-
     buf->off += l;
 }
 
 void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
 {
-    pushf_element(buf, prefix, prefix_len, l + 2, "\"%s\"", s);
+    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l + 2)) {
+        buf->base[buf->off++] = '"';
+        memcpy(buf->base + buf->off, s, l);
+        buf->off += l;
+        buf->base[buf->off++] = '"';
+    }
 }
 
 void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
@@ -6835,22 +6840,22 @@ void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *prefix, s
 
 void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int32_t v)
 {
-    pushf_element(buf, prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
+    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
 }
 
 void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int64_t v)
 {
-    pushf_element(buf, prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
+    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
 }
 
 void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint32_t v)
 {
-    pushf_element(buf, prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
+    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
 }
 
 void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint64_t v)
 {
-    pushf_element(buf, prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
+    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
 }
 
 struct st_ptls_log_t ptls_log = {
