@@ -48,12 +48,13 @@ subtest "h2olog", sub {
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
-  until (($trace .= $tracer->get_trace()) =~ m{h3s_destroy}) {}
+  until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy".*"module":"picotls","type":"free"}s) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
   }
 
+  # we assume that the last line being read is NOT partial; if it is partial, decode_json fails
   my @events = map { decode_json($_) } split /\n/, $trace;
   is scalar(grep { $_->{type} && $_->{tid} && $_->{time} } @events), scalar(@events), "each event has type, tid, and time";
 
@@ -75,7 +76,7 @@ subtest "h2olog -t", sub {
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
-  until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy"}) {diag $trace}
+  until (($trace .= $tracer->get_trace()) =~ m{"h3s_destroy"}) {}
 
   if ($ENV{H2OLOG_DEBUG}) {
     diag "h2olog output:\n", $trace;
@@ -124,7 +125,7 @@ subtest "multi clients", sub {
   my @logs;
   for my $tracer(@tracers) {
     my $logs = '';
-    until (($logs .= $tracer->get_trace()) =~ m{"type":"h3s_destroy"}) {}
+    until (($logs .= $tracer->get_trace()) =~ m{"type":"h3s_destroy".*"module":"picotls","type":"free"}s) {}
     # Removes first some lines until HTTP/3 has been started.
     # THis is because connecting h2olog produces a "h2o:receive_request" and some succeeding events.
     push @logs, $logs =~ s/\A.+?"module":"picotls","type":"new"[^\n]+//xmsr;
