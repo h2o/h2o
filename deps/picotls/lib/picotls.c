@@ -7138,6 +7138,8 @@ Exit:
 #endif
 }
 
+#if PTLS_HAVE_LOG
+
 void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
                               int add_time)
 {
@@ -7193,8 +7195,6 @@ void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *
 int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
                            void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata)
 {
-#if PTLS_HAVE_LOG
-
     if (!expand_logbuf_or_invalidate(buf, "}\n", 2, 0))
         return 0;
 
@@ -7246,11 +7246,6 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
     ptls_buffer_dispose(buf);
     return needs_appdata;
-
-#else
-
-    ptls_buffer_dispose(buf);
-    return 0;
+}
 
 #endif
-}

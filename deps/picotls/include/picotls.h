@@ -1397,6 +1397,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         ptls_decode_assert_block_close((src), end);                                                                                \
     } while (0)
 
+#if PTLS_HAVE_LOG
 #define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, add_time, block)                                          \
     do {                                                                                                                           \
         int ptlslog_include_appdata = 0;                                                                                           \
@@ -1411,6 +1412,9 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
                 ptls_log__do_write_end(&logpoint, (conn_state), (get_sni), (get_sni_arg), &ptlslogbuf, ptlslog_include_appdata);   \
         } while (PTLS_UNLIKELY(ptlslog_include_appdata));                                                                          \
     } while (0)
+#else
+#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, add_time, block) /* don't generate code */
+#endif
 
 #define PTLS_LOG_DEFINE_POINT(_module, _name, _var)                                                                                \
     static struct st_ptls_log_point_t _var = {.name = PTLS_TO_STR(_module) ":" PTLS_TO_STR(_name)}
