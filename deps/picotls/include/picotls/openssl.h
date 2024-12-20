@@ -39,8 +39,7 @@ extern "C" {
 #define PTLS_OPENSSL_HAVE_CHACHA20_POLY1305 0
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER) && \
-    !defined(OPENSSL_NO_ASYNC)
+#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER) && !defined(OPENSSL_NO_ASYNC)
 #include <openssl/async.h>
 #define PTLS_OPENSSL_HAVE_ASYNC 1
 #else

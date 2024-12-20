@@ -23,6 +23,7 @@
 #include "wincompat.h"
 #endif
 #include <assert.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6774,69 +6775,6 @@ void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *
     memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
 }
 
-int ptls_log__do_pushv(ptls_buffer_t *buf, const void *p, size_t l)
-{
-    if (ptls_buffer_reserve(buf, l) != 0)
-        return 0;
-
-    memcpy(buf->base + buf->off, p, l);
-    buf->off += l;
-    return 1;
-}
-
-int ptls_log__do_push_unsafestr(ptls_buffer_t *buf, const char *s, size_t l)
-{
-    if (ptls_buffer_reserve(buf, l * (sizeof("\\uXXXX") - 1) + 1) != 0)
-        return 0;
-
-    buf->off = (uint8_t *)ptls_jsonescape((char *)(buf->base + buf->off), s, l) - buf->base;
-
-    return 1;
-}
-
-int ptls_log__do_push_hexdump(ptls_buffer_t *buf, const void *s, size_t l)
-{
-    if (ptls_buffer_reserve(buf, l * 2 + 1) != 0)
-        return 0;
-
-    ptls_hexdump((char *)(buf->base + buf->off), s, l);
-    buf->off += l * 2;
-
-    return 1;
-}
-
-int ptls_log__do_push_signed32(ptls_buffer_t *buf, int32_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("-2147483648")];
-    int len = snprintf(s, sizeof(s), "%" PRId32, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
-
-int ptls_log__do_push_signed64(ptls_buffer_t *buf, int64_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("-9223372036854775808")];
-    int len = snprintf(s, sizeof(s), "%" PRId64, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
-
-int ptls_log__do_push_unsigned32(ptls_buffer_t *buf, uint32_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("4294967295")];
-    int len = snprintf(s, sizeof(s), "%" PRIu32, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
-
-int ptls_log__do_push_unsigned64(ptls_buffer_t *buf, uint64_t v)
-{
-    /* TODO optimize */
-    char s[sizeof("18446744073709551615")];
-    int len = snprintf(s, sizeof(s), "%" PRIu64, v);
-    return ptls_log__do_pushv(buf, s, (size_t)len);
-}
-
 struct st_ptls_log_t ptls_log = {
     .dummy_conn_state = {.random_ = 1 /* never log */},
     ._generation = 1, /* starts from 1 so that recalc can be forced by setting to zero (i.e., the initial) */
@@ -6888,6 +6826,15 @@ static struct {
      */
     pthread_mutex_t mutex;
 } logctx = {.mutex = PTHREAD_MUTEX_INITIALIZER};
+
+static PTLS_THREADLOCAL struct {
+    ptls_buffer_t buf; /* buf.base == NULL upon failre */
+    char smallbuf[128];
+    struct {
+        char buf[sizeof(",\"tid\":-9223372036854775808")];
+        size_t len;
+    } tid;
+} logbuf;
 
 static void close_log_fd(size_t slot)
 {
@@ -6957,31 +6904,8 @@ static int is_in_addresslist(const struct in6_addr *list, const struct in6_addr 
 #undef IS_EQUAL
 }
 
-#endif
-
-void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t))
-{
-    uint32_t r;
-    random_bytes(&r, sizeof(r));
-
-    *state = (ptls_log_conn_state_t){
-        .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
-        .address = in6addr_any,
-    };
-}
-
-size_t ptls_log_num_lost(void)
-{
-#if PTLS_HAVE_LOG
-    return logctx.num_lost;
-#else
-    return 0;
-#endif
-}
-
 void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point)
 {
-#if PTLS_HAVE_LOG
     if (!caller_locked)
         pthread_mutex_lock(&logctx.mutex);
 
@@ -6997,13 +6921,11 @@ void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point
 
     if (!caller_locked)
         pthread_mutex_unlock(&logctx.mutex);
-#endif
 }
 
 void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
                            void *get_sni_arg)
 {
-#if PTLS_HAVE_LOG
     if (!caller_locked)
         pthread_mutex_lock(&logctx.mutex);
 
@@ -7023,6 +6945,217 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
 
     if (!caller_locked)
         pthread_mutex_unlock(&logctx.mutex);
+}
+
+static int expand_logbuf_or_invalidate(const char *prefix, size_t prefix_len, size_t capacity)
+{
+    if (logbuf.buf.base == NULL)
+        return 0;
+
+    if (ptls_buffer_reserve(&logbuf.buf, prefix_len + capacity) != 0) {
+        ptls_buffer_dispose(&logbuf.buf);
+        assert(logbuf.buf.base == NULL);
+        return 0;
+    }
+
+    memcpy(logbuf.buf.base + logbuf.buf.off, prefix, prefix_len);
+    logbuf.buf.off += prefix_len;
+
+    return 1;
+}
+
+__attribute__((format(printf, 4, 5))) static void pushf_logbuf_or_invalidate(const char *prefix, size_t prefix_len, size_t capacity,
+                                                                             const char *fmt, ...)
+{
+    if (!expand_logbuf_or_invalidate(prefix, prefix_len, capacity))
+        return;
+
+    va_list args;
+    va_start(args, fmt);
+    int l = vsnprintf((char *)logbuf.buf.base + logbuf.buf.off, logbuf.buf.capacity - logbuf.buf.off, fmt, args);
+    va_end(args);
+
+    assert(l < logbuf.buf.capacity - logbuf.buf.off && "insufficent capacity");
+    logbuf.buf.off += l;
+}
+
+void ptls_log__do_push_element_safestr(const char *prefix, size_t prefix_len, const char *s, size_t l)
+{
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l + 2)) {
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+        memcpy(logbuf.buf.base + logbuf.buf.off, s, l);
+        logbuf.buf.off += l;
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+    }
+}
+
+void ptls_log__do_push_element_unsafestr(const char *prefix, size_t prefix_len, const char *s, size_t l)
+{
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l * (sizeof("\\uXXXX") - 1) + 2)) {
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+        logbuf.buf.off = (uint8_t *)ptls_jsonescape((char *)logbuf.buf.base + logbuf.buf.off, s, l) - logbuf.buf.base;
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+    }
+}
+
+void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, const void *s, size_t l)
+{
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l * 2 + 2)) {
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+        ptls_hexdump((char *)logbuf.buf.base + logbuf.buf.off, s, l);
+        logbuf.buf.off += l * 2;
+        logbuf.buf.base[logbuf.buf.off++] = '"';
+    }
+}
+
+void ptls_log__do_push_element_signed32(const char *prefix, size_t prefix_len, int32_t v)
+{
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
+}
+
+void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, int64_t v)
+{
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
+}
+
+void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len, uint32_t v)
+{
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
+}
+
+void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v)
+{
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
+}
+
+void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v)
+{
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, 5)) {
+        if (v) {
+            memcpy(logbuf.buf.base + logbuf.buf.off, "true", 4);
+            logbuf.buf.off += 4;
+        } else {
+            memcpy(logbuf.buf.base + logbuf.buf.off, "false", 5);
+            logbuf.buf.off += 5;
+        }
+    }
+}
+
+void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time)
+{
+    assert(logbuf.buf.base == NULL);
+    ptls_buffer_init(&logbuf.buf, logbuf.smallbuf, sizeof(logbuf.smallbuf));
+
+    /* add module and type name */
+    const char *colon_at = strchr(point->name, ':');
+    int written = snprintf((char *)logbuf.buf.base, logbuf.buf.capacity, "{\"module\":\"%.*s\",\"type\":\"%s\"",
+                           (int)(colon_at - point->name), point->name, colon_at + 1);
+
+    /* obtain and stringify thread id once */
+    if (logbuf.tid.len == 0) {
+#if defined(__linux__)
+        logbuf.tid.len = sprintf(logbuf.tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
+#elif defined(__APPLE__)
+        uint64_t t = 0;
+        (void)pthread_threadid_np(NULL, &t);
+        logbuf.tid.len = sprintf(logbuf.tid.buf, ",\"tid\":%" PRIu64, t);
+#else
+        /* other platforms: skip emitting tid, by keeping logbuf.tid.len == 0 */
+#endif
+    }
+    /* append tid */
+    assert(written > 0 && written + logbuf.tid.len < logbuf.buf.capacity);
+    memcpy((char *)logbuf.buf.base + written, logbuf.tid.buf, logbuf.tid.len + 1);
+    written += logbuf.tid.len;
+
+    /* append time if requested */
+    if (add_time) {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        written += snprintf((char *)logbuf.buf.base + written, logbuf.buf.capacity - written, ",\"time\":%" PRIu64,
+                            (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000);
+    }
+    assert(written > 0 && written < logbuf.buf.capacity && "caller MUST provide smallbuf suffient to emit the prefix");
+
+    logbuf.buf.off = (size_t)written;
+}
+
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
+                           void *get_sni_arg, int includes_appdata)
+{
+    if (!expand_logbuf_or_invalidate("}\n", 2, 0))
+        return 0;
+
+    int needs_appdata = 0;
+
+    pthread_mutex_lock(&logctx.mutex);
+
+    /* calc the active conn bits, updating stale information if necessary */
+    if (point->state.generation != ptls_log._generation)
+        ptls_log__recalc_point(1, point);
+    uint32_t active = point->state.active_conns;
+    if (conn != NULL && conn->state.generation != ptls_log._generation) {
+        ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
+        active &= conn->state.active_conns;
+    }
+
+    /* iterate through the active connctions */
+    for (size_t slot = 0; active != 0; ++slot, active >>= 1) {
+        if ((active & 1) == 0)
+            continue;
+
+        assert(logctx.conns[slot].points != NULL);
+
+        if (logctx.conns[slot].appdata != includes_appdata) {
+            if (!includes_appdata && ptls_log.may_include_appdata)
+                needs_appdata = 1;
+            continue;
+        }
+
+        /* write */
+        ssize_t wret;
+        while ((wret = write(logctx.conns[slot].fd, logbuf.buf.base, logbuf.buf.off)) == -1 && errno == EINTR)
+            ;
+        if (wret == logbuf.buf.off) {
+            /* success */
+        } else if (wret > 0 || (wret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+            /* partial write or buffer full */
+            ++logctx.num_lost;
+        } else {
+            /* write error; close and unregister the connection */
+            close_log_fd(slot);
+        }
+    }
+
+    pthread_mutex_unlock(&logctx.mutex);
+
+    if (includes_appdata)
+        assert(!needs_appdata);
+
+    ptls_buffer_dispose(&logbuf.buf);
+    assert(logbuf.buf.base == NULL);
+    return needs_appdata;
+}
+
+#endif
+
+void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t))
+{
+    uint32_t r;
+    random_bytes(&r, sizeof(r));
+
+    *state = (ptls_log_conn_state_t){
+        .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
+        .address = in6addr_any,
+    };
+}
+
+size_t ptls_log_num_lost(void)
+{
+#if PTLS_HAVE_LOG
+    return logctx.num_lost;
+#else
+    return 0;
 #endif
 }
 
@@ -7102,120 +7235,4 @@ Exit:
 #else
     return PTLS_ERROR_NOT_AVAILABLE;
 #endif
-}
-
-void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
-                              int add_time)
-{
-    ptls_buffer_init(buf, smallbuf, smallbufsize);
-
-    /* add module and type name */
-    const char *colon_at = strchr(point->name, ':');
-    int written = snprintf((char *)buf->base, buf->capacity, "{\"module\":\"%.*s\",\"type\":\"%s\"", (int)(colon_at - point->name),
-                           point->name, colon_at + 1);
-
-#if defined(__linux__) || defined(__APPLE__)
-    /* obtain and stringify thread id once */
-    static PTLS_THREADLOCAL struct {
-        char buf[sizeof(",\"tid\":-9223372036854775808")];
-        size_t len;
-    } tid;
-    if (tid.len == 0) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&mutex);
-        if (tid.len == 0) {
-#if defined(__linux__)
-            int l = sprintf(tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
-#elif defined(__APPLE__)
-            uint64_t t = 0;
-            (void)pthread_threadid_np(NULL, &t);
-            int l = sprintf(tid.buf, ",\"tid\":%" PRIu64, t);
-#else
-#error "unexpected platform"
-#endif
-            __sync_synchronize();
-            tid.len = (size_t)l;
-        }
-        pthread_mutex_unlock(&mutex);
-    }
-    /* append tid */
-    assert(written > 0 && written + tid.len < buf->capacity);
-    memcpy((char *)buf->base + written, tid.buf, tid.len + 1);
-    written += tid.len;
-#endif
-
-    /* append time if requested */
-    if (add_time) {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        written += snprintf((char *)buf->base + written, buf->capacity - written, ",\"time\":%" PRIu64,
-                            (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000);
-    }
-    assert(written > 0 && written < buf->capacity && "caller MUST provide smallbuf suffient to emit the prefix");
-
-    buf->off = (size_t)written;
-}
-
-int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata)
-{
-    int needs_appdata = 0;
-
-#if PTLS_HAVE_LOG
-    uint32_t active;
-
-    /* point == NULL indicates skip */
-    if (point == NULL || ptls_buffer_reserve(buf, 2) != 0)
-        goto Exit;
-    buf->base[buf->off++] = '}';
-    buf->base[buf->off++] = '\n';
-
-    pthread_mutex_lock(&logctx.mutex);
-
-    /* calc the active conn bits, updating stale information if necessary */
-    if (point->state.generation != ptls_log._generation)
-        ptls_log__recalc_point(1, point);
-    active = point->state.active_conns;
-    if (conn != NULL && conn->state.generation != ptls_log._generation) {
-        ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
-        active &= conn->state.active_conns;
-    }
-
-    /* iterate through the active connctions */
-    for (size_t slot = 0; active != 0; ++slot, active >>= 1) {
-        if ((active & 1) == 0)
-            continue;
-
-        assert(logctx.conns[slot].points != NULL);
-
-        if (logctx.conns[slot].appdata != includes_appdata) {
-            if (!includes_appdata && ptls_log.may_include_appdata)
-                needs_appdata = 1;
-            continue;
-        }
-
-        /* write */
-        ssize_t wret;
-        while ((wret = write(logctx.conns[slot].fd, buf->base, buf->off)) == -1 && errno == EINTR)
-            ;
-        if (wret == buf->off) {
-            /* success */
-        } else if (wret > 0 || (wret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
-            /* partial write or buffer full */
-            ++logctx.num_lost;
-        } else {
-            /* write error; close and unregister the connection */
-            close_log_fd(slot);
-        }
-    }
-
-    pthread_mutex_unlock(&logctx.mutex);
-
-    if (includes_appdata)
-        assert(!needs_appdata);
-#endif
-
-Exit:
-    ptls_buffer_dispose(buf);
-    return needs_appdata;
 }
