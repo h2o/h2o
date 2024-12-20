@@ -862,7 +862,7 @@ ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *sr
 
     h2o_http2_frame_t frame;
     ssize_t ret;
-    static int (*FRAME_HANDLERS[])(struct st_h2o_http2client_conn_t * conn, h2o_http2_frame_t * frame, const char **err_desc) = {
+    static int (*FRAME_HANDLERS[])(struct st_h2o_http2client_conn_t *conn, h2o_http2_frame_t *frame, const char **err_desc) = {
         handle_data_frame,                /* DATA */
         handle_headers_frame,             /* HEADERS */
         handle_priority_frame,            /* PRIORITY */

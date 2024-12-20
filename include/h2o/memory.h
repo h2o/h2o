@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
+#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p) - offsetof(s, m)))
 #define H2O_ALIGNOF(type) (__alignof__(type))
 
 #if __GNUC__ >= 3

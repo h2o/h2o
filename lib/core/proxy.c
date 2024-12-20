@@ -752,7 +752,8 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 
     assert(status != 101 && "101 has to be notified as final");
 
-    if (status != 100 || (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
+    if (status != 100 ||
+        (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
         self->src_req->res.status = status;
         self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
         h2o_send_informational(self->src_req);

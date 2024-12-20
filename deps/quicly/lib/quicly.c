@@ -7215,7 +7215,7 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
             break;
         }
     }
-     if (packet->ecn != 0)
+    if (packet->ecn != 0)
         conn->super.stats.num_packets.received_ecn_counts[get_ecn_index_from_bits(packet->ecn)] += 1;
 
     /* state updates, that are triggered by the receipt of a packet */

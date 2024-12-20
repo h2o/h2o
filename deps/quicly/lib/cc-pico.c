@@ -124,7 +124,7 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
     cc->state.pico.bytes_per_mtu_increase = calc_bytes_per_mtu_increase(cc->cwnd, loss->rtt.smoothed, max_udp_payload_size);
 
     /* Reduce congestion window. */
-    cc->cwnd *=  cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_RENO_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
+    cc->cwnd *= cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_RENO_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;

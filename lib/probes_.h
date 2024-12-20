@@ -24,7 +24,7 @@
 
 #include "picotls.h"
 
-#define H2O_LOG_SOCK(_name, _sock, _block) \
+#define H2O_LOG_SOCK(_name, _sock, _block)                                                                                         \
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(h2o, _name, logpoint);                                                                               \
         uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \

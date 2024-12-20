@@ -531,8 +531,8 @@ static void async_nb_run_sync(neverbleed_iobuf_t *buf, void (*transaction_cb)(ne
 
 static void async_nb_read_ready(h2o_socket_t *sock, const char *err)
 {
-    // neverbleed will never write half a response because we limit the number of in-flight transactions with NEVERBLEED_MAX_IN_FLIGHT_TX
-    // read responses until the neverbleed fd is no longer read ready
+    // neverbleed will never write half a response because we limit the number of in-flight transactions with
+    // NEVERBLEED_MAX_IN_FLIGHT_TX read responses until the neverbleed fd is no longer read ready
     while (async_nb.read_queue.len > 0) {
         struct async_nb_transaction_t *transaction = async_nb_pop(&async_nb.read_queue);
         assert(transaction != NULL);
