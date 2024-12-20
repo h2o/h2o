@@ -6775,98 +6775,108 @@ void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *
     memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
 }
 
-static int expand_logbuf_or_invalidate(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity)
+static PTLS_THREADLOCAL struct {
+    ptls_buffer_t buf; /* buf.base == NULL upon failre */
+    char smallbuf[128];
+    struct {
+        char buf[sizeof(",\"tid\":-9223372036854775808")];
+        size_t len;
+    } tid;
+} ptlslogbuf;
+
+static int expand_logbuf_or_invalidate(const char *prefix, size_t prefix_len, size_t capacity)
 {
-    if (buf->base == NULL)
+    if (ptlslogbuf.buf.base == NULL)
         return 0;
 
-    if (ptls_buffer_reserve(buf, prefix_len + capacity) != 0) {
-        ptls_buffer_dispose(buf);
-        assert(buf->base == NULL);
+    if (ptls_buffer_reserve(&ptlslogbuf.buf, prefix_len + capacity) != 0) {
+        ptls_buffer_dispose(&ptlslogbuf.buf);
+        assert(ptlslogbuf.buf.base == NULL);
         return 0;
     }
 
     if (prefix_len != 0) {
-        memcpy(buf->base + buf->off, prefix, prefix_len);
-        buf->off += prefix_len;
+        memcpy(ptlslogbuf.buf.base + ptlslogbuf.buf.off, prefix, prefix_len);
+        ptlslogbuf.buf.off += prefix_len;
     }
 
     return 1;
 }
 
-__attribute__((format(printf, 5, 6))) static void
-pushf_logbuf_or_invalidate(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, size_t capacity, const char *fmt, ...)
+__attribute__((format(printf, 4, 5))) static void pushf_logbuf_or_invalidate(const char *prefix, size_t prefix_len, size_t capacity,
+                                                                             const char *fmt, ...)
 {
-    if (!expand_logbuf_or_invalidate(buf, prefix, prefix_len, capacity))
+    if (!expand_logbuf_or_invalidate(prefix, prefix_len, capacity))
         return;
 
     va_list args;
     va_start(args, fmt);
-    int l = vsnprintf((char *)buf->base + buf->off, buf->capacity - buf->off, fmt, args);
+    int l = vsnprintf((char *)ptlslogbuf.buf.base + ptlslogbuf.buf.off, ptlslogbuf.buf.capacity - ptlslogbuf.buf.off, fmt, args);
     va_end(args);
 
-    assert(l < buf->capacity - buf->off && "insufficent capacity");
-    buf->off += l;
+    assert(l < ptlslogbuf.buf.capacity - ptlslogbuf.buf.off && "insufficent capacity");
+    ptlslogbuf.buf.off += l;
 }
 
-void ptls_log__do_push_element_safestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
+void ptls_log__do_push_element_safestr(const char *prefix, size_t prefix_len, const char *s, size_t l)
 {
-    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l + 2)) {
-        buf->base[buf->off++] = '"';
-        memcpy(buf->base + buf->off, s, l);
-        buf->off += l;
-        buf->base[buf->off++] = '"';
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l + 2)) {
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
+        memcpy(ptlslogbuf.buf.base + ptlslogbuf.buf.off, s, l);
+        ptlslogbuf.buf.off += l;
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
     }
 }
 
-void ptls_log__do_push_element_unsafestr(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const char *s, size_t l)
+void ptls_log__do_push_element_unsafestr(const char *prefix, size_t prefix_len, const char *s, size_t l)
 {
-    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l * (sizeof("\\uXXXX") - 1) + 2)) {
-        buf->base[buf->off++] = '"';
-        buf->off = (uint8_t *)ptls_jsonescape((char *)buf->base + buf->off, s, l) - buf->base;
-        buf->base[buf->off++] = '"';
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l * (sizeof("\\uXXXX") - 1) + 2)) {
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
+        ptlslogbuf.buf.off =
+            (uint8_t *)ptls_jsonescape((char *)ptlslogbuf.buf.base + ptlslogbuf.buf.off, s, l) - ptlslogbuf.buf.base;
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
     }
 }
 
-void ptls_log__do_push_element_hexdump(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, const void *s, size_t l)
+void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, const void *s, size_t l)
 {
-    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, l * 2 + 2)) {
-        buf->base[buf->off++] = '"';
-        ptls_hexdump((char *)buf->base + buf->off, s, l);
-        buf->off += l * 2;
-        buf->base[buf->off++] = '"';
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, l * 2 + 2)) {
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
+        ptls_hexdump((char *)ptlslogbuf.buf.base + ptlslogbuf.buf.off, s, l);
+        ptlslogbuf.buf.off += l * 2;
+        ptlslogbuf.buf.base[ptlslogbuf.buf.off++] = '"';
     }
 }
 
-void ptls_log__do_push_element_signed32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int32_t v)
+void ptls_log__do_push_element_signed32(const char *prefix, size_t prefix_len, int32_t v)
 {
-    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
 }
 
-void ptls_log__do_push_element_signed64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int64_t v)
+void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, int64_t v)
 {
-    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
 }
 
-void ptls_log__do_push_element_unsigned32(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint32_t v)
+void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len, uint32_t v)
 {
-    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
 }
 
-void ptls_log__do_push_element_unsigned64(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, uint64_t v)
+void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v)
 {
-    pushf_logbuf_or_invalidate(buf, prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
 }
 
-void ptls_log__do_push_element_bool(ptls_buffer_t *buf, const char *prefix, size_t prefix_len, int v)
+void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v)
 {
-    if (expand_logbuf_or_invalidate(buf, prefix, prefix_len, 5)) {
+    if (expand_logbuf_or_invalidate(prefix, prefix_len, 5)) {
         if (v) {
-            memcpy(buf->base + buf->off, "true", 4);
-            buf->off += 4;
+            memcpy(ptlslogbuf.buf.base + ptlslogbuf.buf.off, "true", 4);
+            ptlslogbuf.buf.off += 4;
         } else {
-            memcpy(buf->base + buf->off, "false", 5);
-            buf->off += 5;
+            memcpy(ptlslogbuf.buf.base + ptlslogbuf.buf.off, "false", 5);
+            ptlslogbuf.buf.off += 5;
         }
     }
 }
@@ -7140,62 +7150,51 @@ Exit:
 
 #if PTLS_HAVE_LOG
 
-void ptls_log__do_write_start(struct st_ptls_log_point_t *point, ptls_buffer_t *buf, void *smallbuf, size_t smallbufsize,
-                              int add_time)
+void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time)
 {
-    ptls_buffer_init(buf, smallbuf, smallbufsize);
+    assert(ptlslogbuf.buf.base == NULL);
+    ptls_buffer_init(&ptlslogbuf.buf, ptlslogbuf.smallbuf, sizeof(ptlslogbuf.smallbuf));
 
     /* add module and type name */
     const char *colon_at = strchr(point->name, ':');
-    int written = snprintf((char *)buf->base, buf->capacity, "{\"module\":\"%.*s\",\"type\":\"%s\"", (int)(colon_at - point->name),
-                           point->name, colon_at + 1);
+    int written = snprintf((char *)ptlslogbuf.buf.base, ptlslogbuf.buf.capacity, "{\"module\":\"%.*s\",\"type\":\"%s\"",
+                           (int)(colon_at - point->name), point->name, colon_at + 1);
 
 #if defined(__linux__) || defined(__APPLE__)
     /* obtain and stringify thread id once */
-    static PTLS_THREADLOCAL struct {
-        char buf[sizeof(",\"tid\":-9223372036854775808")];
-        size_t len;
-    } tid;
-    if (tid.len == 0) {
-        static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
-        pthread_mutex_lock(&mutex);
-        if (tid.len == 0) {
+    if (ptlslogbuf.tid.len == 0) {
 #if defined(__linux__)
-            int l = sprintf(tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
+        ptlslogbuf.tid.len = sprintf(ptlslogbuf.tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
 #elif defined(__APPLE__)
-            uint64_t t = 0;
-            (void)pthread_threadid_np(NULL, &t);
-            int l = sprintf(tid.buf, ",\"tid\":%" PRIu64, t);
+        uint64_t t = 0;
+        (void)pthread_threadid_np(NULL, &t);
+        ptlslogbuf.tid.len = sprintf(ptlslogbuf.tid.buf, ",\"tid\":%" PRIu64, t);
 #else
 #error "unexpected platform"
 #endif
-            __sync_synchronize();
-            tid.len = (size_t)l;
-        }
-        pthread_mutex_unlock(&mutex);
     }
     /* append tid */
-    assert(written > 0 && written + tid.len < buf->capacity);
-    memcpy((char *)buf->base + written, tid.buf, tid.len + 1);
-    written += tid.len;
+    assert(written > 0 && written + ptlslogbuf.tid.len < ptlslogbuf.buf.capacity);
+    memcpy((char *)ptlslogbuf.buf.base + written, ptlslogbuf.tid.buf, ptlslogbuf.tid.len + 1);
+    written += ptlslogbuf.tid.len;
 #endif
 
     /* append time if requested */
     if (add_time) {
         struct timeval tv;
         gettimeofday(&tv, NULL);
-        written += snprintf((char *)buf->base + written, buf->capacity - written, ",\"time\":%" PRIu64,
+        written += snprintf((char *)ptlslogbuf.buf.base + written, ptlslogbuf.buf.capacity - written, ",\"time\":%" PRIu64,
                             (uint64_t)tv.tv_sec * 1000 + tv.tv_usec / 1000);
     }
-    assert(written > 0 && written < buf->capacity && "caller MUST provide smallbuf suffient to emit the prefix");
+    assert(written > 0 && written < ptlslogbuf.buf.capacity && "caller MUST provide smallbuf suffient to emit the prefix");
 
-    buf->off = (size_t)written;
+    ptlslogbuf.buf.off = (size_t)written;
 }
 
 int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg, ptls_buffer_t *buf, int includes_appdata)
+                           void *get_sni_arg, int includes_appdata)
 {
-    if (!expand_logbuf_or_invalidate(buf, "}\n", 2, 0))
+    if (!expand_logbuf_or_invalidate("}\n", 2, 0))
         return 0;
 
     int needs_appdata = 0;
@@ -7226,9 +7225,9 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
         /* write */
         ssize_t wret;
-        while ((wret = write(logctx.conns[slot].fd, buf->base, buf->off)) == -1 && errno == EINTR)
+        while ((wret = write(logctx.conns[slot].fd, ptlslogbuf.buf.base, ptlslogbuf.buf.off)) == -1 && errno == EINTR)
             ;
-        if (wret == buf->off) {
+        if (wret == ptlslogbuf.buf.off) {
             /* success */
         } else if (wret > 0 || (wret == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
             /* partial write or buffer full */
@@ -7244,7 +7243,8 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
     if (includes_appdata)
         assert(!needs_appdata);
 
-    ptls_buffer_dispose(buf);
+    ptls_buffer_dispose(&ptlslogbuf.buf);
+    assert(ptlslogbuf.buf.base == NULL);
     return needs_appdata;
 }
 
