@@ -1409,13 +1409,13 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
     do {                                                                                                                           \
         PTLS_LOG_DEFINE_POINT(quicly, _name, logpoint);                                                                            \
         uint32_t active = ptls_log_point_maybe_active(&logpoint);                                                                  \
-        if (active == 0)                                                                                                           \
+        if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
         ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
         ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
         active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
-        if (active == 0)                                                                                                           \
+        if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, _c->stash.now == 0, {     \
             if (_c->stash.now != 0)                                                                                                \
