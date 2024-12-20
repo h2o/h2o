@@ -33,7 +33,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#if defined(__linux__) || defined(__FreeBSD__) || defined(__NetBSD__)
+#if (defined(__linux__) && !defined(__ANDROID__)) || defined(__FreeBSD__) || defined(__NetBSD__)
 #define NEVERBLEED_HAS_PTHREAD_SETAFFINITY_NP 1
 #if defined(__linux__)
 #define NEVERBLEED_CPU_SET_T cpu_set_t
