@@ -7031,6 +7031,11 @@ int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct socka
     for (path_index = 0; path_index < PTLS_ELEMENTSOF(conn->paths); ++path_index)
         if (conn->paths[path_index] != NULL && compare_socket_address(src_addr, &conn->paths[path_index]->address.remote.sa) == 0)
             break;
+    if (path_index != 0 && !quicly_is_client(conn) &&
+        (QUICLY_PACKET_IS_LONG_HEADER(packet->octets.base[0]) || !conn->super.remote.address_validation.validated)) {
+        ret = QUICLY_ERROR_PACKET_IGNORED;
+        goto Exit;
+    }
     if (path_index == PTLS_ELEMENTSOF(conn->paths) &&
         conn->super.stats.num_paths.validation_failed >= conn->super.ctx->max_path_validation_failures) {
         ret = QUICLY_ERROR_PACKET_IGNORED;

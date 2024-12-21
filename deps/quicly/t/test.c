@@ -740,6 +740,90 @@ static void test_jumpstart_cwnd(void)
     ok(derive_jumpstart_cwnd(&bounded_max, 250, 1000000, 250) == 80000);
 }
 
+static void do_test_migration_during_handshake(int second_flight_from_orig_address)
+{
+    quicly_conn_t *client, *server;
+    const struct sockaddr_in serveraddr = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(0x7f000001), .sin_port = htons(12345)},
+                             clientaddr1 = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(0x7f000002), .sin_port = htons(12345)},
+                             clientaddr2 = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(0x7f000003), .sin_port = htons(12345)};
+    quicly_address_t destaddr, srcaddr;
+    struct iovec datagrams[10];
+    uint8_t buf[quic_ctx.transport_params.max_udp_payload_size * 10];
+    quicly_decoded_packet_t packets[40];
+    size_t num_datagrams, num_packets;
+    int ret;
+
+    /* client send first flight */
+    ret = quicly_connect(&client, &quic_ctx, "example.com", (void *)&serveraddr, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
+                         NULL, NULL, NULL);
+    ok(ret == 0);
+    num_datagrams = 10;
+    ret = quicly_send(client, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf));
+    ok(ret == 0);
+    ok(num_datagrams > 0);
+
+    /* server accepts and responds, but the packets are dropped */
+    num_packets = decode_packets(packets, datagrams, num_datagrams);
+    ok(num_packets == 1);
+    ret = quicly_accept(&server, &quic_ctx, &destaddr.sa, (void *)&clientaddr1, packets, NULL, new_master_id(), NULL, NULL);
+    ok(ret == 0);
+    num_datagrams = 10;
+    ret = quicly_send(server, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf));
+    ok(ret == 0);
+    ok(num_datagrams > 0);
+
+    /* loop until timeout */
+    const struct sockaddr_in *clientaddr = second_flight_from_orig_address ? &clientaddr1 : &clientaddr2;
+    while (1) {
+        int64_t client_timeout = quicly_get_first_timeout(client), server_timeout = quicly_get_first_timeout(server),
+                smaller_timeout = client_timeout < server_timeout ? client_timeout : server_timeout;
+        if (quic_now < smaller_timeout)
+            quic_now = smaller_timeout;
+
+        /* when client times out, it resends Initials but from a different address and the server drops them */
+        if (quic_now >= client_timeout) {
+            num_datagrams = 10;
+            ret = quicly_send(client, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf));
+            if (ret == QUICLY_ERROR_FREE_CONNECTION)
+                break;
+            ok(ret == 0);
+            ok(num_datagrams > 0);
+            num_packets = decode_packets(packets, datagrams, num_datagrams);
+            ok(num_packets > 0);
+            for (size_t i = 0; i < num_packets; ++i) {
+                ret = quicly_receive(server, (void *)&serveraddr, (void *)clientaddr, &packets[i]);
+                if (clientaddr == &clientaddr1) {
+                    ok(ret == 0);
+                } else {
+                    ok(ret == QUICLY_ERROR_PACKET_IGNORED);
+                }
+            }
+            clientaddr = &clientaddr2;
+        }
+
+        /* when server times out it resends packets to the old client address */
+        if (quic_now >= server_timeout) {
+            num_datagrams = 10;
+            ret = quicly_send(server, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf));
+            if (ret == QUICLY_ERROR_FREE_CONNECTION)
+                break;
+            ok(ret == 0);
+            ok(num_datagrams > 0);
+            ok(destaddr.sin.sin_family == AF_INET);
+            ok(destaddr.sin.sin_addr.s_addr == clientaddr1.sin_addr.s_addr);
+        }
+    }
+
+    quicly_free(client);
+    quicly_free(server);
+}
+
+static void test_migration_during_handshake(void)
+{
+    subtest("migrate-before-2nd", do_test_migration_during_handshake, 0);
+    subtest("migrate-before-3nd", do_test_migration_during_handshake, 1);
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -811,6 +895,8 @@ int main(int argc, char **argv)
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
+
+    subtest("migration-during-handshake", test_migration_during_handshake);
 
     return done_testing();
 }

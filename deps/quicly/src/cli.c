@@ -33,6 +33,7 @@
 #include <netinet/udp.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <picotls.h>
