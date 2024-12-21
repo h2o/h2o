@@ -937,7 +937,11 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
     PTLS_LOG(h2o, h3_frame_receive, {
         PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
-        PTLS_LOG_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
+        if (frame->payload != NULL) {
+            PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
+        } else {
+            PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+        }
     });
 
     /* validate frame type */
