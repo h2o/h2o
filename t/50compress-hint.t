@@ -100,4 +100,6 @@ subtest "forcing gzip or br also works" => sub {
 };
 
 $socket->close();
+undef $server;
+
 done_testing();

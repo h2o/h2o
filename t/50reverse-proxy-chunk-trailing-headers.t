@@ -77,5 +77,8 @@ EOR
 
 test(0);
 test(1);
-done_testing();
 
+undef $upstream;
+undef $server;
+
+done_testing();

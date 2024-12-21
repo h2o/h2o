@@ -68,4 +68,9 @@ for my $i (1..30) {
 
 isnt $unexpected, 1;
 is((2 * $access_count1), $access_count2, "load balanced");
+
+undef $guard1;
+undef $guard2;
+undef $server;
+
 done_testing();

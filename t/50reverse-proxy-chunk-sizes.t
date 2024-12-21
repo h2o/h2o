@@ -52,5 +52,7 @@ foreach my $cl (@clopts) {
     }
 }
 
-done_testing();
+undef $upstream;
+undef $server;
 
+done_testing();

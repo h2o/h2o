@@ -285,4 +285,6 @@ subtest "connect" => sub {
     while (waitpid($upstream_pid, 0) != $upstream_pid) {}
 };
 
+undef $server;
+
 done_testing;

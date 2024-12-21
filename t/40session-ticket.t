@@ -110,8 +110,6 @@ EOT
     $doit->("ascii");
 };
 
-done_testing;
-
 my $server;
 
 sub spawn_with {
@@ -136,3 +134,7 @@ sub test {
         or die "failed to parse the output of s_client:{{{$lines}}}";
     $1;
 }
+
+undef $server;
+
+done_testing;
