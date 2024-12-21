@@ -2383,7 +2383,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
                 }
             }
             assert(tls->cipher_suite != NULL && "no compatible cipher-suite provided that matches psk.hash");
-            if (properties->client.max_early_data_size != NULL) {
+            if (properties != NULL && properties->client.max_early_data_size != NULL) {
                 tls->client.using_early_data = 1;
                 *properties->client.max_early_data_size = SIZE_MAX;
             }
