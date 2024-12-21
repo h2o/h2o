@@ -42,6 +42,8 @@ subtest "header-values-with-surronding-space" => sub {
     is get_status(), 400;
 };
 
+undef $server;
+
 done_testing;
 
 # connect, send (broken) request, read something

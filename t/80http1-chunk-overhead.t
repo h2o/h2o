@@ -65,4 +65,7 @@ sub send_request {
     $resp;
 }
 
+undef $upstream;
+undef $server;
+
 done_testing();

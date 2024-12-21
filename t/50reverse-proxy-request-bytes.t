@@ -86,5 +86,7 @@ subtest 'streaming' => sub {
     doit(1);
 };
 
-done_testing();
+undef $upstream;
+undef $server;
 
+done_testing();

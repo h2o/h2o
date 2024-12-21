@@ -68,5 +68,8 @@ foreach my $iter ((1, 10, 100)) {
         }
     }
 }
-done_testing();
 
+undef $upstream;
+undef $server;
+
+done_testing();
