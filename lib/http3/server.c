@@ -521,7 +521,10 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int sto
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
-        quicly_request_stop(stream->quic, stop_sending_code);
+        /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
+         * as it is allowed and might be beneficial in case ACKs are lost */
+        if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
+            quicly_request_stop(stream->quic, stop_sending_code);
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
     }
@@ -1177,8 +1180,9 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    if (errstr != NULL || (quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0 &&
-                           quicly_recvstate_transfer_complete(&stream->quic->recvstate))) {
+    if (errstr != NULL ||
+        (quicly_recvstate_transfer_complete(&stream->quic->recvstate) &&
+         (stream->quic->recvstate.eos == UINT64_MAX || quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0))) {
         /* tidy up the request streaming */
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
@@ -1188,7 +1192,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
             --conn->num_streams_req_streaming;
         check_run_blocked(conn);
         /* close the stream if an error occurred */
-        if (errstr != NULL) {
+        if (errstr != NULL || stream->quic->recvstate.eos == UINT64_MAX) {
             shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
             return;
         }
