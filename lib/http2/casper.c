@@ -27,6 +27,11 @@
 #include "h2o/string_.h"
 #include "h2o/http2_casper.h"
 
+/* Code below uses SHA1_* which are deprecated by OpenSSL 3.0. */
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 #define COOKIE_NAME "h2o_casper"
 #define COOKIE_ATTRIBUTES "; Path=/; Expires=Tue, 01 Jan 2030 00:00:00 GMT; Secure"
 
