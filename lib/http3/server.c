@@ -1138,7 +1138,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
             h2o_linklist_insert(&conn->delayed_streams.recv_body_blocked, &stream->link);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BLOCKED, in_generator);
             check_run_blocked(conn);
-        } else if (stream->req.write_req.cb != NULL && stream->req_body->size != 0) {
+        } else if (stream->req.write_req.cb != NULL && stream->req_body != NULL && stream->req_body->size != 0) {
             /* in streaming mode, let the run_delayed invoke write_req */
             if (!h2o_linklist_is_linked(&stream->link))
                 h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
