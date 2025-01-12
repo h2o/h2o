@@ -45,7 +45,7 @@
 
 #define DEFAULT_IO_TIMEOUT 5000
 
-static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
+static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
 static void add_header(h2o_iovec_t name, h2o_iovec_t value);
@@ -231,7 +231,7 @@ static int load_http3_session_cb(h2o_httpclient_ctx_t *ctx, struct sockaddr *ser
     return 1;
 }
 
-static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
+static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
 {
     save_session(quicly_get_tls(conn), NULL, NULL, &token);
     return 0;
