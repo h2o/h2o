@@ -32,7 +32,8 @@ static void test_handshake(void)
     uint8_t packetsbuf[PTLS_ELEMENTSOF(packets) * quic_ctx.transport_params.max_udp_payload_size];
     size_t num_packets, num_decoded;
     quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(packets) * 4];
-    int ret, i;
+    int i;
+    quicly_error_t ret;
 
     /* send CH */
     ret = quicly_connect(&client, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
@@ -115,7 +116,7 @@ static void simple_http(void)
     const char *req = "GET / HTTP/1.0\r\n\r\n", *resp = "HTTP/1.0 200 OK\r\n\r\nhello world";
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
-    int ret;
+    quicly_error_t ret;
 
     ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
@@ -159,7 +160,7 @@ static void test_reset_then_close(void)
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
     uint64_t stream_id;
-    int ret;
+    quicly_error_t ret;
 
     /* client sends STOP_SENDING and RESET_STREAM */
     ret = quicly_open_stream(client, &client_stream, 0);
@@ -201,7 +202,7 @@ static void test_send_then_close(void)
 {
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
-    int ret;
+    quicly_error_t ret;
 
     ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
@@ -246,7 +247,7 @@ static void test_reset_after_close(void)
 {
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
-    int ret;
+    quicly_error_t ret;
 
     ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
@@ -293,7 +294,7 @@ static void tiny_stream_window(void)
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
     quicly_stats_t stats;
-    int ret;
+    quicly_error_t ret;
 
     quic_ctx.transport_params.max_stream_data = (quicly_max_stream_data_t){4, 4, 4};
 
@@ -378,7 +379,7 @@ static void test_reset_during_loss(void)
     test_streambuf_t *client_streambuf, *server_streambuf;
     struct iovec reordered_packet;
     uint8_t reordered_packet_buf[quic_ctx.transport_params.max_udp_payload_size];
-    int ret;
+    quicly_error_t ret;
     uint64_t max_data_at_start, tmp;
 
     quic_ctx.transport_params.max_stream_data = (quicly_max_stream_data_t){4, 4, 4};
@@ -532,7 +533,7 @@ static void tiny_connection_window(void)
     quicly_stream_t *client_stream, *server_stream;
     test_streambuf_t *client_streambuf, *server_streambuf;
     size_t i;
-    int ret;
+    quicly_error_t ret;
     char testdata[1025];
 
     quic_ctx.transport_params.max_data = 1024;

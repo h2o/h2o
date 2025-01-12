@@ -70,19 +70,19 @@ extern "C" {
  * Error code used by quicly. The code coalesces the following to an int64_t.
  * * 0..0x2ff: picotls error codes (of type int)
  * * 0x30000..0x400000000002ffff: QUIC application error codes
- * * 0x400000000002ffff..0x800000000002ffff...: QUIC protocol error codes
+ * * 0x4000000000030000..0x800000000002ffff...: QUIC protocol error codes
  * Internal error codes should be allocated from the unused space below 0x30000 (i.e., unused space of picotls error codes);
  * quicly itself uses 0xffxx. `quicly_error_t` is defined as a signed type so that the picotls error code space can be mapped
  * without sign conversion.
  */
 typedef int64_t quicly_error_t;
 
-#define QUICLY_ERROR_IS_QUIC(e) ((uint64_t)(int64_t)(e) - 0x30000u < 0x8000000000000000u)
-#define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) ((uint64_t)(int64_t)(e) - 0x4000000000030000u < 0x4000000000000000u)
-#define QUICLY_ERROR_IS_QUIC_APPLICATION(e) ((uint64_t)(int64_t)(e) - 0x30000u < 0x4000000000000000u)
-#define QUICLY_ERROR_GET_ERROR_CODE(e) (((uint64_t)(int64_t)(e) - 0x30000u) & 0x3fffffffffffffffu)
-#define QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(e) ((int64_t)((uint64_t)(e) + 0x4000000000030000u))
-#define QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(e) ((int64_t)(uint64_t)(e) + 0x30000)
+#define QUICLY_ERROR_IS_QUIC(e) ((uint64_t)(quicly_error_t)(e) - 0x30000u < 0x8000000000000000u)
+#define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) ((uint64_t)(quicly_error_t)(e) - 0x4000000000030000u < 0x4000000000000000u)
+#define QUICLY_ERROR_IS_QUIC_APPLICATION(e) ((uint64_t)(quicly_error_t)(e) - 0x30000u < 0x4000000000000000u)
+#define QUICLY_ERROR_GET_ERROR_CODE(e) (((uint64_t)(quicly_error_t)(e) - 0x30000u) & 0x3fffffffffffffffu)
+#define QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(e) ((quicly_error_t)((uint64_t)(e) + 0x4000000000030000u))
+#define QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(e) ((quicly_error_t)(uint64_t)(e) + 0x30000)
 /**
  * PTLS_ERROR_NO_MEMORY and QUICLY_ERROR_STATE_EXHAUSTION are special error codes that are internal but can be passed to
  * quicly_close. These are converted to QUICLY_TRANSPORT_ERROR_INTERNAL when sent over the wire.

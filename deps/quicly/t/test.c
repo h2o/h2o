@@ -447,7 +447,7 @@ size_t transmit(quicly_conn_t *src, quicly_conn_t *dst)
     uint8_t datagramsbuf[PTLS_ELEMENTSOF(datagrams) * quicly_get_context(src)->transport_params.max_udp_payload_size];
     size_t num_datagrams, i;
     quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(datagrams) * 2];
-    int ret;
+    quicly_error_t ret;
 
     num_datagrams = PTLS_ELEMENTSOF(datagrams);
     ret = quicly_send(src, &destaddr, &srcaddr, datagrams, &num_datagrams, datagramsbuf, sizeof(datagramsbuf));
@@ -687,7 +687,7 @@ static void test_nondecryptable_initial(void)
     struct iovec packet = {.iov_base = packetbuf, .iov_len = sizeof(packetbuf)};
     size_t num_decoded;
     quicly_decoded_packet_t decoded;
-    int ret;
+    quicly_error_t ret;
 
     /* create an Initial packet, with its payload all set to zero */
     memcpy(packetbuf, header, sizeof(header));
@@ -707,7 +707,7 @@ static void test_nondecryptable_initial(void)
 static void test_set_cc(void)
 {
     quicly_conn_t *conn;
-    int ret;
+    quicly_error_t ret;
 
     ret = quicly_connect(&conn, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
                          NULL, NULL);
@@ -805,7 +805,7 @@ static void do_test_migration_during_handshake(int second_flight_from_orig_addre
     uint8_t buf[quic_ctx.transport_params.max_udp_payload_size * 10];
     quicly_decoded_packet_t packets[40];
     size_t num_datagrams, num_packets;
-    int ret;
+    quicly_error_t ret;
 
     /* client send first flight */
     ret = quicly_connect(&client, &quic_ctx, "example.com", (void *)&serveraddr, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
