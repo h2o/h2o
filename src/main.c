@@ -4044,7 +4044,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
 
     /* handle retry, setting `token` to a non-NULL pointer if contains a valid token */
     if (packet->token.len != 0) {
-        int ret;
+        quicly_error_t ret;
         const char *err_desc = NULL;
         if ((ret = quic_decrypt_address_token(&token_buf, packet->token, &err_desc)) == 0) {
             if (validate_token(ctx, &srcaddr->sa, packet->cid.src, packet->cid.dest.encrypted, &token_buf))

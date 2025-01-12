@@ -204,8 +204,8 @@ struct st_h2o_http3_server_stream_t {
     quicly_stream_t *quic;
     struct {
         h2o_buffer_t *buf;
-        int (*handle_input)(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                            int in_generator, const char **err_desc);
+        quicly_error_t (*handle_input)(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
+                                       int in_generator, const char **err_desc);
         uint64_t bytes_left_in_data_frame;
     } recvbuf;
     struct {
@@ -262,11 +262,11 @@ struct st_h2o_http3_server_stream_t {
 static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cbdata), void *cbdata);
 static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_idle_connection(h2o_conn_t *_conn);
-static void on_stream_destroy(quicly_stream_t *qs, int err);
-static int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                      int in_generator, const char **err_desc);
-static int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                    int in_generator, const char **err_desc);
+static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err);
+static quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
+                                                 const uint8_t *src_end, int in_generator, const char **err_desc);
+static quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
+                                               const uint8_t *src_end, int in_generator, const char **err_desc);
 
 static const h2o_sendvec_callbacks_t self_allocated_vec_callbacks = {h2o_sendvec_read_raw, NULL},
                                      immutable_vec_callbacks = {h2o_sendvec_read_raw, NULL};
@@ -516,8 +516,8 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
  * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that (see
  * handle_priority_update_frame).
  */
-static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, int stop_sending_code, int reset_code, int in_generator,
-                            int reset_only_if_open)
+static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_error_t stop_sending_code,
+                            quicly_error_t reset_code, int in_generator, int reset_only_if_open)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
@@ -866,7 +866,7 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
     return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
 }
 
-void on_stream_destroy(quicly_stream_t *qs, int err)
+void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -1047,7 +1047,7 @@ Error:
     shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0, 0);
 }
 
-static void on_send_stop(quicly_stream_t *qs, int err)
+static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
@@ -1070,7 +1070,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
         if (bytes_available != 0) {
             const uint8_t *src = (const uint8_t *)stream->recvbuf.buf->bytes, *src_end = src + bytes_available;
             do {
-                int err;
+                quicly_error_t err;
                 const char *err_desc = NULL;
                 if ((err = stream->recvbuf.handle_input(stream, &src, src_end, in_generator, &err_desc)) != 0) {
                     if (err == H2O_HTTP3_ERROR_INCOMPLETE) {
@@ -1161,7 +1161,7 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
     handle_buffered_input(stream, 0);
 }
 
-static void on_receive_reset(quicly_stream_t *qs, int err)
+static void on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
@@ -1281,11 +1281,11 @@ static void run_delayed(h2o_timer_t *timer)
     } while (made_progress);
 }
 
-int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                               int in_generator, const char **err_desc)
+quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
+                                          int in_generator, const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
-    int ret;
+    quicly_error_t ret;
 
     /* read and ignore unknown frames */
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
@@ -1302,8 +1302,8 @@ int handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, cons
     return 0;
 }
 
-static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
-                                            const uint8_t *src_end, int in_generator, const char **err_desc)
+static quicly_error_t handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
+                                                       const uint8_t *src_end, int in_generator, const char **err_desc)
 {
     size_t bytes_avail = src_end - *src;
 
@@ -1325,11 +1325,11 @@ static int handle_input_expect_data_payload(struct st_h2o_http3_server_stream_t 
     return 0;
 }
 
-int handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                             int in_generator, const char **err_desc)
+quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
+                                        int in_generator, const char **err_desc)
 {
     h2o_http3_read_frame_t frame;
-    int ret;
+    quicly_error_t ret;
 
     /* read frame */
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
@@ -1411,19 +1411,20 @@ static int handle_input_expect_headers_process_connect(struct st_h2o_http3_serve
     return handle_input_expect_headers_process_request_immediately(stream, err_desc);
 }
 
-static int handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
-                                       int in_generator, const char **err_desc)
+static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
+                                                  const uint8_t *src_end, int in_generator, const char **err_desc)
 {
     assert(!in_generator); /* this function is processing headers (before generators get assigned), not trailers */
 
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     h2o_http3_read_frame_t frame;
-    int header_exists_map = 0, ret;
+    int header_exists_map = 0;
     h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
     h2o_iovec_t datagram_flow_id_field = {};
     uint64_t datagram_flow_id = UINT64_MAX;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
+    quicly_error_t ret;
 
     /* read the HEADERS frame (or a frame that precedes that) */
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
@@ -1770,7 +1771,8 @@ static void do_send_informational(h2o_ostream_t *_ostr, h2o_req_t *_req)
     finalize_do_send(stream);
 }
 
-static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn, const h2o_http3_priority_update_frame_t *frame)
+static quicly_error_t handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn,
+                                                   const h2o_http3_priority_update_frame_t *frame)
 {
     if (frame->element_is_push)
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
@@ -1796,7 +1798,7 @@ static int handle_priority_update_frame(struct st_h2o_http3_server_conn_t *conn,
 static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, const uint8_t *payload, size_t len)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
-    int err;
+    quicly_error_t err;
     const char *err_desc = NULL;
 
     if (!h2o_http3_has_received_settings(&conn->h3)) {
@@ -1840,7 +1842,7 @@ Fail:
     h2o_quic_close_connection(&conn->h3.super, err, err_desc);
 }
 
-static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
+static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
                                                         on_send_stop,      on_receive,    on_receive_reset};
@@ -1922,13 +1924,14 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
     return 0;
 }
 
-static int scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
+static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
 #define HAS_DATA_TO_SEND()                                                                                                         \
     (conn->scheduler.uni.active != 0 || conn->scheduler.reqs.active.smallest_urgency < H2O_ABSPRIO_NUM_URGENCY_LEVELS)
 
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qc));
-    int had_data_to_send = HAS_DATA_TO_SEND(), ret = 0;
+    int had_data_to_send = HAS_DATA_TO_SEND();
+    quicly_error_t ret = 0;
 
     while (quicly_can_send_data(conn->h3.super.quic, s)) {
         /* The strategy is:
@@ -2033,7 +2036,7 @@ Exit:
 #undef HAS_DATA_TO_SEND
 }
 
-static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *qs)
+static void scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *qs)
 {
     struct st_h2o_http3_server_conn_t *conn =
         H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
@@ -2069,7 +2072,7 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
     } else {
         struct st_h2o_http3_server_stream_t *stream = qs->data;
         if (stream->proceed_while_sending)
-            return 0;
+            return;
         switch (new_state) {
         case DEACTIVATE:
             req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
@@ -2082,8 +2085,6 @@ static int scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, qu
             break;
         }
     }
-
-    return 0;
 }
 
 static quicly_stream_scheduler_t scheduler = {scheduler_can_send, scheduler_do_send, scheduler_update_state};
@@ -2235,7 +2236,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     /* accept connection */
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
     quicly_conn_t *qconn;
-    int accept_ret = quicly_accept(
+    quicly_error_t accept_ret = quicly_accept(
         &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, ctx->super.next_cid,
         &conn->handshake_properties,
         &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
@@ -2362,7 +2363,7 @@ struct foreach_request_ctx {
     void *cbdata;
 };
 
-static int foreach_request_per_conn(void *_ctx, quicly_stream_t *qs)
+static int64_t foreach_request_per_conn(void *_ctx, quicly_stream_t *qs)
 {
     struct foreach_request_ctx *ctx = _ctx;
 
