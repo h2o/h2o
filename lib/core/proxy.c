@@ -454,8 +454,11 @@ static void do_send_from_pipe(struct rp_generator_t *self)
 
     static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
     h2o_sendvec_t vec = {.callbacks = &callbacks};
-    if ((vec.len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
+    if ((vec.len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
+        if (send_state == H2O_SEND_STATE_FINAL)
+            send_state = H2O_SEND_STATE_IN_PROGRESS;
         vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
+    }
     vec.cb_arg[0] = (uint64_t)self;
     vec.cb_arg[1] = 0; /* unused */
 
