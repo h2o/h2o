@@ -460,7 +460,7 @@ static void test_reset_during_loss(void)
 
 static uint16_t test_close_error_code;
 
-static void test_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, int err, uint64_t frame_type,
+static void test_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type,
                                   const char *reason, size_t reason_len)
 {
     ok(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
@@ -478,7 +478,7 @@ static void test_close(void)
     uint8_t datagram_buf[quic_ctx.transport_params.max_udp_payload_size];
     size_t num_datagrams;
     int64_t client_timeout, server_timeout;
-    int ret;
+    quicly_error_t ret;
 
     quic_ctx.closed_by_remote = &closed_by_remote;
 

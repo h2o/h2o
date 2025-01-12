@@ -117,17 +117,17 @@ typedef struct st_quicly_stream_scheduler_t {
      * Called by quicly to emit stream data.  The scheduler should repeatedly choose a stream and call `quicly_send_stream` until
      * `quicly_can_send_stream` returns false.
      */
-    int (*do_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, quicly_send_context_t *s);
+    quicly_error_t (*do_send)(struct st_quicly_stream_scheduler_t *sched, quicly_conn_t *conn, quicly_send_context_t *s);
     /**
      *
      */
-    int (*update_state)(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *stream);
+    void (*update_state)(struct st_quicly_stream_scheduler_t *sched, quicly_stream_t *stream);
 } quicly_stream_scheduler_t;
 
 /**
  * called when stream is being open. Application is expected to create it's corresponding state and tie it to stream->data.
  */
-QUICLY_CALLBACK_TYPE(int, stream_open, quicly_stream_t *stream);
+QUICLY_CALLBACK_TYPE(quicly_error_t, stream_open, quicly_stream_t *stream);
 /**
  *
  */
@@ -135,7 +135,7 @@ QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iov
 /**
  * called when the connection is closed by remote peer
  */
-QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, int err, uint64_t frame_type, const char *reason,
+QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, const char *reason,
                      size_t reason_len);
 /**
  * Returns current time in milliseconds. The returned value MUST monotonically increase (i.e., it is the responsibility of the
@@ -145,11 +145,11 @@ QUICLY_CALLBACK_TYPE0(int64_t, now);
 /**
  * called when a NEW_TOKEN token is received on a connection
  */
-QUICLY_CALLBACK_TYPE(int, save_resumption_token, quicly_conn_t *conn, ptls_iovec_t token);
+QUICLY_CALLBACK_TYPE(quicly_error_t, save_resumption_token, quicly_conn_t *conn, ptls_iovec_t token);
 /**
  *
  */
-QUICLY_CALLBACK_TYPE(int, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
+QUICLY_CALLBACK_TYPE(quicly_error_t, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
                      quicly_address_token_plaintext_t *token);
 /**
  * called to initialize a congestion controller for a new connection.
@@ -764,7 +764,7 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * called when the stream is destroyed
      */
-    void (*on_destroy)(quicly_stream_t *stream, int err);
+    void (*on_destroy)(quicly_stream_t *stream, quicly_error_t err);
     /**
      * called whenever data can be retired from the send buffer, specifying the amount that can be newly removed
      */
@@ -781,7 +781,7 @@ typedef struct st_quicly_stream_callbacks_t {
      * called when a STOP_SENDING frame is received.  Do not call `quicly_reset_stream` in response.  The stream will be
      * automatically reset by quicly.
      */
-    void (*on_send_stop)(quicly_stream_t *stream, int err);
+    void (*on_send_stop)(quicly_stream_t *stream, quicly_error_t err);
     /**
      * called when data is newly received.  `off` is the offset within the buffer (the beginning position changes as the application
      * calls `quicly_stream_sync_recvbuf`.  Applications should consult `quicly_stream_t::recvstate` to see if it has contiguous
@@ -791,7 +791,7 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * called when a RESET_STREAM frame is received
      */
-    void (*on_receive_reset)(quicly_stream_t *stream, int err);
+    void (*on_receive_reset)(quicly_stream_t *stream, quicly_error_t err);
 } quicly_stream_callbacks_t;
 
 struct st_quicly_stream_t {
@@ -1063,11 +1063,11 @@ struct sockaddr *quicly_get_peername(quicly_conn_t *conn);
 /**
  *
  */
-int quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats);
+quicly_error_t quicly_get_stats(quicly_conn_t *conn, quicly_stats_t *stats);
 /**
  *
  */
-int quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate);
+quicly_error_t quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *delivery_rate);
 /**
  *
  */
@@ -1093,7 +1093,7 @@ void quicly_free(quicly_conn_t *conn);
  * error; indicating idle close).  An application should continue calling quicly_receive and quicly_send, until they return
  * QUICLY_ERROR_FREE_CONNECTION.  At this point, it is should call quicly_free.
  */
-int quicly_close(quicly_conn_t *conn, int err, const char *reason_phrase);
+quicly_error_t quicly_close(quicly_conn_t *conn, quicly_error_t err, const char *reason_phrase);
 /**
  *
  */
@@ -1122,7 +1122,7 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s);
  * Sends data of given stream.  Called by stream scheduler.  Only streams that can send some data or EOS should be specified.  It is
  * the responsibility of the stream scheduler to maintain a list of such streams.
  */
-int quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
+quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
  * Builds a Version Negotiation packet. The generated packet might include a greasing version.
  * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
@@ -1133,8 +1133,8 @@ size_t quicly_send_version_negotiation(quicly_context_t *ctx, ptls_iovec_t dest_
 /**
  *
  */
-int quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
-                                   uint64_t *value);
+quicly_error_t quicly_retry_calc_cidpair_hash(ptls_hash_algorithm_t *sha256, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
+                                              uint64_t *value);
 /**
  * Builds a UDP datagram containing a Retry packet.
  * @param retry_aead_cache  pointer to `ptls_aead_context_t *` that the function can store a AEAD context for future reuse. The
@@ -1161,8 +1161,8 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  * @return 0 if successful, otherwise an error. When an error is returned, the caller must call `quicly_close` to discard the
  *         connection context.
  */
-int quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams, size_t *num_datagrams,
-                void *buf, size_t bufsize);
+quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
+                           size_t *num_datagrams, void *buf, size_t bufsize);
 /**
  * returns ECN bits to be set for the packets built by the last invocation of `quicly_send`
  */
@@ -1179,11 +1179,12 @@ size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, v
 /**
  *
  */
-int quicly_send_resumption_token(quicly_conn_t *conn);
+quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn);
 /**
  *
  */
-int quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr, quicly_decoded_packet_t *packet);
+quicly_error_t quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr,
+                              quicly_decoded_packet_t *packet);
 /**
  * consults if the incoming packet identified by (dest_addr, src_addr, decoded) belongs to the given connection
  */
@@ -1214,18 +1215,18 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  * pre-fills the vector with an unpredictable value (i.e. random), then calls this function to set the stateless reset token to the
  * value supplied by peer.
  */
-int quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
-                                           quicly_cid_t *initial_scid, quicly_cid_t *retry_scid, void *stateless_reset_token,
-                                           const uint8_t *src, const uint8_t *end);
+quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
+                                                      quicly_cid_t *initial_scid, quicly_cid_t *retry_scid,
+                                                      void *stateless_reset_token, const uint8_t *src, const uint8_t *end);
 /**
  * Initiates a new connection.
  * @param new_cid the CID to be used for the connection. path_id is ignored.
  * @param appdata initial value to be set to `*quicly_get_data(conn)`
  */
-int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
-                   struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
-                   ptls_handshake_properties_t *handshake_properties, const quicly_transport_parameters_t *resumed_transport_params,
-                   void *appdata);
+quicly_error_t quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *server_name, struct sockaddr *dest_addr,
+                              struct sockaddr *src_addr, const quicly_cid_plaintext_t *new_cid, ptls_iovec_t address_token,
+                              ptls_handshake_properties_t *handshake_properties,
+                              const quicly_transport_parameters_t *resumed_transport_params, void *appdata);
 /**
  * accepts a new connection
  * @param new_cid        The CID to be used for the connection. When an error is being returned, the application can reuse the CID
@@ -1236,9 +1237,10 @@ int quicly_connect(quicly_conn_t **conn, quicly_context_t *ctx, const char *serv
  *                       validated.
  * @param appdata        initial value to be set to `*quicly_get_data(conn)`
  */
-int quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
-                  quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                  const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties, void *appdata);
+quicly_error_t quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct sockaddr *dest_addr, struct sockaddr *src_addr,
+                             quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
+                             const quicly_cid_plaintext_t *new_cid, ptls_handshake_properties_t *handshake_properties,
+                             void *appdata);
 /**
  *
  */
@@ -1256,7 +1258,7 @@ quicly_stream_id_t quicly_get_ingress_max_streams(quicly_conn_t *conn, int uni);
  * Iterates through each stream. When the callback returns a non-zero value, bails out from the iteration, returning the returned
  * value.
  */
-int quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int (*cb)(void *thunk, quicly_stream_t *stream));
+int64_t quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int64_t (*cb)(void *thunk, quicly_stream_t *stream));
 /**
  *
  */
@@ -1264,7 +1266,7 @@ quicly_stream_t *quicly_get_stream(quicly_conn_t *conn, quicly_stream_id_t strea
 /**
  *
  */
-int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidirectional);
+quicly_error_t quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidirectional);
 /**
  * This function returns a stream that is already open, or if the given ID refers to a stream that can be opened by the peer but is
  * yet-to-be opened, the functions opens that stream and returns it. Otherwise, `*stream` is set to NULL.
@@ -1273,15 +1275,15 @@ int quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidir
  * initiated stream for which the peer has not yet sent anything.
  * Invocation of this function might open not only the stream that is referred to by the `stream_id` but also other streams.
  */
-int quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream);
+quicly_error_t quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id, quicly_stream_t **stream);
 /**
  *
  */
-void quicly_reset_stream(quicly_stream_t *stream, int err);
+void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err);
 /**
  *
  */
-void quicly_request_stop(quicly_stream_t *stream, int err);
+void quicly_request_stop(quicly_stream_t *stream, quicly_error_t err);
 /**
  *
  */
@@ -1348,15 +1350,15 @@ void quicly_amend_ptls_context(ptls_context_t *ptls);
  *                      the identifier of the AEAD key being used.
  * @param plaintext     the token to be encrypted
  */
-int quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
-                                 size_t start_off, const quicly_address_token_plaintext_t *plaintext);
+quicly_error_t quicly_encrypt_address_token(void (*random_bytes)(void *, size_t), ptls_aead_context_t *aead, ptls_buffer_t *buf,
+                                            size_t start_off, const quicly_address_token_plaintext_t *plaintext);
 /**
  * Decrypts an address token.
  * If decryption succeeds, returns zero. If the token is unusable due to decryption failure, returns PTLS_DECODE_ERROR. If the token
  * is unusable and the connection should be reset, returns QUICLY_ERROR_INVALID_TOKEN.
  */
-int quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token_plaintext_t *plaintext, const void *src,
-                                 size_t len, size_t prefix_len, const char **err_desc);
+quicly_error_t quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_address_token_plaintext_t *plaintext, const void *src,
+                                            size_t len, size_t prefix_len, const char **err_desc);
 /**
  * Builds authentication data for TLS session ticket. 0-RTT can be accepted only when the auth_data of the original connection and
  * the new connection are identical.
@@ -1381,7 +1383,7 @@ char *quicly_hexdump(const uint8_t *bytes, size_t len, size_t indent);
 /**
  *
  */
-void quicly_stream_noop_on_destroy(quicly_stream_t *stream, int err);
+void quicly_stream_noop_on_destroy(quicly_stream_t *stream, quicly_error_t err);
 /**
  *
  */
@@ -1393,7 +1395,7 @@ void quicly_stream_noop_on_send_emit(quicly_stream_t *stream, size_t off, void *
 /**
  *
  */
-void quicly_stream_noop_on_send_stop(quicly_stream_t *stream, int err);
+void quicly_stream_noop_on_send_stop(quicly_stream_t *stream, quicly_error_t err);
 /**
  *
  */
@@ -1401,7 +1403,7 @@ void quicly_stream_noop_on_receive(quicly_stream_t *stream, size_t off, const vo
 /**
  *
  */
-void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, int err);
+void quicly_stream_noop_on_receive_reset(quicly_stream_t *stream, quicly_error_t err);
 
 extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
 
