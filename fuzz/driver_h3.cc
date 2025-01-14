@@ -149,6 +149,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 
         conn_callbacks.super.destroy_connection = on_destroy_connection;
 
+        ptls_log._generation = 0; /* disable tracing */
+
         quic_init_context(&server_ctx.super, ctx.loop);
         h2o_http3_server_amend_quicly_context(&config, server_ctx.super.quic);
         if (pthread_create(&tupstream, NULL, upstream_thread, dirname) != 0) {
@@ -166,7 +168,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     ++num_connections;
     sent_response = false;
     h2o_http3_conn_t *conn = h2o_http3_server_accept(&server_ctx, &dst_addr, &src_addr, NULL /* initial_packet */,
-                                                     NULL /* address_token */, 0 /* skip_tracing */, &conn_callbacks);
+                                                     NULL /* address_token */, &conn_callbacks);
     assert(conn != NULL);
     assert(&conn->super != &h2o_quic_accept_conn_decryption_failed);
     quicly_stream_t *stream;

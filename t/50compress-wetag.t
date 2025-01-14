@@ -68,4 +68,6 @@ subtest "gzip + weak" => sub {
 };
 
 $upstream_listener->close();
+undef $server;
+
 done_testing();

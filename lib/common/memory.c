@@ -189,7 +189,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
 
 void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
-#define ALIGN_TO(x, a) (((x) + (a)-1) & ~((a)-1))
+#define ALIGN_TO(x, a) (((x) + (a) - 1) & ~((a) - 1))
     void *ret;
 
     if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {

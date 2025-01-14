@@ -91,4 +91,6 @@ subtest "HTTP/2" => sub {
 };
 
 $socket->close();
+undef $server;
+
 done_testing();

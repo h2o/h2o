@@ -150,15 +150,12 @@ int main(int argc, char **argv)
     ptls_minicrypto_init_secp256r1sha256_sign_certificate(&sign_certificate,
                                                           ptls_iovec_init(SECP256R1_PRIVATE_KEY, SECP256R1_PRIVATE_KEY_SIZE));
 
-    ptls_context_t ctxbuf = {ptls_minicrypto_random_bytes,
-                             &ptls_get_time,
-                             ptls_minicrypto_key_exchanges,
-                             ptls_minicrypto_cipher_suites_all,
-                             {&cert, 1},
-                             {{NULL}},
-                             NULL,
-                             NULL,
-                             &sign_certificate.super};
+    ptls_context_t ctxbuf = {.random_bytes = ptls_minicrypto_random_bytes,
+                             .get_time = &ptls_get_time,
+                             .key_exchanges = ptls_minicrypto_key_exchanges,
+                             .cipher_suites = ptls_minicrypto_cipher_suites_all,
+                             .certificates = {&cert, 1},
+                             .sign_certificate = &sign_certificate.super};
     ctx = ctx_peer = &ctxbuf;
     ADD_FFX_AES128_ALGORITHMS(minicrypto);
     ADD_FFX_CHACHA20_ALGORITHMS(minicrypto);

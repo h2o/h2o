@@ -58,31 +58,31 @@ static void test_extension_bitmap(void)
 
 static void test_select_cipher(void)
 {
-#define C(x) ((x) >> 8) & 0xff, (x)&0xff
+#define C(x) ((x) >> 8) & 0xff, (x) & 0xff
 
     ptls_cipher_suite_t *selected;
 
     {
         ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input; /* `input[0]` is preferable, but prohibited by MSVC */
-        ok(select_cipher(&selected, candidates, &input, &input, 0, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
+        ok(select_cipher(&selected, candidates, &input, &input, 0, 0, 0) == PTLS_ALERT_HANDSHAKE_FAILURE);
     }
 
     {
         ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
     }
 
     {
         ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_chacha20poly1305sha256, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
     }
 
@@ -90,9 +90,9 @@ static void test_select_cipher(void)
         ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes128gcmsha256, &ptls_minicrypto_aes256gcmsha384,
                                              &ptls_minicrypto_chacha20poly1305sha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
     }
 
@@ -101,11 +101,11 @@ static void test_select_cipher(void)
                                              &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256),
                                         C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes256gcmsha384);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_chacha20poly1305sha256);
     }
 
@@ -114,9 +114,9 @@ static void test_select_cipher(void)
                                              &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256),
                                         C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_aes256gcmsha384);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_aes256gcmsha384);
     }
 
@@ -124,13 +124,13 @@ static void test_select_cipher(void)
         ptls_cipher_suite_t *candidates[] = {&ptls_minicrypto_aes256gcmsha384, &ptls_minicrypto_aes128gcmsha256, NULL};
         static const uint8_t input[] = {C(PTLS_CIPHER_SUITE_CHACHA20_POLY1305_SHA256), C(PTLS_CIPHER_SUITE_AES_128_GCM_SHA256),
                                         C(PTLS_CIPHER_SUITE_AES_256_GCM_SHA384)};
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes256gcmsha384);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 1, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_aes256gcmsha384);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 0, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
-        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1) == 0);
+        ok(select_cipher(&selected, candidates, input, input + sizeof(input), 0, 1, 0) == 0);
         ok(selected == &ptls_minicrypto_aes128gcmsha256);
     }
 
@@ -1314,17 +1314,19 @@ static int on_copy_ticket(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encry
     return 0;
 }
 
-static ptls_iovec_t saved_ticket = {NULL};
+static ptls_iovec_t saved_tickets[8] = {{NULL}};
 
 static int on_save_ticket(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
 {
-    saved_ticket.base = malloc(src.len);
-    memcpy(saved_ticket.base, src.base, src.len);
-    saved_ticket.len = src.len;
+    memmove(saved_tickets + 1, saved_tickets, sizeof(saved_tickets[0]) * (PTLS_ELEMENTSOF(saved_tickets) - 1));
+    saved_tickets[0].base = malloc(src.len);
+    memcpy(saved_tickets[0].base, src.base, src.len);
+    saved_tickets[0].len = src.len;
     return 0;
 }
 
-static void test_resumption_impl(int different_preferred_key_share, int require_client_authentication, int transfer_session)
+static void test_resumption_impl(int different_preferred_key_share, int require_client_authentication, int use_ticket_request,
+                                 int transfer_session)
 {
     assert(ctx->key_exchanges[0]->id == ctx_peer->key_exchanges[0]->id);
     assert(ctx->key_exchanges[1] == NULL);
@@ -1335,6 +1337,10 @@ static void test_resumption_impl(int different_preferred_key_share, int require_
 
     if (different_preferred_key_share)
         ctx->key_exchanges = different_key_exchanges;
+    if (use_ticket_request) {
+        ctx->ticket_requests.client.new_session_count = 3;
+        ctx->ticket_requests.client.resumption_count = 2;
+    }
 
     ptls_encrypt_ticket_t et = {on_copy_ticket};
     ptls_save_ticket_t st = {on_save_ticket};
@@ -1343,41 +1349,54 @@ static void test_resumption_impl(int different_preferred_key_share, int require_
     assert(ctx_peer->max_early_data_size == 0);
     assert(ctx_peer->encrypt_ticket == NULL);
     assert(ctx_peer->save_ticket == NULL);
-    saved_ticket = ptls_iovec_init(NULL, 0);
+    memset(saved_tickets, 0, sizeof(saved_tickets));
 
     ctx_peer->ticket_lifetime = 86400;
     ctx_peer->max_early_data_size = 8192;
     ctx_peer->encrypt_ticket = &et;
     ctx->save_ticket = &st;
 
-    test_handshake(saved_ticket, different_preferred_key_share ? TEST_HANDSHAKE_2RTT : TEST_HANDSHAKE_1RTT, 1, 0, 0,
+    test_handshake(ptls_iovec_init(NULL, 0), different_preferred_key_share ? TEST_HANDSHAKE_2RTT : TEST_HANDSHAKE_1RTT, 1, 0, 0,
                    transfer_session);
     ok(server_sc_callcnt == 1);
-    ok(saved_ticket.base != NULL);
+    if (use_ticket_request) {
+        /* should have received 3 tickets */
+        ok(saved_tickets[2].base != NULL);
+        ok(saved_tickets[3].base == NULL);
+    } else {
+        ok(saved_tickets[0].base != NULL);
+    }
 
     /* psk using saved ticket */
-    test_handshake(saved_ticket, TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication, transfer_session);
+    test_handshake(saved_tickets[0], TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication, transfer_session);
     ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
     ok(client_sc_callcnt == require_client_authentication);
+    if (use_ticket_request && !require_client_authentication) {
+        /* should have received 2 tickets */
+        ok(saved_tickets[4].base != NULL);
+        ok(saved_tickets[5].base == NULL);
+    }
 
     /* 0-rtt psk using saved ticket */
-    test_handshake(saved_ticket, TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication, transfer_session);
+    test_handshake(saved_tickets[0], TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication, transfer_session);
     ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
     ok(client_sc_callcnt == require_client_authentication);
 
     ctx->require_dhe_on_psk = 1;
 
     /* psk-dhe using saved ticket */
-    test_handshake(saved_ticket, TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication, transfer_session);
+    test_handshake(saved_tickets[0], TEST_HANDSHAKE_1RTT, 1, 0, require_client_authentication, transfer_session);
     ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
     ok(client_sc_callcnt == require_client_authentication);
 
     /* 0-rtt psk-dhe using saved ticket */
-    test_handshake(saved_ticket, TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication, transfer_session);
+    test_handshake(saved_tickets[0], TEST_HANDSHAKE_EARLY_DATA, 1, 0, require_client_authentication, transfer_session);
     ok(server_sc_callcnt == require_client_authentication); /* client authentication turns off resumption */
     ok(client_sc_callcnt == require_client_authentication);
 
     ctx->require_dhe_on_psk = 0;
+    ctx->ticket_requests.client.new_session_count = 0;
+    ctx->ticket_requests.client.resumption_count = 0;
     ctx_peer->ticket_lifetime = 0;
     ctx_peer->max_early_data_size = 0;
     ctx_peer->encrypt_ticket = NULL;
@@ -1385,24 +1404,11 @@ static void test_resumption_impl(int different_preferred_key_share, int require_
     ctx->key_exchanges = key_exchanges_orig;
 }
 
-static void test_resumption(void)
+static void test_resumption(int different_preferred_key_share, int require_client_authentication)
 {
-    test_resumption_impl(0, 0, 0);
-    test_resumption_impl(0, 0, 1);
-}
-
-static void test_resumption_different_preferred_key_share(void)
-{
-    if (ctx == ctx_peer)
-        return;
-    test_resumption_impl(1, 0, 0);
-    test_resumption_impl(0, 0, 1);
-}
-
-static void test_resumption_with_client_authentication(void)
-{
-    test_resumption_impl(0, 0, 0);
-    test_resumption_impl(0, 1, 1);
+    subtest("basic", test_resumption_impl, different_preferred_key_share, require_client_authentication, 0, 0);
+    subtest("transfer-session", test_resumption_impl, different_preferred_key_share, require_client_authentication, 0, 1);
+    subtest("ticket-request", test_resumption_impl, different_preferred_key_share, require_client_authentication, 1, 0);
 }
 
 static void test_async_sign_certificate(void)
@@ -1619,6 +1625,178 @@ static void test_ech_config_mismatch(void)
     free(retry_configs.base);
 }
 
+static void do_test_pre_shared_key(int mode)
+{
+    ptls_context_t ctx_client = *ctx;
+    ptls_key_exchange_algorithm_t *alternate_keyex[3];
+    size_t client_max_early_data_size = 0;
+    ptls_handshake_properties_t client_prop = {.client.max_early_data_size = &client_max_early_data_size};
+
+    switch (mode) {
+    case 0: /* no keyex */
+        ctx_client.key_exchanges = NULL;
+        break;
+    case 1: /* keyex match */
+        break;
+    case 2: /* server has no keyex */
+        break;
+    case 3: /* keyex mismatch */
+        if (!(ctx_client.key_exchanges[0] != NULL && ctx_client.key_exchanges[1] != NULL)) {
+            note("keyex mismatch test requires two key exchange algorithms");
+            return;
+        }
+        alternate_keyex[0] = ctx_client.key_exchanges[1];
+        alternate_keyex[1] = ctx_client.key_exchanges[0];
+        alternate_keyex[2] = NULL;
+        ctx_client.key_exchanges = alternate_keyex;
+        break;
+    case 4: /* negotiate */
+        client_prop.client.negotiate_before_key_exchange = 1;
+        break;
+    case -1: /* fail:requires-psk-dhe */
+        ctx_client.key_exchanges = NULL;
+        break;
+    default:
+        assert(!"FIXME");
+    }
+
+    ctx_client.max_early_data_size = 16384;
+    assert(ctx_client.pre_shared_key.identity.len == 0 && ctx_client.pre_shared_key.secret.len == 0);
+    ctx_client.pre_shared_key.identity = ptls_iovec_init("", 1);
+    ctx_client.pre_shared_key.secret = ptls_iovec_init("hello world", 11);
+    for (size_t i = 0; ctx_client.cipher_suites[i] != NULL; ++i) {
+        if (strcmp(ctx_client.cipher_suites[i]->hash->name, "sha256") == 0) {
+            ctx_client.pre_shared_key.hash = ctx_client.cipher_suites[i]->hash;
+            break;
+        }
+    }
+    assert(ctx_client.pre_shared_key.hash != NULL);
+
+    ptls_context_t ctx_server = ctx_client;
+    switch (mode) {
+    case 2: /* server has no keyex */
+        ctx_server.key_exchanges = NULL;
+        break;
+    case -1: /* fail:requires-psk-dhe */
+        ctx_server.require_dhe_on_psk = 1;
+        break;
+    default:
+        break;
+    }
+
+    ptls_t *client = ptls_new(&ctx_client, 0), *server = ptls_new(&ctx_server, 1);
+    ptls_buffer_t cbuf, sbuf, decbuf;
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(&sbuf, "", 0);
+    ptls_buffer_init(&decbuf, "", 0);
+
+    /* [client] send CH and early data */
+    int ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_prop);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(client_prop.client.early_data_acceptance == PTLS_EARLY_DATA_ACCEPTANCE_UNKNOWN);
+    ok(client_max_early_data_size == SIZE_MAX);
+    ret = ptls_send(client, &cbuf, "hello", 5);
+    ok(ret == 0);
+
+    /* [server] read CH and generate up to ServerFinished */
+    size_t consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    if (mode < 0) {
+        ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+        goto Exit;
+    }
+    ok(consumed <= cbuf.off);
+    memmove(cbuf.base, cbuf.base + consumed, cbuf.off - consumed);
+    cbuf.off -= consumed;
+    if (mode >= 3) {
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ok(cbuf.off == 0);
+        consumed = sbuf.off;
+        ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, &client_prop);
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ok(client_prop.client.early_data_acceptance == PTLS_EARLY_DATA_REJECTED);
+        ok(consumed == sbuf.off);
+        sbuf.off = 0;
+        consumed = cbuf.off;
+        ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+        ok(ret == 0);
+        ok(consumed == cbuf.off);
+        cbuf.off = 0;
+    } else {
+        ok(ret == 0);
+        /* [server] read early data */
+        consumed = cbuf.off;
+        ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+        ok(ret == 0);
+        ok(consumed == cbuf.off);
+        cbuf.off = 0;
+        ok(decbuf.off == 5);
+        ok(memcmp(decbuf.base, "hello", 5) == 0);
+        decbuf.off = 0;
+    }
+
+    /* [server] write 0.5-RTT data */
+    ret = ptls_send(server, &sbuf, "hi", 2);
+    ok(ret == 0);
+
+    /* [client] read up to ServerFinished */
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, &client_prop);
+    ok(ret == 0);
+    ok(client_prop.client.early_data_acceptance == (mode < 3 ? PTLS_EARLY_DATA_ACCEPTED : PTLS_EARLY_DATA_REJECTED));
+    ok(consumed < sbuf.off);
+    memmove(sbuf.base, sbuf.base + consumed, sbuf.off - consumed);
+    sbuf.off -= consumed;
+
+    /* [client] read 0.5-RTT data */
+    consumed = sbuf.off;
+    ret = ptls_receive(client, &decbuf, sbuf.base, &consumed);
+    ok(ret == 0);
+    ok(consumed == sbuf.off);
+    sbuf.off = 0;
+    ok(decbuf.off == 2);
+    ok(memcmp(decbuf.base, "hi", 2) == 0);
+    decbuf.off = 0;
+
+    /* [client] write 1-RTT data */
+    ret = ptls_send(client, &cbuf, "bye", 3);
+    ok(ret == 0);
+
+    /* [server] read ClientFinished and 1-RTT data */
+    ok(!ptls_handshake_is_complete(server));
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+    ok(ret == 0);
+    ok(ptls_handshake_is_complete(server));
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+    ok(decbuf.off == 3);
+    ok(memcmp(decbuf.base, "bye", 3) == 0);
+
+Exit:
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&decbuf);
+    ptls_free(client);
+    ptls_free(server);
+}
+
+static void test_pre_shared_key(void)
+{
+    if (ctx != ctx_peer) {
+        note("psk tests use `ctx` only");
+        return;
+    }
+
+    subtest("key-share:no", do_test_pre_shared_key, 0);
+    subtest("key-share:yes", do_test_pre_shared_key, 1);
+    subtest("key-share:server-wo-key-share", do_test_pre_shared_key, 2);
+    subtest("key-share:mismatch", do_test_pre_shared_key, 3);
+    subtest("key-share:negotiate", do_test_pre_shared_key, 4);
+
+    subtest("fail:requires-psk-dhe", do_test_pre_shared_key, -1);
+}
+
 typedef uint8_t traffic_secrets_t[2 /* is_enc */][4 /* epoch */][PTLS_MAX_DIGEST_SIZE /* octets */];
 
 static int on_update_traffic_key(ptls_update_traffic_key_t *self, ptls_t *tls, int is_enc, size_t epoch, const void *secret)
@@ -1672,7 +1850,7 @@ static void test_handshake_api(void)
     ctx_peer->ticket_lifetime = 86400;
     ctx_peer->max_early_data_size = 8192;
 
-    saved_ticket = ptls_iovec_init(NULL, 0);
+    memset(saved_tickets, 0, sizeof(saved_tickets));
 
     ptls_buffer_init(&cbuf, "", 0);
     ptls_buffer_init(&sbuf, "", 0);
@@ -1721,7 +1899,7 @@ static void test_handshake_api(void)
 
     /* 0-RTT resumption */
     size_t max_early_data_size = 0;
-    ptls_handshake_properties_t client_hs_prop = {{{{NULL}, saved_ticket, &max_early_data_size}}};
+    ptls_handshake_properties_t client_hs_prop = {{{{NULL}, saved_tickets[0], &max_early_data_size}}};
     client = ptls_new(ctx, 0);
     *ptls_get_data_ptr(client) = &client_secrets;
     server = ptls_new(ctx_peer, 1);
@@ -1763,7 +1941,7 @@ static void test_handshake_api(void)
 
     /* 0-RTT rejection */
     ctx_peer->max_early_data_size = 0;
-    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_tickets[0], &max_early_data_size}}};
     client = ptls_new(ctx, 0);
     *ptls_get_data_ptr(client) = &client_secrets;
     server = ptls_new(ctx_peer, 1);
@@ -1801,7 +1979,7 @@ static void test_handshake_api(void)
     ctx_peer->max_early_data_size = 8192;
     ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
     server_hs_prop.server.enforce_retry = 1;
-    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_tickets[0], &max_early_data_size}}};
     client = ptls_new(ctx, 0);
     *ptls_get_data_ptr(client) = &client_secrets;
     server = ptls_new(ctx_peer, 1);
@@ -1843,7 +2021,7 @@ static void test_handshake_api(void)
     ctx->omit_end_of_early_data = 0;
     ctx_peer->update_traffic_key = NULL;
     ctx_peer->omit_end_of_early_data = 0;
-    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_ticket, &max_early_data_size}}};
+    client_hs_prop = (ptls_handshake_properties_t){{{{NULL}, saved_tickets[0], &max_early_data_size}}};
     server_hs_prop = (ptls_handshake_properties_t){{{{NULL}}}};
     server_hs_prop.server.enforce_retry = 1;
     client = ptls_new(ctx, 0);
@@ -1911,9 +2089,10 @@ static void test_all_handshakes_core(void)
     subtest("hrr-handshake", test_hrr_handshake);
     /* resumption does not work when the client offers ECH but the server does not recognize that */
     if (!(can_ech(ctx, 0) && !can_ech(ctx_peer, 1))) {
-        subtest("resumption", test_resumption);
-        subtest("resumption-different-preferred-key-share", test_resumption_different_preferred_key_share);
-        subtest("resumption-with-client-authentication", test_resumption_with_client_authentication);
+        subtest("resumption", test_resumption, 0, 0);
+        if (ctx != ctx_peer)
+            subtest("resumption-different-preferred-key-share", test_resumption, 1, 0);
+        subtest("resumption-with-client-authentication", test_resumption, 0, 1);
     }
     subtest("async-sign-certificate", test_async_sign_certificate);
     subtest("enforce-retry-stateful", test_enforce_retry_stateful);
@@ -1923,6 +2102,7 @@ static void test_all_handshakes_core(void)
         subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
     }
     subtest("key-update", test_key_update);
+    subtest("pre-shared-key", test_pre_shared_key);
     subtest("handshake-api", test_handshake_api);
 }
 
@@ -2321,9 +2501,22 @@ void test_key_exchange(ptls_key_exchange_algorithm_t *client, ptls_key_exchange_
     ok(ret == 0);
     ok(ctx == NULL);
 
+    /* client invalid input */
+    ret = client->create(client, &ctx);
+    ok(ret == 0);
+    client_secret = ptls_iovec_init(NULL, 0);
+    ret = ctx->on_exchange(&ctx, 1, &client_secret, ptls_iovec_init(ctx->pubkey.base, ctx->pubkey.len - 1));
+    ok(ret != 0);
+    ok(ctx == NULL);
+    ok(client_secret.base == NULL);
+
     /* test derivation failure. In case of X25519, the outcome is derived key becoming all-zero and rejected. In case of others, it
      * is most likely that the provided key would be rejected. */
+    server_pubkey = ptls_iovec_init(NULL, 0);
+    server_secret = ptls_iovec_init(NULL, 0);
     static uint8_t zeros[32] = {0};
     ret = server->exchange(server, &server_pubkey, &server_secret, ptls_iovec_init(zeros, sizeof(zeros)));
     ok(ret != 0);
+    ok(server_pubkey.base == NULL);
+    ok(server_secret.base == NULL);
 }

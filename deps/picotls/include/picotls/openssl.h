@@ -33,17 +33,17 @@ extern "C" {
 #include <openssl/opensslconf.h>
 #include "../picotls.h"
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
-#if !defined(OPENSSL_NO_CHACHA) && !defined(OPENSSL_NO_POLY1305)
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(OPENSSL_NO_CHACHA) && !defined(OPENSSL_NO_POLY1305)
 #define PTLS_OPENSSL_HAVE_CHACHA20_POLY1305 1
-#endif
+#else
+#define PTLS_OPENSSL_HAVE_CHACHA20_POLY1305 0
 #endif
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER)
-#if !defined(OPENSSL_NO_ASYNC)
+#if OPENSSL_VERSION_NUMBER >= 0x10100010L && !defined(LIBRESSL_VERSION_NUMBER) && !defined(OPENSSL_NO_ASYNC)
 #include <openssl/async.h>
 #define PTLS_OPENSSL_HAVE_ASYNC 1
-#endif
+#else
+#define PTLS_OPENSSL_HAVE_ASYNC 0
 #endif
 
 extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1;
@@ -64,14 +64,26 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_secp521r1;
 #define PTLS_OPENSSL_HAVE_X25519 1
 #define PTLS_OPENSSL_HAS_X25519 1 /* deprecated; use HAVE_ */
 extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
+#else
+#define PTLS_OPENSSL_HAVE_X25519 0
+#define PTLS_OPENSSL_HAS_X25519 0 /* deprecated; use HAVE_ */
+#endif
+#ifdef OPENSSL_IS_BORINGSSL
+#define PTLS_OPENSSL_HAVE_X25519MLKEM768 1
+extern ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768;
+#else
+#define PTLS_OPENSSL_HAVE_X25519MLKEM768 0
 #endif
 
 /* when boringssl is used, existence of libdecrepit is assumed */
 #if !defined(OPENSSL_NO_BF) || defined(OPENSSL_IS_BORINGSSL)
 #define PTLS_OPENSSL_HAVE_BF 1
+#else
+#define PTLS_OPENSSL_HAVE_BF 0
 #endif
 
 extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[];
+extern ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges_all[];
 
 extern ptls_cipher_algorithm_t ptls_openssl_aes128ecb;
 extern ptls_cipher_algorithm_t ptls_openssl_aes128ctr;

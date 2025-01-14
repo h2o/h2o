@@ -204,7 +204,7 @@ IF (WITH_MBEDTLS)
     message(STATUS "mbedtls/include: ${MBEDTLS_INCLUDE_DIRS}")
     message(STATUS "mbedtls libraries: ${MBEDTLS_LIBRARIES}")
     INCLUDE_DIRECTORIES(${MBEDTLS_INCLUDE_DIRS})
-    ADD_LIBRARY(picotls-mbedtls lib/mbedtls.c)
+    ADD_LIBRARY(picotls-mbedtls lib/mbedtls.c lib/mbedtls_sign.c)
     ADD_EXECUTABLE(test-mbedtls.t
         deps/picotest/picotest.c
         ${CORE_TEST_FILES}

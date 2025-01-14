@@ -149,4 +149,7 @@ subtest 'http1' => sub {
 #     };
 # };
 
+undef $http1_upstream;
+undef $http2_upstream;
+
 done_testing();

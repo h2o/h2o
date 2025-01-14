@@ -52,6 +52,9 @@
 #ifdef OPENSSL_IS_BORINGSSL
 #include "./chacha20poly1305.h"
 #endif
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+#include <openssl/mlkem.h>
+#endif
 #ifdef PTLS_HAVE_AEGIS
 #include "./libaegis.h"
 #endif
@@ -201,7 +204,7 @@ void ptls_openssl_random_bytes(void *buf, size_t len)
     }
 }
 
-static EC_KEY *ecdh_gerenate_key(EC_GROUP *group)
+static EC_KEY *ecdh_generate_key(EC_GROUP *group)
 {
     EC_KEY *key;
 
@@ -362,7 +365,7 @@ static int x9_62_create_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_k
     }
     if ((ret = x9_62_create_context(algo, &ctx)) != 0)
         goto Exit;
-    if ((ctx->privkey = ecdh_gerenate_key(group)) == NULL) {
+    if ((ctx->privkey = ecdh_generate_key(group)) == NULL) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -423,7 +426,7 @@ static int x9_62_key_exchange(EC_GROUP *group, ptls_iovec_t *pubkey, ptls_iovec_
     }
 
     /* create private key */
-    if ((privkey = ecdh_gerenate_key(group)) == NULL) {
+    if ((privkey = ecdh_generate_key(group)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
@@ -434,14 +437,14 @@ static int x9_62_key_exchange(EC_GROUP *group, ptls_iovec_t *pubkey, ptls_iovec_
         goto Exit;
     }
 
-    /* calc secret */
+    /* allocate space for secret */
     secret->len = (EC_GROUP_get_degree(group) + 7) / 8;
     if ((secret->base = malloc(secret->len)) == NULL) {
         ret = PTLS_ERROR_NO_MEMORY;
         goto Exit;
     }
 
-    /* ecdh! */
+    /* calc secret */
     if (ECDH_compute_key(secret->base, secret->len, peer_point, privkey, NULL) <= 0) {
         ret = PTLS_ALERT_HANDSHAKE_FAILURE; /* ??? */
         goto Exit;
@@ -516,7 +519,7 @@ static int evp_keyex_on_exchange(ptls_key_exchange_context_t **_ctx, int release
         goto Exit;
     }
 
-    secret->base = NULL;
+    *secret = ptls_iovec_init(NULL, 0);
 
     if (peerkey.len != ctx->super.pubkey.len) {
         ret = PTLS_ALERT_DECRYPT_ERROR;
@@ -598,8 +601,10 @@ Exit:
         EVP_PKEY_CTX_free(evpctx);
     if (evppeer != NULL)
         EVP_PKEY_free(evppeer);
-    if (ret != 0)
+    if (ret != 0) {
         free(secret->base);
+        *secret = ptls_iovec_init(NULL, 0);
+    }
     if (release) {
         evp_keyex_free(ctx);
         *_ctx = NULL;
@@ -679,7 +684,7 @@ static int evp_keyex_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t 
     ptls_key_exchange_context_t *ctx = NULL;
     int ret;
 
-    outpubkey->base = NULL;
+    *outpubkey = ptls_iovec_init(NULL, 0);
 
     if ((ret = evp_keyex_create(algo, &ctx)) != 0)
         goto Exit;
@@ -695,8 +700,139 @@ static int evp_keyex_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t 
 Exit:
     if (ctx != NULL)
         evp_keyex_on_exchange(&ctx, 1, NULL, ptls_iovec_init(NULL, 0));
-    if (ret != 0)
+    if (ret != 0) {
         free(outpubkey->base);
+        *outpubkey = ptls_iovec_init(NULL, 0);
+    }
+    return ret;
+}
+
+#endif
+
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+
+struct st_x25519mlkem768_context_t {
+    ptls_key_exchange_context_t super;
+    uint8_t pubkey[MLKEM768_PUBLIC_KEY_BYTES + X25519_PUBLIC_VALUE_LEN];
+    struct {
+        uint8_t x25519[X25519_PRIVATE_KEY_LEN];
+        struct MLKEM768_private_key mlkem;
+    } privkey;
+};
+
+static int x25519mlkem768_on_exchange(ptls_key_exchange_context_t **_ctx, int release, ptls_iovec_t *secret,
+                                      ptls_iovec_t ciphertext)
+{
+    struct st_x25519mlkem768_context_t *ctx = (void *)*_ctx;
+    int ret;
+
+    if (secret == NULL) {
+        ret = 0;
+        goto Exit;
+    }
+
+    *secret = ptls_iovec_init(NULL, 0);
+
+    /* validate length */
+    if (ciphertext.len != MLKEM768_CIPHERTEXT_BYTES + X25519_PUBLIC_VALUE_LEN) {
+        ret = PTLS_ALERT_DECRYPT_ERROR;
+        goto Exit;
+    }
+
+    /* appsocate memory */
+    secret->len = MLKEM_SHARED_SECRET_BYTES + X25519_SHARED_KEY_LEN;
+    if ((secret->base = malloc(secret->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* run key exchange */
+    if (!MLKEM768_decap(secret->base, ciphertext.base, MLKEM768_CIPHERTEXT_BYTES, &ctx->privkey.mlkem) ||
+        !X25519(secret->base + MLKEM_SHARED_SECRET_BYTES, ctx->privkey.x25519, ciphertext.base + MLKEM768_CIPHERTEXT_BYTES)) {
+        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+        goto Exit;
+    }
+    ret = 0;
+
+Exit:
+    if (secret != NULL && ret != 0) {
+        free(secret->base);
+        *secret = ptls_iovec_init(NULL, 0);
+    }
+    if (release) {
+        ptls_clear_memory(&ctx->privkey, sizeof(ctx->privkey));
+        free(ctx);
+        *_ctx = NULL;
+    }
+    return ret;
+}
+
+static int x25519mlkem768_create(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **_ctx)
+{
+    struct st_x25519mlkem768_context_t *ctx = NULL;
+
+    if ((ctx = malloc(sizeof(*ctx))) == NULL)
+        return PTLS_ERROR_NO_MEMORY;
+
+    ctx->super = (ptls_key_exchange_context_t){algo, ptls_iovec_init(ctx->pubkey, sizeof(ctx->pubkey)), x25519mlkem768_on_exchange};
+    MLKEM768_generate_key(ctx->pubkey, NULL, &ctx->privkey.mlkem);
+    X25519_keypair(ctx->pubkey + MLKEM768_PUBLIC_KEY_BYTES, ctx->privkey.x25519);
+
+    *_ctx = &ctx->super;
+    return 0;
+}
+
+static int x25519mlkem768_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *ciphertext, ptls_iovec_t *secret,
+                                   ptls_iovec_t peerkey)
+{
+    struct {
+        CBS cbs;
+        struct MLKEM768_public_key key;
+    } mlkem_peer;
+    uint8_t x25519_privkey[X25519_PRIVATE_KEY_LEN];
+    int ret;
+
+    *ciphertext = ptls_iovec_init(NULL, 0);
+    *secret = ptls_iovec_init(NULL, 0);
+
+    /* validate input length */
+    if (peerkey.len != MLKEM768_PUBLIC_KEY_BYTES + X25519_PUBLIC_VALUE_LEN) {
+        ret = PTLS_ALERT_DECODE_ERROR;
+        goto Exit;
+    }
+
+    /* allocate memory */
+    ciphertext->len = MLKEM768_CIPHERTEXT_BYTES + X25519_PUBLIC_VALUE_LEN;
+    if ((ciphertext->base = malloc(ciphertext->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    secret->len = MLKEM_SHARED_SECRET_BYTES + X25519_SHARED_KEY_LEN;
+    if ((secret->base = malloc(secret->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    /* run key exchange */
+    CBS_init(&mlkem_peer.cbs, peerkey.base, MLKEM768_PUBLIC_KEY_BYTES);
+    X25519_keypair(ciphertext->base + MLKEM768_CIPHERTEXT_BYTES, x25519_privkey);
+    if (!MLKEM768_parse_public_key(&mlkem_peer.key, &mlkem_peer.cbs) ||
+        !X25519(secret->base + MLKEM_SHARED_SECRET_BYTES, x25519_privkey, peerkey.base + MLKEM768_PUBLIC_KEY_BYTES)) {
+        ret = PTLS_ALERT_ILLEGAL_PARAMETER;
+        goto Exit;
+    }
+    MLKEM768_encap(ciphertext->base, secret->base, &mlkem_peer.key);
+
+    ret = 0;
+
+Exit:
+    if (ret != 0) {
+        free(ciphertext->base);
+        *ciphertext = ptls_iovec_init(NULL, 0);
+        free(secret->base);
+        *secret = ptls_iovec_init(NULL, 0);
+    }
+    ptls_clear_memory(&x25519_privkey, sizeof(x25519_privkey));
     return ret;
 }
 
@@ -1559,9 +1695,8 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
         X509_VERIFY_PARAM *params = X509_STORE_CTX_get0_param(verify_ctx);
         X509_VERIFY_PARAM_set_purpose(params, is_server ? X509_PURPOSE_SSL_CLIENT : X509_PURPOSE_SSL_SERVER);
         X509_VERIFY_PARAM_set_depth(params, 98); /* use the default of OpenSSL 1.0.2 and above; see `man SSL_CTX_set_verify` */
-        /* when _acting_ as client, set the server name */
-        if (!is_server) {
-            assert(server_name != NULL && "ptls_set_server_name MUST be called");
+        /* when _acting_ as client, set the server name if provided*/
+        if (!is_server && server_name != NULL) {
             if (ptls_server_name_is_ipaddr(server_name)) {
                 X509_VERIFY_PARAM_set1_ip_asc(params, server_name);
             } else {
@@ -2060,7 +2195,27 @@ ptls_key_exchange_algorithm_t ptls_openssl_x25519 = {.id = PTLS_GROUP_X25519,
                                                      .exchange = evp_keyex_exchange,
                                                      .data = NID_X25519};
 #endif
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768 = {.id = PTLS_GROUP_X25519MLKEM768,
+                                                             .name = PTLS_GROUP_NAME_X25519MLKEM768,
+                                                             .create = x25519mlkem768_create,
+                                                             .exchange = x25519mlkem768_exchange};
+#endif
 ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[] = {&ptls_openssl_secp256r1, NULL};
+ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges_all[] = {
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+    &ptls_openssl_x25519mlkem768,
+#endif
+#if PTLS_OPENSSL_HAVE_SECP521R1
+    &ptls_openssl_secp521r1,
+#endif
+#if PTLS_OPENSSL_HAVE_SECP384R1
+    &ptls_openssl_secp384r1,
+#endif
+#if PTLS_OPENSSL_HAVE_X25519
+    &ptls_openssl_x25519,
+#endif
+    &ptls_openssl_secp256r1,      NULL};
 ptls_cipher_algorithm_t ptls_openssl_aes128ecb = {
     "AES128-ECB",          PTLS_AES128_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 0 /* iv size */, sizeof(struct cipher_context_t),
     aes128ecb_setup_crypto};

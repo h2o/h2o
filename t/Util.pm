@@ -5,6 +5,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use Fcntl qw(:flock);
 use File::Temp qw(tempfile tempdir);
+use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
@@ -527,7 +528,11 @@ class H2
         while true
             f = self.read(timeout)
             return nil if f == nil
-            puts f.to_s
+            if block_given?
+                yield f
+            else
+                puts f.to_s
+            end
             if f.type == "DATA" && f.len > 0
                 self.send_window_update(0, f.len)
                 self.send_window_update(f.stream_id, f.len)
@@ -816,18 +821,17 @@ package H2ologTracer {
 
     sub new {
         my ($class, $opts) = @_;
-        unless ($opts->{pid} or $opts->{path}) {
-            Carp::croak("Missing pid or path in the opts");
+        unless ($opts->{path}) {
+            Carp::croak("Missing path in the opts (pid is no longer supported)");
         }
-        my $h2o_pid = $opts->{pid};
         my $h2olog_socket_path = $opts->{path};
         my $h2olog_args = $opts->{args} // [];
         my $output_dir = $opts->{output_dir} // File::Temp::tempdir(CLEANUP => 1);
 
-        my $h2olog_prog = t::Util::bindir() . "/h2olog";
+        my $h2olog_prog = "misc/h2olog";
 
         my $output_file = "$output_dir/h2olog.jsonl";
-        my $attaching_opts = $h2o_pid ? "-p $h2o_pid" : "-u $h2olog_socket_path";
+        my $attaching_opts = "-u $h2olog_socket_path";
 
         my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d $attaching_opts -w '$output_file' 2>&1};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
@@ -937,28 +941,26 @@ sub get_tracer {
     my $tracer_pid = shift;
     my $fn = shift;
     my $read_trace;
-    while (1) {
-        sleep 1;
-        if (open my $fh, "<", $fn) {
-            my $off = 0;
-            $read_trace = sub {
-                seek $fh, $off, 0
-                    or die "seek failed:$!";
-                read $fh, my $bytes, 1048576;
-                $bytes = ''
-                    unless defined $bytes;
-                $off += length $bytes;
-                if ($^O ne 'linux') {
-                    $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
-                }
-                return $bytes;
-            };
-            last;
-        }
-        die "bpftrace failed to start\n"
+
+    while (!-e $fn) {
+        die "tracer failed to start\n"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+        sleep 0.1;
     }
-    return $read_trace;
+
+    open my $fh, '-|', 'tail', '-c', '+1', '-f', $fn
+        or die "failed invoke tail opening $fn:$?";
+
+    return sub {
+        IO::Select->new($fh)->can_read(1);
+        sysread $fh, my $bytes, 1048576;
+        $bytes = ''
+            unless defined $bytes;
+        if ($bytes eq '' && waitpid($tracer_pid, WNOHANG) == $tracer_pid) {
+            die "tracer died with status $? and there would be no more data";
+        }
+        $bytes;
+    };
 }
 
 sub run_picotls_client {

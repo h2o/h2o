@@ -35,6 +35,9 @@
 		08790E111D8BD85700A04BC1 /* redis-client.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DF41D8BD72500A04BC1 /* redis-client.c */; };
 		08819C25218C9FA90057ED23 /* libh2o.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 1079231519A320A700C52AD6 /* libh2o.a */; };
 		08819C2E218C9FF70057ED23 /* qif.c in Sources */ = {isa = PBXBuildFile; fileRef = 08819C2D218C9FF70057ED23 /* qif.c */; };
+		089341FB2C99477C005CFA53 /* alloc.c in Sources */ = {isa = PBXBuildFile; fileRef = 089341F92C99477C005CFA53 /* alloc.c */; };
+		089341FC2C99477C005CFA53 /* alloc.h in Headers */ = {isa = PBXBuildFile; fileRef = 089341FA2C99477C005CFA53 /* alloc.h */; };
+		089341FD2C99478D005CFA53 /* alloc.c in Sources */ = {isa = PBXBuildFile; fileRef = 089341F92C99477C005CFA53 /* alloc.c */; };
 		08B3297F29407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
 		08B3298029407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
 		08B3298129407664009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297E29407664009D6766 /* hpke.c */; };
@@ -531,7 +534,6 @@
 		E9F677D520074770006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D08137391FD400F4004679DF /* roundrobin.c */; };
 		E9F677D6200775FF006476D3 /* least_conn.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373D1FD40431004679DF /* least_conn.c */; };
 		E9F677D720077603006476D3 /* roundrobin.c in Sources */ = {isa = PBXBuildFile; fileRef = D081373E1FD40431004679DF /* roundrobin.c */; };
-		E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */ = {isa = PBXBuildFile; fileRef = E908A2A923163CB70039BCEE /* ebpf.h */; };
 		E9FF84BC24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BD24C5AA47002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
 		E9FF84BE24C5AA52002577CA /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E9FF84BB24C5AA46002577CA /* quicly-probes.d */; };
@@ -748,12 +750,17 @@
 		0879B8CC2724DBF400F77220 /* 10socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 10socket.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08819C2C218C9FA90057ED23 /* qif */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = qif; sourceTree = BUILT_PRODUCTS_DIR; };
 		08819C2D218C9FF70057ED23 /* qif.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qif.c; sourceTree = "<group>"; };
+		089341F92C99477C005CFA53 /* alloc.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = alloc.c; sourceTree = "<group>"; };
+		089341FA2C99477C005CFA53 /* alloc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = alloc.h; sourceTree = "<group>"; };
 		089FA83229BB6EB900F7B746 /* 50connect-inflight.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-inflight.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		089FA83329BEC70800F7B746 /* 50compress-wetag.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50compress-wetag.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08A835E42996351100D872CE /* build.mk */ = {isa = PBXFileReference; lastKnownFileType = text; path = build.mk; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.make; };
 		08A835E529964B5C00D872CE /* Dockerfile.ubuntu1604 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu1604; sourceTree = "<group>"; };
 		08A835E629964B5C00D872CE /* Dockerfile.ubuntu2004 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2004; sourceTree = "<group>"; };
 		08A835E729964B5C00D872CE /* Dockerfile.ubuntu2204 */ = {isa = PBXFileReference; lastKnownFileType = text; path = Dockerfile.ubuntu2204; sourceTree = "<group>"; };
+		08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-qlog.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08AD2A402CCF219600301CD6 /* h2olog */ = {isa = PBXFileReference; lastKnownFileType = text; path = h2olog; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1110,12 +1117,6 @@
 		E901C439213E59A000D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
 		E901C43C213FAE0300D17C93 /* qpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = qpack.h; sourceTree = "<group>"; };
 		E901C43F2140CCB500D17C93 /* qpack.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = qpack.c; sourceTree = "<group>"; };
-		E904232E24AB2C9B0072C5B7 /* json.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = json.cc; sourceTree = "<group>"; };
-		E904233024AB2C9C0072C5B7 /* json.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = json.h; sourceTree = "<group>"; };
-		E904233224AB2C9C0072C5B7 /* h2olog.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = h2olog.cc; sourceTree = "<group>"; };
-		E904233424AB2C9C0072C5B7 /* h2olog.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = h2olog.h; sourceTree = "<group>"; };
-		E904233524AB2C9C0072C5B7 /* pyproject.toml */ = {isa = PBXFileReference; lastKnownFileType = text; path = pyproject.toml; sourceTree = "<group>"; };
-		E908A2A923163CB70039BCEE /* ebpf.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ebpf.h; sourceTree = "<group>"; };
 		E908A2AB231CF3D10039BCEE /* 50reverse-proxy-chunked-post-termination.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = "50reverse-proxy-chunked-post-termination.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E908A2AE2320AE4C0039BCEE /* check.mk */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = check.mk; sourceTree = "<group>"; };
 		E90A95F21E30795100483D6C /* headers_util.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = headers_util.c; sourceTree = "<group>"; };
@@ -1124,10 +1125,6 @@
 		E90BB43B24F38937006507EA /* 40http3-concurrency.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-concurrency.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90BB43C24F4834D006507EA /* 40http3-forward.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-forward.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		E90C514D230BB28800D6AD8E /* 90dtrace.t */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = 90dtrace.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		E915E87325D4A88D00FB20F7 /* http_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = http_tracer.cc; sourceTree = "<group>"; };
-		E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = generated_raw_tracer.cc; sourceTree = "<group>"; };
-		E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = raw_tracer.cc.h; sourceTree = "<group>"; };
-		E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */ = {isa = PBXFileReference; lastKnownFileType = text.script.python; path = gen_raw_tracer.py; sourceTree = "<group>"; };
 		E918FC392136583F00CCB252 /* proptest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = proptest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E918FC3B213658BE00CCB252 /* prop.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = prop.c; sourceTree = "<group>"; };
 		E918FC412136597200CCB252 /* theft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = theft.h; sourceTree = "<group>"; };
@@ -1514,6 +1511,8 @@
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
+				089341F92C99477C005CFA53 /* alloc.c */,
+				089341FA2C99477C005CFA53 /* alloc.h */,
 				0812AB1C1D7FCFEB00004F23 /* async.c */,
 				0812AB1D1D7FCFEB00004F23 /* async.h */,
 				0812AB1E1D7FCFEB00004F23 /* hiredis.c */,
@@ -1992,7 +1991,6 @@
 				10DA969B1CD2BF9000679165 /* cache.h */,
 				1024A3FD1D22546800EB13F1 /* cache_digests.h */,
 				105534D71A3C785000627ECB /* configurator.h */,
-				E908A2A923163CB70039BCEE /* ebpf.h */,
 				107D4D521B5B2412004A9B21 /* file.h */,
 				1044812D1BFD0FBE0007863F /* filecache.h */,
 				7D2DF4ED20297EE0004AD361 /* header.h */,
@@ -2038,6 +2036,7 @@
 		107923AA19A3216B00C52AD6 /* misc */ = {
 			isa = PBXGroup;
 			children = (
+				08AD2A402CCF219600301CD6 /* h2olog */,
 				10583BE61AE5A322004A3AD6 /* clang-format-all.sh */,
 				E908A2AC2320AE210039BCEE /* docker-ci */,
 				104960151B9D3F9100FF136D /* dump-github-repository.pl */,
@@ -2408,7 +2407,9 @@
 				10B6D4501C727315005F0CF8 /* 80yaml-merge.t */,
 				E90C514D230BB28800D6AD8E /* 90dtrace.t */,
 				E9D49A5225FB562800F4A80D /* 90h2olog.t */,
+				08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */,
 				086001BD2730B4450043886F /* 90h2olog-selective-tracing.t */,
+				08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */,
 				104B9A451A5D1004009EEE64 /* 90live-fetch-ocsp-response.t */,
 				109EEFE31D77B350001F11D1 /* 90live-sni.t */,
 				10C2117C1B8164B1005A9D02 /* 90root-fastcgi-php.t */,
@@ -2430,7 +2431,6 @@
 		10F417D419C190DD00B6E31A /* src */ = {
 			isa = PBXGroup;
 			children = (
-				E904232D24AB2C740072C5B7 /* h2olog */,
 				10D0906A19F38B850043D458 /* httpclient.c */,
 				10A3D40E1B584BEC00327CF9 /* standalone.h */,
 				10F417D519C190F800B6E31A /* main.c */,
@@ -2612,30 +2612,6 @@
 				E90BB43924F369E4006507EA /* server.c */,
 			);
 			path = http3;
-			sourceTree = "<group>";
-		};
-		E904232D24AB2C740072C5B7 /* h2olog */ = {
-			isa = PBXGroup;
-			children = (
-				E915E87425D4A89700FB20F7 /* generated_raw_tracer.cc */,
-				E904233224AB2C9C0072C5B7 /* h2olog.cc */,
-				E904233424AB2C9C0072C5B7 /* h2olog.h */,
-				E915E87325D4A88D00FB20F7 /* http_tracer.cc */,
-				E904232E24AB2C9B0072C5B7 /* json.cc */,
-				E904233024AB2C9C0072C5B7 /* json.h */,
-				E904233624AB2CA80072C5B7 /* misc */,
-				E915E87525D4A89700FB20F7 /* raw_tracer.cc.h */,
-				E904233524AB2C9C0072C5B7 /* pyproject.toml */,
-			);
-			path = h2olog;
-			sourceTree = "<group>";
-		};
-		E904233624AB2CA80072C5B7 /* misc */ = {
-			isa = PBXGroup;
-			children = (
-				E915E87625D4A8B700FB20F7 /* gen_raw_tracer.py */,
-			);
-			path = misc;
 			sourceTree = "<group>";
 		};
 		E908A2AC2320AE210039BCEE /* docker-ci */ = {
@@ -2982,7 +2958,6 @@
 				107923A519A3215F00C52AD6 /* http1.h in Headers */,
 				E901C3E6213E1C3600D17C93 /* ranges.h in Headers */,
 				E98884CA21E7F3AF0060F010 /* sentmap.h in Headers */,
-				E9FB8DC423991D08007BFC59 /* ebpf.h in Headers */,
 				10A3D3D31B4CDF1200327CF9 /* memcached.h in Headers */,
 				E901C3ED213E1C3600D17C93 /* constants.h in Headers */,
 				08790DE01D8015A400A04BC1 /* sds.h in Headers */,
@@ -3010,6 +2985,7 @@
 				104B9A261A4A5041009EEE64 /* serverutil.h in Headers */,
 				1079239719A3210E00C52AD6 /* picohttpparser.h in Headers */,
 				1065E70C19BF664300686E72 /* evloop.h in Headers */,
+				089341FC2C99477C005CFA53 /* alloc.h in Headers */,
 				E9E5047A214EB26D004DC170 /* http3_common.h in Headers */,
 				107923C819A3217300C52AD6 /* hpack_huffman_table.h in Headers */,
 				107D4D531B5B2412004A9B21 /* file.h in Headers */,
@@ -3361,6 +3337,7 @@
 				08E86F422B5666C000F7211C /* h2olog.c in Sources */,
 				7D937302202AC7BA005FE6AB /* server_timing.c in Sources */,
 				E901C3F9213E1C4000D17C93 /* frame.c in Sources */,
+				089341FB2C99477C005CFA53 /* alloc.c in Sources */,
 				1058C87E1AA41A1F008D6180 /* headers.c in Sources */,
 				E9E5048B214EC57A004DC170 /* common.c in Sources */,
 				D081373B1FD400F4004679DF /* roundrobin.c in Sources */,
@@ -3768,6 +3745,7 @@
 				E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */,
 				108DD0861BA22E46004167DC /* mruby.c in Sources */,
 				E9708B5B1E52C7F30029E0A5 /* util.c in Sources */,
+				089341FD2C99478D005CFA53 /* alloc.c in Sources */,
 				E9708B681E52C80F0029E0A5 /* throttle_resp.c in Sources */,
 				E9708B251E49BADA0029E0A5 /* hmac.c in Sources */,
 				E901C410213E1C5500D17C93 /* ranges.c in Sources */,

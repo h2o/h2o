@@ -930,10 +930,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
 #undef DELIMITER
 
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
-#define ALPN_ENTRY(s)                                                                                                              \
-    {                                                                                                                              \
-        H2O_STRLIT(s)                                                                                                              \
-    }
+#define ALPN_ENTRY(s) {H2O_STRLIT(s)}
 #define ALPN_PROTOCOLS_H2 ALPN_ENTRY("h2"), ALPN_ENTRY("h2-16"), ALPN_ENTRY("h2-14")
 #define NPN_PROTOCOLS_CORE                                                                                                         \
     "\x02"                                                                                                                         \

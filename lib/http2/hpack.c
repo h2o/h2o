@@ -1016,8 +1016,9 @@ static void fixup_frame_headers(h2o_buffer_t **buf, size_t start_at, uint8_t typ
 
 void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *header_table, uint32_t hpack_capacity,
                                uint32_t stream_id, size_t max_frame_size, h2o_iovec_t method, h2o_url_t *url, h2o_iovec_t protocol,
-                               const h2o_header_t *headers, size_t num_headers, int is_end_stream)
+                               const h2o_header_t *headers, size_t num_headers, int is_end_stream, int send_own_expect)
 {
+    static const h2o_iovec_t hundred_continue = (h2o_iovec_t){H2O_STRLIT("100-continue")};
     int old_style_connect = h2o_memis(method.base, method.len, H2O_STRLIT("CONNECT")) && protocol.base == NULL;
 
     size_t capacity = calc_headers_capacity(headers, num_headers);
@@ -1030,6 +1031,8 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
     if (!old_style_connect)
         capacity += calc_capacity(H2O_TOKEN_PATH->buf.len, url->path.len);
     capacity += calc_capacity(H2O_TOKEN_PROTOCOL->buf.len, protocol.len);
+    if (send_own_expect)
+        capacity += calc_capacity(H2O_TOKEN_EXPECT->buf.len, hundred_continue.len);
 
     size_t start_at = (*buf)->size;
     uint8_t *dst = (void *)(h2o_buffer_reserve(buf, capacity).base + H2O_HTTP2_FRAME_HEADER_SIZE);
@@ -1046,6 +1049,9 @@ void h2o_hpack_flatten_request(h2o_buffer_t **buf, h2o_hpack_header_table_t *hea
         h2o_header_t h = {&H2O_TOKEN_PROTOCOL->buf, NULL, protocol};
         dst = encode_header(header_table, dst, &h);
     }
+    if (send_own_expect)
+        dst = encode_header_token(header_table, dst, H2O_TOKEN_EXPECT, &hundred_continue);
+
     for (size_t i = 0; i != num_headers; ++i) {
         const h2o_header_t *header = headers + i;
         if (header->name == &H2O_TOKEN_ACCEPT_ENCODING->buf &&

@@ -618,10 +618,21 @@ static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurat
 static int on_config_expect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
-    if (ret == -1)
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON,FORWARD");
+    switch (ret) {
+    case 0:
+        self->vars->conf.expect_mode = H2O_PROXY_EXPECT_OFF;
+        break;
+    case 1:
+        self->vars->conf.expect_mode = H2O_PROXY_EXPECT_ON;
+        break;
+    case 2:
+        self->vars->conf.expect_mode = H2O_PROXY_EXPECT_FORWARD;
+        break;
+    default:
         return -1;
-    self->vars->conf.use_expect = (int)ret;
+    }
+
     return 0;
 }
 

@@ -375,9 +375,7 @@ h2o_socket_t *h2o_uv_socket_create(uv_handle_t *handle, uv_close_cb close_cb)
     sock->close_cb = close_cb;
     sock->handle->data = sock;
     h2o_timer_init(&sock->write_cb_timer, on_call_write_success);
-    uint64_t flags = h2o_socket_ebpf_lookup_flags(sock->handle->loop, h2o_socket_ebpf_init_key, &sock->super);
-    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
-        sock->super._skip_tracing = 1;
+    ptls_log_init_conn_state(&sock->super._log_state, ptls_openssl_random_bytes);
     return &sock->super;
 }
 

@@ -84,6 +84,7 @@ enum {
     ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED,      /* ${proxy.ssl.session-reused}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER,              /* ${proxy.ssl.cipher}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS,         /* ${proxy.ssl.cipher_bits}x */
+    ELEMENT_TYPE_SSL_SERVER_NAME,               /* ${ssl.server-name}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -307,7 +308,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
                     MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
-                    MAP_EXT_TO_PROTO("ssl.server-name", ssl.server_name);
+                    MAP_EXT_TO_TYPE("ssl.server-name", ELEMENT_TYPE_SSL_SERVER_NAME);
                     MAP_EXT_TO_PROTO("ssl.negotiated-protocol", ssl.negotiated_protocol);
                     MAP_EXT_TO_PROTO("ssl.ech.config-id", ssl.ech_config_id);
                     MAP_EXT_TO_PROTO("ssl.ech.kem", ssl.ech_kem);
@@ -895,6 +896,15 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_PROXY_SSL_CIPHER:
             APPEND_SAFE_STRING(pos, req->proxy_stats.conn.ssl.cipher);
             break;
+        case ELEMENT_TYPE_SSL_SERVER_NAME: {
+            const char *name =
+                req->conn->callbacks->get_ssl_server_name != NULL ? req->conn->callbacks->get_ssl_server_name(req->conn) : NULL;
+            if (name == NULL)
+                goto EmitNull;
+            size_t name_len = strlen(name);
+            RESERVE(name_len * unsafe_factor);
+            pos = append_unsafe_string(pos, name, name_len);
+        } break;
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
             if (cb == NULL)

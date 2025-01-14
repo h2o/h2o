@@ -207,6 +207,7 @@ typedef struct st_h2o_quic_stats_t {
     func(num_bytes.received, "num-bytes.received") \
     func(num_bytes.sent, "num-bytes.sent") \
     func(num_bytes.lost, "num-bytes.lost") \
+    func(num_bytes.ack_received, "num-bytes.ack-received") \
     func(num_bytes.stream_data_sent, "num-bytes.stream-data-sent") \
     func(num_bytes.stream_data_resent, "num-bytes.stream-data-resent") \
     func(num_paths.created, "num-paths.created") \
@@ -494,7 +495,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock);
 /**
  *
  */
-void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase);
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, quicly_error_t err, const char *reason_phrase);
 /**
  *
  */
@@ -530,11 +531,11 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
 /**
  *
  */
-int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
 /**
  * sends packets immediately by calling quicly_send, sendmsg (returns true if success, false if the connection was destroyed)
  */
-int h2o_quic_send(h2o_quic_conn_t *conn);
+quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn);
 /**
  * updates receive buffer
  */

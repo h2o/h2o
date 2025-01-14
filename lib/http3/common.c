@@ -206,7 +206,7 @@ static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *
     return (const h2o_http3_conn_callbacks_t *)conn->super.callbacks;
 }
 
-static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
+static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->recvbuf);
@@ -240,7 +240,7 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     }
 }
 
-static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, int err)
+static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 {
     h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
@@ -293,7 +293,7 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
 
     do {
         h2o_http3_read_frame_t frame;
-        int ret;
+        quicly_error_t ret;
         const char *err_desc = NULL;
 
         if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL,
@@ -356,7 +356,7 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     return stream->handle_input(conn, stream, src, src_end, is_eos);
 }
 
-static void egress_unistream_on_destroy(quicly_stream_t *qs, int err)
+static void egress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_egress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->sendbuf);
@@ -382,7 +382,7 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
     memcpy(dst, stream->sendbuf->bytes + off, *len);
 }
 
-static void egress_unistream_on_send_stop(quicly_stream_t *qs, int err)
+static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
@@ -412,10 +412,11 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
     }
 }
 
-static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream, h2o_iovec_t initial_bytes)
+static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream,
+                                            h2o_iovec_t initial_bytes)
 {
     quicly_stream_t *qs;
-    int ret;
+    quicly_error_t ret;
 
     if ((ret = quicly_open_stream(conn->super.quic, &qs, 1)) != 0)
         return ret;
@@ -664,11 +665,11 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
     Receive:
         for (i = 0; i != num_packets; ++i) {
             if (i != accepted_packet_index) {
-                int ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+                quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
                 switch (ret) {
                 case QUICLY_ERROR_STATE_EXHAUSTION:
                 case PTLS_ERROR_NO_MEMORY:
-                    fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
+                    fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
                     conn->callbacks->destroy_connection(conn);
                     return;
                 }
@@ -921,6 +922,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
+            PTLS_LOG(h2o, h3_frame_receive, {
+                PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+                PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+            });
             *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
         }
@@ -931,6 +936,14 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
     }
 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
+    PTLS_LOG(h2o, h3_frame_receive, {
+        PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+        if (frame->payload != NULL) {
+            PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
+        } else {
+            PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+        }
+    });
 
     /* validate frame type */
     switch (frame->type) {
@@ -1038,7 +1051,7 @@ void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread
     ctx->preprocess_packet = preprocess_cb;
 }
 
-void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase)
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, quicly_error_t err, const char *reason_phrase)
 {
     switch (quicly_get_state(conn->quic)) {
     case QUICLY_STATE_FIRSTFLIGHT: /* FIXME why is this separate? */
@@ -1216,9 +1229,9 @@ Exit:
     h2o_fatal("unreachable");
 }
 
-int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
-    int ret;
+    quicly_error_t ret;
 
     h2o_quic_setup(&conn->super, quic, streams_sock);
     conn->state = H2O_HTTP3_CONN_STATE_OPEN;
@@ -1253,9 +1266,9 @@ Exit:
     return 0;
 }
 
-int h2o_quic_send(h2o_quic_conn_t *conn)
+quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
 {
-    int send_result;
+    quicly_error_t send_result;
 
     if (conn->streams_sock != NULL) {
         if (h2o_socket_is_writing(conn->streams_sock))
@@ -1288,7 +1301,7 @@ Fail:
         conn->callbacks->destroy_connection(conn);
         break;
     default:
-        h2o_fatal("quicly_send returned %d", send_result);
+        h2o_fatal("quicly_send returned %" PRId64, send_result);
     }
     return 0;
 }
