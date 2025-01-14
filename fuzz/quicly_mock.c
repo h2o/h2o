@@ -498,13 +498,13 @@ quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn)
     return 0;
 }
 
-int quicly_qos_send(quicly_conn_t *conn, void *buf, size_t *bufsize)
+quicly_error_t quicly_qos_send(quicly_conn_t *conn, void *buf, size_t *bufsize)
 {
     assert(0 && "unimplemented");
     return 1;
 }
 
-int quicly_qos_receive(quicly_conn_t *conn, const void *src, size_t *len)
+quicly_error_t quicly_qos_receive(quicly_conn_t *conn, const void *src, size_t *len)
 {
     assert(0 && "unimplemented");
     return 1;
