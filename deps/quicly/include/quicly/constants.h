@@ -68,13 +68,23 @@ extern "C" {
 #define QUICLY_EPOCH_ON_STREAMS_TP 4 /* used internally */
 #define QUICLY_EPOCH_ON_STREAMS_OTHER 5
 
-/* coexists with picotls error codes, assuming that int is at least 32-bits */
-#define QUICLY_ERROR_IS_QUIC(e) (((e) & ~0x1ffff) == 0x20000)
-#define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) (((e) & ~0xffff) == 0x20000)
-#define QUICLY_ERROR_IS_QUIC_APPLICATION(e) (((e) & ~0xffff) == 0x30000)
-#define QUICLY_ERROR_GET_ERROR_CODE(e) ((uint16_t)(e))
-#define QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(e) ((uint16_t)(e) + 0x20000)
-#define QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(e) ((uint16_t)(e) + 0x30000)
+/**
+ * Error code used by quicly. The code coalesces the following to an int64_t.
+ * * 0..0x2ff: picotls error codes (of type int)
+ * * 0x30000..0x400000000002ffff: QUIC application error codes
+ * * 0x4000000000030000..0x800000000002ffff...: QUIC protocol error codes
+ * Internal error codes should be allocated from the unused space below 0x30000 (i.e., unused space of picotls error codes);
+ * quicly itself uses 0xffxx. `quicly_error_t` is defined as a signed type so that the picotls error code space can be mapped
+ * without sign conversion.
+ */
+typedef int64_t quicly_error_t;
+
+#define QUICLY_ERROR_IS_QUIC(e) ((uint64_t)(quicly_error_t)(e) - 0x30000u < 0x8000000000000000u)
+#define QUICLY_ERROR_IS_QUIC_TRANSPORT(e) ((uint64_t)(quicly_error_t)(e) - 0x4000000000030000u < 0x4000000000000000u)
+#define QUICLY_ERROR_IS_QUIC_APPLICATION(e) ((uint64_t)(quicly_error_t)(e) - 0x30000u < 0x4000000000000000u)
+#define QUICLY_ERROR_GET_ERROR_CODE(e) (((uint64_t)(quicly_error_t)(e) - 0x30000u) & 0x3fffffffffffffffu)
+#define QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(e) ((quicly_error_t)((uint64_t)(e) + 0x4000000000030000u))
+#define QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(e) ((quicly_error_t)(uint64_t)(e) + 0x30000)
 /**
  * PTLS_ERROR_NO_MEMORY and QUICLY_ERROR_STATE_EXHAUSTION are special error codes that are internal but can be passed to
  * quicly_close. These are converted to QUICLY_TRANSPORT_ERROR_INTERNAL when sent over the wire.
@@ -98,7 +108,7 @@ extern "C" {
 #define QUICLY_TRANSPORT_ERROR_CRYPTO_BUFFER_EXCEEDED QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xd)
 #define QUICLY_TRANSPORT_ERROR_KEY_UPDATE QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xe)
 #define QUICLY_TRANSPORT_ERROR_AEAD_LIMIT_REACHED QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xf)
-#define QUICLY_TRANSPORT_ERROR_TLS_ALERT_BASE QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x100)
+#define QUICLY_TRANSPORT_ERROR_CRYPTO(tls_alert) QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x100 + (tls_alert))
 
 /* internal error codes, used purely for signaling status to the application */
 #define QUICLY_ERROR_PACKET_IGNORED 0xff01

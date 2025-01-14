@@ -30,7 +30,7 @@ void test_stream_concurrency(void)
     quicly_stream_t *client_streams[limit + 2], *server_stream;
     test_streambuf_t *client_streambufs[limit + 1], *server_streambuf;
     size_t i;
-    int ret;
+    quicly_error_t ret;
 
     { /* connect */
         quicly_address_t dest, src;
