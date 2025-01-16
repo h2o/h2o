@@ -25,11 +25,13 @@
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
+#include <fcntl.h>
 #include <getopt.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <openssl/opensslv.h>
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
@@ -78,6 +80,14 @@ static h2o_socket_t *udp_sock = NULL;
 static const char *upgrade_token = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
+static struct {
+    struct {
+        char *from_client[16];
+        char *from_server[16];
+    } uni, bidi;
+} webtransport_stream_files;
+static quicly_error_t (*open_webtransport_stream)(h2o_httpclient_t *client, quicly_stream_t **stream, int unidirectional,
+                                                  void *prefix, size_t *prefix_len);
 static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
@@ -404,6 +414,170 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     }
 }
 
+static int push_webtransport_file(char *(*list)[16], const char *fn)
+{
+    size_t i = 0;
+    for (i = 0; i < PTLS_ELEMENTSOF(*list); ++i) {
+        if ((*list)[i] == NULL) {
+            (*list)[i] = strdup(fn);
+            return 1;
+        }
+    }
+    fprintf(stderr, "too many webtransport files\n");
+    return 0;
+}
+
+static char *pop_webtransport_file(char *(*list)[16])
+{
+    char *popped = (*list)[0];
+    if (popped == NULL) {
+        fprintf(stderr, "no more webtransport files\n");
+        exit(EXIT_FAILURE);
+    }
+    memmove(&(*list)[0], &(*list)[1], sizeof((*list)[0]) * (PTLS_ELEMENTSOF(*list) - 1));
+    return popped;
+}
+
+struct webtransport_stream_state {
+    struct {
+        int fd;
+        uint64_t prefix_len;
+    } ingress;
+    struct {
+        int fd;
+        uint64_t filesize;
+        struct {
+            char bytes[9];
+            size_t len;
+        } prefix;
+    } egress;
+};
+
+static struct webtransport_stream_state *create_webtransport_stream_state(char *(*fnlist)[16], const uint64_t *ingress_prefix_len,
+                                                                          int has_egress)
+{
+    struct webtransport_stream_state *state = h2o_mem_alloc(sizeof(*state));
+    *state = (struct webtransport_stream_state){.ingress.fd = -1, .egress.fd = -1};
+
+    char *fn = pop_webtransport_file(fnlist);
+
+    if (has_egress) {
+        if ((state->egress.fd = open(fn, O_RDONLY)) == -1) {
+            fprintf(stderr, "could not open file for reading:%s:%s\n", fn, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        struct stat st;
+        if (fstat(state->egress.fd, &st) != 0) {
+            fprintf(stderr, "could not stat file:%s:%s\n", fn, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        state->egress.filesize = st.st_size;
+    }
+    if (ingress_prefix_len != NULL) {
+        if (has_egress && unlink(fn) != 0) {
+            fprintf(stderr, "could not unlink file:%s:%s\n", fn, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        if ((state->ingress.fd = open(fn, O_WRONLY | O_TRUNC | O_CREAT)) == -1) {
+            fprintf(stderr, "could not open file for writing:%s:%s\n", fn, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        state->ingress.prefix_len = *ingress_prefix_len;
+    }
+
+    free(fn);
+    return state;
+}
+
+static void on_webtransport_stream_destroy(quicly_stream_t *stream, quicly_error_t err)
+{
+    struct webtransport_stream_state *state = stream->data;
+
+    if (state->ingress.fd != -1)
+        close(state->ingress.fd);
+    if (state->egress.fd != -1)
+        close(state->egress.fd);
+    free(state);
+}
+
+static void on_webtransport_stream_send_emit(quicly_stream_t *stream, size_t off, void *_dst, size_t *len, int *wrote_all)
+{
+    struct webtransport_stream_state *state = stream->data;
+    uint64_t pos = stream->sendstate.acked.ranges[0].end + off;
+    size_t capacity = *len;
+    uint8_t *dst = _dst;
+
+    /* write prefix */
+    if (capacity != 0 && pos < state->egress.prefix.len) {
+        size_t l = state->egress.prefix.len - pos;
+        if (l > capacity)
+            l = capacity;
+        memcpy(dst, state->egress.prefix.bytes + pos, l);
+        pos += l;
+        dst += l;
+        capacity -= l;
+    }
+
+    /* write file */
+    if (capacity != 0 && pos < state->egress.prefix.len + state->egress.filesize) {
+        uint64_t l = state->egress.prefix.len + state->egress.filesize - pos;
+        if (l > capacity)
+            l = capacity;
+        if (pread(state->egress.fd, dst, l, pos - state->egress.prefix.len) != l) {
+            fprintf(stderr, "pread failed:%s\n", strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+        pos += l;
+        dst += l;
+        capacity -= l;
+    }
+
+    *wrote_all = pos == state->egress.prefix.len + state->egress.filesize;
+    *len -= capacity;
+}
+
+static void on_webtransport_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    struct webtransport_stream_state *state = stream->data;
+
+    if (pwrite(state->ingress.fd, src, len, stream->recvstate.data_off + off) != len) {
+        fprintf(stderr, "pwrite failed:%s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
+static const quicly_stream_callbacks_t webtransport_stream_callbacks = {
+    .on_destroy = on_webtransport_stream_destroy,
+    .on_send_shift = quicly_stream_noop_on_send_shift,
+    .on_send_emit = on_webtransport_stream_send_emit,
+    .on_send_stop = quicly_stream_noop_on_send_stop,
+    .on_receive = on_webtransport_stream_receive,
+    .on_receive_reset = quicly_stream_noop_on_receive_reset,
+};
+
+static void attach_webtransport_stream_state(quicly_stream_t *stream, struct webtransport_stream_state *state)
+{
+    stream->data = state;
+    stream->callbacks = &webtransport_stream_callbacks;
+    if (state->egress.fd != -1) {
+        quicly_sendstate_shutdown(&stream->sendstate, state->egress.prefix.len + state->egress.filesize);
+        int ret = quicly_stream_sync_sendbuf(stream, 1);
+        assert(ret == 0);
+    }
+}
+
+static void on_webtransport_stream_open(h2o_httpclient_t *client, quicly_stream_t *stream, h2o_iovec_t recvbuf)
+{
+    int uni = quicly_stream_is_unidirectional(stream->stream_id);
+    struct webtransport_stream_state *state = create_webtransport_stream_state(uni ? &webtransport_stream_files.uni.from_server
+                                                                                   : &webtransport_stream_files.bidi.from_server,
+                                                                               &stream->recvstate.data_off, !uni);
+
+    pwrite(state->ingress.fd, recvbuf.base, quicly_recvstate_bytes_available(&stream->recvstate) - stream->recvstate.data_off, 0);
+
+    attach_webtransport_stream_state(stream, state);
+}
+
 static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
     if (errstr == NULL && !std_in.closed) {
@@ -564,6 +738,18 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
     return 0;
 }
 
+static void open_pending_webtransport_streams(h2o_httpclient_t *client, int uni, char *(*fnlist)[16])
+{
+    while ((*fnlist)[0] != NULL) {
+        uint64_t ingress_prefix_len = 0;
+        struct webtransport_stream_state *state = create_webtransport_stream_state(fnlist, uni ? NULL : &ingress_prefix_len, 1);
+        quicly_stream_t *stream;
+        quicly_error_t err = open_webtransport_stream(client, &stream, uni, state->egress.prefix.bytes, &state->egress.prefix.len);
+        assert(err == 0);
+        attach_webtransport_stream_state(stream, state);
+    }
+}
+
 h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
@@ -585,6 +771,12 @@ h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o
         udp_write = args->forward_datagram.write_;
         if (args->forward_datagram.read_ != NULL)
             *args->forward_datagram.read_ = tunnel_on_udp_read;
+        if (args->webtransport.open_stream != NULL) {
+            open_webtransport_stream = args->webtransport.open_stream;
+            *args->webtransport.on_open_stream = on_webtransport_stream_open;
+            open_pending_webtransport_streams(client, 1, &webtransport_stream_files.uni.from_client);
+            open_pending_webtransport_streams(client, 0, &webtransport_stream_files.bidi.from_client);
+        }
     }
 
     return on_body;
@@ -821,6 +1013,10 @@ int main(int argc, char **argv)
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_UPGRADE,
         OPT_RATIO_HTTP3_ON_STREAMS,
+        OPT_WEBTRANSPORT_UNI_FROM_CLIENT,
+        OPT_WEBTRANSPORT_UNI_FROM_SERVER,
+        OPT_WEBTRANSPORT_BIDI_FROM_CLIENT,
+        OPT_WEBTRANSPORT_BIDI_FROM_SERVER,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -830,6 +1026,10 @@ int main(int argc, char **argv)
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"h3-on-streams", required_argument, NULL, OPT_RATIO_HTTP3_ON_STREAMS},
+                                {"wt-uni-from-client", required_argument, NULL, OPT_WEBTRANSPORT_UNI_FROM_CLIENT},
+                                {"wt-uni-from-server", required_argument, NULL, OPT_WEBTRANSPORT_UNI_FROM_SERVER},
+                                {"wt-bidi-from-client", required_argument, NULL, OPT_WEBTRANSPORT_BIDI_FROM_CLIENT},
+                                {"wt-bidi-from-server", required_argument, NULL, OPT_WEBTRANSPORT_BIDI_FROM_SERVER},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -1019,6 +1219,22 @@ int main(int argc, char **argv)
             break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
+            break;
+        case OPT_WEBTRANSPORT_UNI_FROM_CLIENT:
+            if (!push_webtransport_file(&webtransport_stream_files.uni.from_client, optarg))
+                exit(EXIT_FAILURE);
+            break;
+        case OPT_WEBTRANSPORT_UNI_FROM_SERVER:
+            if (!push_webtransport_file(&webtransport_stream_files.uni.from_server, optarg))
+                exit(EXIT_FAILURE);
+            break;
+        case OPT_WEBTRANSPORT_BIDI_FROM_CLIENT:
+            if (!push_webtransport_file(&webtransport_stream_files.bidi.from_client, optarg))
+                exit(EXIT_FAILURE);
+            break;
+        case OPT_WEBTRANSPORT_BIDI_FROM_SERVER:
+            if (!push_webtransport_file(&webtransport_stream_files.bidi.from_server, optarg))
+                exit(EXIT_FAILURE);
             break;
         default:
             exit(EXIT_FAILURE);
