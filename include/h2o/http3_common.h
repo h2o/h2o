@@ -44,6 +44,8 @@
 #define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
 #define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 2
 #define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
+#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_BIDI 0x41
+#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI 0x54
 #define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
 
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
@@ -52,6 +54,7 @@
 #define H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03 0x276
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x33
+#define H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT11 0xc671706a
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -413,6 +416,7 @@ struct st_h2o_http3_conn_t {
     struct {
         uint64_t max_field_section_size;
         unsigned h3_datagram : 1;
+        uint64_t webtransport_max_sessions;
     } peer_settings;
     struct {
         struct {
@@ -433,6 +437,12 @@ struct st_h2o_http3_conn_t {
      * `h2o_http3_calc_min_flow_control_size(max_frame_payload_size)`.
      */
     size_t max_frame_payload_size;
+    /**
+     * webtransport
+     */
+    struct {
+        void (*on_stream_open)(h2o_http3_conn_t *conn, quicly_stream_id_t session_id, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+    } webtransport;
 };
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -531,7 +541,8 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
 /**
  *
  */
-quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock,
+                               const uint64_t *additional_settings);
 /**
  * sends packets immediately by calling quicly_send, sendmsg (returns true if success, false if the connection was destroyed)
  */

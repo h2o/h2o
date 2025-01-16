@@ -86,6 +86,18 @@ typedef struct st_h2o_httpclient_on_head_t {
     struct {
         h2o_httpclient_forward_datagram_cb write_, *read_;
     } forward_datagram;
+    struct {
+        /**
+         * iff WebTransport is accepted, httpclient sets this callback that allows client applications to open a WebTransport stream
+         */
+        quicly_error_t (*open_stream)(h2o_httpclient_t *client, quicly_stream_t **stream, int unidirectional, void *prefix,
+                                      size_t *prefix_len);
+        /**
+         * iff WebTransport is accepted (as indicated by `open_stream` being non-NULL), applications must set the address of its
+         * callback which will be be called when the server opens a WebTransport stream
+         */
+        void (**on_open_stream)(h2o_httpclient_t *client, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+    } webtransport;
     /**
      * If this pointer is set to non-NULL by the HTTP client, it is offering the user the opportunity to read content to a pipe,
      * rather than suppliend them as bytes. To take that opportunity, users should set the members of the pointed struct to

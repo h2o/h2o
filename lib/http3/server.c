@@ -2313,7 +2313,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         ++ctx->super.quic_stats->packet_processed;
     }
     ++ctx->super.next_cid->master_id; /* FIXME check overlap */
-    h2o_http3_setup(&conn->h3, qconn, NULL);
+    h2o_http3_setup(&conn->h3, qconn, NULL, (uint64_t[]){UINT64_MAX});
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
     H2O_LOG_CONN(h3s_accept, &conn->super, {
@@ -2336,7 +2336,7 @@ void h2o_http3_accept_on_streams(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, stru
         ctx, &ctx->ctx->http3.on_streams.quic, &ctx->ctx->globalconf->http3.on_streams.qpack, &H2O_HTTP3_CONN_CALLBACKS);
     quicly_conn_t *quic = quicly_qos_new(conn->h3.super.ctx->quic, 0, NULL);
     assert(quic != NULL);
-    h2o_http3_setup(&conn->h3, quic, sock);
+    h2o_http3_setup(&conn->h3, quic, sock, (uint64_t[]){UINT64_MAX});
 }
 
 void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic)

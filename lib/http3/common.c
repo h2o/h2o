@@ -206,11 +206,16 @@ static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *
     return (const h2o_http3_conn_callbacks_t *)conn->super.callbacks;
 }
 
+static void free_ingress_unistream(struct st_h2o_http3_ingress_unistream_t *stream)
+{
+    h2o_buffer_dispose(&stream->recvbuf);
+    free(stream);
+}
+
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
-    h2o_buffer_dispose(&stream->recvbuf);
-    free(stream);
+    free_ingress_unistream(stream);
 }
 
 static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
@@ -229,6 +234,10 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
 
     /* handle the bytes */
     stream->handle_input(conn, stream, &src, src_end, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    if (stream->quic == NULL) {
+        free_ingress_unistream(stream);
+        return;
+    }
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
         return;
 
@@ -313,6 +322,28 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
     } while (*src != src_end);
 }
 
+static void webtransport_unistream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
+                                                const uint8_t **src, const uint8_t *src_end, int is_eos)
+{
+    uint64_t session_id;
+
+    /* TODO generate error, we should be capable of reading sesison ID thanks to reliable reset */
+    if (src == NULL)
+        return;
+
+    /* read the session id, or just return if incomplete */
+    if ((session_id = quicly_decodev(src, src_end)) == UINT64_MAX)
+        return;
+
+    /* hand over the stream to the application */
+    stream->quic->data = NULL;
+    conn->webtransport.on_stream_open(conn, (quicly_stream_id_t)session_id, stream->quic,
+                                      h2o_iovec_init(*src, stream->recvbuf->bytes + stream->recvbuf->size - (char *)*src));
+
+    /* detach the QUIC stream, and then `stream` is freed by the caller */
+    stream->quic = NULL;
+}
+
 static void discard_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
                                  const uint8_t *src_end, int is_eos)
 {
@@ -347,7 +378,13 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
+    case H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI:
+        if (conn->webtransport.on_stream_open == NULL)
+            goto DiscardStream;
+        stream->handle_input = webtransport_unistream_handle_input;
+        break;
     default:
+    DiscardStream:
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
         stream->handle_input = discard_handle_input;
         break;
@@ -1155,7 +1192,6 @@ static int qos_is_writing(quicly_qos_is_writing_t *_self, quicly_conn_t *quic)
 
 quicly_qos_is_writing_t h2o_quic_qos_is_writing = {.cb = qos_is_writing};
 
-
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
     /* Setup relation between `h2o_quic_conn_t` and `quicly_conn_t`. At this point, `conn` will not have `quic` associated, though
@@ -1201,7 +1237,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
-static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
+static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity, const uint64_t *additional_settings)
 {
     ptls_buffer_t buf;
     int ret = 0;
@@ -1222,8 +1258,10 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
-        ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
-        ptls_buffer_push_quicint(&buf, 1);
+        for (const uint64_t *p = additional_settings; *p != UINT64_MAX;) {
+            ptls_buffer_push_quicint(&buf, *p++);
+            ptls_buffer_push_quicint(&buf, *p++);
+        }
     });
 
     assert(!buf.is_allocated);
@@ -1233,7 +1271,8 @@ Exit:
     h2o_fatal("unreachable");
 }
 
-quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock,
+                               const uint64_t *additional_settings)
 {
     quicly_error_t ret;
 
@@ -1249,7 +1288,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
-        size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
+        size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight), additional_settings);
         if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
@@ -1375,6 +1414,9 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             default:
                 goto Malformed;
             }
+            break;
+        case H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT11:
+            conn->peer_settings.webtransport_max_sessions = value;
             break;
         default:
             break;

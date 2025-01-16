@@ -111,6 +111,10 @@ struct st_h2o_http3client_req_t {
      */
     h2o_httpclient_forward_datagram_cb on_read_datagrams;
     /**
+     * callback used for passing webtransport streams opened by the server to the application
+     */
+    void (*on_webtransport_stream_open)(h2o_httpclient_t *client, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+    /**
      * flags
      */
     unsigned offered_datagram_flow_id : 1;
@@ -175,6 +179,24 @@ static void write_datagrams(h2o_httpclient_t *_client, h2o_iovec_t *datagrams, s
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, super, _client);
     h2o_http3_send_h3_datagrams(&req->conn->super, req->quic->stream_id, datagrams, num_datagrams);
+}
+
+static quicly_error_t open_webtransport_stream(h2o_httpclient_t *_client, quicly_stream_t **stream, int unidirectional,
+                                               void *prefix, size_t *prefix_len)
+{
+    struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, super, _client);
+
+    quicly_error_t ret;
+    if ((ret = quicly_open_stream(req->conn->super.super.quic, stream, unidirectional)) != 0)
+        return ret;
+
+    uint8_t *prefix_p = (uint8_t *)prefix;
+    prefix_p =
+        quicly_encodev(prefix_p, unidirectional ? H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI : H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_BIDI);
+    prefix_p = quicly_encodev(prefix_p, req->quic->stream_id);
+    *prefix_len = prefix_p - (uint8_t *)prefix;
+
+    return 0;
 }
 
 struct st_h2o_httpclient__h3_conn_t *h2o_httpclient__find_h3_connection(h2o_httpclient_connection_pool_t *pool, int on_streams,
@@ -279,7 +301,7 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
         goto Fail;
     }
     ++conn->ctx->http3->h3.next_cid->master_id; /* FIXME check overlap */
-    if ((ret = h2o_http3_setup(&conn->super, qconn, NULL)) != 0)
+    if ((ret = h2o_http3_setup(&conn->super, qconn, NULL, (uint64_t[]){UINT64_MAX})) != 0)
         goto Fail;
 
     if (quicly_connection_is_ready(conn->super.super.quic))
@@ -349,6 +371,30 @@ Fail:
     h2o_quic_close_connection(&conn->super.super, err, err_desc);
 }
 
+static void on_webtransport_stream_open(h2o_http3_conn_t *_conn, quicly_stream_id_t session_id, quicly_stream_t *stream,
+                                        h2o_iovec_t recvbuf)
+{
+    struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
+
+    /* reject invalid session ID */
+    if (!(!quicly_stream_is_unidirectional(session_id) && quicly_stream_is_client_initiated(session_id))) {
+        h2o_quic_close_connection(&conn->super.super, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, "invalid webtransport session ID");
+        return;
+    }
+
+    /* if session cannot be found, silently close the stream (TODO buffer to handle reorder) */
+    struct st_h2o_http3client_req_t *req;
+    quicly_stream_t *qs = quicly_get_stream(conn->super.super.quic, session_id);
+    if (qs == NULL || (req = qs->data) == NULL || req->response_state != H2O_HTTP3CLIENT_RESPONSE_STATE_BODY) {
+        quicly_request_stop(stream, H2O_HTTP3_ERROR_NONE);
+        if (!quicly_stream_is_unidirectional(stream->stream_id))
+            quicly_reset_stream(stream, H2O_HTTP3_ERROR_NONE);
+        return;
+    }
+
+    req->on_webtransport_stream_open(&req->super, stream, recvbuf);
+}
+
 struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *pool,
                                                        h2o_url_t *origin, h2o_socket_t *streams_sock)
 {
@@ -377,7 +423,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         quicly_conn_t *qconn = quicly_qos_new(&conn->ctx->http3->quic, 1, NULL);
         if (qconn == NULL)
             h2o_fatal("quicly_qos_new");
-        if (h2o_http3_setup(&conn->super, qconn, streams_sock) != 0)
+        if (h2o_http3_setup(&conn->super, qconn, streams_sock, (uint64_t[]){UINT64_MAX}) != 0)
             h2o_fatal("h2o_http3_setup");
     } else {
         /* H3 over QUIC: dns lookup then connect */
@@ -388,6 +434,8 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         h2o_timer_link(conn->ctx->loop, conn->ctx->connect_timeout, &conn->timeout);
         conn->timeout.cb = on_connect_timeout;
     }
+
+    conn->super.webtransport.on_stream_open = on_webtransport_stream_open;
 
     return conn;
 }
@@ -572,13 +620,26 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
                                         .headers = headers.entries,
                                         .num_headers = headers.size};
     if (h2o_httpclient__tunnel_is_ready(&req->super, status, on_head.version)) {
+        if (h2o_lcstris(req->super.upgrade_to, strlen(req->super.upgrade_to), H2O_STRLIT("webtransport"))) {
+            if (req->conn->super.peer_settings.webtransport_max_sessions < 1) {
+                *err_desc = "unknown webtransport_max_sessions";
+                notify_response_error(req, *err_desc);
+                return H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
+            }
+            on_head.webtransport.open_stream = open_webtransport_stream;
+            on_head.webtransport.on_open_stream = &req->on_webtransport_stream_open;
+        }
         on_head.forward_datagram.write_ = write_datagrams;
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
+
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
     req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
     if (req->super._cb.on_body == NULL)
         return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
+
+    assert(on_head.webtransport.on_open_stream == NULL || *on_head.webtransport.on_open_stream != NULL ||
+           "webtransport upgrade is complete but application did not provide `on_open_stream`");
 
     /* handle body */
     req->handle_input = handle_input_expect_data_frame;
