@@ -536,6 +536,12 @@ static void on_webtransport_stream_send_emit(quicly_stream_t *stream, size_t off
     *len -= capacity;
 }
 
+static void shift_webtransport_stream_recvstate(quicly_stream_t *stream)
+{
+    size_t contiguous_bytes_saved = quicly_recvstate_bytes_available(&stream->recvstate);
+    quicly_stream_sync_recvbuf(stream, contiguous_bytes_saved);
+}
+
 static void on_webtransport_stream_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
     struct webtransport_stream_state *state = stream->data;
@@ -544,6 +550,7 @@ static void on_webtransport_stream_receive(quicly_stream_t *stream, size_t off, 
         fprintf(stderr, "pwrite failed:%s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
+    shift_webtransport_stream_recvstate(stream);
 }
 
 static const quicly_stream_callbacks_t webtransport_stream_callbacks = {
@@ -573,9 +580,14 @@ static void on_webtransport_stream_open(h2o_httpclient_t *client, quicly_stream_
                                                                                    : &webtransport_stream_files.bidi.from_server,
                                                                                &stream->recvstate.data_off, !uni);
 
-    pwrite(state->ingress.fd, recvbuf.base, quicly_recvstate_bytes_available(&stream->recvstate) - stream->recvstate.data_off, 0);
+    /* write all the bytes that have been received already (don't bother skipping gaps) */
+    if (pwrite(state->ingress.fd, recvbuf.base, recvbuf.len, 0) != recvbuf.len) {
+        fprintf(stderr, "pwrite failed:%s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
     attach_webtransport_stream_state(stream, state);
+    shift_webtransport_stream_recvstate(stream);
 }
 
 static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)

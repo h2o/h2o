@@ -336,6 +336,7 @@ static void webtransport_unistream_handle_input(h2o_http3_conn_t *conn, struct s
         return;
 
     /* hand over the stream to the application */
+    quicly_stream_sync_recvbuf(stream->quic, *src - (const uint8_t *)stream->recvbuf->bytes);
     stream->quic->data = NULL;
     conn->webtransport.on_stream_open(conn, (quicly_stream_id_t)session_id, stream->quic,
                                       h2o_iovec_init(*src, stream->recvbuf->bytes + stream->recvbuf->size - (char *)*src));
