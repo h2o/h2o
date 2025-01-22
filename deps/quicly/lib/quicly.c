@@ -310,7 +310,7 @@ struct st_quicly_conn_t {
          * valid if state is CLOSING
          */
         struct {
-            uint16_t error_code;
+            uint64_t error_code;
             uint64_t frame_type; /* UINT64_MAX if application close */
             const char *reason_phrase;
             unsigned long num_packets_received;
@@ -5817,21 +5817,25 @@ static quicly_error_t enter_close(quicly_conn_t *conn, int local_is_initiating, 
     assert(conn->super.state < QUICLY_STATE_CLOSING);
 
     /* release all inflight info, register a close timeout */
-    if ((ret = discard_sentmap_by_epoch(conn, ~0u)) != 0)
-        return ret;
-    if ((ret = quicly_sentmap_prepare(&conn->egress.loss.sentmap, conn->egress.packet_number, conn->stash.now,
-                                      QUICLY_EPOCH_INITIAL)) != 0)
-        return ret;
-    if (quicly_sentmap_allocate(&conn->egress.loss.sentmap, on_end_closing) == NULL)
-        return PTLS_ERROR_NO_MEMORY;
-    quicly_sentmap_commit(&conn->egress.loss.sentmap, 0, 0, 0);
-    ++conn->egress.packet_number;
+    if (!quicly_is_on_streams(conn)) {
+        if ((ret = discard_sentmap_by_epoch(conn, ~0u)) != 0)
+            return ret;
+        if ((ret = quicly_sentmap_prepare(&conn->egress.loss.sentmap, conn->egress.packet_number, conn->stash.now,
+                                          QUICLY_EPOCH_INITIAL)) != 0)
+            return ret;
+        if (quicly_sentmap_allocate(&conn->egress.loss.sentmap, on_end_closing) == NULL)
+            return PTLS_ERROR_NO_MEMORY;
+        quicly_sentmap_commit(&conn->egress.loss.sentmap, 0, 0, 0);
+        ++conn->egress.packet_number;
+    }
 
     if (local_is_initiating) {
         conn->super.state = QUICLY_STATE_CLOSING;
         conn->egress.send_ack_at = 0;
     } else {
         conn->super.state = QUICLY_STATE_DRAINING;
+        if (quicly_is_on_streams(conn))
+            wait_draining = 0;
         conn->egress.send_ack_at = wait_draining ? conn->stash.now + get_sentmap_expiration_time(conn) : 0;
     }
 
@@ -5842,7 +5846,7 @@ static quicly_error_t enter_close(quicly_conn_t *conn, int local_is_initiating, 
 
 quicly_error_t initiate_close(quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, const char *reason_phrase)
 {
-    uint16_t quic_error_code;
+    uint64_t quic_error_code;
 
     if (conn->super.state >= QUICLY_STATE_CLOSING)
         return 0;
@@ -5860,7 +5864,7 @@ quicly_error_t initiate_close(quicly_conn_t *conn, quicly_error_t err, uint64_t 
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
         frame_type = UINT64_MAX;
     } else if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT) {
-        quic_error_code = QUICLY_TRANSPORT_ERROR_CRYPTO(PTLS_ERROR_TO_ALERT(err));
+        quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_CRYPTO(PTLS_ERROR_TO_ALERT(err)));
     } else {
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_INTERNAL);
     }
@@ -7963,12 +7967,28 @@ quicly_error_t quicly_qos_send(quicly_conn_t *conn, void *buf, size_t *bufsize)
 
     lock_now(conn, 0);
 
-    if (conn->idle_timeout.at <= conn->stash.now) {
+    /* handle close */
+    if (conn->idle_timeout.at <= conn->stash.now)
         conn->super.state = QUICLY_STATE_DRAINING;
+    switch (conn->super.state) {
+    default:
+        break;
+    case QUICLY_STATE_CLOSING:
         destroy_all_streams(conn, 0, 0);
-        return QUICLY_ERROR_FREE_CONNECTION;
+        s.dst = quicly_encode_close_frame(s.dst, conn->egress.connection_close.error_code,
+                                          conn->egress.connection_close.frame_type,
+                                          conn->egress.connection_close.reason_phrase);
+        conn->super.state = QUICLY_STATE_DRAINING;
+        conn->egress.send_ack_at = 0;
+        ret = 0;
+        goto Exit;
+    case QUICLY_STATE_DRAINING:
+        destroy_all_streams(conn, 0, 0);
+        ret = QUICLY_ERROR_FREE_CONNECTION;
+        goto Exit;
     }
 
+    /* send transport parameters first (if necessary), then the ordinary frames */
     if (conn->super.state == QUICLY_STATE_FIRSTFLIGHT) {
         if ((ret = emit_qs_transport_parameters(conn, &s)) != 0)
             goto Exit;
