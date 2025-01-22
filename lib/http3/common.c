@@ -1118,10 +1118,14 @@ static void qos_on_read(h2o_socket_t *sock, const char *err)
     }
 
     size_t len = sock->input->size;
-    int ret = quicly_qos_receive(conn->quic, sock->input->bytes, &len);
-    if (ret != 0) {
+    quicly_error_t ret = quicly_qos_receive(conn->quic, sock->input->bytes, &len);
+    switch (ret) {
+    case QUICLY_ERROR_STATE_EXHAUSTION:
+    case PTLS_ERROR_NO_MEMORY:
         conn->callbacks->destroy_connection(conn);
         return;
+    default:
+        break;
     }
     h2o_buffer_consume(&sock->input, len);
 
