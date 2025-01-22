@@ -836,7 +836,7 @@ struct st_quicly_stream_t {
          */
         struct {
             quicly_sender_state_t sender_state;
-            uint16_t error_code;
+            uint64_t error_code;
         } stop_sending;
         /**
          * reset_stream
@@ -846,7 +846,7 @@ struct st_quicly_stream_t {
              * STATE_NONE until RST is generated
              */
             quicly_sender_state_t sender_state;
-            uint16_t error_code;
+            uint64_t error_code;
         } reset_stream;
         /**
          * sends receive window updates to remote peer

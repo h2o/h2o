@@ -310,7 +310,7 @@ struct st_quicly_conn_t {
          * valid if state is CLOSING
          */
         struct {
-            uint16_t error_code;
+            uint64_t error_code;
             uint64_t frame_type; /* UINT64_MAX if application close */
             const char *reason_phrase;
             unsigned long num_packets_received;
@@ -5783,7 +5783,7 @@ static quicly_error_t enter_close(quicly_conn_t *conn, int local_is_initiating, 
 
 quicly_error_t initiate_close(quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, const char *reason_phrase)
 {
-    uint16_t quic_error_code;
+    uint64_t quic_error_code;
 
     if (conn->super.state >= QUICLY_STATE_CLOSING)
         return 0;
@@ -5801,7 +5801,7 @@ quicly_error_t initiate_close(quicly_conn_t *conn, quicly_error_t err, uint64_t 
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
         frame_type = UINT64_MAX;
     } else if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT) {
-        quic_error_code = QUICLY_TRANSPORT_ERROR_CRYPTO(PTLS_ERROR_TO_ALERT(err));
+        quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_CRYPTO(PTLS_ERROR_TO_ALERT(err)));
     } else {
         quic_error_code = QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_INTERNAL);
     }
