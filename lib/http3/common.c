@@ -215,11 +215,15 @@ static void free_ingress_unistream(struct st_h2o_http3_ingress_unistream_t *stre
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
-    free_ingress_unistream(stream);
+    if (stream != NULL)
+        free_ingress_unistream(stream);
 }
 
 static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
 {
+    if (quicly_stop_requested(qs))
+        return;
+
     h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
 
