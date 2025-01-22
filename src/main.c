@@ -226,7 +226,12 @@ struct listener_config_t {
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
      */
     unsigned sndbuf, rcvbuf;
-    int proxy_protocol, h3_on_streams;
+    unsigned proxy_protocol : 1;
+    unsigned h3_on_streams : 1;
+    /**
+     * temporary, see `h2o_accept_ctx_t::advertise_webtransport`
+     */
+    unsigned advertise_webtransport : 1;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
 };
 
@@ -2358,7 +2363,7 @@ static struct listener_config_t *find_listener(struct sockaddr *addr, socklen_t 
 }
 
 static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, socklen_t addrlen, int is_global, int proxy_protocol,
-                                              unsigned sndbuf, unsigned rcvbuf, int h3_on_streams)
+                                              unsigned sndbuf, unsigned rcvbuf, int h3_on_streams, int webtransport)
 {
     struct listener_config_t *listener = h2o_mem_alloc(sizeof(*listener));
 
@@ -2381,6 +2386,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     listener->sndbuf = sndbuf;
     listener->rcvbuf = rcvbuf;
     listener->h3_on_streams = h3_on_streams;
+    listener->advertise_webtransport = webtransport;
 
     conf.listeners = h2o_mem_realloc(conf.listeners, sizeof(*conf.listeners) * (conf.num_listeners + 1));
     conf.listeners[conf.num_listeners++] = listener;
@@ -2708,7 +2714,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
            **initcwnd_node = NULL, **group_node = NULL;
-    int proxy_protocol = 0, h3_on_streams = 0;
+    int proxy_protocol = 0, h3_on_streams = 0, webtransport = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
 
     /* fetch servname (and hostname) */
@@ -2717,13 +2723,14 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         servname = node->data.scalar;
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **h3_on_streams_node;
+        yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **h3_on_streams_node,
+            **webtransport_node;
         if (h2o_configurator_parse_mapping(cmd, node, "port:s",
                                            "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:"
-                                           "s,sndbuf:s,rcvbuf:s,http3-on-streams:s",
+                                           "s,sndbuf:s,rcvbuf:s,http3-on-streams:s,webtransport:s",
                                            &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node,
                                            &ssl_node, &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node, &sndbuf_node,
-                                           &rcvbuf_node, &h3_on_streams_node) != 0)
+                                           &rcvbuf_node, &h3_on_streams_node, &webtransport_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -2741,6 +2748,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         if (rcvbuf_node != NULL && h2o_configurator_scanf(cmd, *rcvbuf_node, "%u", &stream_rcvbuf) != 0)
             return -1;
         if (h3_on_streams_node != NULL && (h3_on_streams = h2o_configurator_get_one_of(cmd, *h3_on_streams_node, "OFF,ON")) == -1)
+            return -1;
+        if (webtransport_node != NULL && (webtransport = (int)h2o_configurator_get_one_of(cmd, *webtransport_node, "OFF,ON")) == -1)
             return -1;
     } break;
     default:
@@ -2788,7 +2797,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 break;
             }
             listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
-                                    stream_rcvbuf, h3_on_streams);
+                                    stream_rcvbuf, h3_on_streams, webtransport);
             listener_is_new = 1;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
@@ -2837,7 +2846,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     break;
                 }
                 listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
-                                        stream_rcvbuf, h3_on_streams);
+                                        stream_rcvbuf, h3_on_streams, webtransport);
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
@@ -2900,7 +2909,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 quic->cid_encryptor = &quic_cid_encryptor;
                 quic->generate_resumption_token = &quic_resumption_token_generator;
                 quic->async_handshake = &async_nb_quic_handler;
-                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0, 0);
+                listener = add_listener(fd, ai->ai_addr, ai->ai_addrlen, ctx->hostconf == NULL, 0, 0, 0, 0, webtransport);
                 if (ai->ai_family == AF_INET)
                     siblings[0] = listener;
                 else if (ai->ai_family == AF_INET6)
@@ -4211,9 +4220,16 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     for (i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
         int fd = listener_config->fds.entries[thread_index];
-        listeners[i] = (struct listener_ctx_t){i,
-                                               {&conf.threads[thread_index].ctx, listener_config->hosts, NULL, NULL,
-                                                listener_config->proxy_protocol, &conf.threads[thread_index].memcached}};
+        listeners[i] = (struct listener_ctx_t){
+            .listener_index = i,
+            .accept_ctx = {
+                .ctx = &conf.threads[thread_index].ctx,
+                .hosts = listener_config->hosts,
+                .expect_proxy_line = listener_config->proxy_protocol,
+                .advertise_webtransport = listener_config->advertise_webtransport,
+                .libmemcached_receiver = &conf.threads[thread_index].memcached,
+            },
+        };
         if (listener_config->ssl.size != 0) {
             listeners[i].accept_ctx.ssl_ctx = listener_config->ssl.entries[0]->identities[0].ossl;
             listeners[i].accept_ctx.http2_origin_frame = listener_config->ssl.entries[0]->http2_origin_frame;

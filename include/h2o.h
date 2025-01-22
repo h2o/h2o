@@ -1375,6 +1375,20 @@ struct st_h2o_req_t {
      * the number of times the request can be delegated
      */
     unsigned remaining_delegations;
+    /**
+     *
+     */
+    struct {
+        /**
+         * generator-supplied callback for accepting newly created webtransport streams
+         */
+        void (*on_stream_open)(h2o_generator_t *generator, h2o_req_t *req, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+        /**
+         * supplied by connection handlers for opening webtransport streams to the client
+         */
+        quicly_error_t (*open_stream)(h2o_req_t *req, quicly_stream_t **stream, int unidirectional, void *prefix,
+                                      size_t *prefix_len);
+    } webtransport;
 
     /**
      * environment variables
@@ -1483,7 +1497,12 @@ typedef struct st_h2o_accept_ctx_t {
     h2o_hostconf_t **hosts;
     SSL_CTX *ssl_ctx;
     h2o_iovec_t *http2_origin_frame;
-    int expect_proxy_line;
+    unsigned expect_proxy_line : 1;
+    /**
+     * To use draft versions of webtransport, servers have to advertise a specific SETTINGS paramter. This property is to be removed
+     * when support for the draft versions is dropped.
+     */
+    unsigned advertise_webtransport : 1;
     h2o_multithread_receiver_t *libmemcached_receiver;
 } h2o_accept_ctx_t;
 

@@ -339,11 +339,18 @@ static void webtransport_unistream_handle_input(h2o_http3_conn_t *conn, struct s
     if ((session_id = quicly_decodev(src, src_end)) == UINT64_MAX)
         return;
 
-    /* hand over the stream to the application */
-    quicly_stream_sync_recvbuf(stream->quic, *src - (const uint8_t *)stream->recvbuf->bytes);
+    /* reject invalid session ID; it must be a client-initiated bi-directional stream */
+    if (!(quicly_stream_is_client_initiated(session_id) && !quicly_stream_is_unidirectional(session_id))) {
+        h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_ID, NULL);
+        return;
+    }
+
+    /* hand over the stream to the application, after removing the prefix */
+    size_t bytes_consumed = *src - (const uint8_t *)stream->recvbuf->bytes;
+    h2o_buffer_consume(&stream->recvbuf, bytes_consumed);
+    quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
     stream->quic->data = NULL;
-    conn->webtransport.on_stream_open(conn, (quicly_stream_id_t)session_id, stream->quic,
-                                      h2o_iovec_init(*src, stream->recvbuf->bytes + stream->recvbuf->size - (char *)*src));
+    conn->webtransport.on_stream_open(conn, (quicly_stream_id_t)session_id, stream->quic, &stream->recvbuf);
 
     /* detach the QUIC stream, and then `stream` is freed by the caller */
     stream->quic = NULL;
@@ -1503,4 +1510,115 @@ uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, si
     if ((flow_id = ptls_decode_quicint(&src, end)) != UINT64_MAX)
         *payload = h2o_iovec_init(src, end - src);
     return flow_id;
+}
+
+int h2o_http3_is_core_egress_unidirectional_stream(quicly_stream_t *stream)
+{
+    if (stream->callbacks->on_destroy == egress_unistream_on_destroy) {
+        assert(quicly_stream_is_unidirectional(stream->stream_id) && quicly_stream_is_self_initiated(stream));
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+size_t h2o_http3_webtransport_encode_prefix(void *buf, int unidirectional, quicly_stream_id_t session_id)
+{
+    uint8_t *p = buf;
+
+    p = quicly_encodev(p, unidirectional ? H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI : H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_BIDI);
+    p = quicly_encodev(p, session_id);
+
+    return p - (uint8_t *)buf;
+}
+
+struct st_h2o_http3_parked_webtransport_stream_t {
+    h2o_linklist_t link;
+    quicly_stream_id_t session_id;
+    quicly_stream_t *stream;
+    h2o_buffer_t *recvbuf;
+};
+
+static void free_parked_webtransport_stream(struct st_h2o_http3_parked_webtransport_stream_t *parked)
+{
+    if (h2o_linklist_is_linked(&parked->link))
+        h2o_linklist_unlink(&parked->link);
+    if (parked->stream != NULL) {
+        /* detach the stream; the stream itself is freed by quicly */
+        parked->stream->callbacks = &quicly_stream_noop_callbacks;
+        parked->stream->data = NULL;
+    }
+    if (parked->recvbuf != NULL)
+        h2o_buffer_dispose(&parked->recvbuf);
+    free(parked);
+}
+
+void parked_webtransport_stream_on_destroy(quicly_stream_t *stream, quicly_error_t err)
+{
+    struct st_h2o_http3_parked_webtransport_stream_t *parked = stream->data;
+    parked->stream = NULL;
+    /* Once parked, `st_h2o_http3_parked_webtransport_stream_t` is freed only through
+     * `h2o_http3_dispatch_parked_webtransport_streams`. Otherwise, client- and server-side implementations cannot forward the
+     * payload of webtransport streams closed before session establishment. */
+}
+
+void parked_webtransport_stream_on_send_shift(quicly_stream_t *stream, size_t delta)
+{
+    h2o_fatal("would not have sent anything");
+}
+
+void parked_webtransport_stream_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
+{
+    h2o_fatal("would not have asked to send anything");
+}
+
+void parked_webtransport_stream_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
+{
+    struct st_h2o_http3_parked_webtransport_stream_t *parked = stream->data;
+    h2o_buffer_write(&parked->recvbuf, off, src, len);
+}
+
+void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, quicly_stream_id_t session_id, quicly_stream_t *stream,
+                                        h2o_buffer_t **recvbuf)
+{
+    static const quicly_stream_callbacks_t callbacks = {
+        .on_destroy = parked_webtransport_stream_on_destroy,
+        .on_send_shift = parked_webtransport_stream_on_send_shift,
+        .on_send_emit = parked_webtransport_stream_on_send_emit,
+        .on_send_stop = quicly_stream_noop_on_send_stop,
+        .on_receive = parked_webtransport_stream_on_receive,
+        .on_receive_reset = quicly_stream_noop_on_receive_reset,
+    };
+
+    struct st_h2o_http3_parked_webtransport_stream_t *parked = h2o_mem_alloc(sizeof(*parked));
+    *parked = (struct st_h2o_http3_parked_webtransport_stream_t){
+        .session_id = session_id,
+        .stream = stream,
+        .recvbuf = *recvbuf,
+    };
+    h2o_buffer_init(recvbuf, &h2o_socket_buffer_prototype); /* reset given buffer now that it has been moved to `*parked` */
+    if (parked->stream != NULL) {
+        parked->stream->data = parked;
+        parked->stream->callbacks = &callbacks;
+    }
+
+    h2o_linklist_insert(anchor, &parked->link);
+}
+
+void h2o_http3_dispatch_parked_webtransport_streams(h2o_linklist_t *anchor, h2o_http3_conn_t *conn)
+{
+    while (!h2o_linklist_is_empty(anchor)) {
+        struct st_h2o_http3_parked_webtransport_stream_t *parked =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_parked_webtransport_stream_t, link, anchor->next);
+        h2o_linklist_unlink(&parked->link);
+        if (conn != NULL) {
+            conn->webtransport.on_stream_open(conn, parked->session_id, parked->stream, &parked->recvbuf);
+            parked->stream = NULL; /* ownership must have been moved */
+        } else if (quicly_get_state(parked->stream->conn) == QUICLY_STATE_CONNECTED) {
+            quicly_request_stop(parked->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+            if (quicly_stream_has_send_side(quicly_is_client(parked->stream->conn), parked->stream->stream_id))
+                quicly_reset_stream(parked->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+        }
+        free_parked_webtransport_stream(parked);
+    }
 }

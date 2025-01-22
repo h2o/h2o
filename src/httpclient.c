@@ -478,7 +478,7 @@ static struct webtransport_stream_state *create_webtransport_stream_state(char *
             fprintf(stderr, "could not unlink file:%s:%s\n", fn, strerror(errno));
             exit(EXIT_FAILURE);
         }
-        if ((state->ingress.fd = open(fn, O_WRONLY | O_TRUNC | O_CREAT)) == -1) {
+        if ((state->ingress.fd = open(fn, O_WRONLY | O_TRUNC | O_CREAT, 0666)) == -1) {
             fprintf(stderr, "could not open file for writing:%s:%s\n", fn, strerror(errno));
             exit(EXIT_FAILURE);
         }

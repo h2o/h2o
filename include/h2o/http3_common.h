@@ -76,6 +76,12 @@
 #define H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x200)
 #define H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x201)
 #define H2O_HTTP3_ERROR_QPACK_DECODER_STREAM QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x202)
+#define H2O_HTTP3_ERROR_WEBTRANSPORT_BUFFERED_STREAM_REJECTED QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x3994bd84)
+#define H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x170d7b68)
+
+#define H2O_HTTP3_WEBTRANSPORT_APPLICATION_ERROR_BASE 0x52e4a40fa8dbu
+#define H2O_HTTP3_ERROR_FROM_WEBTRANSPORT_APPLICATION(x)                                                                           \
+    QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(H2O_HTTP3_WEBTRANSPORT_APPLICATION_ERROR_BASE + (x))
 
 #define H2O_HTTP3_ERROR_INCOMPLETE -1
 #define H2O_HTTP3_ERROR_TRANSPORT -2
@@ -441,7 +447,8 @@ struct st_h2o_http3_conn_t {
      * webtransport
      */
     struct {
-        void (*on_stream_open)(h2o_http3_conn_t *conn, quicly_stream_id_t session_id, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+        void (*on_stream_open)(h2o_http3_conn_t *conn, quicly_stream_id_t session_id, quicly_stream_t *stream,
+                               h2o_buffer_t **recvbuf);
     } webtransport;
 };
 
@@ -594,6 +601,26 @@ uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, si
  * have to be guaranteed.
  */
 static uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length);
+/**
+ *
+ */
+int h2o_http3_is_core_egress_unidirectional_stream(quicly_stream_t *stream);
+
+#define H2O_HTTP3_WEBTRANSPORT_PREFIX_CAPACITY 16 /* two quicints */
+/**
+ *
+ */
+size_t h2o_http3_webtransport_encode_prefix(void *buf, int unidirectional, quicly_stream_id_t session_id);
+/**
+ *
+ */
+void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, quicly_stream_id_t session_id, quicly_stream_t *stream,
+                                        h2o_buffer_t **recvbuf);
+/**
+ * if `conn` is non-NULL, dispatches parked webtransport streams through `conn`; otherwise, parked streams are reset with
+ *  WEBTRANSPROT_SESSION_GONE errors
+ */
+void h2o_http3_dispatch_parked_webtransport_streams(h2o_linklist_t *anchor, h2o_http3_conn_t *conn);
 
 /* inline definitions */
 
