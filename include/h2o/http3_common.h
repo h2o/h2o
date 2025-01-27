@@ -399,6 +399,20 @@ typedef struct st_h2o_http3_conn_callbacks_t {
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
 } h2o_http3_conn_callbacks_t;
 
+/**
+ * Retains properties of a webtransport stream being opened. The receive buffer is passed separately, as its structure might be
+ * different depending on the callbacks.
+ */
+typedef struct st_h2o_http3_on_webtransport_stream_open_t {
+    quicly_stream_id_t session_id;
+    int unidirectional;
+    /**
+     * Associated QUIC stream; may become NULL if the webtransport stream is closed or reset while waiting for the corresponding
+     * session to become available.
+     */
+    quicly_stream_t *stream;
+} h2o_http3_on_webtransport_stream_open_t;
+
 struct st_h2o_http3_conn_t {
     /**
      *
@@ -447,8 +461,7 @@ struct st_h2o_http3_conn_t {
      * webtransport
      */
     struct {
-        void (*on_stream_open)(h2o_http3_conn_t *conn, quicly_stream_id_t session_id, quicly_stream_t *stream,
-                               h2o_buffer_t **recvbuf);
+        void (*on_stream_open)(h2o_http3_conn_t *conn, h2o_http3_on_webtransport_stream_open_t *params, h2o_buffer_t **recvbuf);
     } webtransport;
 };
 
@@ -614,7 +627,7 @@ size_t h2o_http3_webtransport_encode_prefix(void *buf, int unidirectional, quicl
 /**
  *
  */
-void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, quicly_stream_id_t session_id, quicly_stream_t *stream,
+void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, h2o_http3_on_webtransport_stream_open_t *params,
                                         h2o_buffer_t **recvbuf);
 /**
  * if `conn` is non-NULL, dispatches parked webtransport streams through `conn`; otherwise, parked streams are reset with

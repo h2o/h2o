@@ -96,7 +96,7 @@ typedef struct st_h2o_httpclient_on_head_t {
          * iff WebTransport is accepted (as indicated by `open_stream` being non-NULL), applications must set the address of its
          * callback which will be be called when the server opens a WebTransport stream
          */
-        void (**on_open_stream)(h2o_httpclient_t *client, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+        void (**on_open_stream)(h2o_httpclient_t *client, h2o_http3_on_webtransport_stream_open_t *params, h2o_iovec_t recvbuf);
     } webtransport;
     /**
      * If this pointer is set to non-NULL by the HTTP client, it is offering the user the opportunity to read content to a pipe,

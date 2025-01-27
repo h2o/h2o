@@ -441,7 +441,6 @@ static char *pop_webtransport_file(char *(*list)[16])
 struct webtransport_stream_state {
     struct {
         int fd;
-        uint64_t prefix_len;
     } ingress;
     struct {
         int fd;
@@ -453,8 +452,7 @@ struct webtransport_stream_state {
     } egress;
 };
 
-static struct webtransport_stream_state *create_webtransport_stream_state(char *(*fnlist)[16], const uint64_t *ingress_prefix_len,
-                                                                          int has_egress)
+static struct webtransport_stream_state *create_webtransport_stream_state(char *(*fnlist)[16], int has_ingress, int has_egress)
 {
     struct webtransport_stream_state *state = h2o_mem_alloc(sizeof(*state));
     *state = (struct webtransport_stream_state){.ingress.fd = -1, .egress.fd = -1};
@@ -473,7 +471,7 @@ static struct webtransport_stream_state *create_webtransport_stream_state(char *
         }
         state->egress.filesize = st.st_size;
     }
-    if (ingress_prefix_len != NULL) {
+    if (has_ingress) {
         if (has_egress && unlink(fn) != 0) {
             fprintf(stderr, "could not unlink file:%s:%s\n", fn, strerror(errno));
             exit(EXIT_FAILURE);
@@ -482,22 +480,25 @@ static struct webtransport_stream_state *create_webtransport_stream_state(char *
             fprintf(stderr, "could not open file for writing:%s:%s\n", fn, strerror(errno));
             exit(EXIT_FAILURE);
         }
-        state->ingress.prefix_len = *ingress_prefix_len;
     }
 
     free(fn);
     return state;
 }
 
-static void on_webtransport_stream_destroy(quicly_stream_t *stream, quicly_error_t err)
+static void destroy_webtransport_stream_state(struct webtransport_stream_state *state)
 {
-    struct webtransport_stream_state *state = stream->data;
-
     if (state->ingress.fd != -1)
         close(state->ingress.fd);
     if (state->egress.fd != -1)
         close(state->egress.fd);
     free(state);
+}
+
+static void on_webtransport_stream_destroy(quicly_stream_t *stream, quicly_error_t err)
+{
+    struct webtransport_stream_state *state = stream->data;
+    destroy_webtransport_stream_state(state);
 }
 
 static void on_webtransport_stream_send_emit(quicly_stream_t *stream, size_t off, void *_dst, size_t *len, int *wrote_all)
@@ -573,12 +574,12 @@ static void attach_webtransport_stream_state(quicly_stream_t *stream, struct web
     }
 }
 
-static void on_webtransport_stream_open(h2o_httpclient_t *client, quicly_stream_t *stream, h2o_iovec_t recvbuf)
+static void on_webtransport_stream_open(h2o_httpclient_t *client, h2o_http3_on_webtransport_stream_open_t *params,
+                                        h2o_iovec_t recvbuf)
 {
-    int uni = quicly_stream_is_unidirectional(stream->stream_id);
-    struct webtransport_stream_state *state = create_webtransport_stream_state(uni ? &webtransport_stream_files.uni.from_server
-                                                                                   : &webtransport_stream_files.bidi.from_server,
-                                                                               &stream->recvstate.data_off, !uni);
+    struct webtransport_stream_state *state = create_webtransport_stream_state(
+        params->unidirectional ? &webtransport_stream_files.uni.from_server : &webtransport_stream_files.bidi.from_server, 1,
+        !params->unidirectional);
 
     /* write all the bytes that have been received already (don't bother skipping gaps) */
     if (pwrite(state->ingress.fd, recvbuf.base, recvbuf.len, 0) != recvbuf.len) {
@@ -586,8 +587,12 @@ static void on_webtransport_stream_open(h2o_httpclient_t *client, quicly_stream_
         exit(EXIT_FAILURE);
     }
 
-    attach_webtransport_stream_state(stream, state);
-    shift_webtransport_stream_recvstate(stream);
+    if (params->stream != NULL) {
+        attach_webtransport_stream_state(params->stream, state);
+        shift_webtransport_stream_recvstate(params->stream);
+    } else {
+        destroy_webtransport_stream_state(state);
+    }
 }
 
 static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
@@ -754,7 +759,7 @@ static void open_pending_webtransport_streams(h2o_httpclient_t *client, int uni,
 {
     while ((*fnlist)[0] != NULL) {
         uint64_t ingress_prefix_len = 0;
-        struct webtransport_stream_state *state = create_webtransport_stream_state(fnlist, uni ? NULL : &ingress_prefix_len, 1);
+        struct webtransport_stream_state *state = create_webtransport_stream_state(fnlist, !uni, 1);
         quicly_stream_t *stream;
         quicly_error_t err = open_webtransport_stream(client, &stream, uni, state->egress.prefix.bytes, &state->egress.prefix.len);
         assert(err == 0);

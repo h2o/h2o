@@ -2231,8 +2231,8 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
 
 static quicly_receive_datagram_frame_t on_receive_datagram_frame = {datagram_frame_receive_cb};
 
-static void on_webtransport_stream_open_by_client(h2o_http3_conn_t *h3, quicly_stream_id_t session_id,
-                                                  quicly_stream_t *webtransport_stream, h2o_buffer_t **recvbuf)
+static void on_webtransport_stream_open_by_client(h2o_http3_conn_t *h3, h2o_http3_on_webtransport_stream_open_t *params,
+                                                  h2o_buffer_t **recvbuf)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
 
@@ -2240,21 +2240,23 @@ static void on_webtransport_stream_open_by_client(h2o_http3_conn_t *h3, quicly_s
     struct st_h2o_http3_server_stream_t *req_stream;
     quicly_stream_t *req_stream_quic;
     quicly_error_t ret;
-    if ((ret = quicly_get_or_open_stream(conn->h3.super.quic, session_id, &req_stream_quic)) != 0) {
+    if ((ret = quicly_get_or_open_stream(conn->h3.super.quic, params->session_id, &req_stream_quic)) != 0) {
         h2o_quic_close_connection(&conn->h3.super, ret, 0);
         return;
     }
     if (req_stream_quic == NULL ||
         ((req_stream = req_stream_quic->data) != NULL && req_stream->state > H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY)) {
         /* if the webtransport stream is opened too late, send SESSION_GONE */
-        webtransport_stream->callbacks = &quicly_stream_noop_callbacks;
-        quicly_request_stop(webtransport_stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
-        if (quicly_stream_has_receive_side(0, webtransport_stream->stream_id))
-            quicly_reset_stream(webtransport_stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+        if (params->stream != NULL) {
+            params->stream->callbacks = &quicly_stream_noop_callbacks;
+            quicly_request_stop(params->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+            if (!params->unidirectional)
+                quicly_reset_stream(params->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+        }
         return;
     } else if (req_stream == NULL || req_stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY) {
         /* if the webtransport stream is opened too early, buffer the stream until the response headers are sent */
-        h2o_http3_park_webtransport_stream(&req_stream->webtransport.parked, session_id, webtransport_stream, recvbuf);
+        h2o_http3_park_webtransport_stream(&req_stream->webtransport.parked, params, recvbuf);
         return;
     }
 
@@ -2263,7 +2265,7 @@ static void on_webtransport_stream_open_by_client(h2o_http3_conn_t *h3, quicly_s
         h2o_quic_close_connection(&conn->h3.super, H2O_HTTP3_ERROR_INTERNAL, "");
         return;
     }
-    req_stream->req.webtransport.on_stream_open(req_stream->req._generator, &req_stream->req, webtransport_stream,
+    req_stream->req.webtransport.on_stream_open(req_stream->req._generator, &req_stream->req, params,
                                                 h2o_iovec_init((*recvbuf)->bytes, (*recvbuf)->size));
 }
 

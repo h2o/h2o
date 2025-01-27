@@ -1382,7 +1382,8 @@ struct st_h2o_req_t {
         /**
          * generator-supplied callback for accepting newly created webtransport streams
          */
-        void (*on_stream_open)(h2o_generator_t *generator, h2o_req_t *req, quicly_stream_t *stream, h2o_iovec_t recvbuf);
+        void (*on_stream_open)(h2o_generator_t *generator, h2o_req_t *req, h2o_http3_on_webtransport_stream_open_t *params,
+                               h2o_iovec_t recvbuf);
         /**
          * supplied by connection handlers for opening webtransport streams to the client
          */

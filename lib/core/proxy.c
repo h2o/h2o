@@ -759,46 +759,51 @@ static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quic
     };
 
     /* prepare sendbufs if necessary */
-    if (quicly_stream_has_send_side(0, pair->client.stream->stream_id))
+    if (pair->client.stream != NULL && quicly_stream_has_send_side(0, pair->client.stream->stream_id))
         h2o_buffer_init(&pair->client.sendbuf, &h2o_socket_buffer_prototype);
-    if (quicly_stream_has_send_side(1, pair->server.stream->stream_id))
+    if (pair->server.stream != NULL && quicly_stream_has_send_side(1, pair->server.stream->stream_id))
         h2o_buffer_init(&pair->server.sendbuf, &h2o_socket_buffer_prototype);
 
     { /* assign prefix to either side and set remaining length */
         struct rp_webtransport_stream_endpoint_t *prefixed =
-            quicly_stream_is_self_initiated(pair->client.stream) ? &pair->client : &pair->server;
+            pair->client.stream != NULL && quicly_stream_is_self_initiated(pair->client.stream) ? &pair->client : &pair->server;
         h2o_buffer_append(&prefixed->sendbuf, prefix, prefix_len);
         prefixed->remaining_prefix_length = prefix_len;
     }
 
     /* setup links */
-    pair->client.stream->data = pair;
-    pair->client.stream->callbacks = &callbacks;
-    pair->server.stream->data = pair;
-    pair->server.stream->callbacks = &callbacks;
+    if (pair->client.stream != NULL) {
+        pair->client.stream->data = pair;
+        pair->client.stream->callbacks = &callbacks;
+    }
+    if (pair->server.stream != NULL) {
+        pair->server.stream->data = pair;
+        pair->server.stream->callbacks = &callbacks;
+    }
 
     return pair;
 }
 
 static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t err)
 {
-    if (!QUICLY_ERROR_IS_QUIC_APPLICATION(err))
-        err = H2O_HTTP3_ERROR_INTERNAL;
-
-    int is_client = quicly_is_client(stream->conn);
-    if (quicly_stream_has_receive_side(is_client, stream->stream_id))
-        quicly_request_stop(stream, err);
-    if (quicly_stream_has_send_side(is_client, stream->stream_id))
-        quicly_reset_stream(stream, err);
+    if (stream != NULL) {
+        if (!QUICLY_ERROR_IS_QUIC_APPLICATION(err))
+            err = H2O_HTTP3_ERROR_INTERNAL;
+        int is_client = quicly_is_client(stream->conn);
+        if (quicly_stream_has_receive_side(is_client, stream->stream_id))
+            quicly_request_stop(stream, err);
+        if (quicly_stream_has_send_side(is_client, stream->stream_id))
+            quicly_reset_stream(stream, err);
+    }
 }
 
-static void on_webtransport_stream_open_by_client(h2o_generator_t *generator, h2o_req_t *req, quicly_stream_t *client_stream,
-                                                  h2o_iovec_t recvbuf)
+static void on_webtransport_stream_open_by_client(h2o_generator_t *generator, h2o_req_t *req,
+                                                  h2o_http3_on_webtransport_stream_open_t *params, h2o_iovec_t recvbuf)
 {
     struct rp_generator_t *self = (void *)generator;
 
     if (self->res_done || self->had_body_error) {
-        abort_webtransport_stream(client_stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+        abort_webtransport_stream(params->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
         return;
     }
 
@@ -810,24 +815,24 @@ static void on_webtransport_stream_open_by_client(h2o_generator_t *generator, h2
     quicly_error_t ret;
 
     /* open stream to buffer */
-    if ((ret = self->webtransport.open_stream_to_server(self->client, &server_stream,
-                                                        quicly_stream_is_unidirectional(client_stream->stream_id), prefix.buf,
+    if ((ret = self->webtransport.open_stream_to_server(self->client, &server_stream, params->unidirectional, prefix.buf,
                                                         &prefix.len)) != 0) {
-        abort_webtransport_stream(client_stream, ret);
+        abort_webtransport_stream(params->stream, ret);
         return;
     }
 
     union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(client_stream, server_stream, prefix.buf, prefix.len);
+        create_webtransport_stream_pair(params->stream, server_stream, prefix.buf, prefix.len);
     webtransport_stream_on_receive(pair->client.stream, 0, recvbuf.base, recvbuf.len);
 }
 
-static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, quicly_stream_t *server_stream, h2o_iovec_t recvbuf)
+static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, h2o_http3_on_webtransport_stream_open_t *params,
+                                                  h2o_iovec_t recvbuf)
 {
     struct rp_generator_t *self;
 
     if ((self = client->data) == NULL || self->res_done || self->had_body_error) {
-        abort_webtransport_stream(server_stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
+        abort_webtransport_stream(params->stream, H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE);
         return;
     }
 
@@ -844,16 +849,21 @@ static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, quic
     } prefix;
     quicly_error_t ret;
 
-    if ((ret = self->src_req->webtransport.open_stream(self->src_req, &client_stream,
-                                                       quicly_stream_is_unidirectional(server_stream->stream_id), prefix.buf,
+    if ((ret = self->src_req->webtransport.open_stream(self->src_req, &client_stream, params->unidirectional, prefix.buf,
                                                        &prefix.len)) != 0) {
-        abort_webtransport_stream(server_stream, ret);
+        abort_webtransport_stream(params->stream, ret);
         return;
     }
 
     union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(client_stream, server_stream, prefix.buf, prefix.len);
-    webtransport_stream_on_receive(pair->server.stream, 0, recvbuf.base, recvbuf.len);
+        create_webtransport_stream_pair(client_stream, params->stream, prefix.buf, prefix.len);
+
+    h2o_buffer_append(&pair->client.sendbuf, recvbuf.base, recvbuf.len);
+    if (pair->server.stream == NULL || quicly_recvstate_transfer_complete(&pair->server.stream->recvstate))
+        quicly_sendstate_shutdown(&pair->client.stream->sendstate, pair->client.sendbuf->size);
+
+    if (pair->client.sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->client.stream->sendstate))
+        quicly_stream_sync_sendbuf(pair->client.stream, 1);
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
