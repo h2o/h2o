@@ -537,6 +537,12 @@ static void on_webtransport_stream_send_emit(quicly_stream_t *stream, size_t off
     *len -= capacity;
 }
 
+static void on_webtransport_stream_send_stop(quicly_stream_t *stream, quicly_error_t err)
+{
+    fprintf(stderr, "webtransport:received STOP_SENDING(stream=%" PRId64 ",code=%" PRIu64 "\n", stream->stream_id,
+            QUICLY_ERROR_GET_ERROR_CODE(err));
+}
+
 static void shift_webtransport_stream_recvstate(quicly_stream_t *stream)
 {
     size_t contiguous_bytes_saved = quicly_recvstate_bytes_available(&stream->recvstate);
@@ -554,13 +560,20 @@ static void on_webtransport_stream_receive(quicly_stream_t *stream, size_t off, 
     shift_webtransport_stream_recvstate(stream);
 }
 
+static void on_webtransport_stream_receive_reset(quicly_stream_t *stream, quicly_error_t err)
+{
+    fprintf(stderr, "webtransport:received RESET_STREAM(stream=%" PRId64 ",code=%" PRIu64 "\n", stream->stream_id,
+            QUICLY_ERROR_GET_ERROR_CODE(err));
+}
+
+
 static const quicly_stream_callbacks_t webtransport_stream_callbacks = {
     .on_destroy = on_webtransport_stream_destroy,
     .on_send_shift = quicly_stream_noop_on_send_shift,
     .on_send_emit = on_webtransport_stream_send_emit,
-    .on_send_stop = quicly_stream_noop_on_send_stop,
+    .on_send_stop = on_webtransport_stream_send_stop,
     .on_receive = on_webtransport_stream_receive,
-    .on_receive_reset = quicly_stream_noop_on_receive_reset,
+    .on_receive_reset = on_webtransport_stream_receive_reset,
 };
 
 static void attach_webtransport_stream_state(quicly_stream_t *stream, struct webtransport_stream_state *state)
