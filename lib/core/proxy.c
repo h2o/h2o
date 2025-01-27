@@ -738,8 +738,8 @@ static void webtransport_stream_on_receive_reset(quicly_stream_t *event_source, 
     quicly_reset_stream(pair->as_array[!event_index].stream, err);
 }
 
-static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quicly_stream_t *client_stream,
-                                                                            quicly_stream_t *server_stream, h2o_iovec_t prefix)
+static void setup_webtransport_stream_pair(quicly_stream_t *client_stream, quicly_stream_t *server_stream, h2o_iovec_t prefix,
+                                           h2o_iovec_t recvbuf, quicly_error_t stop_sending_err, quicly_error_t reset_stream_err)
 {
     static const quicly_stream_callbacks_t callbacks = {
         .on_destroy = webtransport_stream_on_destroy,
@@ -756,19 +756,15 @@ static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quic
         .client.stream = client_stream,
         .server.stream = server_stream,
     };
+    size_t recipient =
+        (pair->client.stream != NULL && quicly_stream_is_self_initiated(pair->client.stream) ? &pair->client : &pair->server) -
+        pair->as_array;
 
     /* prepare sendbufs if necessary */
     if (pair->client.stream != NULL && quicly_stream_has_send_side(0, pair->client.stream->stream_id))
         h2o_buffer_init(&pair->client.sendbuf, &h2o_socket_buffer_prototype);
     if (pair->server.stream != NULL && quicly_stream_has_send_side(1, pair->server.stream->stream_id))
         h2o_buffer_init(&pair->server.sendbuf, &h2o_socket_buffer_prototype);
-
-    { /* assign prefix to either side and set remaining length */
-        struct rp_webtransport_stream_endpoint_t *prefixed =
-            pair->client.stream != NULL && quicly_stream_is_self_initiated(pair->client.stream) ? &pair->client : &pair->server;
-        h2o_buffer_append(&prefixed->sendbuf, prefix.base, prefix.len);
-        prefixed->remaining_prefix_length = prefix.len;
-    }
 
     /* setup links */
     if (pair->client.stream != NULL) {
@@ -780,7 +776,26 @@ static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quic
         pair->server.stream->callbacks = &callbacks;
     }
 
-    return pair;
+    /* setup stuff to send to */
+    if (reset_stream_err == 0) {
+        h2o_buffer_append(&pair->as_array[recipient].sendbuf, prefix.base, prefix.len);
+        pair->as_array[recipient].remaining_prefix_length = prefix.len;
+        h2o_buffer_append(&pair->as_array[recipient].sendbuf, recvbuf.base, recvbuf.len);
+        if (pair->as_array[!recipient].stream == NULL ||
+            quicly_recvstate_transfer_complete(&pair->as_array[!recipient].stream->recvstate))
+            quicly_sendstate_shutdown(&pair->as_array[recipient].stream->sendstate, pair->as_array[recipient].sendbuf->size);
+    } else {
+        /* FIXME forward prefix using reliable reset? */
+        quicly_reset_stream(pair->as_array[recipient].stream, reset_stream_err);
+    }
+
+    /* setup stop-sending */
+    if (stop_sending_err != 0)
+        quicly_request_stop(pair->as_array[recipient].stream, stop_sending_err);
+
+    /* notify quicly that there's stuff to send, if any */
+    if (pair->as_array[recipient].sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->as_array[recipient].stream->sendstate))
+        quicly_stream_sync_sendbuf(pair->client.stream, 1);
 }
 
 static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t err)
@@ -788,6 +803,8 @@ static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t er
     if (stream != NULL) {
         if (!QUICLY_ERROR_IS_QUIC_APPLICATION(err))
             err = H2O_HTTP3_ERROR_INTERNAL;
+        stream->callbacks = &quicly_stream_noop_callbacks;
+        stream->data = NULL;
         int is_client = quicly_is_client(stream->conn);
         if (quicly_stream_has_receive_side(is_client, stream->stream_id))
             quicly_request_stop(stream, err);
@@ -820,9 +837,8 @@ static void on_webtransport_stream_open_by_client(h2o_generator_t *generator, h2
         return;
     }
 
-    union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(params->stream, server_stream, h2o_iovec_init(prefix.buf, prefix.len));
-    webtransport_stream_on_receive(pair->client.stream, 0, recvbuf.base, recvbuf.len);
+    setup_webtransport_stream_pair(params->stream, server_stream, h2o_iovec_init(prefix.buf, prefix.len), recvbuf,
+                                   params->error_codes.stop_sending, params->error_codes.reset_stream);
 }
 
 static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, h2o_http3_on_webtransport_stream_open_t *params,
@@ -854,15 +870,8 @@ static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, h2o_
         return;
     }
 
-    union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(client_stream, params->stream, h2o_iovec_init(prefix.buf, prefix.len));
-
-    h2o_buffer_append(&pair->client.sendbuf, recvbuf.base, recvbuf.len);
-    if (pair->server.stream == NULL || quicly_recvstate_transfer_complete(&pair->server.stream->recvstate))
-        quicly_sendstate_shutdown(&pair->client.stream->sendstate, pair->client.sendbuf->size);
-
-    if (pair->client.sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->client.stream->sendstate))
-        quicly_stream_sync_sendbuf(pair->client.stream, 1);
+    setup_webtransport_stream_pair(client_stream, params->stream, h2o_iovec_init(prefix.buf, prefix.len), recvbuf,
+                                   params->error_codes.stop_sending, params->error_codes.reset_stream);
 }
 
 static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
