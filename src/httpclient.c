@@ -758,7 +758,6 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
 static void open_pending_webtransport_streams(h2o_httpclient_t *client, int uni, char *(*fnlist)[16])
 {
     while ((*fnlist)[0] != NULL) {
-        uint64_t ingress_prefix_len = 0;
         struct webtransport_stream_state *state = create_webtransport_stream_state(fnlist, !uni, 1);
         quicly_stream_t *stream;
         quicly_error_t err = open_webtransport_stream(client, &stream, uni, state->egress.prefix.bytes, &state->egress.prefix.len);
