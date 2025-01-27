@@ -739,8 +739,7 @@ static void webtransport_stream_on_receive_reset(quicly_stream_t *event_source, 
 }
 
 static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quicly_stream_t *client_stream,
-                                                                            quicly_stream_t *server_stream, const void *prefix,
-                                                                            size_t prefix_len)
+                                                                            quicly_stream_t *server_stream, h2o_iovec_t prefix)
 {
     static const quicly_stream_callbacks_t callbacks = {
         .on_destroy = webtransport_stream_on_destroy,
@@ -767,8 +766,8 @@ static union rp_webtransport_stream_pair_t *create_webtransport_stream_pair(quic
     { /* assign prefix to either side and set remaining length */
         struct rp_webtransport_stream_endpoint_t *prefixed =
             pair->client.stream != NULL && quicly_stream_is_self_initiated(pair->client.stream) ? &pair->client : &pair->server;
-        h2o_buffer_append(&prefixed->sendbuf, prefix, prefix_len);
-        prefixed->remaining_prefix_length = prefix_len;
+        h2o_buffer_append(&prefixed->sendbuf, prefix.base, prefix.len);
+        prefixed->remaining_prefix_length = prefix.len;
     }
 
     /* setup links */
@@ -822,7 +821,7 @@ static void on_webtransport_stream_open_by_client(h2o_generator_t *generator, h2
     }
 
     union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(params->stream, server_stream, prefix.buf, prefix.len);
+        create_webtransport_stream_pair(params->stream, server_stream, h2o_iovec_init(prefix.buf, prefix.len));
     webtransport_stream_on_receive(pair->client.stream, 0, recvbuf.base, recvbuf.len);
 }
 
@@ -856,7 +855,7 @@ static void on_webtransport_stream_open_by_server(h2o_httpclient_t *client, h2o_
     }
 
     union rp_webtransport_stream_pair_t *pair =
-        create_webtransport_stream_pair(client_stream, params->stream, prefix.buf, prefix.len);
+        create_webtransport_stream_pair(client_stream, params->stream, h2o_iovec_init(prefix.buf, prefix.len));
 
     h2o_buffer_append(&pair->client.sendbuf, recvbuf.base, recvbuf.len);
     if (pair->server.stream == NULL || quicly_recvstate_transfer_complete(&pair->server.stream->recvstate))
