@@ -411,6 +411,13 @@ typedef struct st_h2o_http3_on_webtransport_stream_open_t {
      * session to become available.
      */
     quicly_stream_t *stream;
+    /**
+     * Error codes; zero if not received
+     */
+    struct {
+        quicly_error_t stop_sending;
+        quicly_error_t reset_stream;
+    } error_codes;
 } h2o_http3_on_webtransport_stream_open_t;
 
 struct st_h2o_http3_conn_t {

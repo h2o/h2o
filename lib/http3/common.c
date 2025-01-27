@@ -329,7 +329,10 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
 static void webtransport_unistream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
                                                 const uint8_t **src, const uint8_t *src_end, int is_eos)
 {
-    h2o_http3_on_webtransport_stream_open_t params;
+    h2o_http3_on_webtransport_stream_open_t params = {
+        .unidirectional = quicly_stream_is_unidirectional(stream->quic->stream_id),
+        .stream = stream->quic,
+    };
 
     /* TODO generate error, we should be capable of reading sesison ID thanks to reliable reset */
     if (src == NULL)
@@ -344,9 +347,6 @@ static void webtransport_unistream_handle_input(h2o_http3_conn_t *conn, struct s
         h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_ID, NULL);
         return;
     }
-
-    params.stream = stream->quic;
-    params.unidirectional = quicly_stream_is_unidirectional(stream->quic->stream_id);
 
     /* hand over the stream to the application, after removing the prefix */
     size_t bytes_consumed = *src - (const uint8_t *)stream->recvbuf->bytes;
@@ -1572,10 +1572,24 @@ static void parked_webtransport_stream_on_send_emit(quicly_stream_t *stream, siz
     h2o_fatal("would not have asked to send anything");
 }
 
+static void parked_webtransport_stream_on_send_stop(quicly_stream_t *stream, quicly_error_t err)
+{
+    assert(QUICLY_ERROR_IS_QUIC_TRANSPORT(err));
+    struct st_h2o_http3_parked_webtransport_stream_t *parked = stream->data;
+    parked->params.error_codes.stop_sending = err;
+}
+
 static void parked_webtransport_stream_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
     struct st_h2o_http3_parked_webtransport_stream_t *parked = stream->data;
     h2o_buffer_write(&parked->recvbuf, off, src, len);
+}
+
+static void parked_webtransport_stream_on_receive_reset(quicly_stream_t *stream, quicly_error_t err)
+{
+    assert(QUICLY_ERROR_IS_QUIC_TRANSPORT(err));
+    struct st_h2o_http3_parked_webtransport_stream_t *parked = stream->data;
+    parked->params.error_codes.reset_stream = err;
 }
 
 void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, h2o_http3_on_webtransport_stream_open_t *params,
@@ -1585,9 +1599,9 @@ void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, h2o_http3_on_web
         .on_destroy = parked_webtransport_stream_on_destroy,
         .on_send_shift = parked_webtransport_stream_on_send_shift,
         .on_send_emit = parked_webtransport_stream_on_send_emit,
-        .on_send_stop = quicly_stream_noop_on_send_stop,
+        .on_send_stop = parked_webtransport_stream_on_send_stop,
         .on_receive = parked_webtransport_stream_on_receive,
-        .on_receive_reset = quicly_stream_noop_on_receive_reset,
+        .on_receive_reset = parked_webtransport_stream_on_receive_reset,
     };
 
     struct st_h2o_http3_parked_webtransport_stream_t *parked = h2o_mem_alloc(sizeof(*parked));
