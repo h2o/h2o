@@ -2236,6 +2236,17 @@ static void on_webtransport_stream_open_by_client(h2o_http3_conn_t *h3, h2o_http
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
 
+    H2O_PROBE_CONN(H3S_WEBTRANSPORT_STREAM_OPEN_BY_CLIENT, &conn->super, params->session_id, params->unidirectional,
+                   params->stream != NULL ? params->stream->stream_id : -1, params->error_codes.stop_sending,
+                   params->error_codes.reset_stream);
+    H2O_LOG_CONN(h3s_webtransport_stream_open_by_client, &conn->super, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, (uint64_t)params->session_id);
+        PTLS_LOG_ELEMENT_SIGNED(unidirectional, params->unidirectional);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, params->stream != NULL ? params->stream->stream_id : -1);
+        PTLS_LOG_ELEMENT_SIGNED(stop_sending_err, params->error_codes.stop_sending);
+        PTLS_LOG_ELEMENT_SIGNED(reset_stream_err, params->error_codes.reset_stream);
+    });
+
     /* obtain request stream and check state */
     struct st_h2o_http3_server_stream_t *req_stream;
     quicly_stream_t *req_stream_quic;
@@ -2273,9 +2284,19 @@ quicly_error_t on_webtransport_stream_open_by_server(h2o_req_t *_req, quicly_str
                                                      void *prefix, size_t *prefix_len)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    quicly_error_t ret;
-    if ((ret = quicly_open_stream(get_conn(stream)->h3.super.quic, webtransport_stream, unidirectional)) != 0)
+    quicly_error_t ret = quicly_open_stream(conn->h3.super.quic, webtransport_stream, unidirectional);
+
+    H2O_PROBE_CONN(H3S_WEBTRANSPORT_STREAM_OPEN_BY_SERVER, &conn->super, stream->quic->stream_id, unidirectional,
+                   ret == 0 ? (*webtransport_stream)->stream_id : -1);
+    H2O_LOG_CONN(h3s_webtransport_stream_open_by_server, &conn->super, {
+        PTLS_LOG_ELEMENT_UNSIGNED(req_id, (uint64_t)stream->quic->stream_id);
+        PTLS_LOG_ELEMENT_SIGNED(unidirectional, unidirectional);
+        PTLS_LOG_ELEMENT_SIGNED(stream_id, ret == 0 ? (*webtransport_stream)->stream_id : -1);
+    });
+
+    if (ret != 0)
         return ret;
 
     *prefix_len = h2o_http3_webtransport_encode_prefix(prefix, unidirectional, stream->quic->stream_id);
