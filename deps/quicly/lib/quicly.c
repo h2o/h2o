@@ -436,7 +436,7 @@ struct st_quicly_conn_t {
         ptls_t *tls;
         ptls_handshake_properties_t handshake_properties;
         struct {
-            ptls_raw_extension_t ext[3];
+            ptls_raw_extension_t ext[2];
             ptls_buffer_t buf;
         } transport_params;
         unsigned async_in_progress : 1;
@@ -2799,12 +2799,9 @@ quicly_error_t quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, cons
              NULL, NULL, conn->super.ctx->expand_client_hello ? conn->super.ctx->initial_egress_max_udp_payload_size : 0)) != 0)
         goto Exit;
     conn->crypto.transport_params.ext[0] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_FINAL,
+        (ptls_raw_extension_t){get_transport_parameters_extension_id(conn->super.version),
                                {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
-    conn->crypto.transport_params.ext[1] =
-        (ptls_raw_extension_t){QUICLY_TLS_EXTENSION_TYPE_TRANSPORT_PARAMETERS_DRAFT,
-                               {conn->crypto.transport_params.buf.base, conn->crypto.transport_params.buf.off}};
-    conn->crypto.transport_params.ext[2] = (ptls_raw_extension_t){UINT16_MAX};
+    conn->crypto.transport_params.ext[1] = (ptls_raw_extension_t){UINT16_MAX};
     conn->crypto.handshake_properties.additional_extensions = conn->crypto.transport_params.ext;
     conn->crypto.handshake_properties.collected_extensions = client_collected_extensions;
 
