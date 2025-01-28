@@ -2404,11 +2404,13 @@ static void setup_http3(h2o_accept_ctx_t *ctx, struct st_h2o_http3_server_conn_t
                         h2o_socket_t *streams_sock)
 {
     /* build SETTINGS */
-    uint64_t additional_settings[5], *additional_settings_p = additional_settings;
+    uint64_t additional_settings[7], *additional_settings_p = additional_settings;
     *additional_settings_p++ = H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL;
     *additional_settings_p++ = 1;
     if (ctx->advertise_webtransport) {
         *additional_settings_p++ = H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT11;
+        *additional_settings_p++ = 1;
+        *additional_settings_p++ = H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT06;
         *additional_settings_p++ = 1;
     }
     *additional_settings_p++ = UINT64_MAX;

@@ -1428,6 +1428,9 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
                 goto Malformed;
             }
             break;
+        case H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT06:
+            conn->peer_settings.webtransport_max_sessions = 1;
+            break;
         case H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT11:
             conn->peer_settings.webtransport_max_sessions = value;
             break;
