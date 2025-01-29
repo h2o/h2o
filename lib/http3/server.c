@@ -1527,6 +1527,9 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     case H2O_HTTP3_FRAME_TYPE_HEADERS:
         break;
     case H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT: {
+        size_t bytes_consumed = *src - (const uint8_t *)stream->recvbuf.buf->bytes;
+        h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
+        quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
         h2o_http3_on_webtransport_stream_open_t params = {
             .session_id = frame.length, /* the field is abused, see doc-comment on `h2o_http3_read_frame_t` */
             .unidirectional = 0,
