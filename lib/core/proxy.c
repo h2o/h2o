@@ -694,8 +694,7 @@ static void webtransport_stream_on_send_emit(quicly_stream_t *event_source, size
     if (*len > bytes_avail - off)
         *len = bytes_avail - off;
     memcpy(dst, egress->sendbuf->bytes + off, *len);
-    if (off + *len == bytes_avail)
-        *wrote_all = 1;
+    *wrote_all = off + *len == bytes_avail;
 }
 
 static void webtransport_stream_on_send_stop(quicly_stream_t *event_source, quicly_error_t err)
