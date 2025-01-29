@@ -723,13 +723,14 @@ static void webtransport_stream_on_receive(quicly_stream_t *event_source, size_t
     struct rp_webtransport_stream_endpoint_t *egress = &pair->as_array[!event_index], *ingress = &pair->as_array[event_index];
 
     /* write supplied bytes to the sendbuf and shutdown if possible */
-    h2o_buffer_write(&egress->sendbuf, off + egress->remaining_prefix_length, src, len);
-    if (quicly_recvstate_transfer_complete(&ingress->stream->recvstate) && quicly_sendstate_is_open(&egress->stream->sendstate))
+    int got_more = h2o_buffer_write(&egress->sendbuf, off + egress->remaining_prefix_length, src, len);
+    if (quicly_recvstate_transfer_complete(&ingress->stream->recvstate) && quicly_sendstate_is_open(&egress->stream->sendstate)) {
         quicly_sendstate_shutdown(&egress->stream->sendstate,
                                   egress->stream->sendstate.acked.ranges[0].end + egress->sendbuf->size);
+        got_more = 1;
+    }
 
-    /* update quicly state */
-    if (webtransport_stream_calc_bytes_available(egress, ingress->stream) > 0) {
+    if (got_more) {
         quicly_stream_sync_sendbuf(egress->stream, 1);
         h2o_quic_schedule_timer(&h2o_http3_get_conn(egress->stream->conn)->super);
     }
