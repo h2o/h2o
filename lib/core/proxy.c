@@ -705,7 +705,9 @@ static void webtransport_stream_on_send_stop(quicly_stream_t *event_source, quic
 
     webtransport_parse_event(&pair, &event_index, event_source);
 
-    quicly_request_stop(pair->as_array[!event_index].stream, err);
+    quicly_stream_t *sender = pair->as_array[!event_index].stream;
+    if (sender != NULL && !quicly_recvstate_transfer_complete(&sender->recvstate) && !quicly_stop_requested(sender))
+        quicly_request_stop(sender, err);
 }
 
 static void webtransport_stream_on_receive(quicly_stream_t *event_source, size_t off, const void *src, size_t len)
@@ -735,7 +737,9 @@ static void webtransport_stream_on_receive_reset(quicly_stream_t *event_source, 
 
     webtransport_parse_event(&pair, &event_index, event_source);
 
-    quicly_reset_stream(pair->as_array[!event_index].stream, err);
+    quicly_stream_t *recipient = pair->as_array[!event_index].stream;
+    if (recipient != NULL && !quicly_sendstate_transfer_complete(&recipient->sendstate))
+        quicly_reset_stream(recipient, err);
 }
 
 static void setup_webtransport_stream_pair(quicly_stream_t *client_stream, quicly_stream_t *server_stream, h2o_iovec_t prefix,
