@@ -674,8 +674,10 @@ static void webtransport_stream_on_send_shift(quicly_stream_t *event_source, siz
     }
 
     /* notify the ingress the amount of bytes being shifted */
-    if (delta != 0 && ingress->stream != NULL)
+    if (delta != 0 && ingress->stream != NULL) {
         quicly_stream_sync_recvbuf(ingress->stream, delta);
+        h2o_quic_schedule_timer(&h2o_http3_get_conn(ingress->stream->conn)->super);
+    }
 }
 
 static void webtransport_stream_on_send_emit(quicly_stream_t *event_source, size_t off, void *dst, size_t *len, int *wrote_all)
@@ -705,8 +707,10 @@ static void webtransport_stream_on_send_stop(quicly_stream_t *event_source, quic
     webtransport_parse_event(&pair, &event_index, event_source);
 
     quicly_stream_t *sender = pair->as_array[!event_index].stream;
-    if (sender != NULL && !quicly_recvstate_transfer_complete(&sender->recvstate) && !quicly_stop_requested(sender))
+    if (sender != NULL && !quicly_recvstate_transfer_complete(&sender->recvstate) && !quicly_stop_requested(sender)) {
         quicly_request_stop(sender, err);
+        h2o_quic_schedule_timer(&h2o_http3_get_conn(sender->conn)->super);
+    }
 }
 
 static void webtransport_stream_on_receive(quicly_stream_t *event_source, size_t off, const void *src, size_t len)
@@ -725,8 +729,10 @@ static void webtransport_stream_on_receive(quicly_stream_t *event_source, size_t
                                   egress->stream->sendstate.acked.ranges[0].end + egress->sendbuf->size);
 
     /* update quicly state */
-    if (webtransport_stream_calc_bytes_available(egress, ingress->stream) > 0)
+    if (webtransport_stream_calc_bytes_available(egress, ingress->stream) > 0) {
         quicly_stream_sync_sendbuf(egress->stream, 1);
+        h2o_quic_schedule_timer(&h2o_http3_get_conn(egress->stream->conn)->super);
+    }
 }
 
 static void webtransport_stream_on_receive_reset(quicly_stream_t *event_source, quicly_error_t err)
@@ -737,8 +743,10 @@ static void webtransport_stream_on_receive_reset(quicly_stream_t *event_source, 
     webtransport_parse_event(&pair, &event_index, event_source);
 
     quicly_stream_t *recipient = pair->as_array[!event_index].stream;
-    if (recipient != NULL && !quicly_sendstate_transfer_complete(&recipient->sendstate))
+    if (recipient != NULL && !quicly_sendstate_transfer_complete(&recipient->sendstate)) {
         quicly_reset_stream(recipient, err);
+        h2o_quic_schedule_timer(&h2o_http3_get_conn(recipient->conn)->super);
+    }
 }
 
 static void setup_webtransport_stream_pair(quicly_stream_t *client_stream, quicly_stream_t *server_stream, h2o_iovec_t prefix,
@@ -796,9 +804,11 @@ static void setup_webtransport_stream_pair(quicly_stream_t *client_stream, quicl
     if (stop_sending_err != 0)
         quicly_request_stop(pair->as_array[recipient].stream, stop_sending_err);
 
-    /* notify quicly that there's stuff to send, if any */
-    if (pair->as_array[recipient].sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->as_array[recipient].stream->sendstate))
+    /* notify quicly that there's stuff to send or receive, if any */
+    if (pair->as_array[recipient].sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->as_array[recipient].stream->sendstate)) {
         quicly_stream_sync_sendbuf(pair->as_array[recipient].stream, 1);
+        h2o_quic_schedule_timer(&h2o_http3_get_conn(pair->as_array[recipient].stream->conn)->super);
+    }
 }
 
 static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t err)
@@ -808,11 +818,17 @@ static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t er
             err = H2O_HTTP3_ERROR_INTERNAL;
         stream->callbacks = &quicly_stream_noop_callbacks;
         stream->data = NULL;
-        int is_client = quicly_is_client(stream->conn);
-        if (quicly_stream_has_receive_side(is_client, stream->stream_id))
+        int is_client = quicly_is_client(stream->conn), acted = 0;
+        if (quicly_stream_has_receive_side(is_client, stream->stream_id)) {
             quicly_request_stop(stream, err);
-        if (quicly_stream_has_send_side(is_client, stream->stream_id))
+            acted = 1;
+        }
+        if (quicly_stream_has_send_side(is_client, stream->stream_id)) {
             quicly_reset_stream(stream, err);
+            acted = 1;
+        }
+        if (acted)
+            h2o_quic_schedule_timer(&h2o_http3_get_conn(stream->conn)->super);
     }
 }
 
