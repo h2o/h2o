@@ -795,7 +795,7 @@ static void setup_webtransport_stream_pair(quicly_stream_t *client_stream, quicl
 
     /* notify quicly that there's stuff to send, if any */
     if (pair->as_array[recipient].sendbuf->size != 0 || !quicly_sendstate_is_open(&pair->as_array[recipient].stream->sendstate))
-        quicly_stream_sync_sendbuf(pair->client.stream, 1);
+        quicly_stream_sync_sendbuf(pair->as_array[recipient].stream, 1);
 }
 
 static void abort_webtransport_stream(quicly_stream_t *stream, quicly_error_t err)
