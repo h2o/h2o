@@ -167,8 +167,8 @@ static void test_reset_then_close(void)
     ok(ret == 0);
     stream_id = client_stream->stream_id;
     client_streambuf = client_stream->data;
-    quicly_reset_stream(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
-    quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    quicly_reset_stream(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
+    quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7654321));
 
     transmit(client, server);
 
@@ -179,8 +179,8 @@ static void test_reset_then_close(void)
     server_streambuf = server_stream->data;
     ok(quicly_sendstate_transfer_complete(&server_stream->sendstate));
     ok(quicly_recvstate_transfer_complete(&server_stream->recvstate));
-    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
-    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
+    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7654321));
 
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
     transmit(server, client);
@@ -188,7 +188,7 @@ static void test_reset_then_close(void)
     /* client closes the stream */
     ok(client_streambuf->is_detached);
     ok(client_streambuf->error_received.stop_sending == -1);
-    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7654321));
     ok(quicly_num_streams(client) == 0);
 
     quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
@@ -338,7 +338,7 @@ static void tiny_stream_window(void)
     ok(buffer_is(&server_streambuf->super.ingress, "orld"));
     ok(quicly_recvstate_transfer_complete(&server_stream->recvstate));
 
-    quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
+    quicly_request_stop(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
 
     transmit(client, server);
 
@@ -348,14 +348,14 @@ static void tiny_stream_window(void)
     /* client should have sent ACK(FIN),STOP_RESPONDING and waiting for response */
     ok(quicly_num_streams(client) == 1);
     ok(!server_streambuf->is_detached);
-    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
+    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
     ok(quicly_sendstate_transfer_complete(&server_stream->sendstate));
 
     transmit(server, client);
 
     /* client can close the stream when it receives an RESET_STREAM in response */
     ok(client_streambuf->is_detached);
-    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
+    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
     ok(client_streambuf->error_received.stop_sending == -1);
     ok(quicly_num_streams(client) == 0);
     ok(quicly_num_streams(server) == 1);
@@ -413,13 +413,13 @@ static void test_reset_during_loss(void)
     }
 
     /* transmit RESET_STREAM */
-    quicly_reset_stream(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
+    quicly_reset_stream(client_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
     ok(quicly_sendstate_transfer_complete(&client_stream->sendstate));
     transmit(client, server);
 
     ok(quicly_recvstate_transfer_complete(&server_stream->recvstate));
-    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345));
-    quicly_reset_stream(server_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
+    quicly_reset_stream(server_stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7654321));
     ok(!server_streambuf->is_detached);
     ok(quicly_sendstate_transfer_complete(&server_stream->sendstate));
 
@@ -443,7 +443,7 @@ static void test_reset_during_loss(void)
 
     /* RESET_STREAM for downstream is sent */
     transmit(server, client);
-    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    ok(client_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7654321));
     ok(client_streambuf->is_detached);
     ok(quicly_num_streams(client) == 0);
     ok(quicly_num_streams(server) == 1);
@@ -459,7 +459,7 @@ static void test_reset_during_loss(void)
     quic_ctx.transport_params.max_stream_data = max_stream_data_orig;
 }
 
-static uint16_t test_close_error_code;
+static uint64_t test_close_error_code;
 
 static void test_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type,
                                   const char *reason, size_t reason_len)
@@ -484,7 +484,7 @@ static void test_close(void)
     quic_ctx.closed_by_remote = &closed_by_remote;
 
     /* client sends close */
-    ret = quicly_close(client, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(12345), "good bye");
+    ret = quicly_close(client, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567), "good bye");
     ok(ret == 0);
     ok(quicly_get_state(client) == QUICLY_STATE_CLOSING);
     ok(quicly_get_first_timeout(client) <= quic_now);
@@ -499,7 +499,7 @@ static void test_close(void)
         decode_packets(&decoded, &datagram, 1);
         ret = quicly_receive(server, NULL, &fake_address.sa, &decoded);
         ok(ret == 0);
-        ok(test_close_error_code == 12345);
+        ok(test_close_error_code == 1234567);
         ok(quicly_get_state(server) == QUICLY_STATE_DRAINING);
         server_timeout = quicly_get_first_timeout(server);
         ok(quic_now < server_timeout && server_timeout < quic_now + 1000); /* 3 pto or something */
