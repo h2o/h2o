@@ -37,6 +37,7 @@
 #define H2O_HTTP3_FRAME_TYPE_PUSH_PROMISE 5
 #define H2O_HTTP3_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
+#define H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT 0x41
 #define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST 0xF0700
 #define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH 0xF0701
 
@@ -44,9 +45,9 @@
 #define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
 #define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 2
 #define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
-#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_BIDI 0x41
-#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI 0x54
-#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT 0x54
+#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000                    /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_REQUEST_MAYBE_WEBTRANSPORT 0x4000000000000001 /* internal type */
 
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
@@ -483,6 +484,9 @@ typedef struct st_h2o_http3_read_frame_t {
     uint64_t type;
     uint8_t _header_size;
     const uint8_t *payload;
+    /**
+     * if type is WEBTRANSPORT, this field conveys the session ID
+     */
     uint64_t length;
 } h2o_http3_read_frame_t;
 
@@ -631,7 +635,7 @@ int h2o_http3_is_core_egress_unidirectional_stream(quicly_stream_t *stream);
 /**
  *
  */
-size_t h2o_http3_webtransport_encode_prefix(void *buf, int unidirectional, quicly_stream_id_t session_id);
+size_t h2o_http3_webtransport_encode_prefix(void *buf, int client_initiated, int unidirectional, quicly_stream_id_t session_id);
 /**
  *
  */

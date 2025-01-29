@@ -200,7 +200,7 @@ static quicly_error_t open_webtransport_stream(h2o_httpclient_t *_client, quicly
     if ((ret = quicly_open_stream(req->conn->super.super.quic, stream, unidirectional)) != 0)
         return ret;
 
-    *prefix_len = h2o_http3_webtransport_encode_prefix(prefix, unidirectional, req->quic->stream_id);
+    *prefix_len = h2o_http3_webtransport_encode_prefix(prefix, 1, unidirectional, req->quic->stream_id);
 
     return 0;
 }

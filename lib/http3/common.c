@@ -391,7 +391,7 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
-    case H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI:
+    case H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT:
         if (conn->webtransport.on_stream_open == NULL)
             goto DiscardStream;
         stream->handle_input = webtransport_unistream_handle_input;
@@ -967,9 +967,16 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         return H2O_HTTP3_ERROR_INCOMPLETE;
     frame->_header_size = (uint8_t)(src - *_src);
 
-    /* read the content of the frame (unless it's a DATA frame) */
+    /* read the content of the frame, with below exceptions */
     frame->payload = NULL;
-    if (frame->type != H2O_HTTP3_FRAME_TYPE_DATA) {
+    switch (frame->type) {
+    case H2O_HTTP3_FRAME_TYPE_DATA:
+        /* as the frame can be large, `read_frame` reads only the header */
+        break;
+    case H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT:
+        /* after type and length (which actually carries the session ID), the rest of the stream is webtransport payload */
+        break;
+    default:
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             PTLS_LOG(h2o, h3_frame_receive, {
@@ -983,6 +990,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
             return H2O_HTTP3_ERROR_INCOMPLETE;
         frame->payload = src;
         src += frame->length;
+        break;
     }
 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
@@ -997,10 +1005,15 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 
     /* validate frame type */
     switch (frame->type) {
+    case H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT:
+        if (stream_type == H2O_HTTP3_STREAM_TYPE_REQUEST_MAYBE_WEBTRANSPORT && !is_client)
+            goto Validation_Success;
+        break;
 #define FRAME(id, req_clnt, req_srvr, ctl_clnt, ctl_srvr)                                                                          \
     case H2O_HTTP3_FRAME_TYPE_##id:                                                                                                \
         switch (stream_type) {                                                                                                     \
         case H2O_HTTP3_STREAM_TYPE_REQUEST:                                                                                        \
+        case H2O_HTTP3_STREAM_TYPE_REQUEST_MAYBE_WEBTRANSPORT:                                                                     \
             if (req_clnt && !is_client)                                                                                            \
                 goto Validation_Success;                                                                                           \
             if (req_srvr && is_client)                                                                                             \
@@ -1526,11 +1539,12 @@ int h2o_http3_is_core_egress_unidirectional_stream(quicly_stream_t *stream)
     }
 }
 
-size_t h2o_http3_webtransport_encode_prefix(void *buf, int unidirectional, quicly_stream_id_t session_id)
+size_t h2o_http3_webtransport_encode_prefix(void *buf, int client_initiated, int unidirectional, quicly_stream_id_t session_id)
 {
     uint8_t *p = buf;
 
-    p = quicly_encodev(p, unidirectional ? H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_UNI : H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT_BIDI);
+    p = quicly_encodev(p, client_initiated && !unidirectional ? H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT
+                                                              : H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT);
     p = quicly_encodev(p, session_id);
 
     return p - (uint8_t *)buf;
