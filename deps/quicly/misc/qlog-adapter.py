@@ -251,7 +251,7 @@ def handle_stream_receive(event):
     return {
         "frame_type": label,
         "stream_id": event["stream-id"],
-        "length": event["len"],
+        "length": len(event["data"]) / 2 if "data" in event else event["data-len"],
         "offset": event["off"]
     }
 
@@ -260,7 +260,7 @@ def handle_stream_send(event):
     return {
         "frame_type": label,
         "stream_id": event["stream-id"],
-        "length": event["len"],
+        "length": len(event["data"]) / 2 if "data" in event else event["data-len"],
         "offset": event["off"]
     }
 
