@@ -188,6 +188,7 @@ typedef struct st_h2o_httpclient_ctx_t {
 } h2o_httpclient_ctx_t;
 
 struct st_h2o_http3client_ctx_t {
+    ptls_openssl_verify_certificate_t verify_cert;
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
