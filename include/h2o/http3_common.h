@@ -37,6 +37,7 @@
 #define H2O_HTTP3_FRAME_TYPE_PUSH_PROMISE 5
 #define H2O_HTTP3_FRAME_TYPE_GOAWAY 7
 #define H2O_HTTP3_FRAME_TYPE_MAX_PUSH_ID 13
+#define H2O_HTTP3_FRAME_TYPE_WEBTRANSPORT 0x41
 #define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_REQUEST 0xF0700
 #define H2O_HTTP3_FRAME_TYPE_PRIORITY_UPDATE_PUSH 0xF0701
 
@@ -44,7 +45,9 @@
 #define H2O_HTTP3_STREAM_TYPE_PUSH_STREAM 1
 #define H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER 2
 #define H2O_HTTP3_STREAM_TYPE_QPACK_DECODER 3
-#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000 /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_WEBTRANSPORT 0x54
+#define H2O_HTTP3_STREAM_TYPE_REQUEST 0x4000000000000000                    /* internal type */
+#define H2O_HTTP3_STREAM_TYPE_REQUEST_MAYBE_WEBTRANSPORT 0x4000000000000001 /* internal type */
 
 #define H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY 1
 #define H2O_HTTP3_SETTINGS_MAX_FIELD_SECTION_SIZE 6
@@ -52,6 +55,8 @@
 #define H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03 0x276
 #define H2O_HTTP3_SETTINGS_H3_DATAGRAM 0x33
+#define H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT06 0x2b603742
+#define H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT11 0xc671706a
 
 #define H2O_HTTP3_ERROR_NONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x100)
 #define H2O_HTTP3_ERROR_GENERAL_PROTOCOL QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x101)
@@ -73,6 +78,12 @@
 #define H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x200)
 #define H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x201)
 #define H2O_HTTP3_ERROR_QPACK_DECODER_STREAM QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x202)
+#define H2O_HTTP3_ERROR_WEBTRANSPORT_BUFFERED_STREAM_REJECTED QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x3994bd84)
+#define H2O_HTTP3_ERROR_WEBTRANSPORT_SESSION_GONE QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x170d7b68)
+
+#define H2O_HTTP3_WEBTRANSPORT_APPLICATION_ERROR_BASE 0x52e4a40fa8dbu
+#define H2O_HTTP3_ERROR_FROM_WEBTRANSPORT_APPLICATION(x)                                                                           \
+    QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(H2O_HTTP3_WEBTRANSPORT_APPLICATION_ERROR_BASE + (x))
 
 #define H2O_HTTP3_ERROR_INCOMPLETE -1
 #define H2O_HTTP3_ERROR_TRANSPORT -2
@@ -390,6 +401,27 @@ typedef struct st_h2o_http3_conn_callbacks_t {
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
 } h2o_http3_conn_callbacks_t;
 
+/**
+ * Retains properties of a webtransport stream being opened. The receive buffer is passed separately, as its structure might be
+ * different depending on the callbacks.
+ */
+typedef struct st_h2o_http3_on_webtransport_stream_open_t {
+    quicly_stream_id_t session_id;
+    int unidirectional;
+    /**
+     * Associated QUIC stream; may become NULL if the webtransport stream is closed or reset while waiting for the corresponding
+     * session to become available.
+     */
+    quicly_stream_t *stream;
+    /**
+     * Error codes; zero if not received
+     */
+    struct {
+        quicly_error_t stop_sending;
+        quicly_error_t reset_stream;
+    } error_codes;
+} h2o_http3_on_webtransport_stream_open_t;
+
 struct st_h2o_http3_conn_t {
     /**
      *
@@ -413,6 +445,7 @@ struct st_h2o_http3_conn_t {
     struct {
         uint64_t max_field_section_size;
         unsigned h3_datagram : 1;
+        uint64_t webtransport_max_sessions;
     } peer_settings;
     struct {
         struct {
@@ -433,6 +466,12 @@ struct st_h2o_http3_conn_t {
      * `h2o_http3_calc_min_flow_control_size(max_frame_payload_size)`.
      */
     size_t max_frame_payload_size;
+    /**
+     * webtransport
+     */
+    struct {
+        void (*on_stream_open)(h2o_http3_conn_t *conn, h2o_http3_on_webtransport_stream_open_t *params, h2o_buffer_t **recvbuf);
+    } webtransport;
 };
 
 #define H2O_HTTP3_CHECK_SUCCESS(expr)                                                                                              \
@@ -445,6 +484,9 @@ typedef struct st_h2o_http3_read_frame_t {
     uint64_t type;
     uint8_t _header_size;
     const uint8_t *payload;
+    /**
+     * if type is WEBTRANSPORT, this field conveys the session ID
+     */
     uint64_t length;
 } h2o_http3_read_frame_t;
 
@@ -529,9 +571,15 @@ void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_
  */
 void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
 /**
+ * Returns `h2o_http3_conn_t` associated to the QUIC connection; at the moment, it is a wrapper of `return *quicly_get_data(quic)`
+ * but is less prone to changes.
+ */
+h2o_http3_conn_t *h2o_http3_get_conn(quicly_conn_t *quic);
+/**
  *
  */
-quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock,
+                               const uint64_t *additional_settings);
 /**
  * sends packets immediately by calling quicly_send, sendmsg (returns true if success, false if the connection was destroyed)
  */
@@ -583,6 +631,26 @@ uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, si
  * have to be guaranteed.
  */
 static uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length);
+/**
+ *
+ */
+int h2o_http3_is_core_egress_unidirectional_stream(quicly_stream_t *stream);
+
+#define H2O_HTTP3_WEBTRANSPORT_PREFIX_CAPACITY 16 /* two quicints */
+/**
+ *
+ */
+size_t h2o_http3_webtransport_encode_prefix(void *buf, int client_initiated, int unidirectional, quicly_stream_id_t session_id);
+/**
+ *
+ */
+void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, h2o_http3_on_webtransport_stream_open_t *params,
+                                        h2o_buffer_t **recvbuf);
+/**
+ * if `conn` is non-NULL, dispatches parked webtransport streams through `conn`; otherwise, parked streams are reset with
+ *  WEBTRANSPROT_SESSION_GONE errors
+ */
+void h2o_http3_dispatch_parked_webtransport_streams(h2o_linklist_t *anchor, h2o_http3_conn_t *conn);
 
 /* inline definitions */
 

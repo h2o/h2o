@@ -313,6 +313,11 @@ static void h2o_buffer_append(h2o_buffer_t **dst, const void *src, size_t len);
  */
 static int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len) __attribute__((warn_unused_result));
 /**
+ * writes given data to buffer at the specified offset
+ * @return if the size of the buffer increased as the result
+ */
+static int h2o_buffer_write(h2o_buffer_t **dst, size_t off, const void *src, size_t len);
+/**
  * throws away given size of the data from the buffer.
  * @param delta number of octets to be drained from the buffer
  */
@@ -535,6 +540,19 @@ inline int h2o_buffer_try_append(h2o_buffer_t **dst, const void *src, size_t len
     h2o_memcpy(buf.base, src, len);
     (*dst)->size += len;
     return 1;
+}
+
+inline int h2o_buffer_write(h2o_buffer_t **dst, size_t off, const void *src, size_t len)
+{
+    h2o_buffer_reserve(dst, off + len);
+    h2o_memcpy((*dst)->bytes + off, src, len);
+
+    int size_increased = 0;
+    if ((*dst)->size < off + len) {
+        (*dst)->size = off + len;
+        size_increased = 1;
+    }
+    return size_increased;
 }
 
 inline void h2o_doublebuffer_init(h2o_doublebuffer_t *db, h2o_buffer_prototype_t *prototype)

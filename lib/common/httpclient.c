@@ -259,10 +259,16 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     /* adjust selected protocol if the attempt is to create a tunnel */
     if (upgrade_to != NULL) {
-        /* TODO provide a knob to map each upgrade token to some, all, or no HTTP version. Until that is done, upgrade other than to
-         * a CONNECT and CONNECT-UDP tunnel is directed to H1. */
-        if (upgrade_to != h2o_httpclient_upgrade_to_connect && strcmp(upgrade_to, "connect-udp") != 0)
+        size_t upgrade_to_len = strlen(upgrade_to);
+        if (h2o_lcstris(upgrade_to, upgrade_to_len, H2O_STRLIT("webtransport"))) {
+            /* FIXME avoid selecting H1, H2, or return an error response */
+            assert(selected_protocol == PROTOCOL_SELECTOR_H3 || selected_protocol == PROTOCOL_SELECTOR_H3_ON_STREAMS);
+        } else if (upgrade_to != h2o_httpclient_upgrade_to_connect &&
+                   !h2o_lcstris(upgrade_to, upgrade_to_len, H2O_STRLIT("connect-udp"))) {
+            /* TODO provide a knob to map each upgrade token to some, all, or no HTTP version. Until that is done, upgrade other
+             * than to a CONNECT and CONNECT-UDP tunnel is directed to H1. */
             selected_protocol = PROTOCOL_SELECTOR_H1;
+        }
     }
 
     switch (selected_protocol) {
