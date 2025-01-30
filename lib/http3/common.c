@@ -1263,6 +1263,13 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+h2o_http3_conn_t *h2o_http3_get_conn(quicly_conn_t *quic)
+{
+    h2o_http3_conn_t *conn = *quicly_get_data(quic);
+    assert(conn->super.quic == quic);
+    return conn;
+}
+
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity, const uint64_t *additional_settings)
 {
     ptls_buffer_t buf;

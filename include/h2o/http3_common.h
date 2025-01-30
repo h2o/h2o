@@ -574,7 +574,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
  * Returns `h2o_http3_conn_t` associated to the QUIC connection; at the moment, it is a wrapper of `return *quicly_get_data(quic)`
  * but is less prone to changes.
  */
-static h2o_http3_conn_t *h2o_http3_get_conn(quicly_conn_t *quic);
+h2o_http3_conn_t *h2o_http3_get_conn(quicly_conn_t *quic);
 /**
  *
  */
@@ -653,13 +653,6 @@ void h2o_http3_park_webtransport_stream(h2o_linklist_t *anchor, h2o_http3_on_web
 void h2o_http3_dispatch_parked_webtransport_streams(h2o_linklist_t *anchor, h2o_http3_conn_t *conn);
 
 /* inline definitions */
-
-inline h2o_http3_conn_t *h2o_http3_get_conn(quicly_conn_t *quic)
-{
-    h2o_http3_conn_t *conn = *quicly_get_data(quic);
-    assert(conn->super.quic == quic);
-    return conn;
-}
 
 inline int h2o_http3_has_received_settings(h2o_http3_conn_t *conn)
 {
