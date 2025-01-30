@@ -22,6 +22,7 @@
 #ifndef h2o__evloop_h
 #define h2o__evloop_h
 
+#include <stdbool.h>
 #include "h2o/linklist.h"
 #include "h2o/timerwheel.h"
 
@@ -53,6 +54,12 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
     uint64_t run_count;
+    struct {
+        uint64_t epoll_bp_usecs;
+        uint64_t epoll_bp_budget;
+        bool epoll_bp_changed;
+        bool epoll_nonblock;
+    } bp;
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
@@ -71,6 +78,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 void h2o_evloop_socket_set_max_read_size(h2o_socket_t *sock, size_t max_size);
 
 h2o_evloop_t *h2o_evloop_create(void);
+h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t budget);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 /**
  * runs a event loop once. The function returns 0 if successful, or -1 if it aborts the operation due to a system call returning an
@@ -99,6 +107,27 @@ static inline uint64_t h2o_now(h2o_evloop_t *loop)
 static inline uint64_t h2o_now_nanosec(h2o_evloop_t *loop)
 {
     return loop->_now_nanosec;
+}
+
+static inline void h2o_loop_set_bp_usecs(h2o_evloop_t *loop, uint64_t usecs)
+{
+    if (loop->bp.epoll_bp_usecs != usecs) {
+        loop->bp.epoll_bp_usecs = usecs;
+        loop->bp.epoll_bp_changed = true;
+    }
+}
+
+static inline void h2o_loop_set_bp_budget(h2o_evloop_t *loop, uint64_t budget)
+{
+    if (loop->bp.epoll_bp_budget != budget) {
+        loop->bp.epoll_bp_budget = budget;
+        loop->bp.epoll_bp_changed = true;
+    }
+}
+
+static inline void h2o_loop_set_nonblock(h2o_evloop_t *loop, bool nonblock)
+{
+    loop->bp.epoll_nonblock = nonblock;
 }
 
 static inline uint64_t h2o_evloop_get_execution_time_millisec(h2o_evloop_t *loop)

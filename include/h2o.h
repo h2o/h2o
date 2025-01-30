@@ -52,6 +52,7 @@ extern "C" {
 #include "h2o/token.h"
 #include "h2o/url.h"
 #include "h2o/balancer.h"
+#include "h2o/busypoll.h"
 #include "h2o/http2_common.h"
 #include "h2o/send_state.h"
 
@@ -583,6 +584,12 @@ struct st_h2o_globalconf_t {
     h2o_status_callbacks_t statuses;
 
     size_t _num_config_slots;
+
+    /* busypoll */
+    struct {
+        size_t nic_count;
+        h2o_busypoll_nic_vector_t nic_to_cpu_map;
+    } bp;
 };
 
 enum {
@@ -663,6 +670,11 @@ typedef enum h2o_conn_state {
  * context of the http server.
  */
 struct st_h2o_context_t {
+    /**
+     * thread index/count, used in status handlers for per-thread metrics
+     */
+    int thread_index;
+    int thread_count;
     /**
      * points to the loop (either uv_loop_t or h2o_evloop_t, depending on the value of H2O_USE_LIBUV)
      */
@@ -2025,6 +2037,9 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
 void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/common/busypoll.c */
+void h2o_busypoll_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/compress.c */
 

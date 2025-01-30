@@ -156,6 +156,27 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_KTLS "use Kernel TLS" ${WITH_KTLS_DEFAULT})
 
+# Find out if system provides libynl
+CMAKE_PUSH_CHECK_STATE()
+FIND_LIBRARY(SYSTEM_YNL_LIB "ynl")
+IF (SYSTEM_YNL_LIB)
+    SET(CMAKE_REQUIRED_LIBRARIES ${SYSTEM_YNL_LIB})
+ENDIF()
+CHECK_C_SOURCE_COMPILES("
+#include <ynl/ynl.h>
+int main(void) {
+return YNL_ERROR_NONE;
+}" SYSTEM_HAS_YNL)
+CMAKE_POP_CHECK_STATE()
+
+IF (SYSTEM_HAS_YNL)
+    ADD_DEFINITIONS("-DH2O_HAS_YNL_H")
+    IF (SYSTEM_YNL_LIB)
+        LIST(APPEND EXTRA_LIBS ${SYSTEM_YNL_LIB})
+    ENDIF ()
+ENDIF ()
+
+
 # aegis
 FIND_PACKAGE(aegis)
 IF (aegis_FOUND)
@@ -405,6 +426,7 @@ SET(LIB_SOURCE_FILES
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
     lib/common/absprio.c
+    lib/common/busypoll.c
 
     lib/core/config.c
     lib/core/configurator.c
@@ -441,6 +463,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/status/ssl.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
+    lib/handler/configurator/busypoll.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c

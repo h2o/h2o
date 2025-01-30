@@ -192,3 +192,8 @@ h2o_evloop_t *h2o_evloop_create(void)
 
     return &loop->super;
 }
+
+h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t packet_budget)
+{
+    return NULL;
+}
