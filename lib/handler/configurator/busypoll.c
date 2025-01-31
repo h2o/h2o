@@ -85,15 +85,18 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
             nic_to_cpu_map->entries[i].mode = BP_MODE_SUSPEND;
             break;
         case 2:
-#ifndef H2O_HAS_YNL_H
-            h2o_configurator_errprintf(cmd, node, "libynl is not available and required to busypoll");
-            return -1;
-#endif
             nic_to_cpu_map->entries[i].mode = BP_MODE_BUSYPOLL;
             break;
         default:
             return -1;
         }
+
+#ifndef H2O_HAS_YNL_H
+        if (nic_to_cpu_map->entries[i].mode == BP_MODE_SUSPEND || nic_to_cpu_map->entries[i].mode == BP_MODE_BUSYPOLL) {
+            h2o_configurator_errprintf(cmd, node, "libynl is not available and required to busypoll");
+            return -1;
+        }
+#endif
 
         nic_to_cpu_map->entries[i].options.gro_flush_timeout = 0;
         nic_to_cpu_map->entries[i].options.defer_hard_irqs = 0;
