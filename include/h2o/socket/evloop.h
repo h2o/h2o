@@ -57,6 +57,7 @@ typedef struct st_h2o_evloop_t {
     struct {
         uint64_t epoll_bp_usecs;
         uint64_t epoll_bp_budget;
+        bool prefer_busy_poll;
         bool epoll_bp_changed;
         bool epoll_nonblock;
     } bp;
@@ -78,7 +79,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 void h2o_evloop_socket_set_max_read_size(h2o_socket_t *sock, size_t max_size);
 
 h2o_evloop_t *h2o_evloop_create(void);
-h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t budget);
+h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t budget, uint8_t prefer);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 /**
  * runs a event loop once. The function returns 0 if successful, or -1 if it aborts the operation due to a system call returning an
@@ -121,6 +122,14 @@ static inline void h2o_loop_set_bp_budget(h2o_evloop_t *loop, uint64_t budget)
 {
     if (loop->bp.epoll_bp_budget != budget) {
         loop->bp.epoll_bp_budget = budget;
+        loop->bp.epoll_bp_changed = true;
+    }
+}
+
+static inline void h2o_loop_set_bp_prefer(h2o_evloop_t *loop, bool prefer)
+{
+    if (loop->bp.prefer_busy_poll != prefer) {
+        loop->bp.prefer_busy_poll = prefer;
         loop->bp.epoll_bp_changed = true;
     }
 }

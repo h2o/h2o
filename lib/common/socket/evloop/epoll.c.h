@@ -214,16 +214,17 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
-static void evloop_set_bp(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget)
+static void evloop_set_bp(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget, uint8_t prefer)
 {
     char buf[128];
     struct epoll_params params = {0};
 
     params.busy_poll_usecs = usecs;
     params.busy_poll_budget = budget;
+    params.prefer_busy_poll = prefer == 0 ? 0 : 1;
 
     if (ioctl(loop->ep, EPIOCSPARAMS, &params) != 0)
-        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " err: %d:%s\n", usecs, budget, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n", usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
 }
 
 int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
@@ -255,7 +256,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 
         /* save a few syscalls if epoll bp params are unchanged */
         if (loop->super.bp.epoll_bp_changed) {
-            evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget);
+            evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.prefer_busy_poll);
             loop->super.bp.epoll_bp_changed = false;
         }
 
@@ -379,7 +380,7 @@ static void evloop_do_dispose(h2o_evloop_t *_loop)
     close(loop->ep);
 }
 
-static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint64_t packet_budget)
+static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint64_t packet_budget, uint8_t prefer)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
     char buf[128];
@@ -391,18 +392,19 @@ static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint
     if (time_budget) {
         loop->super.bp.epoll_bp_usecs = time_budget;
         loop->super.bp.epoll_bp_budget = packet_budget;
-        evloop_set_bp(loop, time_budget, packet_budget);
+        loop->super.bp.prefer_busy_poll = prefer;
+        evloop_set_bp(loop, time_budget, packet_budget, prefer);
     }
 
     return &loop->super;
 }
 
-h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t packet_budget)
+h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t packet_budget, uint8_t prefer)
 {
-    return _do_h2o_evloop_create(EPOLL_CLOEXEC, nsecs, packet_budget);
+    return _do_h2o_evloop_create(EPOLL_CLOEXEC, nsecs, packet_budget, prefer);
 }
 
 h2o_evloop_t *h2o_evloop_create(void)
 {
-    return _do_h2o_evloop_create(EPOLL_CLOEXEC, 0, 0);
+    return _do_h2o_evloop_create(EPOLL_CLOEXEC, 0, 0, 0);
 }
