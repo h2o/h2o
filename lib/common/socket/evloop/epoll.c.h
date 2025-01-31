@@ -22,14 +22,8 @@
 #include <assert.h>
 #include <limits.h>
 #include <stdio.h>
-
-#define _GNU_SOURCE         /* See feature_test_macros(7) */
-#include <unistd.h>
-#include <sys/syscall.h>   /* For SYS_xxx definitions */
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
-#include <sys/param.h>
-
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
 #else
@@ -265,7 +259,10 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
             loop->super.bp.epoll_bp_changed = false;
         }
 
-        nevents = syscall(__NR_epoll_pwait2, loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
+        //FIXME: use epoll_pwait2 after env update
+        //nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
+        (void)ts;
+        nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
     }
 
     update_now(&loop->super);
