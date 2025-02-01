@@ -260,10 +260,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
             loop->super.bp.epoll_bp_changed = false;
         }
 
-        //FIXME: use epoll_pwait2 after env update
-        //nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
+#ifdef H2O_HAS_YNL_H
+        nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
+#else
         (void)ts;
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+#endif
     }
 
     update_now(&loop->super);
