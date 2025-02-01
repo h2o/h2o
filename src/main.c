@@ -2525,7 +2525,7 @@ static void socket_reuseport(int fd)
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, const char *iface)
 {
     int fd;
     if ((fd = socket(domain, type, protocol)) == -1) {
@@ -2544,6 +2544,10 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         }
     }
 #endif
+
+    if (conf.globalconf.bp.nic_count > 0) {
+        h2o_busypoll_bind_interface(fd, iface);
+    }
 
     switch (type) {
     case SOCK_STREAM: {
@@ -2600,10 +2604,6 @@ static int finish_open_listener(int fd, int apply_bpf_filter, int cpus, const ch
 
     if (fd < 0)
         goto Error;
-
-    if (conf.globalconf.bp.nic_count > 0) {
-        h2o_busypoll_bind_interface(fd, iface);
-    }
 
     ret = getsockname(fd, (struct sockaddr *)&ss, &sslen);
     if (ret != 0) {
@@ -2680,11 +2680,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, const char *iface)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen, iface)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -2902,8 +2902,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else {
+                        const char *iface = NULL;
+                        if (conf.globalconf.bp.nic_count > 0) {
+                            iface = conf.globalconf.bp.nic_to_cpu_map.entries[0].iface.base; /* FIXME: check this */
+                        }
+
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, iface)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -2962,7 +2967,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, NULL)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -4787,7 +4792,7 @@ static int dup_listener(struct listener_config_t *config, const char *iface)
             h2o_fatal("failed to obtain local address of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
-                                sslen)) != -1) {
+                                sslen, iface)) != -1) {
             if (type == SOCK_DGRAM)
                 set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
@@ -4835,6 +4840,24 @@ static void create_per_thread_nic_map_listeners(void)
         for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
             int cpus = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
             const char *iface = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].iface.base;
+            /* we've already taken care of adding 1 fd for nic 0's first
+             * CPU because the listener when initially created takes this
+             * CPU for nic0.
+             *
+             * nic0 needs a listener for every other CPU (except the
+             * first), and all other NICs need fds for all CPUs.
+             */
+            if (nic_i == 0 && cpus == 1) {
+                fprintf(stderr, "the first nic (%s) had only 1 thread, no "
+                                " additional duping is required.\n", iface);
+                continue;
+            }
+
+            /* in this case, the first NIC has multiple threads, so we need
+             * to dup listeners for each thread other than the first
+             */
+            if (nic_i == 0)
+                cpus--;
 
             fprintf(stderr," current fd size: %zd\n", listener_config->fds.size);
             fprintf(stderr," got %d cpus for nic: %s\n", cpus, iface);
