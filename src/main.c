@@ -2904,7 +2904,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     } else {
                         const char *iface = NULL;
                         if (conf.globalconf.bp.nic_count > 0) {
-                            iface = conf.globalconf.bp.nic_to_cpu_map.entries[0].iface.base; /* FIXME: check this */
+                            iface = conf.globalconf.bp.nic_to_cpu_map.entries[0].iface.base;
                         }
 
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
