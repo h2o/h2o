@@ -19,41 +19,39 @@ static __thread const char *nic_claimed = NULL;
 static __thread unsigned int napi_id_claimed = 0;
 
 static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint64_t cfg_gro_flush_timeout,
-                        uint64_t cfg_irq_suspend_timeout)
+                        uint64_t cfg_irq_suspend_timeout, uint32_t *napi_ids, size_t napi_ids_size)
 {
-    struct netdev_napi_get_list *napi_list = NULL;
-    struct netdev_napi_get_req_dump *req = NULL;
+    struct netdev_queue_get_req *get_req = NULL;
     struct netdev_napi_set_req *set_req = NULL;
     struct ynl_sock *ys;
     struct ynl_error yerr;
-    uint32_t napi_id = 0;
 
     ys = ynl_sock_create(&ynl_netdev_family, &yerr);
     if (!ys)
         error(1, 0, "YNL: %s", yerr.msg);
 
-    req = netdev_napi_get_req_dump_alloc();
-    netdev_napi_get_req_dump_set_ifindex(req, cfg_ifindex);
-    napi_list = netdev_napi_get_dump(ys, req);
+    for (int i = 0; i < napi_ids_size; i++) {
+        get_req = netdev_queue_get_req_alloc();
+        netdev_queue_get_req_set_ifindex(get_req, cfg_ifindex);
+        netdev_queue_get_req_set_type(get_req, NETDEV_QUEUE_TYPE_RX);
+        netdev_queue_get_req_set_id(get_req, i);
+        struct netdev_queue_get_rsp *rsp = netdev_queue_get(ys, get_req);
+        if (rsp == NULL)
+            error(1, 0, "can't get queue params: %s\n", yerr.msg);
+        napi_ids[i] = rsp->_present.napi_id;
+        netdev_queue_get_rsp_free(rsp);
+        netdev_queue_get_req_free(get_req);
 
-    /* assume there is 1 NAPI configured and take the first */
-    if (napi_list->obj._present.id)
-        napi_id = napi_list->obj.id;
-    else
-        error(1, 0, "napi ID not present?");
+        set_req = netdev_napi_set_req_alloc();
+        netdev_napi_set_req_set_id(set_req, napi_ids[i]);
+        netdev_napi_set_req_set_defer_hard_irqs(set_req, cfg_defer_hard_irqs);
+        netdev_napi_set_req_set_gro_flush_timeout(set_req, cfg_gro_flush_timeout);
+        netdev_napi_set_req_set_irq_suspend_timeout(set_req, cfg_irq_suspend_timeout);
+        if (netdev_napi_set(ys, set_req))
+            error(1, 0, "can't set NAPI params: %s\n", yerr.msg);
+        netdev_napi_set_req_free(set_req);
+    }
 
-    set_req = netdev_napi_set_req_alloc();
-    netdev_napi_set_req_set_id(set_req, napi_id);
-    netdev_napi_set_req_set_defer_hard_irqs(set_req, cfg_defer_hard_irqs);
-    netdev_napi_set_req_set_gro_flush_timeout(set_req, cfg_gro_flush_timeout);
-    netdev_napi_set_req_set_irq_suspend_timeout(set_req, cfg_irq_suspend_timeout);
-
-    if (netdev_napi_set(ys, set_req))
-        error(1, 0, "can't set NAPI params: %s\n", yerr.msg);
-
-    netdev_napi_get_list_free(napi_list);
-    netdev_napi_get_req_dump_free(req);
-    netdev_napi_set_req_free(set_req);
     ynl_sock_destroy(ys);
 }
 
@@ -131,24 +129,29 @@ void bind_interface(int fd, const char *iface)
 
 static unsigned int get_napi_id(int fd)
 {
-#if !defined(SIOCGIFNAME_BY_NAPI_ID)
-#define SIOCGIFNAME_BY_NAPI_ID (0x894D)
-#endif
-    unsigned int napi_id = 0;
-    socklen_t napi_id_len = sizeof(napi_id);
-
-    if (getsockopt(fd, SOL_SOCKET, SO_INCOMING_NAPI_ID, &napi_id, &napi_id_len) != 0) {
-        h2o_perror("so_napi_incoming_id failed");
-    }
-
-    return napi_id;
+    // FIXME
+    return 0;
 }
 
-static int get_nic_name_by_napi(int fd, unsigned int napi_id, struct ifreq *ifr)
+static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
 {
-    ifr->ifr_ifru.ifru_ivalue = napi_id;
+    for (int i = 0; i < nic_count; i++) {
+        for (int j = 0; j < nic_count; j++) {
+            if (nic_to_cpu_map[i].napi_ids.entries[j] == napi_id)
+                return nic_to_cpu_map[i].iface.base;
+        }
+    }
+    return NULL;
+}
 
-    return ioctl(fd, SIOCGIFNAME_BY_NAPI_ID, ifr);
+static struct busypoll_nic_t *get_nic_by_cpu(unsigned int cpu_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
+{
+    for (int nic_i = 0; nic_i < nic_count; nic_i++) {
+        if (CPU_ISSET(cpu_id, &nic_to_cpu_map[nic_i].cpu_map)) {
+            return &nic_to_cpu_map[nic_i];
+        }
+    }
+    return NULL;
 }
 
 /*
@@ -188,7 +191,7 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
         cpu_set_t cpuset;
         CPU_ZERO(&cpuset);
 
-        if (strcmp(nic_to_cpu_map[i].iface.base, iface) == 0) {
+        if (iface && strcmp(nic_to_cpu_map[i].iface.base, iface) == 0) {
             fprintf(stderr, "found matching iface in conf map: %s\n", iface);
             pthread_mutex_lock(&nic_to_cpu_map[i].mutex);
             for (int j = 0; j < get_nprocs_conf(); j++) {
@@ -318,17 +321,15 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
             /* next case, the IDs mismatch */
             if (napi_id_claimed != napi_id) {
                 /* this is a bug no matter what -- but let's check is_local to help debug */
-                struct ifreq ifr = {};
-                const char *mismatch_nic_name = NULL;
+                const char *iface, *mismatch_nic_name = "unknown";
 
-                if (get_nic_name_by_napi(sockfd, napi_id, &ifr) == -1) {
-                    fprintf(stderr, "SIOCGIFNAME_BY_NAPI_ID failed ? %d\n", napi_id);
-                    h2o_perror("SIOCGIFNAME_BY_NAPI_ID failed");
+                if ((iface = get_nic_name_by_napi(napi_id, nic_to_cpu_map, nic_count)) == NULL) {
+                    fprintf(stderr, "failed to find interface name for napi id: %d\n", napi_id);
+                    h2o_perror("failed to find interface name for napi id");
                 }
 
-                mismatch_nic_name = "unknown";
-                if (strlen(ifr.ifr_name) > 0)
-                    mismatch_nic_name = ifr.ifr_name;
+                if (strlen(iface) > 0)
+                    mismatch_nic_name = iface;
 
                 struct sockaddr_in localaddr;
                 socklen_t localaddrlen = sizeof(localaddr);
@@ -379,19 +380,18 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
     } else {
         /* a CPU has not been claimed yet, so claim one */
         int listener_fd = h2o_socket_get_fd(listener);
-        struct ifreq ifr = {};
-
-        if (get_nic_name_by_napi(sockfd, napi_id, &ifr) == -1) {
-            fprintf(stderr, "SIOCGIFNAME_BY_NAPI_ID failed ? %d\n", napi_id);
-            h2o_perror("SIOCGIFNAME_BY_NAPI_ID failed");
+        const char *iface;
+        if ((iface = get_nic_name_by_napi(napi_id, nic_to_cpu_map, nic_count)) == NULL) {
+            fprintf(stderr, "failed to find interface name for napi id: %d\n", napi_id);
+            h2o_perror("failed to find interface name for napi id");
         }
 
-        fprintf(stderr, "thread %zd NAPI id: %u, iface: %s, listener fd: %d\n", thread_index, napi_id, ifr.ifr_name, listener_fd);
+        fprintf(stderr, "thread %zd NAPI id: %u, iface: %s, listener fd: %d\n", thread_index, napi_id, iface, listener_fd);
 
-        int found = assign_nic_map_cpu(h2o_socket_get_loop(sock), ifr.ifr_name, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
+        int found = assign_nic_map_cpu(h2o_socket_get_loop(sock), iface, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
 
         if (!found) {
-            fprintf(stderr, "no CPU found for thread with NAPI from NIC: %s:%d\n", ifr.ifr_name, napi_id);
+            fprintf(stderr, "no CPU found for thread with NAPI from NIC: %s:%d\n", iface, napi_id);
             fprintf(stderr, "busy-poll-cpu-map configuration or queue setup is buggy -- exiting h2o now.\n");
             exit(-1);
         }
@@ -405,9 +405,10 @@ void h2o_busypoll_bind_interface(int fd, const char *iface)
     bind_interface(fd, iface);
 }
 
-void h2o_busypoll_set_opts(uint32_t ifindex, uint32_t defer_hard_irqs, uint64_t gro_flush_timeout, uint64_t irq_suspend_timeout)
+void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
 {
-    setup_queue(ifindex, defer_hard_irqs, gro_flush_timeout, irq_suspend_timeout);
+    setup_queue(nic->ifindex, nic->options.defer_hard_irqs, nic->options.gro_flush_timeout, nic->options.suspend_timeout,
+                nic->napi_ids.entries, nic->napi_ids.capacity);
 }
 
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface)
@@ -428,7 +429,7 @@ void h2o_busypoll_bind_interface(int fd, const char *iface)
     /* noop */
 }
 
-void h2o_busypoll_set_opts(uint32_t ifindex, uint32_t defer_hard_irqs, uint64_t gro_flush_timeout, uint64_t irq_suspend_timeout)
+void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
 {
     /* noop */
 }

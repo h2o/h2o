@@ -70,6 +70,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
                 CPU_SET(cpu_num, &nic_to_cpu_map->entries[i].cpu_map);
         }
         nic_to_cpu_map->entries[i].cpu_count = CPU_COUNT(&nic_to_cpu_map->entries[i].cpu_map);
+        h2o_vector_reserve(NULL, &nic_to_cpu_map[i].entries->napi_ids, nic_to_cpu_map->entries[i].cpu_count);
 
         yoml_t **mode_node = NULL, **gro_node = NULL, **irq_node = NULL, **st_node = NULL;
         if (h2o_configurator_parse_mapping(cmd, *options_node, "mode:s", "gro-flush-timeout:s,defer-hard-irqs:s,suspend-timeout:s",
@@ -116,9 +117,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
 
     /* setup queues */
     for (int i = 0; i != nic_count; ++i) {
-        h2o_busypoll_set_opts(nic_to_cpu_map->entries[i].ifindex, nic_to_cpu_map->entries[i].options.defer_hard_irqs,
-                              nic_to_cpu_map->entries[i].options.gro_flush_timeout,
-                              nic_to_cpu_map->entries[i].options.suspend_timeout);
+        h2o_busypoll_set_opts(&nic_to_cpu_map->entries[i]);
     }
 
     return 0;

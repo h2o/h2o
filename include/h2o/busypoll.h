@@ -15,6 +15,7 @@ struct busypoll_nic_t {
     size_t cpu_count;
     enum busypoll_mode_t mode;
     cpu_set_t cpu_map;
+    H2O_VECTOR(uint32_t) napi_ids;
     pthread_mutex_t mutex;
     struct {
         size_t gro_flush_timeout;
@@ -27,7 +28,7 @@ typedef H2O_VECTOR(struct busypoll_nic_t) h2o_busypoll_nic_vector_t;
 
 void h2o_busypoll_bind_interface(int fd, const char *iface);
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface);
-void h2o_busypoll_set_opts(uint32_t ifindex, uint32_t defer_hard_irqs, uint64_t gro_flush_timeout, uint64_t irq_suspend_timeout);
+void h2o_busypoll_set_opts(struct busypoll_nic_t *nic);
 void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, size_t thread_index,
                                         struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count);
 
