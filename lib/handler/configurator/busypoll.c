@@ -58,6 +58,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         pthread_mutex_init(&nic_to_cpu_map->entries[i].mutex, NULL);
         nic_to_cpu_map->entries[i].cpu_count = 0;
         CPU_ZERO(&nic_to_cpu_map->entries[i].cpu_map);
+        CPU_ZERO(&nic_to_cpu_map->entries[i].napi_map);
         for (int j = 0; j < (*cpus_node)->data.sequence.size; j++) {
             yoml_t *cpu_node = (*cpus_node)->data.sequence.elements[j];
             if (cpu_node->type != YOML_TYPE_SCALAR) {

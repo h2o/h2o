@@ -15,6 +15,7 @@ struct busypoll_nic_t {
     size_t cpu_count;
     enum busypoll_mode_t mode;
     cpu_set_t cpu_map;
+    cpu_set_t napi_map;
     pthread_mutex_t mutex;
     struct {
         size_t gro_flush_timeout;

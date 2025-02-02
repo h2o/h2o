@@ -137,7 +137,21 @@ static unsigned int get_napi_id(int fd)
 
 static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
 {
-    // FIXME
+    for (int nic_i = 0; nic_i < nic_count; nic_i++) {
+        if (CPU_ISSET(napi_id, &nic_to_cpu_map[nic_i].napi_map)) {
+            return nic_to_cpu_map[nic_i].iface.base;
+        }
+    }
+    return NULL;
+}
+
+static struct busypoll_nic_t *get_nic_by_cpu(unsigned int cpu_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
+{
+    for (int nic_i = 0; nic_i < nic_count; nic_i++) {
+        if (CPU_ISSET(cpu_id, &nic_to_cpu_map[nic_i].cpu_map)) {
+            return &nic_to_cpu_map[nic_i];
+        }
+    }
     return NULL;
 }
 
