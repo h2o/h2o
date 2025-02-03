@@ -65,6 +65,9 @@ module Kernel
         while 1
           begin
             while 1
+              if req["rack.input"].is_a?(String)
+                req["rack.input"] = H2O::StreamingInputStream.new(generator, req["rack.input"])
+              end
               resp = app.call(req)
               cached = self_fiber
               (req, generator) = Fiber.yield(resp, generator)
@@ -130,6 +133,25 @@ module H2O
       self
     end
 
+  end
+
+  class StreamingInputStream
+    def initialize(generator, chunk)
+      @generator = generator
+      @chunk = chunk
+      @eos = false
+    end
+    def fetch
+      while @chunk.empty? and !@eos
+        @chunk, @eos = _h2o__fetch_req_chunk(@generator)
+      end
+      if @chunk.empty?
+        return nil
+      end
+      ret = @chunk
+      @chunk = ""
+      return ret
+    end
   end
 
 end
