@@ -161,6 +161,10 @@ module H2O
       end
     end
 
+    def read
+      raise RuntimeError.new('InputStream#read not implemented')
+    end
+
   end
 
 end
