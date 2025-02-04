@@ -143,22 +143,31 @@
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
     "  class StreamingInputStream\n"                                                                                               \
+    "\n"                                                                                                                           \
     "    def initialize(generator, chunk)\n"                                                                                       \
     "      @generator = generator\n"                                                                                               \
     "      @chunk = chunk\n"                                                                                                       \
     "      @eos = false\n"                                                                                                         \
     "    end\n"                                                                                                                    \
-    "    def fetch\n"                                                                                                              \
+    "\n"                                                                                                                           \
+    "    def gets\n"                                                                                                               \
     "      while @chunk.empty? and !@eos\n"                                                                                        \
     "        @chunk, @eos = _h2o__fetch_req_chunk(@generator)\n"                                                                   \
     "      end\n"                                                                                                                  \
     "      if @chunk.empty?\n"                                                                                                     \
-    "        return nil\n"                                                                                                         \
+    "        return nil # eos\n"                                                                                                   \
     "      end\n"                                                                                                                  \
-    "      ret = @chunk\n"                                                                                                         \
+    "      c = @chunk\n"                                                                                                           \
     "      @chunk = \"\"\n"                                                                                                        \
-    "      return ret\n"                                                                                                           \
+    "      return c\n"                                                                                                             \
     "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def each\n"                                                                                                               \
+    "      while c = gets\n"                                                                                                       \
+    "        yield c\n"                                                                                                            \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
     "end\n"

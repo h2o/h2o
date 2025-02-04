@@ -136,22 +136,31 @@ module H2O
   end
 
   class StreamingInputStream
+
     def initialize(generator, chunk)
       @generator = generator
       @chunk = chunk
       @eos = false
     end
-    def fetch
+
+    def gets
       while @chunk.empty? and !@eos
         @chunk, @eos = _h2o__fetch_req_chunk(@generator)
       end
       if @chunk.empty?
-        return nil
+        return nil # eos
       end
-      ret = @chunk
+      c = @chunk
       @chunk = ""
-      return ret
+      return c
     end
+
+    def each
+      while c = gets
+        yield c
+      end
+    end
+
   end
 
 end
