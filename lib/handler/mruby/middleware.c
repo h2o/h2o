@@ -932,7 +932,7 @@ void h2o_mruby_middleware_init_context(h2o_mruby_shared_context_t *shared_ctx)
     struct RClass *module = mrb_define_module(mrb, "H2O");
 
     struct RClass *app_klass = mrb_class_get_under(shared_ctx->mrb, module, "App");
-    mrb_define_method(mrb, app_klass, "request", middleware_request_method, MRB_ARGS_ARG(1, 0));
+    mrb_define_method(mrb, app_klass, "_h2o_request", middleware_request_method, MRB_ARGS_ARG(1, 0));
 
     struct RClass *app_request_klass = mrb_class_get_under(shared_ctx->mrb, module, "AppRequest");
     mrb_ary_set(shared_ctx->mrb, shared_ctx->constants, H2O_MRUBY_APP_REQUEST_CLASS, mrb_obj_value(app_request_klass));

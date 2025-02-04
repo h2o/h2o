@@ -262,6 +262,12 @@
     "    def initialize(reprocess)\n"                                                                                              \
     "      @reprocess = reprocess\n"                                                                                               \
     "    end\n"                                                                                                                    \
+    "    def request(env)\n"                                                                                                       \
+    "      if !(env[\"rack.input\"].nil? or env[\"rack.input\"].is_a?(InputStream))\n"                                             \
+    "        env[\"rack.input\"] = InputStream.new(env[\"rack.input\"].read)\n"                                                    \
+    "      end\n"                                                                                                                  \
+    "      _h2o_request(env)\n"                                                                                                    \
+    "    end\n"                                                                                                                    \
     "    def call(env)\n"                                                                                                          \
     "      request(env).join\n"                                                                                                    \
     "    end\n"                                                                                                                    \

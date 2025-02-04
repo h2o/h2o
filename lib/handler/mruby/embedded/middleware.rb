@@ -24,6 +24,13 @@ module H2O
     def initialize(reprocess)
       @reprocess = reprocess
     end
+    def request(env)
+      # `_h2o_request` reads all input synchronously, so convert streaming input here to avoid fiber error
+      if !(env["rack.input"].nil? or env["rack.input"].is_a?(InputStream))
+        env["rack.input"] = InputStream.new(env["rack.input"].read)
+      end
+      _h2o_request(env)
+    end
     def call(env)
       request(env).join
     end
