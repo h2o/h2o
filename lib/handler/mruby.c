@@ -41,6 +41,14 @@
 #include "h2o/mruby_.h"
 #include "mruby/embedded.c.h"
 
+struct st_h2o_mruby_req_streaming_ctx_t {
+    h2o_mruby_generator_t *generator;
+    h2o_mruby_context_t *ctx;
+    mrb_value receiver;
+    h2o_timer_t delay_slot;
+    int is_end_stream;
+};
+
 #define STATUS_FALLTHRU 399
 #define FALLTHRU_SET_PREFIX "x-fallthru-set-"
 
@@ -467,10 +475,44 @@ mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input,
     return mrb_nil_value();
 }
 
+static void write_req_on_delayed(h2o_timer_t *entry)
+{
+    struct st_h2o_mruby_req_streaming_ctx_t *ctx =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_req_streaming_ctx_t, delay_slot, entry);
+    h2o_iovec_t chunk;
+    int is_end_stream;
+
+    if (ctx->generator != NULL) {
+        chunk = ctx->generator->req->entity;
+        is_end_stream = ctx->is_end_stream;
+        ctx->generator->req_streaming = NULL; /* steal state; `fetch_req_chunk_callback` might get called inside fiber */
+    } else {
+        chunk = h2o_iovec_init("", 0);
+        is_end_stream = 1;
+    }
+
+    /* run the fiber */
+    int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
+    mrb_value input = mrb_ary_new_capa(ctx->ctx->shared->mrb, 2);
+    mrb_ary_set(ctx->ctx->shared->mrb, input, 0, mrb_str_new(ctx->ctx->shared->mrb, chunk.base, chunk.len));
+    mrb_ary_set(ctx->ctx->shared->mrb, input, 1, mrb_bool_value(is_end_stream));
+    h2o_mruby_run_fiber(ctx->ctx, ctx->receiver, input, NULL);
+    mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
+
+    mrb_gc_unregister(ctx->ctx->shared->mrb, ctx->receiver);
+    free(ctx);
+}
+
 static void fetch_req_chunk_on_delayed(h2o_timer_t *entry)
 {
-    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, req_streaming_callback.delay_slot, entry);
-    generator->req->proceed_req(generator->req, NULL);
+    struct st_h2o_mruby_req_streaming_ctx_t *ctx =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_req_streaming_ctx_t, delay_slot, entry);
+
+    if (ctx->generator != NULL) {
+        ctx->generator->req->proceed_req(ctx->generator->req, NULL);
+    } else {
+        write_req_on_delayed(entry);
+    }
 }
 
 static mrb_value fetch_req_chunk_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
@@ -479,45 +521,32 @@ static mrb_value fetch_req_chunk_callback(h2o_mruby_context_t *ctx, mrb_value in
     mrb_state *mrb = ctx->shared->mrb;
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
 
-    assert(generator->req_streaming_callback.ctx == NULL);
+    if (generator->req_streaming != NULL) {
+        *run_again = 1;
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "another fiber is already blocked reading request");
+    }
 
-    generator->req_streaming_callback.ctx = ctx;
-    generator->req_streaming_callback.receiver = *receiver;
-    generator->req_streaming_callback.delay_slot.cb = fetch_req_chunk_on_delayed;
-    h2o_timer_link(ctx->shared->ctx->loop, 0, &generator->req_streaming_callback.delay_slot);
+    generator->req_streaming = h2o_mem_alloc(sizeof(*generator->req_streaming));
+    *generator->req_streaming = (struct st_h2o_mruby_req_streaming_ctx_t){
+        .generator = generator,
+        .ctx = ctx,
+        .receiver = *receiver,
+    };
+    h2o_timer_init(&generator->req_streaming->delay_slot, fetch_req_chunk_on_delayed);
+    h2o_timer_link(ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
 
     mrb_gc_register(mrb, *receiver);
 
     return mrb_nil_value();
 }
 
-static void write_req_on_delayed(h2o_timer_t *entry)
-{
-    h2o_mruby_generator_t *generator = H2O_STRUCT_FROM_MEMBER(h2o_mruby_generator_t, req_streaming_callback.delay_slot, entry);
-
-    /* steal state and reset; note `fetch_req_chunk_callback` might get called while `h2o_mruby_run_fiber` is in action */
-    h2o_mruby_context_t *ctx = generator->req_streaming_callback.ctx;
-    mrb_value receiver = generator->req_streaming_callback.receiver;
-    generator->req_streaming_callback.ctx = NULL;
-    generator->req_streaming_callback.receiver = mrb_nil_value();
-
-    int gc_arena = mrb_gc_arena_save(ctx->shared->mrb);
-    mrb_value input = mrb_ary_new_capa(ctx->shared->mrb, 2);
-    mrb_ary_set(ctx->shared->mrb, input, 0, mrb_str_new(ctx->shared->mrb, generator->req->entity.base, generator->req->entity.len));
-    mrb_ary_set(ctx->shared->mrb, input, 1, mrb_bool_value(generator->req_streaming_callback.is_end_stream));
-    h2o_mruby_run_fiber(ctx, receiver, input, NULL);
-    mrb_gc_arena_restore(ctx->shared->mrb, gc_arena);
-
-    mrb_gc_unregister(ctx->shared->mrb, receiver);
-}
-
 static int write_req(void *_generator, int is_end_stream)
 {
     h2o_mruby_generator_t *generator = _generator;
 
-    generator->req_streaming_callback.is_end_stream = is_end_stream;
-    generator->req_streaming_callback.delay_slot.cb = write_req_on_delayed;
-    h2o_timer_link(generator->req_streaming_callback.ctx->shared->ctx->loop, 0, &generator->req_streaming_callback.delay_slot);
+    generator->req_streaming->is_end_stream = is_end_stream;
+    generator->req_streaming->delay_slot.cb = write_req_on_delayed;
+    h2o_timer_link(generator->req_streaming->ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
 
     return 0;
 }
@@ -857,8 +886,8 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
     mrb_hash_set(mrb, env, h2o_mruby_token_env_key(shared, H2O_TOKEN_HOST),
                  h2o_mruby_new_str(mrb, generator->req->authority.base, generator->req->authority.len));
+    generator->req_streaming = NULL;
     if (generator->req->entity.base != NULL) {
-        memset(&generator->req_streaming_callback, 0, sizeof(generator->req_streaming_callback));
         if (generator->req->proceed_req == NULL) {
             char buf[32];
             int l = sprintf(buf, "%zu", generator->req->entity.len);
@@ -879,7 +908,6 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
                          mrb_str_new(mrb, generator->req->entity.base, generator->req->entity.len));
             generator->req->write_req.cb = write_req;
             generator->req->write_req.ctx = generator;
-            h2o_timer_init(&generator->req_streaming_callback.delay_slot, NULL);
         }
     }
     {
@@ -998,8 +1026,16 @@ SetUsingToken:
 
 static void clear_rack_input(h2o_mruby_generator_t *generator)
 {
-    if (!mrb_nil_p(generator->rack_input))
+    if (!mrb_nil_p(generator->rack_input)) {
         mrb_input_stream_set_data(generator->ctx->shared->mrb, generator->rack_input, NULL, -1, 0, NULL, NULL);
+    } else if (generator->req_streaming != NULL) {
+        /* pending request streaming; rearm the timer to fire `write_req_on_delayed` immediately, which would signal EOS to mruby */
+        generator->req_streaming->generator = NULL;
+        if (h2o_timer_is_linked(&generator->req_streaming->delay_slot))
+            h2o_timer_unlink(&generator->req_streaming->delay_slot);
+        generator->req_streaming->delay_slot.cb = write_req_on_delayed;
+        h2o_timer_link(generator->req_streaming->ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
+    }
 }
 
 static void on_generator_dispose(void *_generator)

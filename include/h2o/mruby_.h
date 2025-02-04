@@ -174,12 +174,7 @@ struct st_h2o_mruby_generator_t {
         mrb_value generator;
         mrb_value error_stream;
     } refs;
-    struct {
-        h2o_mruby_context_t *ctx;
-        mrb_value receiver;
-        h2o_timer_t delay_slot;
-        int is_end_stream;
-    } req_streaming_callback;
+    struct st_h2o_mruby_req_streaming_ctx_t *req_streaming;
 };
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
