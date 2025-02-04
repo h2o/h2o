@@ -161,8 +161,23 @@ module H2O
       end
     end
 
-    def read
-      raise RuntimeError.new('InputStream#read not implemented')
+    def read(len = nil, outbuf = "")
+      outbuf.clear
+      while len.nil? or outbuf.length < len
+        c = gets
+        if !c
+          break
+        end
+        outbuf << c
+        if !len.nil? and outbuf.length > len
+          @chunk = outbuf.slice!(len, outbuf.length - len)
+          break
+        end
+      end
+      if outbuf.empty? and len
+        outbuf = nil
+      end
+      outbuf
     end
 
   end

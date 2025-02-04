@@ -168,6 +168,25 @@
     "      end\n"                                                                                                                  \
     "    end\n"                                                                                                                    \
     "\n"                                                                                                                           \
+    "    def read(len = nil, outbuf = \"\")\n"                                                                                     \
+    "      outbuf.clear\n"                                                                                                         \
+    "      while len.nil? or outbuf.length < len\n"                                                                                \
+    "        c = gets\n"                                                                                                           \
+    "        if !c\n"                                                                                                              \
+    "          break\n"                                                                                                            \
+    "        end\n"                                                                                                                \
+    "        outbuf << c\n"                                                                                                        \
+    "        if !len.nil? and outbuf.length > len\n"                                                                               \
+    "          @chunk = outbuf.slice!(len, outbuf.length - len)\n"                                                                 \
+    "          break\n"                                                                                                            \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "      if outbuf.empty? and len\n"                                                                                             \
+    "        outbuf = nil\n"                                                                                                       \
+    "      end\n"                                                                                                                  \
+    "      outbuf\n"                                                                                                               \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
     "  end\n"                                                                                                                      \
     "\n"                                                                                                                           \
     "end\n"
