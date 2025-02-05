@@ -107,7 +107,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (irq_node) {
             h2o_configurator_scanf(cmd, *irq_node, "%zu", &nic_to_cpu_map->entries[i].options.defer_hard_irqs);
         }
-        if (st_node) {
+        if (st_node && nic_to_cpu_map->entries[i].mode == BP_MODE_SUSPEND) {
             h2o_configurator_scanf(cmd, *st_node, "%zu", &nic_to_cpu_map->entries[i].options.suspend_timeout);
         }
 

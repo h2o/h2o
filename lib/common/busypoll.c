@@ -180,7 +180,7 @@ static int is_local_conn(int fd)
     return is_local;
 }
 
-static int assign_nic_map_cpu(const char *iface, size_t thread_index, int napi_id, int listener_fd, int is_lo,
+static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread_index, int napi_id, int listener_fd, int is_lo,
                               struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
 {
     int found = 0;
@@ -235,7 +235,11 @@ static int assign_nic_map_cpu(const char *iface, size_t thread_index, int napi_i
                         }
                     }
 
-                    nic_claimed = nic_to_cpu_map[i].iface.base;
+                    struct busypoll_nic_t *nic = &nic_to_cpu_map[i];
+                    if (nic && nic->mode == BP_MODE_SUSPEND) {
+                        h2o_loop_set_bp_prefer(loop, 1);
+                    }
+                    nic_claimed = nic->iface.base;
                     napi_id_claimed = napi_id;
                     found = 1;
                     cpu_claimed = 1;
@@ -384,7 +388,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
 
         fprintf(stderr, "thread %zd NAPI id: %u, iface: %s, listener fd: %d\n", thread_index, napi_id, ifr.ifr_name, listener_fd);
 
-        int found = assign_nic_map_cpu(ifr.ifr_name, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
+        int found = assign_nic_map_cpu(h2o_socket_get_loop(sock), ifr.ifr_name, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
 
         if (!found) {
             fprintf(stderr, "no CPU found for thread with NAPI from NIC: %s:%d\n", ifr.ifr_name, napi_id);

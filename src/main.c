@@ -4277,8 +4277,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     conf.threads[thread_index].ctx.thread_count = conf.thread_map.size;
 
     if (conf.globalconf.bp.nic_count > 0) {
-        /* FIXME: set prefer if bp mode == SUSPEND */
-        h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, 0);
+        uint8_t prefer_busy_poll = 0; /* prefer will be set later for nics in SUSPEND mode */
+        h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, prefer_busy_poll);
         if (!loop) {
             h2o_fatal("internal error; creating busy poll loop on unsupported backend");
         }
