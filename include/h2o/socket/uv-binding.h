@@ -22,6 +22,7 @@
 #ifndef h2o__uv_binding_h
 #define h2o__uv_binding_h
 
+#include <stdbool.h>
 #include <string.h>
 #include <sys/time.h>
 #include <uv.h>
@@ -76,6 +77,21 @@ inline void h2o_timer_init(h2o_timer_t *timer, h2o_timer_cb cb)
 inline int h2o_timer_is_linked(h2o_timer_t *entry)
 {
     return entry->is_linked;
+}
+
+static inline void h2o_loop_set_bp_usecs(h2o_loop_t *loop, uint64_t usecs)
+{
+    (void)loop; /* noop */
+}
+
+static inline void h2o_loop_set_bp_budget(h2o_loop_t *loop, uint64_t budget)
+{
+    (void)loop; /* noop */
+}
+
+static inline void h2o_loop_set_bp_prefer(h2o_loop_t *loop, bool prefer)
+{
+    (void)loop; /* noop */
 }
 
 #endif

@@ -9,6 +9,7 @@ my @private_commands = (
     qw(mruby.handler_path proxy.connect.proxy-status proxy.http2.max-concurrent_streams proxy-status.identity), # deprecated
     qw(header.cookie.unset header.cookie.unsetunless), # removing "cookie" headers in response?
     qw(http3-ack-frequency http3-allow-delayed-ack quic-nodes self-trace), # highly experimental and therefore undocumented
+    qw(busy-poll-usecs busy-poll-budget busy-poll-map epoll-nonblock), # highly experimental and therefore undocumented
 );
 
 my $tempdir = tempdir(CLEANUP => 1);
