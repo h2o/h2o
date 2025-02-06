@@ -76,6 +76,23 @@ extern "C" {
 #define H2O_BUILD_ASSERT(condition) ((void)sizeof(char[2 * !!(!__builtin_constant_p(condition) || (condition)) - 1]))
 
 /**
+ * H2O invokes system calls through the h2o_sysfn() macro. By setting H2O_SYS_PREFIX macro, deployments can replace these system
+ * calls with their own implementation. As an example, if `H2O_SYS_PREFIX` is set to `my`, `h2o_sysfn(pipe, fds)` will be compiled
+ * as `my_pipe(fds)`. It is up to each deployment to supply the replacement function (e.g., `my_pipe`).
+ */
+#ifdef H2O_SYS_PREFIX
+#define h2o__syseval2(p, fn) p##_##fn
+#define h2o__syseval(p, fn) h2o__syseval2(p, fn)
+#define h2o_sysfn(fn, ...)                                                                                                         \
+    (({                                                                                                                            \
+        extern __typeof(fn) h2o__syseval(H2O_SYS_PREFIX, fn);                                                                      \
+        h2o__syseval(H2O_SYS_PREFIX, fn);                                                                                          \
+    })(__VA_ARGS__))
+#else
+#define h2o_sysfn(fn, ...) (fn(__VA_ARGS__))
+#endif
+
+/**
  * library users can use their own log method by define this macro
  */
 #ifndef h2o_error_printf
