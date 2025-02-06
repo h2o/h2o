@@ -166,6 +166,10 @@ QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  * is complete.
  */
 QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
+/**
+ *
+ */
+QUICLY_CALLBACK_TYPE(int, qos_is_writing, quicly_conn_t *conn);
 
 /**
  * crypto offload API
@@ -417,6 +421,10 @@ struct st_quicly_context_t {
      *
      */
     quicly_async_handshake_t *async_handshake;
+    /**
+     *
+     */
+    quicly_qos_is_writing_t *qos_is_writing;
 };
 
 /**
@@ -597,7 +605,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency;                                                                                                         \
+            ack_frequency, qs_transport_parameters;                                                                                \
     } num_frames_sent, num_frames_received;                                                                                        \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -1027,6 +1035,10 @@ static const quicly_transport_parameters_t *quicly_get_remote_transport_paramete
 /**
  *
  */
+int quicly_is_on_streams(quicly_conn_t *conn);
+/**
+ *
+ */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
 /**
  *
@@ -1428,6 +1440,10 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
             } while (0);                                                                                                           \
         });                                                                                                                        \
     } while (0)
+
+quicly_error_t quicly_qos_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
+quicly_error_t quicly_qos_receive(quicly_conn_t *conn, const void *src, size_t *len);
+quicly_conn_t *quicly_qos_new(quicly_context_t *ctx, int is_client, void *appdata);
 
 /* inline definitions */
 

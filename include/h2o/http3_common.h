@@ -371,6 +371,10 @@ struct st_h2o_quic_conn_t {
      *
      */
     uint64_t _accept_hashkey;
+    /**
+     * unless set to NULL, the connection is QUIC on Streams using `streams_sock` as the underlying socket
+     */
+    h2o_socket_t *streams_sock;
 };
 
 typedef struct st_h2o_http3_qpack_context_t {
@@ -511,7 +515,10 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
 /**
  *
  */
-void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic);
+void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
+
+extern quicly_qos_is_writing_t h2o_quic_qos_is_writing;
+
 /**
  * initializes a http3 connection
  */
@@ -524,7 +531,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn);
 /**
  *
  */
-quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic);
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
 /**
  * sends packets immediately by calling quicly_send, sendmsg (returns true if success, false if the connection was destroyed)
  */

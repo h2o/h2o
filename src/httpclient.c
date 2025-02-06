@@ -774,6 +774,7 @@ int main(int argc, char **argv)
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
     h3ctx.quic.save_resumption_token = &save_http3_token;
+    h3ctx.quic.qos_is_writing = &h2o_quic_qos_is_writing;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
@@ -819,6 +820,7 @@ int main(int argc, char **argv)
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_UPGRADE,
+        OPT_RATIO_HTTP3_ON_STREAMS,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -827,6 +829,7 @@ int main(int argc, char **argv)
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
+                                {"h3-on-streams", required_argument, NULL, OPT_RATIO_HTTP3_ON_STREAMS},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -926,6 +929,13 @@ int main(int argc, char **argv)
             } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
                        !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_RATIO_HTTP3_ON_STREAMS:
+            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.h3_on_streams) != 1 ||
+                !(0 <= ctx.protocol_selector.ratio.h3_on_streams && ctx.protocol_selector.ratio.h3_on_streams <= 100)) {
+                fprintf(stderr, "failed to parse H3-on-Streams ratio (--h3s)\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -1039,13 +1049,15 @@ int main(int argc, char **argv)
     } else if (upgrade_token != NULL) {
         /* masque using extended CONNECT (RFC 9298) */
         if (strcmp(req.method, "GET") == 0) {
-            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0) {
+            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0 ||
+                ctx.protocol_selector.ratio.h3_on_streams != 0) {
                 fprintf(stderr, "extended CONNECT with GET cannot be used on H2/H3; specify `-2 0 -3 0`\n");
                 exit(EXIT_FAILURE);
             }
         } else if (strcmp(req.method, "CONNECT") == 0) {
             if (ctx.protocol_selector.ratio.http2 < 0 ||
-                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
+                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 + ctx.protocol_selector.ratio.h3_on_streams !=
+                    100) {
                 fprintf(stderr,
                         "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
                 exit(EXIT_FAILURE);
