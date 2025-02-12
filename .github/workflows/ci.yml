@@ -21,7 +21,7 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 1.1.1
             command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
-          - name: OpenSSL 3.0 (Ubuntu 22.04 / DTrace)
+          - name: OpenSSL 3.0 (Ubuntu 24.04 / DTrace)
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: boringssl
             command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
