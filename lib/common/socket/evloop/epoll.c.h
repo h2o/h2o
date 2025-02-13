@@ -23,11 +23,39 @@
 #include <limits.h>
 #include <stdio.h>
 #include <sys/epoll.h>
-
+#include <sys/ioctl.h>
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
 #else
 #define DEBUG_LOG(...)
+#endif
+
+/*
+ * The defines below can be removed if:
+ *
+ *  1.) the associated kernel PR is merged, AND
+ *  2.) we get CI to install the linux-libc-dev deb package from the
+ *      associated kernel build.
+ *
+ * That package has the updated user API header which will create the
+ * defines below, so they would be pulled in when we include
+ * linux/eventpoll.h, I think.
+ *
+ */
+#ifndef EPOLL_IOC_TYPE
+struct epoll_params
+{
+  uint32_t busy_poll_usecs;
+  uint16_t busy_poll_budget;
+  uint8_t prefer_busy_poll;
+
+  /* pad the struct to a multiple of 64bits */
+  uint8_t __pad;
+};
+
+#define EPOLL_IOC_TYPE 0x8A
+#define EPIOCSPARAMS _IOW(EPOLL_IOC_TYPE, 0x01, struct epoll_params)
+#define EPIOCGPARAMS _IOR(EPOLL_IOC_TYPE, 0x02, struct epoll_params)
 #endif
 
 struct st_h2o_evloop_epoll_t {
@@ -186,6 +214,19 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
+static void evloop_set_bp(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget, uint8_t prefer)
+{
+    char buf[128];
+    struct epoll_params params = {0};
+
+    params.busy_poll_usecs = usecs;
+    params.busy_poll_budget = budget;
+    params.prefer_busy_poll = prefer == 0 ? 0 : 1;
+
+    if (ioctl(loop->ep, EPIOCSPARAMS, &params) != 0)
+        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n", usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+}
+
 int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
@@ -197,8 +238,36 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         return -1;
 
     /* poll */
-    max_wait = adjust_max_wait(&loop->super, max_wait);
-    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+    if (!loop->super.bp.epoll_bp_usecs) {
+        max_wait = adjust_max_wait(&loop->super, max_wait);
+        nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+    } else {
+        uint64_t _time = loop->super.bp.epoll_bp_usecs;
+        time_t seconds = 0;
+        long int nsec = 0;
+
+        if (!loop->super.bp.epoll_nonblock) {
+            seconds = _time / 1000000;
+            nsec = (_time % 1000000) * 1000;
+        }
+
+        struct timespec ts = { .tv_sec = seconds,
+                               .tv_nsec = nsec };
+
+        /* save a few syscalls if epoll bp params are unchanged */
+        if (loop->super.bp.epoll_bp_changed) {
+            evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.prefer_busy_poll);
+            loop->super.bp.epoll_bp_changed = false;
+        }
+
+#ifdef H2O_HAS_YNL_H
+        nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
+#else
+        (void)ts;
+        nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+#endif
+    }
+
     update_now(&loop->super);
     if (nevents == -1)
         return -1;
@@ -312,14 +381,32 @@ static void evloop_do_dispose(h2o_evloop_t *_loop)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     close(loop->ep);
 }
-h2o_evloop_t *h2o_evloop_create(void)
+
+static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint64_t packet_budget, uint8_t prefer)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
+    char buf[128];
 
-    if ((loop->ep = epoll_create1(EPOLL_CLOEXEC)) == -1) {
-        char buf[128];
+    if ((loop->ep = epoll_create1(flags)) == -1) {
         h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 
+    if (time_budget) {
+        loop->super.bp.epoll_bp_usecs = time_budget;
+        loop->super.bp.epoll_bp_budget = packet_budget;
+        loop->super.bp.prefer_busy_poll = prefer;
+        evloop_set_bp(loop, time_budget, packet_budget, prefer);
+    }
+
     return &loop->super;
+}
+
+h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t packet_budget, uint8_t prefer)
+{
+    return _do_h2o_evloop_create(EPOLL_CLOEXEC, nsecs, packet_budget, prefer);
+}
+
+h2o_evloop_t *h2o_evloop_create(void)
+{
+    return _do_h2o_evloop_create(EPOLL_CLOEXEC, 0, 0, 0);
 }

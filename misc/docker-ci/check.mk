@@ -40,7 +40,7 @@ ossl1.1.1:
 		TMP_SIZE='$(TMP_SIZE)'
 
 ossl3.0:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
@@ -49,7 +49,7 @@ ossl3.0:
 		TMP_SIZE='$(TMP_SIZE)'
 
 boringssl:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204 \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
@@ -57,7 +57,7 @@ boringssl:
 		TMP_SIZE='$(TMP_SIZE)'
 
 asan:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2004 \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
@@ -66,7 +66,7 @@ asan:
 
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
-	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2204  \
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404  \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check _coverage_report \
 		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
 		BUILD_ARGS='$(BUILD_ARGS)' \

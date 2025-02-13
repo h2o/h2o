@@ -32,7 +32,7 @@ hosts:
         mruby.handler: |
           Proc.new do |env|
             attr = env["QUERY_STRING"]
-            [399, {"link" => "</index.js>; rel=preload; as=script; #{attr}"}, []]
+            [399, {"link" => "</index.js>;rel=preload;as=script;#{attr}"}, []]
           end
         file.dir: @{[DOC_ROOT]}
       /assets:
@@ -69,15 +69,15 @@ unlike $resp, qr{link:\s*\n}, "push-only doesn't appear in the link header";
 # mruby
 $resp = `nghttp -vn --stat 'https://127.0.0.1:$server->{tls_port}/mruby/'`;
 like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js}is, "index.js is pushed";
-like $resp, qr{link: </index.js>; rel=preload; as=script;}, "Found link header";
+like $resp, qr{link: </index.js>;rel=preload;as=script;}, "Found link header";
 
 $resp = `nghttp -vn --stat 'https://127.0.0.1:$server->{tls_port}/mruby/?nopush'`;
 unlike $resp, qr{\nid\s*responseEnd\s.*\s/index\.js}is, "index.js is NOT pushed";
-like $resp, qr{link: </index.js>; rel=preload; as=script;}, "Found link header";
+like $resp, qr{link: </index.js>;rel=preload;as=script;}, "Found link header";
 
 $resp = `nghttp -vn --stat 'https://127.0.0.1:$server->{tls_port}/mruby/?x-http2-push-only'`;
 like $resp, qr{\nid\s*responseEnd\s.*\s/index\.js}is, "index.js is pushed";
-unlike $resp, qr{link: </index.js>; rel=preload; as=script;}, "Didn't find link header";
+unlike $resp, qr{link: </index.js>;rel=preload;as=script;}, "Didn't find link header";
 
 
 done_testing;
