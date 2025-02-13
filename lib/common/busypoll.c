@@ -1,9 +1,6 @@
 #include "h2o.h"
 #include "h2o/busypoll.h"
 
-#include <errno.h>
-#include <error.h>
-
 #if defined(__linux__) && defined(SO_REUSEPORT) && defined(H2O_HAS_YNL_H)
 #include <linux/genetlink.h>
 #include <linux/netlink.h>
@@ -28,7 +25,7 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
 
     ys = ynl_sock_create(&ynl_netdev_family, &yerr);
     if (!ys)
-        error(1, 0, "YNL: %s", yerr.msg);
+        h2o_fatal("ynl, failed to create socket: %s\n", yerr.msg);
 
     for (int i = 0; i < napi_ids_size; i++) {
         get_req = netdev_queue_get_req_alloc();
@@ -37,7 +34,7 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
         netdev_queue_get_req_set_id(get_req, i);
         struct netdev_queue_get_rsp *rsp = netdev_queue_get(ys, get_req);
         if (rsp == NULL)
-            error(1, 0, "can't get queue params: %s\n", yerr.msg);
+            h2o_fatal("ynl, can't get queue params: %s\n", yerr.msg);
         napi_ids[i] = rsp->_present.napi_id;
         netdev_queue_get_rsp_free(rsp);
         netdev_queue_get_req_free(get_req);
@@ -48,7 +45,7 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
         netdev_napi_set_req_set_gro_flush_timeout(set_req, cfg_gro_flush_timeout);
         netdev_napi_set_req_set_irq_suspend_timeout(set_req, cfg_irq_suspend_timeout);
         if (netdev_napi_set(ys, set_req))
-            error(1, 0, "can't set NAPI params: %s\n", yerr.msg);
+            h2o_fatal("ynl, can't set NAPI params: %s\n", yerr.msg);
         netdev_napi_set_req_free(set_req);
     }
 
@@ -68,7 +65,8 @@ void attach_cbpf(int fd, uint16_t cpus, const char *iface)
 
     ret = getsockname(fd, (struct sockaddr *)&ss, &sslen);
     if (ret != 0) {
-        fprintf(stderr, "getsockname failed on listener: %s\n", strerror(errno));
+        char buf[128];
+        fprintf(stderr, "getsockname failed on listener: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     if (ss.ss_family == AF_UNIX) {
         fprintf(stderr, "dont add reuseport filter to AF_UNIX socket listener\n");
@@ -234,7 +232,8 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
                         socklen_t len = sizeof(ss);
                         ret = getsockname(listener_fd, (struct sockaddr *)&ss, &len);
                         if (ret != 0) {
-                            fprintf(stderr, "getsockname failed on listener: %s\n", strerror(errno));
+                            char buf[128];
+                            fprintf(stderr, "getsockname failed on listener: %s\n", h2o_strerror_r(errno, buf, sizeof(buf)));
                         }
                     }
 
@@ -388,7 +387,8 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
 
         fprintf(stderr, "thread %zd NAPI id: %u, iface: %s, listener fd: %d\n", thread_index, napi_id, iface, listener_fd);
 
-        int found = assign_nic_map_cpu(h2o_socket_get_loop(sock), iface, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
+        int found =
+            assign_nic_map_cpu(h2o_socket_get_loop(sock), iface, thread_index, napi_id, listener_fd, 0, nic_to_cpu_map, nic_count);
 
         if (!found) {
             fprintf(stderr, "no CPU found for thread with NAPI from NIC: %s:%d\n", iface, napi_id);
