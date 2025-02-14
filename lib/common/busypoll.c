@@ -127,8 +127,14 @@ void bind_interface(int fd, const char *iface)
 
 static unsigned int get_napi_id(int fd)
 {
-    // FIXME
-    return 0;
+    unsigned int napi_id = 0;
+    socklen_t napi_id_len = sizeof(napi_id);
+
+    if (getsockopt(fd, SOL_SOCKET, SO_INCOMING_NAPI_ID, &napi_id, &napi_id_len) != 0) {
+        h2o_perror("so_napi_incoming_id failed");
+    }
+
+    return napi_id;
 }
 
 static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
@@ -137,16 +143,6 @@ static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_ni
         for (int j = 0; j < nic_count; j++) {
             if (nic_to_cpu_map[i].napi_ids.entries[j] == napi_id)
                 return nic_to_cpu_map[i].iface.base;
-        }
-    }
-    return NULL;
-}
-
-static struct busypoll_nic_t *get_nic_by_cpu(unsigned int cpu_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
-{
-    for (int nic_i = 0; nic_i < nic_count; nic_i++) {
-        if (CPU_ISSET(cpu_id, &nic_to_cpu_map[nic_i].cpu_map)) {
-            return &nic_to_cpu_map[nic_i];
         }
     }
     return NULL;
