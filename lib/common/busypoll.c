@@ -33,28 +33,31 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
         netdev_queue_get_req_set_type(get_req, NETDEV_QUEUE_TYPE_RX);
         netdev_queue_get_req_set_id(get_req, i);
         struct netdev_queue_get_rsp *rsp = netdev_queue_get(ys, get_req);
-        if (rsp == NULL)
-            h2o_fatal("ynl, can't get queue params: %s\n", yerr.msg);
-        napi_ids[i] = rsp->_present.napi_id;
+        if (rsp == NULL) {
+            char buf[128];
+            h2o_fatal("ynl, queue_get: [%d] %s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+        napi_ids[i] = rsp->napi_id;
         netdev_queue_get_rsp_free(rsp);
         netdev_queue_get_req_free(get_req);
+
+        fprintf(stderr, "ynl setup_queue(%d) -> napi_id[%u]\n", i, napi_ids[i]);
 
         set_req = netdev_napi_set_req_alloc();
         netdev_napi_set_req_set_id(set_req, napi_ids[i]);
         netdev_napi_set_req_set_defer_hard_irqs(set_req, cfg_defer_hard_irqs);
         netdev_napi_set_req_set_gro_flush_timeout(set_req, cfg_gro_flush_timeout);
         netdev_napi_set_req_set_irq_suspend_timeout(set_req, cfg_irq_suspend_timeout);
-        if (netdev_napi_set(ys, set_req))
-            h2o_fatal("ynl, can't set NAPI params: %s\n", yerr.msg);
+        int ret = netdev_napi_set(ys, set_req);
+        if (ret != 0) {
+            char buf[128];
+            h2o_fatal("ynl, napi_set: [%d] %s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
         netdev_napi_set_req_free(set_req);
     }
 
     ynl_sock_destroy(ys);
 }
-
-#ifndef ARRAY_SIZE
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-#endif
 
 void attach_cbpf(int fd, uint16_t cpus, const char *iface)
 {
@@ -89,17 +92,16 @@ void attach_cbpf(int fd, uint16_t cpus, const char *iface)
     };
 
     struct sock_fprog p = {
-        .len = ARRAY_SIZE(code),
+        .len = sizeof(code) / sizeof(code[0]),
         .filter = code,
     };
 
-    if (setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &p, sizeof(p))) {
+    if (setsockopt(fd, SOL_SOCKET, SO_ATTACH_REUSEPORT_CBPF, &p, sizeof(p)) != 0) {
         char buf[128];
         h2o_fatal("failed to set SO_ATTACH_REUSEPORT_CBPF: %d:%s", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     } else {
         fprintf(stderr, "bpf prog attached to fd:%d, queues: %u\n", fd, cpus);
     }
-
     return;
 }
 
@@ -121,7 +123,7 @@ void bind_interface(int fd, const char *iface)
     }
 
     if (iface) {
-        fprintf(stderr, "bound %d to iface: %s\n", fd, iface);
+        fprintf(stderr, "bound fd %d to iface: %s\n", fd, iface);
     }
 }
 
