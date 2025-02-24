@@ -321,8 +321,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
                 const char *iface, *mismatch_nic_name = "unknown";
 
                 if ((iface = get_nic_name_by_napi(napi_id, nic_to_cpu_map, nic_count)) == NULL) {
-                    fprintf(stderr, "failed to find interface name for napi id: %d\n", napi_id);
-                    h2o_perror("failed to find interface name for napi id");
+                    h2o_fatal("failed to find interface name for napi id: %d\n", napi_id);
                 }
 
                 if (strlen(iface) > 0)
@@ -379,8 +378,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
         int listener_fd = h2o_socket_get_fd(listener);
         const char *iface;
         if ((iface = get_nic_name_by_napi(napi_id, nic_to_cpu_map, nic_count)) == NULL) {
-            fprintf(stderr, "failed to find interface name for napi id: %d\n", napi_id);
-            h2o_perror("failed to find interface name for napi id");
+            h2o_fatal("failed to find interface name for napi id: %d\n", napi_id);
         }
 
         fprintf(stderr, "thread %zd NAPI id: %u, iface: %s, listener fd: %d\n", thread_index, napi_id, iface, listener_fd);
@@ -407,6 +405,7 @@ void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
 {
     setup_queue(nic->ifindex, nic->options.defer_hard_irqs, nic->options.gro_flush_timeout, nic->options.suspend_timeout,
                 nic->napi_ids.entries, nic->napi_ids.capacity);
+    nic->napi_ids.size = nic->napi_ids.capacity;
 }
 
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface)
