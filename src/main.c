@@ -5257,9 +5257,8 @@ int main(int argc, char **argv)
     if (conf.globalconf.bp.nic_count > 0) {
         fprintf(stderr, "nic map was setup, creating per thread listeners\n");
         create_per_thread_nic_map_listeners();
-    } else {
-        create_per_thread_listeners();
     }
+    create_per_thread_listeners();
 
     capabilities_set_keepcaps();
     /* setuid */
