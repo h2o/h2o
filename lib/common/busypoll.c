@@ -27,6 +27,7 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
     if (!ys)
         h2o_fatal("ynl, failed to create socket: %s\n", yerr.msg);
 
+    /* fetch napi ids for first available queues on the provided interface */
     for (int i = 0; i < napi_ids_size; i++) {
         get_req = netdev_queue_get_req_alloc();
         netdev_queue_get_req_set_ifindex(get_req, cfg_ifindex);
@@ -37,12 +38,16 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
             char buf[128];
             h2o_fatal("ynl, queue_get: [%d] %s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
         }
+        if (!rsp->_present.napi_id || rsp->napi_id == 0) {
+            h2o_fatal("ynl, napi id not present or invalid for queue %d\n", i);
+        }
         napi_ids[i] = rsp->napi_id;
         netdev_queue_get_rsp_free(rsp);
         netdev_queue_get_req_free(get_req);
 
         fprintf(stderr, "ynl setup_queue(%d) -> napi_id[%u]\n", i, napi_ids[i]);
 
+        /* and configure the napi id with the settings provided */
         set_req = netdev_napi_set_req_alloc();
         netdev_napi_set_req_set_id(set_req, napi_ids[i]);
         netdev_napi_set_req_set_defer_hard_irqs(set_req, cfg_defer_hard_irqs);
@@ -142,7 +147,7 @@ static unsigned int get_napi_id(int fd)
 static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
 {
     for (int i = 0; i < nic_count; i++) {
-        for (int j = 0; j < nic_count; j++) {
+        for (int j = 0; j < nic_to_cpu_map[i].napi_ids.size; j++) {
             if (nic_to_cpu_map[i].napi_ids.entries[j] == napi_id)
                 return nic_to_cpu_map[i].iface.base;
         }
