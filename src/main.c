@@ -4834,6 +4834,17 @@ static void create_per_thread_listeners(void)
 
 static void create_per_thread_nic_map_listeners(void)
 {
+    int bp_threads = 0;
+    for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+        if (conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].mode != BP_MODE_OFF) {
+            bp_threads += conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
+        }
+    }
+    if (conf.thread_map.size < bp_threads) {
+        h2o_fatal("%zu threads configured, (%d) assigned as busypoll thread, need at least one free thread\n", conf.thread_map.size,
+                  bp_threads);
+    }
+
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
