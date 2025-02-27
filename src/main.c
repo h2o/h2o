@@ -2903,7 +2903,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         }
                     } else {
                         const char *iface = NULL;
-                        if (conf.globalconf.bp.nic_count > 0) {
+                        if (conf.globalconf.bp.nic_count > 0 && conf.globalconf.bp.nic_to_cpu_map.entries[0].mode != BP_MODE_OFF) {
                             iface = conf.globalconf.bp.nic_to_cpu_map.entries[0].iface.base;
                         }
 

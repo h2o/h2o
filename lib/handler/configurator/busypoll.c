@@ -117,7 +117,9 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
 
     /* setup queues */
     for (int i = 0; i != nic_count; ++i) {
-        h2o_busypoll_set_opts(&nic_to_cpu_map->entries[i]);
+        if (nic_to_cpu_map->entries[i].mode != BP_MODE_OFF) {
+            h2o_busypoll_set_opts(&nic_to_cpu_map->entries[i]);
+        }
     }
 
     return 0;
