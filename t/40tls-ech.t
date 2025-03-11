@@ -10,7 +10,7 @@ my $tls_port = empty_port();
 
 my $ossl_version = server_features()->{OpenSSL};
 plan skip_all => "x25519 may not be supported by $ossl_version"
-    unless $ossl_version =~ /OpenSSL ([0-9]+\.[0-9]+)/ and $1 >= 1.1;
+    unless ($ossl_version =~ /OpenSSL ([0-9]+\.[0-9]+)/ and $1 >= 1.1) or $ossl_version =~ /BoringSSL/;
 
 my $conf = <<"EOT";
 num-threads: 1
