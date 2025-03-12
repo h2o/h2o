@@ -292,12 +292,14 @@ EOT
     $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
+    my $settings;
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
         push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
+        $settings = $conf;
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -315,7 +317,7 @@ $listen_quic
 @{[$user ? "user: $user" : ""]}
 EOT
 
-    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts);
+    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts, $settings);
     return {
         %$ret,
         port => $port,
@@ -325,7 +327,7 @@ EOT
 }
 
 sub spawn_h2o_raw {
-    my ($conf, $check_ports, $opts) = @_;
+    my ($conf, $check_ports, $opts, $netns) = @_;
 
     # By default, h2o will launch as many threads as there are CPU cores on the
     # host, unless 'num-threads' is specified. This results in the process
@@ -339,9 +341,14 @@ sub spawn_h2o_raw {
     $conffh->flush or confess("failed to write to $conffn: $!");
     debug($conf);
 
+    my @argv = (bindir() . "/h2o", "-c", $conffn, @{ $opts || [] });
+    if ($netns) {
+        unshift(@argv, "ip", "netns", "exec", $netns);
+    }
+
     # spawn the server
     my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$opts || []} ],
+        argv     => \@argv,
         is_ready => sub {
             check_port($_) or return for @{ $check_ports || [] };
             1;

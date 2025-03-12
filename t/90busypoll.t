@@ -119,7 +119,23 @@ sub cleanup_ns {
 
 sub test_busypoll {
     my $suspend_value = shift // 0;
-    my ($tmp_fh, $tmp_file) = tempfile(UNLINK => 1);
-    my ($out_fh, $out_file) = tempfile(UNLINK => 1);
+    my $busypoll_mode = ($suspend_value > 0) ? 'BUSYPOLL' : 'SUSPEND';
+    my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
+listen: 48675
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: examples/doc_root
+    access-log: /dev/stdout
+
+capabilities:
+  - CAP_NET_ADMIN
+tcp-reuseport: ON
+
+EOT
+
+    sleep(600);
+
     return 0;
 }
