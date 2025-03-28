@@ -292,14 +292,12 @@ EOT
     $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
-    my $settings;
     if (ref $conf eq 'HASH') {
         @opts = @{$conf->{opts}}
             if $conf->{opts};
         $max_ssl_version = $conf->{max_ssl_version} || undef;
         $user = $conf->{user} if exists $conf->{user};
         push @all_ports, $conf->{extra_ports} if exists $conf->{extra_ports};
-        $settings = $conf;
         $conf = $conf->{conf};
     }
     $conf = <<"EOT";
@@ -317,7 +315,7 @@ $listen_quic
 @{[$user ? "user: $user" : ""]}
 EOT
 
-    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts, $settings);
+    my $ret = spawn_h2o_raw($conf, \@all_ports, \@opts);
     return {
         %$ret,
         port => $port,
