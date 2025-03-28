@@ -409,8 +409,7 @@ void h2o_busypoll_bind_interface(int fd, const char *iface)
 void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
 {
     setup_queue(nic->ifindex, nic->options.defer_hard_irqs, nic->options.gro_flush_timeout, nic->options.suspend_timeout,
-                nic->napi_ids.entries, nic->napi_ids.capacity);
-    nic->napi_ids.size = nic->napi_ids.capacity;
+                nic->napi_ids.entries, nic->napi_ids.size);
 }
 
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface)

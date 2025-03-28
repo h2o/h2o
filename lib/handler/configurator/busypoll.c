@@ -43,7 +43,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (h2o_configurator_parse_mapping(cmd, cur_node, "ifindex:s,cpus:a,options:m", NULL, &index_node, &cpus_node,
                                            &options_node) != 0) {
             h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface block at index %d is invalid\n", i);
-            continue;
+            return -1;
         }
         h2o_configurator_scanf(cmd, *index_node, "%zu", &nic_to_cpu_map->entries[i].ifindex);
 
@@ -51,7 +51,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         if (!if_indextoname(nic_to_cpu_map->entries[i].ifindex, iface)) {
             h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface index %zu is invalid\n",
                                        nic_to_cpu_map->entries[i].ifindex);
-            continue;
+            return -1;
         }
         nic_to_cpu_map->entries[i].iface = h2o_strdup(NULL, iface, SIZE_MAX);
 
@@ -71,12 +71,13 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         nic_to_cpu_map->entries[i].cpu_count = CPU_COUNT(&nic_to_cpu_map->entries[i].cpu_map);
         h2o_vector_reserve(NULL, &nic_to_cpu_map[i].entries->napi_ids, nic_to_cpu_map->entries[i].cpu_count);
+        nic_to_cpu_map->entries[i].napi_ids.size = nic_to_cpu_map->entries[i].cpu_count;
 
         yoml_t **mode_node = NULL, **gro_node = NULL, **irq_node = NULL, **st_node = NULL;
         if (h2o_configurator_parse_mapping(cmd, *options_node, "mode:s", "gro-flush-timeout:s,defer-hard-irqs:s,suspend-timeout:s",
                                            &mode_node, &gro_node, &irq_node, &st_node) != 0) {
             h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface block at index %d has invalid options\n", i);
-            continue;
+            return -1;
         }
         switch (h2o_configurator_get_one_of(cmd, *mode_node, "OFF,SUSPEND,BUSYPOLL")) {
         case 0:
