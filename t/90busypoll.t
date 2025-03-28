@@ -37,10 +37,8 @@ my $server_ip = "192.168.1.1";
 my $client_ip = "192.168.1.2";
 
 # busy poll config
-my $max_events = 8;
 my $busy_poll_usecs = 0;
 my $busy_poll_budget = 16;
-my $perfer_busy_poll = 1;
 
 # IRQ deferral config
 my $napi_defer_hard_irqs = 100;
@@ -120,22 +118,51 @@ sub cleanup_ns {
 sub test_busypoll {
     my $suspend_value = shift // 0;
     my $busypoll_mode = ($suspend_value > 0) ? 'BUSYPOLL' : 'SUSPEND';
+
+    my ($port) = empty_ports(1, { host => "0.0.0.0" });
+
+    # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
+
     my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
-listen: 48675
+listen:
+  host: $server_ip
+  port: $port
 hosts:
   default:
     paths:
       /:
         file.dir: examples/doc_root
-    access-log: /dev/stdout
+    access-log:
+      path: /dev/stdout
+      format: "%h %t %s %b %{bp.iface}x %{bp.napi-id}x %{bp.cpu-idx}x"
 
 capabilities:
   - CAP_NET_ADMIN
 tcp-reuseport: ON
+num-threads: 1
+
+epoll-nonblock: ON
+busy-poll-budget: $busy_poll_budget
+busy-poll-usecs: $busy_poll_usecs
+
+busy-poll-map:
+  interfaces:
+    - ifindex: $nsim_sv_ifidx
+      cpus:
+        - 1
+      options:
+        gro-flush-timeout: $gro_flush_timeout
+        defer-hard-irqs: $napi_defer_hard_irqs
+        suspend-timeout: $suspend_value
+        mode: $busypoll_mode
 
 EOT
 
-    sleep(600);
+    my $ss_out = `ip netns exec nssv ss -tlnp`;
+    diag("LISTENERS:\n" . $ss_out);
+
+    my $resp = `ip netns exec nscl curl -kssi http://$server_ip:$port`;
+    like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
 
     return 0;
 }
