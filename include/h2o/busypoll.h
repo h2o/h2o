@@ -32,4 +32,8 @@ void h2o_busypoll_set_opts(struct busypoll_nic_t *nic);
 void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, size_t thread_index,
                                         struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count);
 
+const char *h2o_busypoll_get_iface(void);
+uint32_t h2o_busypoll_get_napi_id(void);
+uint16_t h2o_busypoll_get_cpu_idx(void);
+
 #endif

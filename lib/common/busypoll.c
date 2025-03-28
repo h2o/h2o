@@ -247,7 +247,7 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
                     nic_claimed = nic->iface.base;
                     napi_id_claimed = napi_id;
                     found = 1;
-                    cpu_claimed = 1;
+                    cpu_claimed = j;
                     break;
                 }
             }
@@ -274,7 +274,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
     napi_id = get_napi_id(sockfd);
 
     /* if this thread has claimed a CPU, check the incoming connection to make sure it is correct */
-    if (cpu_claimed) {
+    if (cpu_claimed > 0) {
         /* start by getting a verdict on the incoming connection */
         int verdict = is_local_conn(sockfd);
         if (verdict == -2) {
@@ -424,6 +424,21 @@ void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listen
     handle_nic_map_accept(sock, listener, thread_index, nic_to_cpu_map, nic_count);
 }
 
+const char *h2o_busypoll_get_iface(void)
+{
+    return nic_claimed;
+}
+
+uint32_t h2o_busypoll_get_napi_id(void)
+{
+    return napi_id_claimed;
+}
+
+uint16_t h2o_busypoll_get_cpu_idx(void)
+{
+    return cpu_claimed;
+}
+
 #else
 
 void h2o_busypoll_bind_interface(int fd, const char *iface)
@@ -445,6 +460,21 @@ void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listen
                                         struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
 {
     /* noop */
+}
+
+const char *h2o_busypoll_get_iface(void)
+{
+    return "-";
+}
+
+uint32_t h2o_busypoll_get_napi_id(void)
+{
+    return 0;
+}
+
+uint16_t h2o_busypoll_get_cpu_idx(void)
+{
+    return 0;
 }
 
 #endif
