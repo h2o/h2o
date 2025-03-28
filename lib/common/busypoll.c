@@ -161,9 +161,9 @@ static const char *get_nic_name_by_napi(unsigned int napi_id, struct busypoll_ni
  *  0  non-local INET (or INET6) connection
  *  1  local INET (or INET6) connection
  */
-static int is_local_conn(int fd)
+static int is_local_conn(int fd, int napi_id)
 {
-    int is_local = -2;
+    int is_local = napi_id == 0;
     int domain = AF_UNSPEC;
     socklen_t domain_size = sizeof(domain);
     int r = getsockopt(fd, SOL_SOCKET, SO_DOMAIN, &domain, &domain_size);
@@ -276,7 +276,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
     /* if this thread has claimed a CPU, check the incoming connection to make sure it is correct */
     if (cpu_claimed > 0) {
         /* start by getting a verdict on the incoming connection */
-        int verdict = is_local_conn(sockfd);
+        int verdict = is_local_conn(sockfd, napi_id);
         if (verdict == -2) {
             /* some sort of error, is_local printed something but there's nothing for us to do. */
             return;
@@ -378,7 +378,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
                 return;
             }
         }
-    } else {
+    } else if (napi_id > 0) {
         /* a CPU has not been claimed yet, so claim one */
         int listener_fd = h2o_socket_get_fd(listener);
         const char *iface;
