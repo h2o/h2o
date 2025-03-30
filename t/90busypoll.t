@@ -14,7 +14,6 @@ run_as_root();
 plan skip_all => "netdevsim kernel module not available"
     unless system("modprobe netdevsim") == 0;
 
-ok(prog_exists("ethtool"), "have ethtool");
 ok(prog_exists("udevadm"), "have udevadm");
 
 my $nsim_sv_id = 256 + int(rand(256));
@@ -26,6 +25,8 @@ my $nsim_cl_ifidx;
 my $nsim_sv_name;
 my $nsim_cl_name;
 
+my $nsim_sv_ports = 1;
+my $nsim_sv_queues = 2;
 my $nsim_sv_sys = "/sys/bus/netdevsim/devices/netdevsim$nsim_sv_id";
 my $nsim_cl_sys = "/sys/bus/netdevsim/devices/netdevsim$nsim_cl_id";
 my $nsim_dev_sys_new = "/sys/bus/netdevsim/new_device";
@@ -66,7 +67,7 @@ sub find_device_name {
 }   
 
 sub create_devices() {
-    ok(system("echo $nsim_sv_id > $nsim_dev_sys_new") == 0, "new server device");
+    ok(system("echo '$nsim_sv_id $nsim_sv_ports $nsim_sv_queues' > $nsim_dev_sys_new") == 0, "new server device");
     ok(system("echo $nsim_cl_id > $nsim_dev_sys_new") == 0, "new client device");
     ok(system("udevadm settle") == 0, "udevadm settle ok");
 }
@@ -98,8 +99,6 @@ sub setup_ns {
     ok(defined $nsim_sv_name && length $nsim_sv_name, "server iface set - $nsim_sv_name");
     ok(defined $nsim_cl_name && length $nsim_cl_name, "client iface set - $nsim_cl_name");
 
-    ok(system("ethtool -L $nsim_sv_name combined 1") == 0, "Ensure server has 1 queue");
-
     ok(system("ip link set $nsim_sv_name netns nssv") == 0, "server iface moved to server ns");
     ok(system("ip link set $nsim_cl_name netns nscl") == 0, "client iface moved to client ns");
 
@@ -123,6 +122,7 @@ sub test_busypoll {
 
     # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
 
+    (my $ah, my $access_log) = tempfile(UNLINK => 1);
     my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
 listen:
   host: $server_ip
@@ -133,13 +133,13 @@ hosts:
       /:
         file.dir: examples/doc_root
     access-log:
-      path: /dev/stdout
-      format: "%h %t %s %b %{bp.iface}x %{bp.napi-id}x %{bp.cpu-idx}x"
+      path: $access_log
+      format: "%{bp.iface}x %{bp.napi-id}x %{bp.cpu-idx}x"
 
 capabilities:
   - CAP_NET_ADMIN
 tcp-reuseport: ON
-num-threads: 1
+num-threads: 2
 
 epoll-nonblock: ON
 busy-poll-budget: $busy_poll_budget
@@ -158,11 +158,26 @@ busy-poll-map:
 
 EOT
 
+    sleep(1);
     my $ss_out = `ip netns exec nssv ss -tlnp`;
     diag("LISTENERS:\n" . $ss_out);
 
-    my $resp = `ip netns exec nscl curl -kssi http://$server_ip:$port`;
-    like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
+    my $num_attempts = 5;
+    for (1..$num_attempts) {
+      my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
+      like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
+    }
+
+    my %served;
+    while (my $line = <$ah>) {
+        chomp $line;
+        $served{$line}++;
+    }
+    is(scalar keys %served, 1, "one thread served all requests");
+    my $served_by = (keys %served)[0];
+    my ($served_iface, $served_napi, $served_cpu) = split ' ', $served_by;
+    ok($served_iface eq $nsim_sv_name, "served by correct interface");
+    ok($served_napi > 0, "served by non-zero napi id");
 
     return 0;
 }
