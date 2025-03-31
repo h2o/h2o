@@ -70,7 +70,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
                 CPU_SET(cpu_num, &nic_to_cpu_map->entries[i].cpu_map);
         }
         nic_to_cpu_map->entries[i].cpu_count = CPU_COUNT(&nic_to_cpu_map->entries[i].cpu_map);
-        h2o_vector_reserve(NULL, &nic_to_cpu_map[i].entries->napi_ids, nic_to_cpu_map->entries[i].cpu_count);
+        h2o_vector_reserve(NULL, &nic_to_cpu_map->entries[i].napi_ids, nic_to_cpu_map->entries[i].cpu_count);
         nic_to_cpu_map->entries[i].napi_ids.size = nic_to_cpu_map->entries[i].cpu_count;
 
         yoml_t **mode_node = NULL, **gro_node = NULL, **irq_node = NULL, **st_node = NULL;
