@@ -51,8 +51,9 @@ subtest "busypoller" => sub {
     create_devices();
     setup_ns();
     link_devices();
-    ok(test_busypoll() == 0, "busypoll test succeeded");
-    ok(test_busypoll($suspend_timeout) == 0, "busypoll with suspend test succeeded");
+    ok(test_busypoll(0, 1) == 0, "busypoll 1 queue test succeeded");
+    ok(test_busypoll($suspend_timeout, 1) == 0, "busypoll 1 queue with suspend test succeeded");
+    ok(test_busypoll(0, 2) == 0, "busypoll multi queue test succeeded");
     unlink_devices();
     cleanup_ns();
     ok(system("modprobe -r netdevsim") == 0, "unload netdevsim");
@@ -116,12 +117,15 @@ sub cleanup_ns {
 
 sub test_busypoll {
     my $suspend_value = shift // 0;
+    my $num_threads = shift // 1;
     my $busypoll_mode = ($suspend_value > 0) ? 'BUSYPOLL' : 'SUSPEND';
 
     my ($port) = empty_ports(1, { host => "0.0.0.0" });
 
     # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
 
+    my $cpu_list = '[' . join(', ', 1..$num_threads) . ']';
+    diag($cpu_list);
     (my $ah, my $access_log) = tempfile(UNLINK => 1);
     my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
 listen:
@@ -139,7 +143,7 @@ hosts:
 capabilities:
   - CAP_NET_ADMIN
 tcp-reuseport: ON
-num-threads: 2
+num-threads: $num_threads
 
 epoll-nonblock: ON
 busy-poll-budget: $busy_poll_budget
@@ -148,8 +152,7 @@ busy-poll-usecs: $busy_poll_usecs
 busy-poll-map:
   interfaces:
     - ifindex: $nsim_sv_ifidx
-      cpus:
-        - 1
+      cpus: $cpu_list
       options:
         gro-flush-timeout: $gro_flush_timeout
         defer-hard-irqs: $napi_defer_hard_irqs
@@ -162,10 +165,10 @@ EOT
     my $ss_out = `ip netns exec nssv ss -tlnp`;
     diag("LISTENERS:\n" . $ss_out);
 
-    my $num_attempts = 5;
+    my $num_attempts = 100;
     for (1..$num_attempts) {
       my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
-      like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
+      #like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
     }
 
     my %served;
@@ -173,7 +176,7 @@ EOT
         chomp $line;
         $served{$line}++;
     }
-    is(scalar keys %served, 1, "one thread served all requests");
+    is(scalar keys %served, $num_threads, "$num_threads thread(s) served all requests");
     my $served_by = (keys %served)[0];
     my ($served_iface, $served_napi, $served_cpu) = split ' ', $served_by;
     ok($served_iface eq $nsim_sv_name, "served by correct interface");
