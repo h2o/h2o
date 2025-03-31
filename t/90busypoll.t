@@ -26,7 +26,7 @@ my $nsim_sv_name;
 my $nsim_cl_name;
 
 my $nsim_sv_ports = 1;
-my $nsim_sv_queues = 2;
+my $nsim_sv_queues = 4;
 my $nsim_sv_sys = "/sys/bus/netdevsim/devices/netdevsim$nsim_sv_id";
 my $nsim_cl_sys = "/sys/bus/netdevsim/devices/netdevsim$nsim_cl_id";
 my $nsim_dev_sys_new = "/sys/bus/netdevsim/new_device";
@@ -51,9 +51,8 @@ subtest "busypoller" => sub {
     create_devices();
     setup_ns();
     link_devices();
-    ok(test_busypoll(0, 1) == 0, "busypoll 1 queue test succeeded");
-    ok(test_busypoll($suspend_timeout, 1) == 0, "busypoll 1 queue with suspend test succeeded");
-    ok(test_busypoll(0, 2) == 0, "busypoll multi queue test succeeded");
+    ok(test_busypoll(0, $nsim_sv_queues) == 0, "busypoll multi queue test succeeded");
+    ok(test_busypoll($suspend_timeout, $nsim_sv_queues) == 0, "busypoll multi queue with suspend test succeeded");
     unlink_devices();
     cleanup_ns();
     ok(system("modprobe -r netdevsim") == 0, "unload netdevsim");
@@ -68,8 +67,9 @@ sub find_device_name {
 }   
 
 sub create_devices() {
+    # both server/client should have the same number of queues since the outgoing queue will be used as the incoming queue
     ok(system("echo '$nsim_sv_id $nsim_sv_ports $nsim_sv_queues' > $nsim_dev_sys_new") == 0, "new server device");
-    ok(system("echo $nsim_cl_id > $nsim_dev_sys_new") == 0, "new client device");
+    ok(system("echo '$nsim_cl_id $nsim_sv_ports $nsim_sv_queues' > $nsim_dev_sys_new") == 0, "new client device");
     ok(system("udevadm settle") == 0, "udevadm settle ok");
 }
 
@@ -125,7 +125,6 @@ sub test_busypoll {
     # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
 
     my $cpu_list = '[' . join(', ', 1..$num_threads) . ']';
-    diag($cpu_list);
     (my $ah, my $access_log) = tempfile(UNLINK => 1);
     my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
 listen:
@@ -177,10 +176,12 @@ EOT
         $served{$line}++;
     }
     is(scalar keys %served, $num_threads, "$num_threads thread(s) served all requests");
-    my $served_by = (keys %served)[0];
-    my ($served_iface, $served_napi, $served_cpu) = split ' ', $served_by;
-    ok($served_iface eq $nsim_sv_name, "served by correct interface");
-    ok($served_napi > 0, "served by non-zero napi id");
+    while (my ($served_by, $count) = each %served) {
+        my ($served_iface, $served_napi, $served_cpu) = split ' ', $served_by;
+        ok($served_iface eq $nsim_sv_name, "served by correct interface");
+        ok($served_napi > 0, "served by non-zero napi id");
+        ok(abs($count - ($num_attempts/$num_threads)) <= $num_attempts * 0.10, "each queue served share of traffic");
+    }
 
     return 0;
 }
