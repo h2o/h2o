@@ -64,7 +64,7 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
     ynl_sock_destroy(ys);
 }
 
-void attach_cbpf(int fd, uint16_t cpus, const char *iface)
+void attach_cbpf(int fd, uint16_t cpus)
 {
     struct sockaddr_storage ss;
     socklen_t sslen = sizeof(ss);
@@ -412,9 +412,9 @@ void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
                 nic->napi_ids.entries, nic->napi_ids.size);
 }
 
-void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface)
+void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus)
 {
-    attach_cbpf(fd, cpus, iface);
+    attach_cbpf(fd, cpus);
 }
 
 void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, size_t thread_index,
@@ -450,7 +450,7 @@ void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
     /* noop */
 }
 
-void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus, const char *iface)
+void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus)
 {
     /* noop */
 }

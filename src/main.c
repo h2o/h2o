@@ -2596,7 +2596,7 @@ Error:
     return -1;
 }
 
-static int finish_open_listener(int fd, int apply_bpf_filter, int cpus, const char *iface)
+static int finish_open_listener(int fd, int apply_bpf_filter, int cpus)
 {
     struct sockaddr_storage ss;
     socklen_t sslen = sizeof(ss);
@@ -2637,7 +2637,7 @@ static int finish_open_listener(int fd, int apply_bpf_filter, int cpus, const ch
          * to listen
          */
         if (apply_bpf_filter) {
-            h2o_busypoll_attach_cbpf(fd, cpus, iface);
+            h2o_busypoll_attach_cbpf(fd, cpus);
         }
 
         /* listen */
@@ -4818,7 +4818,7 @@ static void create_per_thread_listeners(void)
         /* call listen on the first listen socket if needed */
         if (listener_config->need_finish) {
             int listener_fd = listener_config->fds.entries[listener_config->fds.size-1];
-            finish_open_listener(listener_fd, 0, 0, NULL);
+            finish_open_listener(listener_fd, 0, 0);
         }
 
         while (listener_config->fds.size < conf.thread_map.size) {
@@ -4827,7 +4827,7 @@ static void create_per_thread_listeners(void)
 
             /* duplicated listeners may also need listen called */
             if (listener_config->need_finish)
-                finish_open_listener(fd, 0, 0, NULL);
+                finish_open_listener(fd, 0, 0);
         }
     }
 }
@@ -4922,7 +4922,7 @@ static void create_per_thread_nic_map_listeners(void)
                 /* now call listen (which will optionally enable the bpf
                  * filter first).
                  */
-                if (finish_open_listener(fd, enable_filter, cpus, iface) < 0) {
+                if (finish_open_listener(fd, enable_filter, cpus) < 0) {
                     h2o_fatal("unable to open listener\n");
                 }
             }
