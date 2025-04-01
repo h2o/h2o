@@ -4834,15 +4834,12 @@ static void create_per_thread_listeners(void)
 
 static void create_per_thread_nic_map_listeners(void)
 {
-    int bp_threads = 0;
+    int nic_map_cpus = 0;
     for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
-        if (conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].mode != BP_MODE_OFF) {
-            bp_threads += conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
-        }
+        nic_map_cpus += conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
     }
-    if (conf.thread_map.size < bp_threads) {
-        h2o_fatal("%zu threads configured, (%d) assigned as busypoll thread, need at least one free thread\n", conf.thread_map.size,
-                  bp_threads);
+    if (conf.thread_map.size != nic_map_cpus) {
+        h2o_fatal("%zu threads configured, (%d) assigned in busypoll map\n", conf.thread_map.size, nic_map_cpus);
     }
 
     for (size_t i = 0; i != conf.num_listeners; ++i) {
@@ -4859,8 +4856,7 @@ static void create_per_thread_nic_map_listeners(void)
              * first), and all other NICs need fds for all CPUs.
              */
             if (nic_i == 0 && cpus == 1) {
-                fprintf(stderr, "the first nic (%s) had only 1 thread, no "
-                                " additional duping is required.\n", iface);
+                fprintf(stderr, "the first nic (%s) had only 1 thread, no additional duping is required.\n", iface);
                 continue;
             }
 
@@ -4870,11 +4866,12 @@ static void create_per_thread_nic_map_listeners(void)
             if (nic_i == 0)
                 cpus--;
 
-            fprintf(stderr," current fd size: %zd\n", listener_config->fds.size);
-            fprintf(stderr," got %d cpus for nic: %s\n", cpus, iface);
+            fprintf(stderr, " current fd size: %zd\n", listener_config->fds.size);
+            fprintf(stderr, " got %d cpus for nic: %s\n", cpus, iface);
             while (cpus > 0) {
                 int fd = dup_listener(listener_config, iface);
-                fprintf(stderr, " --> bound fd %d for listener %lu to iface: %s for thread: %zd\n", fd, i, iface, listener_config->fds.size);
+                fprintf(stderr, " --> bound fd %d for listener %lu to iface: %s for thread: %zd\n", fd, i, iface,
+                        listener_config->fds.size);
                 listener_config->fds.entries[listener_config->fds.size++] = fd;
                 cpus--;
             }
