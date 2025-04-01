@@ -85,6 +85,7 @@ enum {
     ELEMENT_TYPE_PROXY_SSL_CIPHER,              /* ${proxy.ssl.cipher}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS,         /* ${proxy.ssl.cipher_bits}x */
     ELEMENT_TYPE_SSL_SERVER_NAME,               /* ${ssl.server-name}x */
+    ELEMENT_TYPE_THREAD_INDEX,                  /* ${thread-index}x */
     ELEMENT_TYPE_BUSYPOLL_IFACE,                /* ${bp.iface}x */
     ELEMENT_TYPE_BUSYPOLL_NAPI_ID,              /* ${bp.napi-id}x */
     ELEMENT_TYPE_BUSYPOLL_CPU_IDX,              /* ${bp.cpu-idx}x */
@@ -318,6 +319,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.ech.cipher", ssl.ech_cipher);
                     MAP_EXT_TO_PROTO("ssl.ech.cipher-bits", ssl.ech_cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.backend", ssl.backend);
+                    MAP_EXT_TO_TYPE("thread-index", ELEMENT_TYPE_THREAD_INDEX);
                     MAP_EXT_TO_TYPE("bp.iface", ELEMENT_TYPE_BUSYPOLL_IFACE);
                     MAP_EXT_TO_TYPE("bp.napi-id", ELEMENT_TYPE_BUSYPOLL_NAPI_ID);
                     MAP_EXT_TO_TYPE("bp.cpu-idx", ELEMENT_TYPE_BUSYPOLL_CPU_IDX);
@@ -918,6 +920,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             h2o_iovec_t s = cb(req);
             APPEND_SAFE_STRING_WITH_LEN(pos, s.base, s.len);
         } break;
+        case ELEMENT_TYPE_THREAD_INDEX:
+            RESERVE(sizeof(H2O_INT16_LONGEST_STR));
+			pos += sprintf(pos, "%" PRIu16, (uint16_t)req->conn->ctx->thread_index);
+            break;
         case ELEMENT_TYPE_BUSYPOLL_IFACE:
             APPEND_SAFE_STRING(pos, h2o_busypoll_get_iface());
             break;

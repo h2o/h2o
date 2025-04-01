@@ -137,7 +137,7 @@ hosts:
         file.dir: examples/doc_root
     access-log:
       path: $access_log
-      format: "%{bp.iface}x %{bp.napi-id}x %{bp.cpu-idx}x"
+      format: "%{bp.iface}x %{bp.napi-id}x %{bp.cpu-idx}x %{thread-index}x"
 
 capabilities:
   - CAP_NET_ADMIN
@@ -177,7 +177,7 @@ EOT
     }
     is(scalar keys %served, $num_threads, "$num_threads thread(s) served all requests");
     while (my ($served_by, $count) = each %served) {
-        my ($served_iface, $served_napi, $served_cpu) = split ' ', $served_by;
+        my ($served_iface, $served_napi, $served_cpu, $served_thread) = split ' ', $served_by;
         ok($served_iface eq $nsim_sv_name, "served by correct interface");
         ok($served_napi > 0, "served by non-zero napi id");
         ok(abs($count - ($num_attempts/$num_threads)) <= $num_attempts * 0.10, "each queue served share of traffic");
