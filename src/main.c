@@ -4273,9 +4273,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
-    conf.threads[thread_index].ctx.thread_index = thread_index;
-    conf.threads[thread_index].ctx.thread_count = conf.thread_map.size;
-
     if (conf.globalconf.bp.nic_count > 0) {
         uint8_t prefer_busy_poll = 0; /* prefer will be set later for nics in SUSPEND mode */
         h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, prefer_busy_poll);
@@ -4286,6 +4283,10 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     } else {
         h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
     }
+
+    // these are initiallized by h2o_context_init and need to be updated afterwards
+    conf.threads[thread_index].ctx.thread_index = thread_index;
+    conf.threads[thread_index].ctx.thread_count = conf.thread_map.size;
 
     conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
