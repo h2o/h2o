@@ -378,7 +378,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
                 return;
             }
         }
-    } else if (napi_id > 0) {
+    } else {
         /* a CPU has not been claimed yet, so claim one */
         int listener_fd = h2o_socket_get_fd(listener);
         const char *iface;

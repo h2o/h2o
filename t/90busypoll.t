@@ -12,7 +12,7 @@ run_as_root();
 #
 
 plan skip_all => "netdevsim kernel module not available"
-    unless system("modprobe netdevsim") == 0;
+unless system("modprobe netdevsim") == 0;
 
 ok(prog_exists("udevadm"), "have udevadm");
 
@@ -106,13 +106,14 @@ sub setup_ns {
     ok(system("ip netns exec nssv ip addr add \"$server_ip/24\" dev $nsim_sv_name") == 0, "server ip assigned");
     ok(system("ip netns exec nscl ip addr add \"$client_ip/24\" dev $nsim_cl_name") == 0, "client ip assigned");
 
+    ok(system("ip netns exec nssv ip link set dev lo up") == 0, "server loopback up");
     ok(system("ip netns exec nssv ip link set dev $nsim_sv_name up") == 0, "server iface up");
     ok(system("ip netns exec nscl ip link set dev $nsim_cl_name up") == 0, "client iface up");
 }
 
 sub cleanup_ns {
     system("ip netns del nscl 2>/dev/null");
-	system("ip netns del nssv 2>/dev/null");
+    system("ip netns del nssv 2>/dev/null");
 }
 
 sub test_busypoll {
@@ -125,10 +126,11 @@ sub test_busypoll {
     # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
 
     my $cpu_list = '[' . join(', ', 1..$num_threads) . ']';
+    my $total_threads = $num_threads + 1;
     (my $ah, my $access_log) = tempfile(UNLINK => 1);
     my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
 listen:
-  host: $server_ip
+  host: 0.0.0.0
   port: $port
 hosts:
   default:
@@ -142,7 +144,7 @@ hosts:
 capabilities:
   - CAP_NET_ADMIN
 tcp-reuseport: ON
-num-threads: $num_threads
+num-threads: $total_threads
 
 epoll-nonblock: ON
 busy-poll-budget: $busy_poll_budget
@@ -157,17 +159,26 @@ busy-poll-map:
         defer-hard-irqs: $napi_defer_hard_irqs
         suspend-timeout: $suspend_value
         mode: $busypoll_mode
-
+    - ifindex: 1
+      cpus: [$total_threads]
+      options:
+        mode: OFF
 EOT
 
     sleep(1);
     my $ss_out = `ip netns exec nssv ss -tlnp`;
     diag("LISTENERS:\n" . $ss_out);
 
+    for (1..5) {
+        my $resp = `ip netns exec nssv curl -ksi http://127.0.0.1:$port`;
+    }
     my $num_attempts = 100;
     for (1..$num_attempts) {
-      my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
-      #like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
+        my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
+        #like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
+    }
+    for (1..5) {
+        my $resp = `ip netns exec nssv curl -ksi http://127.0.0.1:$port`;
     }
 
     my %served;
@@ -175,13 +186,18 @@ EOT
         chomp $line;
         $served{$line}++;
     }
-    is(scalar keys %served, $num_threads, "$num_threads thread(s) served all requests");
+
+    is(scalar keys %served, $total_threads, "$total_threads thread(s) served all requests");
     while (my ($served_by, $count) = each %served) {
         my ($served_iface, $served_napi, $served_cpu, $served_thread) = split ' ', $served_by;
-        ok($served_iface eq $nsim_sv_name, "served by correct interface");
-        ok($served_napi > 0, "served by non-zero napi id");
-        ok(abs($count - ($num_attempts/$num_threads)) <= $num_attempts * 0.10, "each queue served share of traffic");
+        if ($served_iface eq $nsim_sv_name) {
+            ok($served_napi > 0, "served by non-zero napi id");
+            ok(abs($count - ($num_attempts/$num_threads)) <= $num_attempts * 0.10, "each queue served share of traffic");
+        } elsif ( $served_iface eq "lo" ) {
+            ok($served_napi == 0, "served by zero napi id");
+        } else {
+            ok(0, "served by unknown interface");
+        }
     }
-
     return 0;
 }
