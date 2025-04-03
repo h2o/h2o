@@ -123,12 +123,10 @@ sub test_busypoll {
 
     my ($port) = empty_ports(1, { host => "0.0.0.0" });
 
-    # why does h2o fail to start with spawn_h2o_raw(<< "EOT", [$port], [], "nssv"); ??
-
     my $cpu_list = '[' . join(', ', 1..$num_threads) . ']';
     my $total_threads = $num_threads + 1;
     (my $ah, my $access_log) = tempfile(UNLINK => 1);
-    my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], "nssv");
+    my $h2o_sv = spawn_h2o_raw(<< "EOT", [], [], {'namespace' => 'nssv' });
 listen:
   host: 0.0.0.0
   port: $port
@@ -165,7 +163,10 @@ busy-poll-map:
         mode: OFF
 EOT
 
-    sleep(1);
+    # h2o was spawned without a port for the is_ready check as it would fail in a namespace
+    sleep(1); # intead we sleep for a bit
+
+
     my $ss_out = `ip netns exec nssv ss -tlnp`;
     diag("LISTENERS:\n" . $ss_out);
 
