@@ -57,7 +57,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     struct st_compress_filter_t *self = (void *)_self;
     struct st_compress_encoder_t *encoder;
     int compressible_types;
-    int compressible_types_mask = H2O_COMPRESSIBLE_BROTLI | H2O_COMPRESSIBLE_GZIP;
+    int compressible_types_mask = H2O_COMPRESSIBLE_BROTLI | H2O_COMPRESSIBLE_GZIP | H2O_COMPRESSIBLE_ZSTD;
     h2o_compress_context_t *compressor;
     ssize_t i;
 
@@ -80,6 +80,9 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
         break;
     case H2O_COMPRESS_HINT_ENABLE_GZIP:
         compressible_types_mask = H2O_COMPRESSIBLE_GZIP;
+        break;
+    case H2O_COMPRESS_HINT_ENABLE_ZSTD:
+        compressible_types_mask = H2O_COMPRESSIBLE_ZSTD;
         break;
     case H2O_COMPRESS_HINT_AUTO:
     default:
@@ -114,7 +117,7 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (content_encoding_header_index != -1)
         goto Next;
 
-/* open the compressor */
+/* open the compressor (TODO add support for zstd) */
 #if H2O_USE_BROTLI
     if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
         compressor =

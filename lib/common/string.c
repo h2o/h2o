@@ -352,6 +352,36 @@ h2o_iovec_t h2o_uri_escape(h2o_mem_pool_t *pool, const char *s, size_t l, const 
     return encoded;
 }
 
+h2o_iovec_t h2o_uri_unescape(h2o_mem_pool_t *pool, const char *str, size_t len)
+{
+    h2o_iovec_t decoded;
+
+    decoded.base = pool != NULL ? h2o_mem_alloc_pool(pool, char, len + 1) : h2o_mem_alloc(len + 1);
+    decoded.len = 0;
+
+    for (size_t i = 0; i < len; ++i) {
+        if (str[i] == '%') {
+            if (i + 2 >= len)
+                goto Fail;
+            int hi = decode_hex(str[i + 1]);
+            int lo = decode_hex(str[i + 2]);
+            if (hi < 0 || lo < 0 || (hi == 0 && lo == 0))
+                goto Fail;
+            decoded.base[decoded.len++] = (hi << 4) | lo;
+            i += 2;
+        } else {
+            decoded.base[decoded.len++] = str[i];
+        }
+    }
+    decoded.base[decoded.len] = '\0';
+    return decoded;
+
+Fail:
+    if (pool == NULL)
+        free(decoded.base);
+    return h2o_iovec_init(NULL, 0);
+}
+
 h2o_iovec_t h2o_get_filext(const char *path, size_t len)
 {
     const char *end = path + len, *p = end;

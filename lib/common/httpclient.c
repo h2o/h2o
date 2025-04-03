@@ -37,6 +37,7 @@ const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the resp
 const char h2o_httpclient_error_protocol_violation[] = "protocol violation";
 const char h2o_httpclient_error_internal[] = "internal error";
 const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
+const char h2o_httpclient_error_unexpected_101[] = "received unexpected 101 response";
 
 /**
  * Used to indicate that the HTTP request is to be "upgraded" into a CONNECT tunnel.
@@ -243,8 +244,9 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
 
     /* adjust selected protocol if the attempt is to create a tunnel */
     if (upgrade_to != NULL) {
-        /* upgrade other than to a CONNECT tunnel is supported only by H1 */
-        if (upgrade_to != h2o_httpclient_upgrade_to_connect)
+        /* TODO provide a knob to map each upgrade token to some, all, or no HTTP version. Until that is done, upgrade other than to
+         * a CONNECT and CONNECT-UDP tunnel is directed to H1. */
+        if (upgrade_to != h2o_httpclient_upgrade_to_connect && strcmp(upgrade_to, "connect-udp") != 0)
             selected_protocol = PROTOCOL_SELECTOR_H1;
     }
 

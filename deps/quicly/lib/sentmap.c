@@ -92,7 +92,7 @@ void quicly_sentmap_dispose(quicly_sentmap_t *map)
     }
 }
 
-int quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch)
+quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch)
 {
     assert(map->_pending_packet == NULL);
 
@@ -129,10 +129,10 @@ void quicly_sentmap_skip(quicly_sentmap_iter_t *iter)
     } while (iter->p->acked != quicly_sentmap__type_packet);
 }
 
-int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event)
+quicly_error_t quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event)
 {
     quicly_sent_packet_t packet;
-    int ret = 0;
+    quicly_error_t ret = 0;
 
     assert(iter->p != &quicly_sentmap__end_iter);
     assert(iter->p->acked == quicly_sentmap__type_packet);
@@ -169,7 +169,8 @@ Exit:
     return ret;
 }
 
-int quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
+quicly_error_t quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked,
+                                           quicly_sent_t *sent)
 {
     assert(!"quicly_sentmap__type_packet cannot be called");
     return QUICLY_TRANSPORT_ERROR_INTERNAL;

@@ -1,0 +1,15 @@
+GET / HTTP/1.1
+host:host.examplÿer-Agekt: curl/6.49.0-DEV
+A6ccept:ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+
+GET /reproxy-test/.well¿known/h0/te/tm HTTP/1.1
+H*st: 127.0.0.1:50492
+User-Agcept: */*
+Transfer-Encoding: chunked
+Content-Type:p aplication/x-www-form-urlencoded
+
+a
+helloworld-ÿ
+--MARK--
+-settings: AAMA¿»BkK--
+PRI * rrrrrh2

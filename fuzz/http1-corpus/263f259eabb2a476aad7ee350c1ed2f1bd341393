@@ -1,0 +1,9 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127/1.1
+host: 127.0.0.1:51458
+proxy-connection: de, HTTP4-Setti1:s.0.1:51458
+proxy-connection: deapplication/CDFX+XML, HTTP4-Setti1:schem
+
+
+--MARK--
+PI *ex.tx *ex.tTP 

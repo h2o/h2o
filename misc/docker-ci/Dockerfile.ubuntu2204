@@ -5,16 +5,17 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get --yes update
 RUN apt-get install --yes \
 	apache2-utils \
+	autoconf \
 	bison \
 	bpftrace \
 	brotli \
 	clang \
 	cmake \
 	cmake-data \
-	curl \
 	dnsutils \
 	flex \
 	git \
+	iproute2 \
 	libbpfcc-dev \
 	libbrotli-dev \
 	libc-ares-dev \
@@ -24,7 +25,10 @@ RUN apt-get install --yes \
 	libedit-dev \
 	libelf-dev \
 	libev-dev \
+	libnghttp2-dev \
+	libpsl-dev \
 	libssl-dev \
+	libtool \
 	liburing-dev \
 	libuv1-dev \
 	llvm \
@@ -32,6 +36,7 @@ RUN apt-get install --yes \
 	net-tools \
 	netcat-openbsd \
 	nghttp2-client \
+	nghttp2-server \
 	nodejs \
 	php-cgi \
 	pkgconf \
@@ -60,7 +65,33 @@ RUN apt-get install --yes \
 	libwww-perl \
 	libio-socket-ssl-perl
 ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
-RUN cpanm -n Test::More Starlet Protocol::HTTP2 Net::DNS::Nameserver Test::TCP
+RUN cpanm -n Test::More Starlet Protocol::HTTP2 Test::TCP
+RUN cpanm -n NLNETLABS/Net-DNS-1.36.tar.gz # Net-DNS 1.39 has issues around use of alarm, fork, etc.
+
+# curl with ngtcp2
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch openssl-3.0.10+quic https://github.com/quictls/openssl /opt/src/quictls \
+	&& cd /opt/src/quictls \
+	&& ./config enable-tls1_3 no-shared --prefix=/usr/local/quictls \
+	&& make install clean
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch v1.1.0 https://github.com/ngtcp2/nghttp3 /opt/src/nghttp3 \
+	&& cd /opt/src/nghttp3 \
+	&& autoreconf -fi \
+	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& make install clean
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch v1.2.0 https://github.com/ngtcp2/ngtcp2 /opt/src/ngtcp2 \
+	&& cd /opt/src/ngtcp2 \
+	&& autoreconf -fi \
+	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& make install clean
+RUN mkdir -p /opt/src \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://curl.se/download/curl-8.6.0.tar.bz2 | tar xjf - \
+	&& cd curl-8.6.0 \
+	&& USE_CURL_SSLKEYLOGFILE=true ./configure --disable-shared --with-nghttp2 --with-ngtcp2 --with-nghttp3 --with-openssl=/usr/local/quictls \
+	&& make install clean
 
 # boringssl
 RUN apt-get install --yes golang-go
@@ -70,8 +101,18 @@ RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/g
       && make clean \
     )
 
+# libaegis
+RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/jedisct1/libaegis.git \
+ && (cd libaegis && mkdir build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && make install && make clean)
+
 # h2spec
 RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+
+# mbedtls
+RUN mkdir -p /opt/src && cd /opt/src && wget -O - https://github.com/Mbed-TLS/mbedtls/archive/refs/tags/v3.5.1.tar.gz | tar xzf - \
+  && cd mbedtls-3.5.1 && mkdir -p build && cd build \
+  && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && make install \
+  && make clean
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \

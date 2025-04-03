@@ -1,0 +1,9 @@
+GETGET / HTTP/1.1
+Host: 12le; MSI/*
+Acceptc:EoT / HTTP/1*
+Acceptc:Eod-ing MSI/*
+Acceptc:EoT / TP/
+Acceptc:Eod-ing: gzipd-ing: gzip
+
+
+--MARK--

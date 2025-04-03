@@ -1,0 +1,9 @@
+GE4T /index.txt HTTP/1.1
+host: 127.5.0.1:51300
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AA999999999999999999999999999999«∆∆t∆n: */*
+
+
+
+--MARK--

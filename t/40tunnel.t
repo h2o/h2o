@@ -3,7 +3,7 @@ use warnings;
 use File::Temp qw(tempdir);
 use IO::Select;
 use IO::Socket::INET;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
@@ -284,5 +284,7 @@ subtest "connect" => sub {
     kill 'KILL', $upstream_pid;
     while (waitpid($upstream_pid, 0) != $upstream_pid) {}
 };
+
+undef $server;
 
 done_testing;

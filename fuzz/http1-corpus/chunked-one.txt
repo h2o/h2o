@@ -1,7 +1,0 @@
-POST / HTTP/1.0
-Transfer-Encoding: chunked
-
-3
-pqr
-0
-

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use URI::Escape;
 use t::Util;
@@ -26,13 +26,8 @@ my $quic_port = empty_port({
 });
 my $h3client = bindir() . "/h2o-httpclient";
 
-subtest 'forward' => sub {
-    subtest '100 Continue' => sub {
-        do_forward(100);
-    };
-    subtest '103 Early Hints' => sub {
-        do_forward(103);
-    };
+subtest 'forward 103 Early Hints' => sub {
+    do_forward(103);
 };
 
 subtest 'send 103' => sub {
@@ -191,14 +186,14 @@ EOT
         run_with_curl($server, sub {
             my ($proto, $port, $curl) = @_;
             my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=$status&link=$link'`;
-            if ($curl =~ /http2/) {
+            if ($curl =~ /--http[23]/) {
                 like $resp, qr{^HTTP/[\d.]+ $status}mi;
             } else {
                 unlike $resp, qr{^HTTP/[\d.]+ $status}mi;
             }
         });
     };
-    
+
     subtest 'none' => sub {
         my $server = spawn_h2o(<< "EOT");
 send-informational: none

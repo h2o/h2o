@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -33,7 +33,7 @@ sub doit {
         # the test
         my $spawn_and_connect = sub {
             my ($opts, $expected) = @_;
-            my $server = spawn_h2o({conf => << "EOT", max_ssl_version => "TLSv1.2"});
+            my $server = spawn_h2o({conf => << "EOT", max_ssl_version => "TLSv1.2", disable_quic => 1});
 ssl-session-resumption:
   mode: cache
   cache-store: memcached

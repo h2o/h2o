@@ -215,7 +215,7 @@ static int run_loop(int fd, quicly_conn_t *client)
                 tv.tv_sec = delta / 1000;
                 tv.tv_usec = (delta % 1000) * 1000;
             } else {
-                tv.tv_sec = 1000;
+                tv.tv_sec = 0;
                 tv.tv_usec = 0;
             }
             FD_ZERO(&readfds);

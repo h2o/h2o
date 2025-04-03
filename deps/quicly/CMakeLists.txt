@@ -7,6 +7,7 @@ INCLUDE(CMakePushCheckState)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(deps/picotls/cmake/boringssl-adjust.cmake)
 INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
+INCLUDE(deps/picotls/cmake/fusion.cmake)
 
 FIND_PACKAGE(OpenSSL REQUIRED)
 BORINGSSL_ADJUST()
@@ -20,15 +21,7 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
-CHECK_C_SOURCE_COMPILES("int main(void) {}" CC_HAS_AESNI256)
-CMAKE_POP_CHECK_STATE()
-IF (CC_HAS_AESNI256)
-    SET(WITH_FUSION_DEFAULT "ON")
-ELSE ()
-    SET(WITH_FUSION_DEFAULT "OFF")
-ENDIF ()
+CHECK_FUSION_PREREQUISITES()
 OPTION(WITH_FUSION "whether or not to use the Fusion AES-GCM engine in the cli binary" ${WITH_FUSION_DEFAULT})
 
 # CMake defaults to a Debug build, whereas quicly defaults to an optimized (Release) build
@@ -75,10 +68,12 @@ SET(QUICLY_LIBRARY_FILES
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/frame.c
+    t/jumpstart.c
     t/local_cid.c
     t/loss.c
     t/lossy.c
     t/maxsender.c
+    t/pacer.c
     t/ranges.c
     t/rate.c
     t/remote_cid.c
@@ -134,7 +129,7 @@ ADD_EXECUTABLE(udpfw t/udpfw.c)
 
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} WITH_DTRACE=${WITH_DTRACE} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS cli test.t)
+    DEPENDS cli udpfw test.t)
 
 ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 

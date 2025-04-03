@@ -18,9 +18,9 @@ jobs:
           - name: "Linux / OpenSSL 1.1.0"
             command: make -f misc/docker-ci.mk CMAKE_ARGS='-DOPENSSL_ROOT_DIR=-DOPENSSL_ROOT_DIR=/opt/openssl-1.1.0 -DWITH_FUSION=OFF' CONTAINER_NAME='h2oserver/h2o-ci:ubuntu1604'
           - name: "Linux / OpenSSL 1.1.1"
-            command: make -f misc/docker-ci.mk
-          - name: "Linux / OpenSSL 3.0"
-            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204
+            command: make -f misc/docker-ci.mk CMAKE_ARGS='-DWITH_AEGIS=1 -DAEGIS_INCLUDE_DIR=/usr/local/include'
+          - name: "Linux / OpenSSL 3.0 + mbedtls"
+            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204 CMAKE_ARGS='-DWITH_MBEDTLS=1'
           - name: "Linux / OpenSSL 1.1.1 + ASan & UBSan"
             command: make -f misc/docker-ci.mk CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address,undefined -DCMAKE_CXX_FLAGS=-fsanitize=address,undefined' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
           - name: "Linux / boringssl"

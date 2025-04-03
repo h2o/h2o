@@ -14,7 +14,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>HTTP/2 Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>HTTP/2 Directives - Configure - H2O - the optimized HTTP server</title>
 </head>
 <body>
 <div id="body">
@@ -23,7 +23,7 @@
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -60,13 +60,13 @@ HTTP/2 Directives
 
 
 <p>
-H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+H2O provides one of the world's most sophisticated <a href="https://tools.ietf.org/html/rfc9113">HTTP/2 protocol</a> implementation, including following features.
 </p>
 
 <h3 id="prioritization">Prioritization</h3>
 
 <p>
-H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540">HTTP/2 specification</a>.
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540" taget=_blank>HTTP/2 specification</a>.
 The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
 </p>
 <p>
@@ -203,6 +203,9 @@ The following describes the configuration directives for controlling the HTTP/2 
 <li><a href="configure/http2_directives.html#http2-input-window-size">
 <code>http2-input-window-size</code>
 </a></li>
+<li><a href="configure/http2_directives.html#http2-max-streams">
+<code>http2-max-streams</code>
+</a></li>
 <li><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection">
 <code>http2-max-concurrent-requests-per-connection</code>
 </a></li>
@@ -229,6 +232,9 @@ The following describes the configuration directives for controlling the HTTP/2 
 </a></li>
 <li><a href="configure/http2_directives.html#http2-allow-cross-origin-push">
 <code>http2-allow-cross-origin-push</code>
+</a></li>
+<li><a href="configure/http2_directives.html#http2-dos-delay">
+<code>http2-dos-delay</code>
 </a></li>
 </ul>
 
@@ -377,6 +383,29 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 <dd><code><pre>16777216</pre></code>
 </dl>
 
+<div id="http2-max-streams" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-max-streams"><code>"http2-max-streams"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+  Maximum number of streams to advertise via HTTP2 <a href="https://www.rfc-editor.org/rfc/rfc7540#section-6.5.2" target="_blank"><code>SETTINGS_MAX_CONCURRENT_STREAMS</code></a>.
+
+</p>
+
+<p>
+ Limits the number of active requests that the proxy will accept on a client connection.  Also see <a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a> which controls the number of requests that the proxy will process concurrently.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-max-streams: 100</pre></code>
+</dl>
+
 <div id="http2-max-concurrent-requests-per-connection" class="directive-head">
 <h3><a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a></h3>
 </div>
@@ -422,7 +451,7 @@ The value cannot exceed 256.
 <dt>Default:</dt>
 <dd><code><pre>http2-max-concurrent-streaming-requests-per-connection: 1</pre></code>
 </dl>
-    
+
 <div id="http2-latency-optimization-min-rtt" class="directive-head">
 <div class="directive-since">since v2.1</div>
 <h3><a href="configure/http2_directives.html#http2-latency-optimization-min-rtt"><code>"http2-latency-optimization-min-rtt"</code></a></h3>
@@ -606,6 +635,29 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the s
 <dd><code><pre>http2-allow-cross-origin-push: OFF</pre></code>
 </dl>
 
+<div id="http2-dos-delay" class="directive-head">
+<h3><a href="configure/http2_directives.html#http2-dos-delay"><code>"http2-dos-delay"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+HTTP request processing delay to be applied when the client behavior is suspicious, in the unit of milliseconds.
+
+</p>
+
+<p>
+When the client behavior is suspicious and there is a concern of Denial-of-Service attack, h2o stops processing requests arriving on the suspicious connection for specified amount of time.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>http2-dos-delay: 100</pre></code>
+</dl>
+
 
 
 
@@ -614,7 +666,7 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the s
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -68,4 +68,6 @@ subtest "gzip + weak" => sub {
 };
 
 $upstream_listener->close();
+undef $server;
+
 done_testing();

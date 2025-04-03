@@ -101,7 +101,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
     /* register all handles, and decref them */
     for (i = 0; i != self->handles->size; ++i) {
         h2o_access_log_filehandle_t *fh = self->handles->entries[i];
-        if (ctx->pathconf != NULL)
+        if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx))
             h2o_access_log_register(ctx->pathconf, fh);
         h2o_mem_release_shared(fh);
     }
@@ -122,5 +122,7 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf)
     self->super.exit = on_config_exit;
     self->handles = self->_handles_stack;
 
-    h2o_configurator_define_command(&self->super, "access-log", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config);
+    h2o_configurator_define_command(&self->super, "access-log",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
+                                    on_config);
 }

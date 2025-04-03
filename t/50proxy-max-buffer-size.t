@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(time);
 use IO::Socket::INET;
@@ -148,5 +148,8 @@ subtest 'http1' => sub {
 #         max_buffer_size_test(1, 1);
 #     };
 # };
+
+undef $http1_upstream;
+undef $http2_upstream;
 
 done_testing();

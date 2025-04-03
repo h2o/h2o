@@ -29,6 +29,10 @@ jobs:
     - uses: actions/checkout@v2
       with:
         submodules: recursive
+    - name: setup
+      run: |
+        sudo sysctl -w vm.mmap_rnd_bits=28 # new default is 32 that causes libasan crashes
+
     - name: Run with Docker
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |

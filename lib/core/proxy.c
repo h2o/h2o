@@ -64,7 +64,7 @@ static h2o_iovec_t rewrite_location(h2o_mem_pool_t *pool, const char *location, 
 {
     h2o_url_t loc_parsed;
 
-    if (h2o_url_parse(location, location_len, &loc_parsed) != 0)
+    if (h2o_url_parse(pool, location, location_len, &loc_parsed) != 0)
         goto NoRewrite;
     if (loc_parsed.scheme != &H2O_URL_SCHEME_HTTP)
         goto NoRewrite;
@@ -161,18 +161,24 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         props->proxy_protocol->len = h2o_stringify_proxy_header(req->conn, props->proxy_protocol->base);
     }
 
-    /* method */
+    /* copy method (if it is an extended CONNECT switching versions, convert as appropriate) */
     *method = h2o_strdup(&req->pool, req->method.base, req->method.len);
+    if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
+        if (req->version >= 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("CONNECT")) &&
+            props->connection_header != NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("GET"));
+        } else if (req->version < 0x200 && h2o_memis(method->base, method->len, H2O_STRLIT("GET")) &&
+                   props->connection_header == NULL) {
+            *method = h2o_iovec_init(H2O_STRLIT("CONNECT"));
+        }
+    }
 
     /* url */
     if (h2o_url_init(url, origin->scheme, req->authority, h2o_strdup(&req->pool, req->path.base, req->path.len)) != 0)
         h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
-        if (upgrade_to != NULL && upgrade_to != h2o_httpclient_upgrade_to_connect) {
-            *props->connection_header = h2o_iovec_init(H2O_STRLIT("upgrade"));
-            h2o_add_header(&req->pool, headers, H2O_TOKEN_UPGRADE, NULL, upgrade_to, strlen(upgrade_to));
-        } else if (keepalive) {
+        if (keepalive) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
@@ -300,6 +306,27 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
     return client;
 }
 
+static int empty_pipe(int fd)
+{
+    ssize_t ret;
+    char buf[1024];
+
+drain_more:
+    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 0;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(buf)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
 static void do_close(struct rp_generator_t *self)
 {
     /**
@@ -319,8 +346,16 @@ static void do_close(struct rp_generator_t *self)
     }
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
-        close(self->pipe_reader.fds[0]);
-        close(self->pipe_reader.fds[1]);
+        h2o_context_t *ctx = self->src_req->conn->ctx;
+        if (ctx->proxy.spare_pipes.count < ctx->globalconf->proxy.max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
+            int *dst = ctx->proxy.spare_pipes.pipes[ctx->proxy.spare_pipes.count++];
+            dst[0] = self->pipe_reader.fds[0];
+            dst[1] = self->pipe_reader.fds[1];
+        } else {
+            close(self->pipe_reader.fds[0]);
+            close(self->pipe_reader.fds[1]);
+        }
+
         self->pipe_reader.fds[0] = -1;
     }
 }
@@ -437,13 +472,18 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
     }
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL) {
         /* Call `on_body_on_close`. This function might dispose `self`, in which case `generator_disposed` would be set to true. */
@@ -458,12 +498,17 @@ static int on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static int on_body_piped(h2o_httpclient_t *client, const char *errstr)
+static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     struct rp_generator_t *self = client->data;
 
     self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
+
+    if (num_trailers != 0) {
+        assert(errstr == h2o_httpclient_error_is_eos);
+        self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
+    }
 
     if (errstr != NULL)
         on_body_on_close(self, errstr);
@@ -486,6 +531,9 @@ static char compress_hint_to_enum(const char *val, size_t len)
     }
     if (h2o_lcstris(val, len, H2O_STRLIT("br"))) {
         return H2O_COMPRESS_HINT_ENABLE_BR;
+    }
+    if (h2o_lcstris(val, len, H2O_STRLIT("zstd"))) {
+        return H2O_COMPRESS_HINT_ENABLE_ZSTD;
     }
     return H2O_COMPRESS_HINT_AUTO;
 }
@@ -600,9 +648,16 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     if (!seen_date_header && emit_missing_date_header)
         h2o_resp_add_date_header(req);
 
-    if (req->upgrade.base != NULL && req->res.status == 101) {
+    /* extended CONNECT: adjust response based on the HTTP versions being used (TODO proper check of status code based on upstream
+     * HTTP version) */
+    if (req->upgrade.base != NULL && (req->res.status == 101 || (200 <= req->res.status && req->res.status <= 299))) {
         assert(req->is_tunnel_req);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        if (req->version < 0x200) {
+            req->res.status = 101;
+            h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_UPGRADE, NULL, req->upgrade.base, req->upgrade.len);
+        } else {
+            req->res.status = 200;
+        }
     }
 
     /* declare the start of the response */
@@ -619,9 +674,15 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        if (req->conn->ctx->proxy.spare_pipes.count > 0) {
+            int *src = req->conn->ctx->proxy.spare_pipes.pipes[--req->conn->ctx->proxy.spare_pipes.count];
+            self->pipe_reader.fds[0] = src[0];
+            self->pipe_reader.fds[1] = src[1];
+        } else {
+            if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+                char errbuf[256];
+                h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+            }
         }
         args->pipe_reader->fd = self->pipe_reader.fds[1];
         args->pipe_reader->on_body_piped = on_body_piped;
@@ -634,7 +695,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     return on_body;
 }
 
-static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers, size_t num_headers)
+static int on_informational(h2o_httpclient_t *client, int version, int status, h2o_iovec_t msg, h2o_header_t *headers,
+                            size_t num_headers)
 {
     struct rp_generator_t *self = client->data;
     size_t i;
@@ -644,10 +706,15 @@ static int on_1xx(h2o_httpclient_t *client, int version, int status, h2o_iovec_t
             h2o_push_path_in_link_header(self->src_req, headers[i].value.base, headers[i].value.len);
     }
 
-    if (status != 101) {
+    assert(status != 101 && "101 has to be notified as final");
+
+    if (status != 100 ||
+        (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
         self->src_req->res.status = status;
         self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
         h2o_send_informational(self->src_req);
+    } else {
+        /* we don't need to forward 100 since protocol handlers have already done */
     }
 
     return 0;
@@ -708,6 +775,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 
     if (req->overrides != NULL) {
         use_proxy_protocol = req->overrides->use_proxy_protocol;
+        props->send_own_expect = req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_ON;
         req->overrides->location_rewrite.match = origin;
         if (!req->overrides->proxy_preserve_host) {
             req->scheme = origin->scheme;
@@ -746,7 +814,7 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
             self->req_done = 0;
         }
     }
-    self->client->informational_cb = on_1xx;
+    self->client->informational_cb = on_informational;
 
     client->get_conn_properties(client, &req->proxy_stats.conn);
 
@@ -826,10 +894,25 @@ void h2o__proxy_process_request(h2o_req_t *req)
     const char *upgrade_to = NULL;
     if (req->is_tunnel_req) {
         if (req->upgrade.base != NULL) {
-            /* upgrade requests (e.g. websocket) are either tunnelled or converted to a normal request (by omitting the Upgrade
-             * header field)  depending on the configuration */
-            if (client_ctx->tunnel_enabled)
+            /* Upgrade requests (e.g. websocket) are either tunnelled, rejected, or converted to an ordinary request depending on
+             * the configuration. */
+            if (client_ctx->tunnel_enabled) {
+                /* Support for H3_DATAGRAM is advertised by the HTTP/3 handler but the proxy handler does not support forwarding
+                 * datagrams nor conversion to/from capsules. Hence we send 421 to let the client retry using a different version of
+                 * HTTP. */
+                if (req->version == 0x300 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))) {
+                    h2o_send_error_421(req, "Misdirected Request", "connect-udp tunneling is only supported in HTTP/1 and 2", 0);
+                    return;
+                }
                 upgrade_to = h2o_strdup(&req->pool, req->upgrade.base, req->upgrade.len).base;
+            } else {
+                /* When recieving a websocket request over HTTP/1.x but tunneling is disabled, convert the request to an ordinary
+                 * HTTP request, as we have always done. Otherwise, refuse the request. */
+                if (!(req->version < 0x200 && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("websocket")))) {
+                    h2o_send_error_403(req, "Forbidden", "The proxy act as a gateway.", H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
+                    return;
+                }
+            }
         } else {
             /* CONNECT request; process as a CONNECT upgrade or reject */
             if (client_ctx->tunnel_enabled) {

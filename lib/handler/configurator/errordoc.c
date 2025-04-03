@@ -133,7 +133,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct errordoc_configurator_t *self = (void *)_self;
 
-    if (ctx->pathconf != NULL && self->vars->size != 0)
+    if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) && self->vars->size != 0)
         h2o_errordoc_register(ctx->pathconf, self->vars->entries, self->vars->size);
 
     --self->vars;
@@ -157,5 +157,7 @@ void h2o_errordoc_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* reproxy: ON | OFF */
-    h2o_configurator_define_command(&c->super, "error-doc", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_errordoc);
+    h2o_configurator_define_command(&c->super, "error-doc",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
+                                    on_config_errordoc);
 }

@@ -21,7 +21,9 @@
 
 CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
 CMAKE_POLICY(SET CMP0003 NEW)
-CMAKE_POLICY(SET CMP0042 NEW)
+IF (NOT CMAKE_VERSION VERSION_LESS 3.0)
+  CMAKE_POLICY(SET CMP0042 NEW)
+ENDIF()
 
 PROJECT(h2o)
 
@@ -29,8 +31,9 @@ INCLUDE(GNUInstallDirs)
 INCLUDE(CheckCSourceCompiles)
 INCLUDE(CMakePushCheckState)
 INCLUDE(ExternalProject)
-INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
 INCLUDE(deps/picotls/cmake/boringssl-adjust.cmake)
+INCLUDE(deps/picotls/cmake/dtrace-utils.cmake)
+INCLUDE(deps/picotls/cmake/fusion.cmake)
 
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o.pc @ONLY)
 CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/libh2o-evloop.pc.in ${CMAKE_CURRENT_BINARY_DIR}/libh2o-evloop.pc @ONLY)
@@ -134,31 +137,11 @@ IF (WITH_DTRACE)
     MESSAGE(STATUS "Enabling USDT support")
 ENDIF ()
 
-CMAKE_PUSH_CHECK_STATE()
-SET(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
-CHECK_C_SOURCE_COMPILES("
-#include <emmintrin.h>
-#include <immintrin.h>
-int main(void) {
-    __m256i  ord0, ord1, ord2, ord3 = _mm256_setzero_si256();
-    ord0 = _mm256_aesenc_epi128(ord1, ord2);
-    ord3 = _mm256_aesenclast_epi128(ord0, ord1);
-    ord1 = _mm256_clmulepi64_epi128(ord3, ord2, 0x00);
-    return 0;
-}
-" CC_HAS_AESNI256)
-CMAKE_POP_CHECK_STATE()
-IF (CC_HAS_AESNI256)
-    SET(WITH_FUSION_DEFAULT "ON")
-ELSE ()
-    SET(WITH_FUSION_DEFAULT "OFF")
-ENDIF ()
+CHECK_FUSION_PREREQUISITES()
 OPTION(WITH_FUSION "build with fusion AES-GCM engine" ${WITH_FUSION_DEFAULT})
-MESSAGE(STATUS "FUSION support : ${WITH_FUSION}")
 
 # KTLS
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    CHECK_C_SOURCE_COMPILES("
+CHECK_C_SOURCE_COMPILES("
 #include <sys/socket.h>
 #include <linux/tcp.h>
 #include <linux/tls.h>
@@ -166,15 +149,21 @@ int main (void) {
     return TCP_ULP + SOL_TLS + TLS_TX + TLS_1_2_VERSION + TLS_CIPHER_AES_GCM_128 + TLS_CIPHER_AES_GCM_256;
 }
 " SYSTEM_HAS_KTLS)
-    IF (SYSTEM_HAS_KTLS)
-        SET(WITH_KTLS_DEFAULT "ON")
-    ELSE ()
-        SET(WITH_KTLS_DEFAULT "OFF")
-    ENDIF ()
+IF (SYSTEM_HAS_KTLS)
+    SET(WITH_KTLS_DEFAULT "ON")
 ELSE ()
     SET(WITH_KTLS_DEFAULT "OFF")
-ENDIF()
+ENDIF ()
 OPTION(WITH_KTLS "use Kernel TLS" ${WITH_KTLS_DEFAULT})
+
+# aegis
+FIND_PACKAGE(aegis)
+IF (aegis_FOUND)
+  SET(WITH_AEGIS_DEFAULT "ON")
+ELSE ()
+  SET(WITH_AEGIS_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_AEGIS "enable AEGIS (requires libaegis)" ${WITH_AEGIS_DEFAULT})
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBURING liburing)
@@ -293,7 +282,7 @@ ENDIF ()
 IF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DH2O_NO_64BIT_ATOMICS")
 ENDIF (NOT ARCH_SUPPORTS_64BIT_ATOMICS)
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread -D_GNU_SOURCE")
 ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthreads -D_POSIX_PTHREAD_SEMANTICS")
@@ -361,6 +350,7 @@ SET(LIB_SOURCE_FILES
     deps/hiredis/net.c
     deps/hiredis/read.c
     deps/hiredis/sds.c
+    deps/hiredis/alloc.c
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
@@ -442,7 +432,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/expires.c
     lib/handler/fastcgi.c
     lib/handler/file.c
+    lib/handler/h2olog.c
     lib/handler/headers.c
+    lib/handler/headers_util.c
+    lib/handler/http2_debug_state.c
     lib/handler/mimemap.c
     lib/handler/proxy.c
     lib/handler/connect.c
@@ -452,12 +445,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/self_trace.c
     lib/handler/server_timing.c
     lib/handler/status.c
-    lib/handler/headers_util.c
     lib/handler/status/events.c
     lib/handler/status/memory.c
     lib/handler/status/requests.c
     lib/handler/status/ssl.c
-    lib/handler/http2_debug_state.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
     lib/handler/configurator/compress.c
@@ -465,7 +456,10 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/expires.c
     lib/handler/configurator/fastcgi.c
     lib/handler/configurator/file.c
+    lib/handler/configurator/h2olog.c
     lib/handler/configurator/headers.c
+    lib/handler/configurator/headers_util.c
+    lib/handler/configurator/http2_debug_state.c
     lib/handler/configurator/proxy.c
     lib/handler/configurator/redirect.c
     lib/handler/configurator/reproxy.c
@@ -473,8 +467,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
-    lib/handler/configurator/http2_debug_state.c
-    lib/handler/configurator/headers_util.c
 
     lib/http1.c
 
@@ -670,7 +662,7 @@ ENDIF ()
 
 ADD_CUSTOM_COMMAND(
     OUTPUT quicly-tracer.h
-    COMMAND ${PROJECT_SOURCE_DIR}/deps/quicly/misc/probe2trace.pl -a tracer < ${PROJECT_SOURCE_DIR}/deps/quicly/quicly-probes.d > ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h
+    COMMAND sh -c "'${PROJECT_SOURCE_DIR}'/deps/quicly/misc/probe2trace.pl -a tracer < '${PROJECT_SOURCE_DIR}'/deps/quicly/quicly-probes.d > '${CMAKE_CURRENT_BINARY_DIR}'/quicly-tracer.h"
     DEPENDS deps/quicly/quicly-probes.d deps/quicly/misc/probe2trace.pl
     VERBATIM)
 
@@ -796,6 +788,9 @@ ENDIF ()
 IF (WITH_KTLS)
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_KTLS=1")
 ENDIF ()
+IF (WITH_AEGIS)
+    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DPTLS_HAVE_AEGIS=1")
+ENDIF ()
 IF (WITH_IO_URING)
     # io_uring is enabled only for standalone server, as it is impossible to cleanly shutdown synchronously
     SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_IO_URING=1")
@@ -814,6 +809,10 @@ IF (WITH_MRUBY)
         "m")
     ADD_DEPENDENCIES(h2o mruby)
 ENDIF (WITH_MRUBY)
+IF (WITH_AEGIS)
+    TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${aegis_INCLUDE_DIR})
+    TARGET_LINK_LIBRARIES(h2o ${aegis_LIBRARIES})
+ENDIF ()
 IF (WITH_IO_URING)
     TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${LIBURING_INCLUDE_DIRS})
     TARGET_LINK_DIRECTORIES(h2o PUBLIC ${LIBURING_LIBRARY_DIRS})
@@ -827,11 +826,16 @@ INSTALL(TARGETS h2o
 
 IF (NOT WITHOUT_LIBS)
     INSTALL(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+    INSTALL(DIRECTORY deps/picotls/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+    INSTALL(DIRECTORY deps/quicly/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
     IF (LIBUV_FOUND)
         INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o.pc" DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
     ENDIF ()
     INSTALL(FILES "${CMAKE_BINARY_DIR}/libh2o-evloop.pc" DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 ENDIF ()
+
+# h2olog is installed directly without fatpacking in misc/regen.pl, as it relies only on standard modules
+INSTALL(PROGRAMS misc/h2olog DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/ca-bundle.crt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
@@ -909,9 +913,9 @@ ADD_CUSTOM_TARGET(doc-publish ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk publish BI
 
 GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
 
-IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON)
+IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON AND NOT (OPENSSL_VERSION VERSION_LESS "1.1.1"))
     ExternalProject_Add(h2get
-                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} "-DCMAKE_C_FLAGS=-include ${CMAKE_SOURCE_DIR}/include/h2o/openssl_backport.h" ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
@@ -1015,83 +1019,6 @@ ELSEIF ("${CMAKE_SYSTEM_NAME}" MATCHES "SunOS")
     ENDIF (LIBUV_FOUND)
 ENDIF ()
 
-# h2olog
-# If BCC is installed to a non-default directory,
-# set something like `PKG_CONFIG_PATH=/path/to/bcc/lib/pkgconfig cmake ...`
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND PKG_CONFIG_FOUND)
-    PKG_CHECK_MODULES(LIBBCC libbcc)
-
-    EXECUTE_PROCESS(
-        COMMAND uname -r
-        OUTPUT_VARIABLE KERNEL_VERSION
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-    SET(REQUIRED_KERNEL_VERSION "4.10.0")
-    IF (NOT (KERNEL_VERSION VERSION_LESS REQUIRED_KERNEL_VERSION))
-        SET(HAVE_BPF_SUPPORTED_KERNEL ON)
-        MESSAGE(STATUS "Checking Linux kernel version ${KERNEL_VERSION} >= ${REQUIRED_KERNEL_VERSION} for h2olog - OK")
-    ENDIF ()
-
-    IF (NOT (CMAKE_VERSION VERSION_LESS "3.8"))
-        CMAKE_POLICY(SET CMP0057 NEW)
-        IF ("cxx_std_11" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-            MESSAGE(STATUS "C++11 OK")
-            SET(CXX_11 ON)
-        ENDIF ()
-    ENDIF ()
-
-    IF (WITH_DTRACE AND LIBBCC_FOUND AND HAVE_BPF_SUPPORTED_KERNEL AND CXX_11)
-        SET(WITH_H2OLOG_DEFAULT ON)
-    ENDIF ()
-ENDIF ()
-
-OPTION(WITH_H2OLOG "use h2olog command" ${WITH_H2OLOG_DEFAULT})
-IF (WITH_H2OLOG)
-    MESSAGE(STATUS "Supporting h2olog")
-
-    SET(H2OLOG_SOURCE_FILES
-        "src/h2olog/h2olog.h"
-        "src/h2olog/h2olog.cc"
-        "src/h2olog/http_tracer.cc"
-        "src/h2olog/json.h"
-        "src/h2olog/json.cc"
-        "include/h2o/version.h"
-    )
-
-    # This phony target is required to force to trigger a custom command.
-    # If DEPENDS is empty, the custom command won't be triggered when OUTPUT files exist.
-    ADD_CUSTOM_COMMAND(OUTPUT phony_force_trigger_command COMMAND echo -n)
-
-    ADD_CUSTOM_COMMAND(
-        OUTPUT  "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc"
-        COMMAND make -f misc/regen.mk src/h2olog/generated_raw_tracer.cc
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS phony_force_trigger_command
-    )
-    LIST(APPEND H2OLOG_SOURCE_FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog/generated_raw_tracer.cc")
-    LINK_DIRECTORIES("${LIBBCC_LIBRARY_DIRS}")
-
-    ADD_EXECUTABLE(h2olog ${H2OLOG_SOURCE_FILES})
-    ADD_DEPENDENCIES(checkdepends h2olog)
-    TARGET_LINK_LIBRARIES(h2olog libh2o-evloop ${EXTRA_LIBS})
-
-    SET_TARGET_PROPERTIES(h2olog PROPERTIES
-        CXX_STANDARD 11
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-        COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DBORINGSSL_NO_CXX"
-    )
-
-    TARGET_LINK_LIBRARIES(h2olog "${LIBBCC_LIBRARIES}")
-    TARGET_INCLUDE_DIRECTORIES(h2olog
-        PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src/h2olog"
-        PRIVATE "${LIBBCC_INCLUDE_DIRS}"
-    )
-
-    INSTALL(TARGETS h2olog RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-ENDIF (WITH_H2OLOG)
-
 # gitrev
 IF (IS_PRERELEASE)
     # To ask generate_gitrev.pl whether or not a gitrev is available,
@@ -1123,7 +1050,7 @@ IF (IS_PRERELEASE)
 ENDIF ()
 
 # injectaddr.so
-IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE)
+IF (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR CMAKE_SYSTEM_NAME STREQUAL "Android" OR APPLE)
     ADD_LIBRARY(injectaddr SHARED t/injectaddr.c)
     SET_TARGET_PROPERTIES(injectaddr PROPERTIES EXCLUDE_FROM_ALL 1)
     IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")

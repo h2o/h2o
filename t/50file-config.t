@@ -77,6 +77,7 @@ EOT
     my $index_orig_len = (stat 't/assets/doc_root/index.txt')[7];
     my $index_gz_len = (stat 't/assets/doc_root/index.txt.gz')[7];
     my $index_br_len = (stat 't/assets/doc_root/index.txt.br')[7];
+    my $index_zstd_len = (stat 't/assets/doc_root/index.txt.zstd')[7];
     my $alice2_orig_len = `gzip -cd < t/assets/doc_root/alice2.txt.gz | wc -c`;
     my $alice2_gz_len = (stat 't/assets/doc_root/alice2.txt.gz')[7];
 
@@ -93,6 +94,10 @@ EOT
     $doit->("ON", q{--header "Accept-Encoding: br, gzip"}, ['/index.txt', '/'], $index_br_len);
     $doit->("ON", q{--header "Accept-Encoding: gzip, br"}, ['/index.txt', '/'], $index_br_len);
     $doit->("ON", q{--header "Accept-Encoding: br"}, ['/index.txt', '/'], $index_br_len);
+    $doit->("ON", q{--header "Accept-Encoding: zstd"}, ['/index.txt', '/'], $index_zstd_len);
+    $doit->("ON", q{--header "Accept-Encoding: br, zstd"}, ['/index.txt', '/'], $index_br_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, zstd"}, ['/index.txt', '/'], $index_zstd_len);
+    $doit->("ON", q{--header "Accept-Encoding: gzip, br, zstd"}, ['/index.txt', '/'], $index_br_len);
 
     $doit->("gunzip", "", ['/alice2.txt'], $alice2_orig_len);
     $doit->("gunzip", q{--header "Accept-Encoding: gzip"}, ['/alice2.txt'], $alice2_gz_len);

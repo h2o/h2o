@@ -5,13 +5,14 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use Fcntl qw(:flock);
 use File::Temp qw(tempfile tempdir);
+use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL;
 use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -36,6 +37,7 @@ our @EXPORT = qw(
     spawn_server
     spawn_h2o
     spawn_h2o_raw
+    empty_port
     empty_ports
     create_data_file
     md5_file
@@ -45,10 +47,12 @@ our @EXPORT = qw(
     openssl_can_negotiate
     openssl_supports_tls13
     curl_supports_http2
+    curl_supports_http3
     run_with_curl
     h2get_exists
     run_with_h2get
     run_with_h2get_simple
+    spawn_h2get_backend
     one_shot_http_upstream
     wait_debugger
     make_guard
@@ -63,6 +67,7 @@ our @EXPORT = qw(
     run_fuzzer
     test_is_passing
     get_exclusive_lock
+    debug
 );
 
 use constant ASSETS_DIR => 't/assets';
@@ -244,18 +249,47 @@ sub sig_num {
     firstidx { $_ eq $name } split " ", $Config::Config{sig_name};
 }
 
-# returns a hash containing `port`, `tls_port`, `guard`
+# returns a hash containing `port`, `tls_port`, `quic_port`, `guard`
+# Set { disable_quic => 1} to disable QUIC support.
 sub spawn_h2o {
     my ($conf) = @_;
     my @opts;
     my $max_ssl_version;
+    my $disable_quic = ref $conf eq 'HASH' && $conf->{disable_quic};
 
     # decide the port numbers
     my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
-    my @all_ports = ($port, $tls_port);
+    my $quic_port;
+    my $listen_quic;
+    my @all_ports = (
+        {
+            port => $port,
+            proto => 'tcp',
+        },
+        {
+            port => $tls_port,
+            proto => 'tcp',
+        },
+    );
+
+    if (!$disable_quic) {
+        $quic_port = empty_port({ host => "0.0.0.0", proto => "tcp" });
+        push @all_ports, {
+            port => $quic_port,
+            proto => 'udp',
+        };
+        $listen_quic = <<"EOT";
+  - type: quic
+    host: 0.0.0.0
+    port: $quic_port
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
+EOT
+    }
 
     # setup the configuration file
-    $conf = $conf->($port, $tls_port)
+    $conf = $conf->($port, $tls_port, $quic_port)
         if ref $conf eq 'CODE';
     my $user = $< == 0 ? "root" : "";
     if (ref $conf eq 'HASH') {
@@ -277,6 +311,7 @@ listen:
       key-file: examples/h2o/server.key
       certificate-file: examples/h2o/server.crt
       @{[$max_ssl_version ? "max-version: $max_ssl_version" : ""]}
+$listen_quic
 @{[$user ? "user: $user" : ""]}
 EOT
 
@@ -285,6 +320,7 @@ EOT
         %$ret,
         port => $port,
         tls_port => $tls_port,
+        quic_port => $quic_port,
     };
 }
 
@@ -301,7 +337,7 @@ sub spawn_h2o_raw {
     my ($conffh, $conffn) = tempfile(UNLINK => 1);
     print $conffh $conf or confess("failed to write to $conffn: $!");
     $conffh->flush or confess("failed to write to $conffn: $!");
-    Test::More::diag($conf) if $ENV{TEST_DEBUG};
+    debug($conf);
 
     # spawn the server
     my ($guard, $pid) = spawn_server(
@@ -316,6 +352,65 @@ sub spawn_h2o_raw {
         pid      => $pid,
         conf_file => $conffn,
     };
+}
+
+sub empty_port_using_file {
+    my ($host, $port, $proto) = @_;
+    my $fn = $ENV{NET_EMPTYPORT_SRCFILE};
+
+    # lock-open the source file, and read the last port number
+    open my $fh, '+>>', $fn
+        or die "failed to open file:$fn:$!";
+    flock $fh, LOCK_EX
+        or die "failed to lock file:$fn:$!";
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    $port = <$fh>
+        unless $port;
+    $port ||= 65535; # if failed to read, start with an invalid number (see below)
+    # find the next available port
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        $port += 2;
+        $port = 32769 if $port > 49152;
+        last if Net::EmptyPort::can_bind($host, $port, $proto);
+        die "empty port not found"
+            if $fail_cnt >= 100;
+    }
+    # write the last port number to file
+    seek $fh, 0, 0
+        or die "failed to seek file:$fn:$!";
+    truncate $fh, 0
+        or die "failed to trancate file:$fn:$!";
+    print $fh $port;
+    # close file (and unlock implicitly)
+    close $fh;
+
+    $port;
+}
+
+sub empty_port {
+    my ($host, $port, $proto) = @_ && ref $_[0] eq 'HASH' ? ($_[0]->{host}, $_[0]->{port}, $_[0]->{proto}) : (undef, @_);
+    $host = '127.0.0.1'
+        unless defined $host;
+    $proto = $proto ? lc($proto) : 'tcp';
+
+    my $found;
+
+    for (my $fail_cnt = 0;; ++$fail_cnt) {
+        if ($ENV{NET_EMPTYPORT_SRCFILE}) {
+            $found = empty_port_using_file($host, $port, $proto);
+        } else {
+            $found = Net::EmptyPort::empty_port({host => $host, port => $port, proto => $proto});
+        }
+        # finally check that $cand can be bound on addresses 0.0.0.0 and 127.0.0.1, as there are rules to prefer one over another
+        # and we do not want that rule to kick in
+        last unless grep { $_ ne $host && !Net::EmptyPort::can_bind($_, $found, $proto) } qw(0.0.0.0 127.0.0.1);
+        $port = $found; # set $port to indicate the last port we failed on
+        die "empty port not found"
+            if $fail_cnt >= 100;
+    }
+
+    $found;
 }
 
 sub empty_ports {
@@ -354,6 +449,9 @@ sub etag_file {
 
 sub prog_exists {
     my $prog = shift;
+    # if SKIP_PROG_EXISTS environment variable is set (e.g., in case of running on CI image), all programs are assumed to exist
+    return 1
+        if $ENV{SKIP_PROG_EXISTS};
     system("which $prog > /dev/null 2>&1") == 0;
 }
 
@@ -375,11 +473,18 @@ sub openssl_can_negotiate {
 }
 
 sub openssl_supports_tls13 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !!( `openssl s_client -help 2>&1` =~ /^\s*-tls1_3\s+/m);
 }
 
 sub curl_supports_http2 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
     return !! (`curl --version` =~ /^Features:.*\sHTTP2(?:\s|$)/m);
+}
+
+sub curl_supports_http3 {
+    return 1 if $ENV{SKIP_PROG_EXISTS};
+    return !! (`curl --version` =~ /^Features:.*\sHTTP3(?:\s|$)/m);
 }
 
 sub run_with_curl {
@@ -400,6 +505,13 @@ sub run_with_curl {
             unless curl_supports_http2();
         $cb->("https", $server->{tls_port}, "curl --insecure --http2", 512);
     };
+    subtest "https/3" => sub {
+        plan skip_all => "curl does not support HTTP/3"
+            unless curl_supports_http3();
+        plan skip_all => "\$server does not have quic_port set"
+            unless $server->{quic_port};
+        $cb->("https", $server->{quic_port}, "curl --insecure --http3", 768);
+    };
 }
 
 sub h2get_exists {
@@ -416,7 +528,11 @@ class H2
         while true
             f = self.read(timeout)
             return nil if f == nil
-            puts f.to_s
+            if block_given?
+                yield f
+            else
+                puts f.to_s
+            end
             if f.type == "DATA" && f.len > 0
                 self.send_window_update(0, f.len)
                 self.send_window_update(f.stream_id, f.len)
@@ -513,34 +629,49 @@ sub make_guard {
 }
 
 sub spawn_forked {
-    my ($code) = @_;
+    my ($code, $opts) = @_;
+    $opts = +{
+        stdout => 1,
+        stderr => 0,
+        %{ $opts || +{} }
+    };
 
-    my ($cout, $pin);
-    pipe($pin, $cout);
-    my ($cerr, $pin2);
-    pipe($pin2, $cerr);
+    my $tempdir = File::Temp::tempdir(CLEANUP => 1) if $opts->{stdout} || $opts->{stderr};
 
     my $pid = fork;
     if ($pid) {
-        close $cout;
-        close $cerr;
-        my $upstream; $upstream = +{
-            pid => $pid,
-            kill => sub {
-                return unless defined $pid;
-                kill 'KILL', $pid;
-                undef $pid;
-            },
-            guard => make_guard(sub { $upstream->{kill}->() }),
-            stdout => $pin,
-            stderr => $pin2,
+        my $wait = sub {
+            while (waitpid($pid, 0) != $pid) {}
+            undef $pid;
         };
-        return $upstream;
+        my $guard = make_guard(sub {
+            return unless defined $pid;
+            kill 'TERM', $pid;
+            $wait->();
+        });
+        my $read_outputs = sub {
+            my $out = path("$tempdir/out")->slurp if $opts->{stdout};
+            my $err = path("$tempdir/err")->slurp if $opts->{stderr};
+            ($out, $err)
+        };
+        return +{
+            pid => $pid,
+            wait => sub {
+                $wait->();
+                $read_outputs->()
+            },
+            kill => sub {
+                undef $guard;
+                $read_outputs->()
+            },
+        };
     }
-    close $pin;
-    close $pin2;
-    open(STDOUT, '>&=', fileno($cout)) or die $!;
-    open(STDERR, '>&=', fileno($cerr)) or die $!;
+    if ($opts->{stdout}) {
+        open(STDOUT, '>', "$tempdir/out") or die $!;
+    }
+    if ($opts->{stderr}) {
+        open(STDERR, '>', "$tempdir/err") or die $!;
+    }
 
     $code->();
     exit;
@@ -622,20 +753,87 @@ sub spawn_h2_server {
     return $server;
 }
 
+sub spawn_h2get_backend {
+    my $h2_snippet = shift;
+    my $testfn = shift;
+    my ($backend_port) = empty_ports(1, { host => '0.0.0.0' });
+    my $backend = spawn_forked(sub {
+        my $code = <<"EOC";
+STDOUT.sync = true
+h2g = H2.server({
+    'cert_path' => 'examples/h2o/server.crt',
+    'key_path' => 'examples/h2o/server.key',
+});
+h2g.listen("https://127.0.0.1:$backend_port")
+
+connpool = {}
+
+loop do
+  begin
+    conn = h2g.accept(100)
+  rescue => e
+  end
+  if conn
+    connpool[conn] = true;
+    conn.expect_prefix
+    conn.send_settings([])
+
+    loop do
+      f = conn.read(-1)
+      if f.type == 'SETTINGS'
+        unless f.flags == ACK then
+          conn.send_settings_ack()
+          break
+        end
+      else
+        raise 'oops'
+      end
+    end
+  end
+  connpool.keys.each do |conn|
+    loop do
+      begin
+        f = conn.read(1000)
+      rescue => e
+        # passive close
+        conn.close
+        connpool.delete(conn)
+        break
+      end
+      break if f.nil? # timeout
+      $h2_snippet
+    end
+  end
+end
+EOC
+        my ($scriptfh, $scriptfn) = tempfile(UNLINK => 1);
+        print $scriptfh $code;
+        close($scriptfh);
+        exec(bindir() . '/h2get_bin/h2get', $scriptfn, "127.0.0.1:$backend_port");
+    }, +{ stderr => 1 });
+
+    $backend->{tls_port} = $backend_port;
+    return $backend;
+}
 # usage: see t/90h2olog.t
 package H2ologTracer {
     use POSIX ":sys_wait_h";
 
     sub new {
         my ($class, $opts) = @_;
-        my $h2o_pid = $opts->{pid} or Carp::croak("Missing pid in the opts");
+        unless ($opts->{path}) {
+            Carp::croak("Missing path in the opts (pid is no longer supported)");
+        }
+        my $h2olog_socket_path = $opts->{path};
         my $h2olog_args = $opts->{args} // [];
-        my $h2olog_prog = t::Util::bindir() . "/h2olog";
+        my $output_dir = $opts->{output_dir} // File::Temp::tempdir(CLEANUP => 1);
 
-        my $tempdir = File::Temp::tempdir(CLEANUP => 1);
-        my $output_file = "$tempdir/h2olog.jsonl";
+        my $h2olog_prog = "misc/h2olog";
 
-        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d -p $h2o_pid -w '$output_file' 2>&1};
+        my $output_file = "$output_dir/h2olog.jsonl";
+        my $attaching_opts = "-u $h2olog_socket_path";
+
+        my $tracer_pid = open my($errfh), "-|", qq{exec $h2olog_prog @{$h2olog_args} -d $attaching_opts -w '$output_file' 2>&1};
         die "failed to spawn $h2olog_prog: $!" unless defined $tracer_pid;
 
         # wait until h2olog and the trace log becomes ready
@@ -644,7 +842,7 @@ package H2ologTracer {
             Carp::confess("h2olog[$tracer_pid] died unexpectedly")
                 unless defined $errline;
             Test::More::diag("h2olog[$tracer_pid]: $errline");
-            last if $errline =~ /Attaching pid=/;
+            last if $errline =~ /\bAttaching\b/ms;
         }
 
         open my $fh, "<", $output_file or die "h2olog[$tracer_pid] does not create the output file ($output_file): $!";
@@ -676,6 +874,8 @@ package H2ologTracer {
             _guard => $guard,
             tracer_pid => $tracer_pid,
             get_trace => $get_trace,
+            output_dir => $output_dir,
+            output_file => $output_file,
         }, $class;
     }
 
@@ -741,28 +941,26 @@ sub get_tracer {
     my $tracer_pid = shift;
     my $fn = shift;
     my $read_trace;
-    while (1) {
-        sleep 1;
-        if (open my $fh, "<", $fn) {
-            my $off = 0;
-            $read_trace = sub {
-                seek $fh, $off, 0
-                    or die "seek failed:$!";
-                read $fh, my $bytes, 1048576;
-                $bytes = ''
-                    unless defined $bytes;
-                $off += length $bytes;
-                if ($^O ne 'linux') {
-                    $bytes = join "", map { substr($_, 4) . "\n" } grep /^XXXX/, split /\n/, $bytes;
-                }
-                return $bytes;
-            };
-            last;
-        }
-        die "bpftrace failed to start\n"
+
+    while (!-e $fn) {
+        die "tracer failed to start\n"
             if waitpid($tracer_pid, WNOHANG) == $tracer_pid;
+        sleep 0.1;
     }
-    return $read_trace;
+
+    open my $fh, '-|', 'tail', '-c', '+1', '-f', $fn
+        or die "failed invoke tail opening $fn:$?";
+
+    return sub {
+        IO::Select->new($fh)->can_read(1);
+        sysread $fh, my $bytes, 1048576;
+        $bytes = ''
+            unless defined $bytes;
+        if ($bytes eq '' && waitpid($tracer_pid, WNOHANG) == $tracer_pid) {
+            die "tracer died with status $? and there would be no more data";
+        }
+        $bytes;
+    };
 }
 
 sub run_picotls_client {
@@ -928,6 +1126,11 @@ sub get_exclusive_lock {
 
     # prevent waring above when trying to lock again
     $ENV{LOCKFD} = "SKIP";
+}
+
+sub debug {
+    return unless $ENV{TEST_DEBUG};
+    Test::More::diag(@_);
 }
 
 1;

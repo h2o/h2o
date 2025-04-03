@@ -113,6 +113,7 @@ struct st_h2o_http2_stream_t {
         } pull;
     };
     unsigned blocked_by_server : 1;
+    unsigned reset_by_peer : 1;
     /**
      *  state of the ostream, only used in push mode
      */
@@ -225,6 +226,13 @@ struct st_h2o_http2_conn_t {
      * timeout entry used for graceful shutdown
      */
     h2o_timer_t _graceful_shutdown_timeout;
+    /**
+     * DoS mitigation; the idea here is to delay processing requests when observing suspicious behavior
+     */
+    struct {
+        h2o_timer_t process_delay;
+        size_t reset_budget; /* RST_STREAM frames are considered suspicious when this value goes down to zero */
+    } dos_mitigation;
 };
 
 /* connection */

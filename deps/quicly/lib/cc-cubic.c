@@ -23,6 +23,7 @@
 #include <math.h>
 #include "quicly/cc.h"
 #include "quicly.h"
+#include "quicly/pacer.h"
 
 #define QUICLY_MIN_CWND 2
 
@@ -61,12 +62,18 @@ static uint32_t calc_w_est(const quicly_cc_t *cc, cubic_float_t t_sec, cubic_flo
 
 /* TODO: Avoid increase if sender was application limited. */
 static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                           uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
+                           int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
 {
     assert(inflight >= bytes);
-    /* Do not increase congestion window while in recovery. */
-    if (largest_acked < cc->recovery_end)
+    /* Do not increase congestion window while in recovery (but jumpstart may do something different). */
+    if (largest_acked < cc->recovery_end) {
+        quicly_cc_jumpstart_on_acked(cc, 1, bytes, largest_acked, inflight, next_pn);
         return;
+    }
+
+    quicly_cc_jumpstart_on_acked(cc, 0, bytes, largest_acked, inflight, next_pn);
+
+    /* TODO: respect cc_limited */
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
@@ -105,14 +112,22 @@ static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t 
 static void cubic_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
                           int64_t now, uint32_t max_udp_payload_size)
 {
+    quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
+
     /* Nothing to do if loss is in recovery window. */
     if (lost_pn < cc->recovery_end)
         return;
     cc->recovery_end = next_pn;
 
+    /* if detected loss before receiving all acks for jumpstart, restore original CWND */
+    if (cc->ssthresh == UINT32_MAX)
+        quicly_cc_jumpstart_on_first_loss(cc, lost_pn);
+
     ++cc->num_loss_episodes;
-    if (cc->cwnd_exiting_slow_start == 0)
+    if (cc->cwnd_exiting_slow_start == 0) {
         cc->cwnd_exiting_slow_start = cc->cwnd;
+        cc->exit_slow_start_at = now;
+    }
 
     cc->state.cubic.avoidance_start = now;
     cc->state.cubic.w_max = cc->cwnd;
@@ -128,7 +143,7 @@ static void cubic_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     update_cubic_k(cc, max_udp_payload_size);
 
     /* RFC 8312, Section 4.5; Multiplicative Decrease */
-    cc->cwnd *= QUICLY_CUBIC_BETA;
+    cc->cwnd *= cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_CUBIC_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;
@@ -163,6 +178,9 @@ static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
     cc->type = &quicly_cc_type_cubic;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
+    cc->exit_slow_start_at = INT64_MAX;
+
+    quicly_cc_jumpstart_reset(cc);
 }
 
 static int cubic_on_switch(quicly_cc_t *cc)
@@ -188,6 +206,7 @@ static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwn
     cubic_reset(cc, initcwnd);
 }
 
-quicly_cc_type_t quicly_cc_type_cubic = {
-    "cubic", &quicly_cc_cubic_init, cubic_on_acked, cubic_on_lost, cubic_on_persistent_congestion, cubic_on_sent, cubic_on_switch};
+quicly_cc_type_t quicly_cc_type_cubic = {"cubic",         &quicly_cc_cubic_init,          cubic_on_acked,
+                                         cubic_on_lost,   cubic_on_persistent_congestion, cubic_on_sent,
+                                         cubic_on_switch, quicly_cc_jumpstart_enter};
 quicly_init_cc_t quicly_cc_cubic_init = {cubic_init};

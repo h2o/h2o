@@ -29,8 +29,8 @@
 typedef struct st_test_streambuf_t {
     quicly_streambuf_t super;
     struct {
-        int stop_sending;
-        int reset_stream;
+        quicly_error_t stop_sending;
+        quicly_error_t reset_stream;
     } error_received;
     int is_detached;
 } test_streambuf_t;
@@ -52,6 +52,7 @@ void test_ranges(void);
 void test_rate(void);
 void test_frame(void);
 void test_maxsender(void);
+void test_pacer(void);
 void test_sentmap(void);
 void test_loss(void);
 void test_simple(void);
@@ -60,5 +61,6 @@ void test_stream_concurrency(void);
 void test_received_cid(void);
 void test_local_cid(void);
 void test_retire_cid(void);
+void test_jumpstart(void);
 
 #endif

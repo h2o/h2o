@@ -12,6 +12,7 @@ OUTPUT=\
     configure/compress_directives.html \
     configure/http1_directives.html \
     configure/http2_directives.html \
+    configure/http3_directives.html \
     configure/access_log_directives.html \
     configure/errordoc_directives.html \
     configure/expires_directives.html \
@@ -39,6 +40,7 @@ MAN = workdir/configure/quick_start.man \
       workdir/configure/compress_directives.man \
       workdir/configure/http1_directives.man \
       workdir/configure/http2_directives.man \
+      workdir/configure/http3_directives.man \
       workdir/configure/access_log_directives.man \
       workdir/configure/errordoc_directives.man \
       workdir/configure/expires_directives.man \

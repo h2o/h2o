@@ -1,0 +1,23 @@
+GET / HTTP/1.1
+host:host
+
+
+GET /proxy-t
+--MARK--
+est/.we HTTP/1.1
+Host: 127.0.0.1:504t: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿kn2/..oding:gzcp
+
+
+GET /reprStrict-Transport-Securityoxi-t
+--MARK--
+estÿÿÿÿÿÿÿÿÿreproxy-tknown/h2/te/te HTTP/1.1
+Host: 127.0.0.1:504t: c:sch6ccept:ÿÿÿst/.well¿kn2/..oding:gzcp
+
+
+GET /reproxi-t
+--MARK--
+estÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ */*
+
+
+--MARK--

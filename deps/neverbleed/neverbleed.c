@@ -50,6 +50,9 @@
 #include <priv.h>
 #endif
 
+/* to maximize code-reuse between different stacks, we intentionally use API declared by OpenSSL as legacy */
+#define OPENSSL_SUPPRESS_DEPRECATED
+
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
@@ -142,6 +145,28 @@ struct st_neverbleed_thread_data_t {
     pid_t self_pid;
     int fd;
 };
+
+/**
+ * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable
+ */
+#define NEVERBLEED_MULTITHREAD_ONCE(block)                                                                                                \
+    do {                                                                                                                           \
+        static volatile int lock = 0;                                                                                              \
+        int lock_loaded = lock;                                                                                                    \
+        __sync_synchronize();                                                                                                      \
+        if (!lock_loaded) {                                                                                                        \
+            static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;                                                              \
+            pthread_mutex_lock(&mutex);                                                                                            \
+            if (!lock) {                                                                                                           \
+                do {                                                                                                               \
+                    block                                                                                                          \
+                } while (0);                                                                                                       \
+                __sync_synchronize();                                                                                              \
+                lock = 1;                                                                                                          \
+            }                                                                                                                      \
+            pthread_mutex_unlock(&mutex);                                                                                          \
+        }                                                                                                                          \
+    } while (0)
 
 static void warnvf(const char *fmt, va_list args)
 {
@@ -237,7 +262,7 @@ static void iobuf_dispose(neverbleed_iobuf_t *buf)
 
 static void iobuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
 {
-    char *n;
+    size_t start_off, end_off;
 
     if (extra <= buf->buf - buf->end + buf->capacity)
         return;
@@ -246,11 +271,20 @@ static void iobuf_reserve(neverbleed_iobuf_t *buf, size_t extra)
         buf->capacity = 4096;
     while (buf->buf - buf->end + buf->capacity < extra)
         buf->capacity *= 2;
-    if ((n = realloc(buf->buf, buf->capacity)) == NULL)
+
+    if (buf->buf != NULL) {
+        start_off = buf->start - buf->buf;
+        end_off = buf->end - buf->buf;
+    } else {
+        /* C99 forbids us doing `buf->start - buf->buf` when both are NULL (undefined behavior) */
+        start_off = 0;
+        end_off = 0;
+    }
+
+    if ((buf->buf = realloc(buf->buf, buf->capacity)) == NULL)
         dief("realloc failed");
-    buf->start = n + (buf->start - buf->buf);
-    buf->end = n + (buf->end - buf->buf);
-    buf->buf = n;
+    buf->start = buf->buf + start_off;
+    buf->end = buf->buf + end_off;
 }
 
 static void iobuf_push_num(neverbleed_iobuf_t *buf, size_t v)
@@ -505,10 +539,42 @@ void neverbleed_transaction_write(neverbleed_t *nb, neverbleed_iobuf_t *buf)
     iobuf_transaction_write(buf, thdata);
 }
 
+static void do_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    /* when other engines are used, this callback gets called without neverbleed data */
+    if (ptr == NULL)
+        return;
+    struct st_neverbleed_rsa_exdata_t *exdata = ptr;
+    struct st_neverbleed_thread_data_t *thdata = get_thread_data(exdata->nb);
+
+    neverbleed_iobuf_t buf = {NULL};
+    iobuf_push_str(&buf, "del_pkey");
+    iobuf_push_num(&buf, exdata->key_index);
+    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
+    iobuf_transaction_no_response(&buf, thdata);
+
+    free(exdata);
+}
+
+static int get_rsa_exdata_idx(void);
+static void rsa_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    assert(idx == get_rsa_exdata_idx());
+    do_exdata_free_callback(parent, ptr, ad, idx, argl, argp);
+}
+
+static int get_rsa_exdata_idx(void)
+{
+    static volatile int index;
+    NEVERBLEED_MULTITHREAD_ONCE({
+        index = RSA_get_ex_new_index(0, NULL, NULL, NULL, rsa_exdata_free_callback);
+    });
+    return index;
+}
 static void get_privsep_data(const RSA *rsa, struct st_neverbleed_rsa_exdata_t **exdata,
                              struct st_neverbleed_thread_data_t **thdata)
 {
-    *exdata = RSA_get_ex_data(rsa, 0);
+    *exdata = RSA_get_ex_data(rsa, get_rsa_exdata_idx());
     if (*exdata == NULL) {
         errno = 0;
         dief("invalid internal ref");
@@ -570,10 +636,11 @@ struct engine_request {
 #endif
 };
 
-static void free_req(struct engine_request *req)
+static void offload_free_request(struct engine_request *req)
 {
 #ifdef OPENSSL_IS_BORINGSSL
     bssl_qat_async_finish_job(req->async_ctx);
+    RSA_free(req->data.rsa);
 #else
     ASYNC_WAIT_CTX_free(req->async.ctx);
 #endif
@@ -837,7 +904,7 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
     exdata->key_index = key_index;
 
     rsa = RSA_new_method(nb->engine);
-    RSA_set_ex_data(rsa, 0, exdata);
+    RSA_set_ex_data(rsa, get_rsa_exdata_idx(), exdata);
     if (BN_hex2bn(&e, ebuf) == 0) {
         fprintf(stderr, "failed to parse e:%s\n", ebuf);
         abort();
@@ -902,10 +969,26 @@ static int ecdsa_sign_stub(neverbleed_iobuf_t *buf)
     return 0;
 }
 
+static int get_ecdsa_exdata_idx(void);
+static void ecdsa_exdata_free_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    assert(idx == get_ecdsa_exdata_idx());
+    do_exdata_free_callback(parent, ptr, ad, idx, argl, argp);
+}
+
+static int get_ecdsa_exdata_idx(void)
+{
+    static volatile int index;
+    NEVERBLEED_MULTITHREAD_ONCE({
+        index = EC_KEY_get_ex_new_index(0, NULL, NULL, NULL, ecdsa_exdata_free_callback);
+    });
+    return index;
+}
+
 static void ecdsa_get_privsep_data(const EC_KEY *ec_key, struct st_neverbleed_rsa_exdata_t **exdata,
                                    struct st_neverbleed_thread_data_t **thdata)
 {
-    *exdata = EC_KEY_get_ex_data(ec_key, 0);
+    *exdata = EC_KEY_get_ex_data(ec_key, get_ecdsa_exdata_idx());
     if (*exdata == NULL) {
         errno = 0;
         dief("invalid internal ref");
@@ -965,7 +1048,7 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     exdata->key_index = key_index;
 
     ec_key = EC_KEY_new_method(nb->engine);
-    EC_KEY_set_ex_data(ec_key, 0, exdata);
+    EC_KEY_set_ex_data(ec_key, get_ecdsa_exdata_idx(), exdata);
 
     ec_group = EC_GROUP_new_by_curve_name(curve_name);
     if (!ec_group) {
@@ -991,21 +1074,6 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     EC_KEY_free(ec_key);
 
     return pkey;
-}
-
-static void priv_ecdsa_finish(EC_KEY *key)
-{
-    struct st_neverbleed_rsa_exdata_t *exdata;
-    struct st_neverbleed_thread_data_t *thdata;
-
-    ecdsa_get_privsep_data(key, &exdata, &thdata);
-
-    neverbleed_iobuf_t buf = {NULL};
-    iobuf_push_str(&buf, "del_pkey");
-    iobuf_push_num(&buf, exdata->key_index);
-    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
-    iobuf_transaction_no_response(&buf, thdata);
-    free(exdata);
 }
 
 #endif
@@ -1099,7 +1167,7 @@ static void bssl_offload_digestsign(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, con
     register_wait_fd(req);
 }
 
-static void bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *src, size_t len)
+static int bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *src, size_t len)
 {
     struct engine_request *req = bssl_offload_create_request(buf, pkey);
 
@@ -1108,13 +1176,20 @@ static void bssl_offload_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const 
     if (meth == NULL)
         dief("failed to obtain QAT RSA method table\n");
     size_t outlen;
-    if (!meth->decrypt(req->data.rsa, &outlen, req->data.output, len, src, len, RSA_NO_PADDING))
-        dief("RSA decrypt failure\n");
+    if (!meth->decrypt(req->data.rsa, &outlen, req->data.output, sizeof(req->data.output), src, len, RSA_NO_PADDING)) {
+        warnf("RSA decrypt failure\n");
+        goto Exit;
+    }
     if (outlen != 0)
-        dief("RSA decrypt completed synchronously unexppctedly\n");
+        dief("RSA decrypt completed synchronously unexpectedly\n");
 
     buf->processing = 1;
     register_wait_fd(req);
+    return 1;
+
+Exit:
+    offload_free_request(req);
+    return 0;
 }
 
 #endif
@@ -1152,7 +1227,7 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload && EVP_PKEY_id(pkey) == EVP_PKEY_RSA) {
         bssl_offload_digestsign(buf, pkey, md, signdata, signlen, rsa_pss);
-        return 0;
+        goto Exit;
     }
 #endif
 
@@ -1190,6 +1265,7 @@ Respond: /* build response */
     iobuf_push_bytes(buf, digestbuf, digestlen);
     if (mdctx != NULL)
         EVP_MD_CTX_destroy(mdctx);
+Exit:
     if (pkey != NULL)
         EVP_PKEY_free(pkey);
     return 0;
@@ -1274,22 +1350,30 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 
 #if USE_OFFLOAD && defined(OPENSSL_IS_BORINGSSL)
     if (use_offload) {
-        bssl_offload_decrypt(buf, pkey, src, srclen);
-        return 0;
+        if (!bssl_offload_decrypt(buf, pkey, src, srclen))
+            goto Softfail;
+
+        goto Exit;
     }
 #endif
 
     if ((decryptlen = RSA_private_decrypt(srclen, src, decryptbuf, rsa, RSA_NO_PADDING)) == -1) {
         errno = 0;
         warnf("RSA decryption error");
-        decryptlen = 0; /* soft failure */
+        goto Softfail;
     }
 
+Respond:
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, decryptbuf, decryptlen);
+Exit:
     RSA_free(rsa);
     EVP_PKEY_free(pkey);
     return 0;
+
+Softfail:
+    decryptlen = 0;
+    goto Respond;
 }
 
 void neverbleed_start_decrypt(neverbleed_iobuf_t *buf, EVP_PKEY *pkey, const void *input, size_t len)
@@ -1636,23 +1720,6 @@ Redo:
     _exit(0);
 }
 
-static int priv_rsa_finish(RSA *rsa)
-{
-    struct st_neverbleed_rsa_exdata_t *exdata;
-    struct st_neverbleed_thread_data_t *thdata;
-
-    get_privsep_data(rsa, &exdata, &thdata);
-
-    neverbleed_iobuf_t buf = {NULL};
-    iobuf_push_str(&buf, "del_pkey");
-    iobuf_push_num(&buf, exdata->key_index);
-    // "del_pkey" command is fire-and-forget, it cannot fail, so doesn't have a response
-    iobuf_transaction_no_response(&buf, thdata);
-
-    free(exdata);
-    return 1;
-}
-
 static int del_pkey_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
@@ -1697,11 +1764,9 @@ static int offload_resume(struct engine_request *req)
     /* save the result */
     iobuf_dispose(req->buf);
     iobuf_push_bytes(req->buf, req->data.output, outlen);
-    /* cleanup */
-    RSA_free(req->data.rsa);
 
     req->buf->processing = 0;
-    free_req(req);
+    offload_free_request(req);
 
     return 0;
 }
@@ -1737,13 +1802,14 @@ static int offload_start(int (*stub)(neverbleed_iobuf_t *), neverbleed_iobuf_t *
         register_wait_fd(req);
         return 0;
     case ASYNC_FINISH: /* completed synchronously */
+        buf->processing = 0;
         break;
     default:
         dief("ASYNC_start_job errored\n");
         break;
     }
 
-    free_req(req);
+    offload_free_request(req);
 
     return ret;
 }
@@ -1767,7 +1833,7 @@ static int offload_resume(struct engine_request *req)
 
     /* job done */
     req->buf->processing = 0;
-    free_req(req);
+    offload_free_request(req);
 
     return ret;
 }
@@ -2053,7 +2119,7 @@ static RSA_METHOD static_rsa_method = {
     NULL,                 /* rsa_mod_exp */
     NULL,                 /* bn_mod_exp */
     NULL,                 /* init */
-    priv_rsa_finish,      /* finish */
+    NULL,                 /* finish */
     RSA_FLAG_SIGN_VER,    /* flags */
     NULL,                 /* app data */
     sign_proxy,           /* rsa_sign */
@@ -2149,7 +2215,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         RSA_meth_set_priv_enc(rsa_method, priv_enc_proxy);
         RSA_meth_set_priv_dec(rsa_method, priv_dec_proxy);
         RSA_meth_set_sign(rsa_method, sign_proxy);
-        RSA_meth_set_finish(rsa_method, priv_rsa_finish);
 #else
         rsa_default_method = RSA_PKCS1_SSLeay();
         rsa_method = &static_rsa_method;
@@ -2166,7 +2231,6 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 
         /* it seems sign_sig and sign_setup is not used in TLS ECDSA. */
         EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
-        EC_KEY_METHOD_set_init(ecdsa_method, NULL, priv_ecdsa_finish, NULL, NULL, NULL, NULL);
 #endif
 
         if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||

@@ -3,6 +3,8 @@
 <div id="<?= $args->{name} ?>" class="directive-head">
 ? if ($args->{since}) {
 <div class="directive-since">since v<?= $args->{since} ?></div>
+? } elsif ($args->{experimental}) {
+<div class="directive-since">experimental</div>
 ? }
 <h3><a href="<?= $ctx->{filename} ?>#<?= $args->{name} ?>"><code>"<?= $args->{name} ?>"</code></a></h3>
 </div>
@@ -17,7 +19,7 @@
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd><?= join(", ", @{$args->{levels}}) ?></dd>
-? if ($args->{default}) {
+? if (defined $args->{default}) {
 <dt>Default:</dt>
 <dd><code><pre><?= $args->{default} ?></pre></code>
 ? }

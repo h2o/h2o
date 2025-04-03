@@ -4,13 +4,13 @@ use strict;
 use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
+use IO::Select;
 use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
-use Scope::Guard qw(scope_guard);
 use Test::More;
-use Time::HiRes qw(sleep);
+use Time::HiRes qw(sleep time);
 
 sub complex ($$;$) {
     my $s = shift;
@@ -27,7 +27,12 @@ sub complex ($$;$) {
 
 $ENV{BINARY_DIR} ||= ".";
 my $cli = "$ENV{BINARY_DIR}/cli";
+my $udpfw = "$ENV{BINARY_DIR}/udpfw";
 my $port = empty_port({
+    host  => "127.0.0.1",
+    proto => "udp",
+});
+my $udpfw_port = empty_port({
     host  => "127.0.0.1",
     proto => "udp",
 });
@@ -347,6 +352,182 @@ subtest "raw-certificates-ec" => sub {
     is $resp, "hello world\n";
 };
 
+subtest "path-migration" => sub {
+    my $doit = sub {
+        my @client_opts = @_;
+        my $server_guard = spawn_server("-e", "$tempdir/events");
+        my $udpfw_guard = undef;
+        my $respawn_udpfw = sub {
+            $udpfw_guard = undef; # terminate existing process
+            $udpfw_guard = spawn_process(
+                ["sh", "-c", "exec $udpfw -b 100 -i 1 -p 0 -B 100 -I 1 -P 10000 -l $udpfw_port 127.0.0.1 $port > /dev/null 2>&1"],
+                $udpfw_port,
+            );
+        };
+        $respawn_udpfw->();
+        # spawn client that sends one request every second, recording events to file
+        my $pid = fork;
+        die "fork failed:$!"
+            unless defined $pid;
+        if ($pid == 0) {
+            exec $cli, @client_opts, qw(-O -i 1000 -p /10000 127.0.0.1), $udpfw_port;
+            die "exec $cli failed:$!";
+        }
+        # send two USR1 signals, each of them causing path migration between requests
+        sleep .5;
+        $respawn_udpfw->();
+        sleep 2;
+        $respawn_udpfw->();
+        sleep 2;
+        # kill the peers
+        kill 'TERM', $pid;
+        while (waitpid($pid, 0) != $pid) {}
+        sleep 0.5; # wait for server-side to close and emit stats
+        my $server_output = $server_guard->finalize;
+        # read the log
+        my $log = slurp_file("$tempdir/events");
+        # check that the path has migrated twice
+        like $log, qr{"type":"promote_path".*\n.*"type":"promote_path"}s;
+        subtest "CID seq 1 is used for 1st path probe" => sub {
+            plan skip_all => "zero-length CID"
+                unless @client_opts;
+            complex $log, sub {
+                /"type":"new_connection_id_receive",[^\n]*"sequence":1,[^\n]*"cid":"(.*?)"/s;
+                my $cid1 = $1;
+                /"type":"packet_prepare",[^\n]*"dcid":"([^\"]*)"[^\n]*\n[^\n]*"type":"path_challenge_send",/s;
+                my $cid_probe = $1;
+                $cid1 eq $cid_probe;
+            };
+        };
+        # check that packets are lost (or deemed lost), but that CC is in slow start
+        complex $server_output, sub {
+            /packets-lost:\s*(\d+).*num-loss-episodes:\s*(\d+)/ and $1 >= 2 and $2 == 0;
+        }, "packets-lost-but-cc-in-slow-start";
+
+    };
+    subtest "without-cid" => sub {
+        $doit->();
+    };
+    subtest "with-cid" => sub {
+        $doit->(qw(-B 01234567));
+    };
+};
+
+subtest "slow-start" => sub {
+    # spawn udpfw that applies 100ms RTT but otherwise nothing
+    my $udpfw_guard = spawn_process(
+        ["sh", "-c", "exec $udpfw -b 100 -i 1 -p 0 -B 100 -I 1 -P 100000 -l $udpfw_port 127.0.0.1 $port > /dev/null 2>&1"],
+        $udpfw_port,
+    );
+
+    # read first $size bytes from client $cli (which would be the payload received) and check RT
+    my $doit = sub {
+        my ($size, $rt_min, $rt_max, @cli_args) = @_;
+        subtest "${size}B" => sub {
+            my $start_at = time;
+            open my $fh, "-|", "$cli -p /$size @{[ join ' ', @cli_args ]} 127.0.0.1 $udpfw_port 2>&1"
+                or die "failed to launch $cli:$!";
+            for (my $total_read = 0; $total_read < $size;) {
+                IO::Select->new($fh)->can_read(); # block until the command writes something
+                my $nread = sysread $fh, my $buf, 65536;
+                die "failed to read from pipe, got $nread:$!"
+                    unless $nread > 0;
+                $total_read += $nread;
+            }
+            my $elapsed = time - $start_at;
+            diag $elapsed;
+            cmp_ok $rt_min * 0.1, '<=', $elapsed, "RT >= $rt_min";
+            cmp_ok $rt_max * 0.1, '>=', $elapsed, "RT <= $rt_max";
+        };
+    };
+
+    my $each_cc = sub {
+        my $cb = shift;
+        for my $cc (qw(reno pico cubic)) {
+            subtest $cc => sub {
+                $cb->($cc);
+            };
+        }
+    };
+
+    subtest "no-pacing" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            subtest "respect-app-limited" => sub {
+                plan skip_all => "Cubic TODO respect app-limited"
+                    if $cc eq "cubic";
+                my $guard = spawn_server("-C", "$cc:10");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([14000, 2, 2.5], [45000, 3, 3.5], [72000, 4, 4.5]);
+            };
+            subtest "disregard-app-limited" => sub {
+                my $guard = spawn_server("-C", "$cc:10", "--disregard-app-limited");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([16000, 2, 2.5], [48000, 3, 3.5], [72000, 4, 4.5]);
+            };
+        });
+    };
+
+    subtest "pacing" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            subtest "respect-app-limited" => sub {
+                plan skip_all => "Cubic TODO respect app-limited"
+                    if $cc eq "cubic";
+                my $guard = spawn_server("-C", "$cc:20:p");
+                # check head of 1st and 3rd batch, tail of 1st and 2nd
+                $doit->(@$_)
+                    for ([1000, 2, 2.3], [28000, 2.3, 3], [85000, 3.3, 4], [89000, 4, 4.5]);
+            };
+            subtest "disregard-app-limited" => sub {
+                my $guard = spawn_server("-C", "$cc:20:p", "--disregard-app-limited");
+                # tail of 1st, 2nd, and 3rd batch fits into each round trip
+                $doit->(@$_)
+                    for ([1000, 2, 2.3], [30000, 2.3, 3], [87000, 3.3, 4], [96000, 4, 4.5]);
+            };
+        });
+    };
+
+    subtest "jumpstart" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            plan skip_all => "Cubic TODO respect app-limited (mandatory for jumpstart)"
+                if $cc eq "cubic";
+            my $guard = spawn_server("-C", "$cc:20:p", "--jumpstart-default", "80");
+            $doit->(@$_)
+                for ([1450 * 45, 2.45, 2.8], [1450 * 90, 3.0, 3.3]);
+        });
+    };
+
+    subtest "jumpstart-resume" => sub {
+        $each_cc->(sub {
+            my $cc = shift;
+            plan skip_all => "Cubic TODO respect app-limited (mandatory for jumpstart)"
+                if $cc eq "cubic";
+            unlink "$tempdir/session";
+            my $guard = spawn_server("-C", "$cc:10:p", "--jumpstart-max", "80");
+            # test RT without jumpstart
+            $doit->(100000, 4, 5);
+            # train
+            my $pid = fork;
+            die "fork failed:$!"
+                unless defined $pid;
+            if ($pid == 0) {
+                open STDOUT, ">", "/dev/null"
+                    or die "failed to redirect STDOUT to /dev/null:$!";
+                exec $cli, qw(-p /1000000 -i 5000 -s), "$tempdir/session", "127.0.0.1", $udpfw_port;
+                die "failed to exec $cli:$!";
+            }
+            sleep 2; # wait until the connection becomes idle, at which point the token will be sent
+            kill 'KILL', $pid;
+            while (waitpid($pid, 0) != $pid) {}
+            # test RT using the obtained session information
+            $doit->(100000, 2, 2.999, "-s", "$tempdir/session");
+        });
+    };
+};
 
 done_testing;
 
@@ -357,23 +538,74 @@ sub spawn_server {
     } else {
         @cmd = ($cli, "-k", "t/assets/server.key", "-c", "t/assets/server.crt", @_, "127.0.0.1", $port);
     }
-    my $pid = fork;
-    die "fork failed:$!"
-        unless defined $pid;
-    if ($pid == 0) {
-        exec @cmd;
-        die "failed to exec $cmd[0]:$?";
-    }
-    while (`netstat -na` !~ /^udp.*\s127\.0\.0\.1[\.:]$port\s/m) {
-        if (waitpid($pid, WNOHANG) == $pid) {
-            die "failed to launch server";
+    spawn_process(\@cmd, $port);
+}
+
+package SpawnedProcess {
+    use POSIX ":sys_wait_h";
+
+    sub new {
+        my ($klass, $cmd, $listen_port) = @_;
+
+        my $self = bless {
+            logfh => scalar File::Temp::tempfile(),
+            pid   => fork(),
+        }, $klass;
+
+        die "fork failed:$!"
+        unless defined $self->{pid};
+        if ($self->{pid} == 0) {
+            close STDOUT;
+            open STDOUT, ">&", $self->{logfh}
+                or die "failed to dup(2) log file to STDOUT:$!";
+            open STDERR, ">&", $self->{logfh}
+                or die "failed to dup(2) log file to STDERR:$!";
+            exec @$cmd;
+            die "failed to exec @{[$cmd->[0]]}:$?";
         }
-        sleep 0.1;
+        for (1..10) {
+            if (`netstat -na` =~ /^udp.*\s(127\.0\.0\.1|0\.0\.0\.0|\*)[\.:]$listen_port\s/m) {
+                last;
+            }
+            if (waitpid($self->{pid}, WNOHANG) == $self->{pid}) {
+                die "failed to launch @{[$cmd->[0]]}:$?";
+            }
+            sleep 0.1;
+        }
+
+        $self;
     }
-    return scope_guard(sub {
-        kill 9, $pid;
-        while (waitpid($pid, 0) != $pid) {}
-    });
+
+    sub DESTROY {
+        goto \&finalize;
+    }
+
+    sub finalize {
+        my $self = shift;
+
+        return unless $self->{pid};
+
+        # kill the process
+        kill 9, $self->{pid};
+        while (waitpid($self->{pid}, 0) != $self->{pid}) {}
+        undef $self->{pid};
+
+        # fetch and close the log file
+        seek $self->{logfh}, 0, 0;
+        my $log = do {
+            local $/;
+            readline $self->{logfh};
+        };
+        close $self->{logfh};
+
+        print STDERR $log;
+
+        return $log;
+    }
+}
+
+sub spawn_process {
+    SpawnedProcess->new(@_);
 }
 
 sub slurp_file {

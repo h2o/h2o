@@ -30,6 +30,8 @@
 #define DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT 3
 #define DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER 400
 #define DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS 1000
+#define DEFAULT_MAX_PROBE_PACKETS 5
+#define DEFAULT_MAX_PATH_VALIDATION_FAILURES 100
 
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
@@ -49,7 +51,14 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               0, /* ack_frequency */
                                               DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                               DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+                                              DEFAULT_MAX_PROBE_PACKETS,
+                                              DEFAULT_MAX_PATH_VALIDATION_FAILURES,
+                                              0, /* default_jumpstart_cwnd_bytes */
+                                              0, /* max_jumpstart_cwnd_bytes */
                                               0, /* enlarge_client_hello */
+                                              1, /* enable_ecn */
+                                              0, /* use_pacing */
+                                              1, /* cc_recognize_app_limited */
                                               NULL,
                                               NULL, /* on_stream_open */
                                               &quicly_default_stream_scheduler,
@@ -79,7 +88,14 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     0, /* ack_frequency */
                                                     DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
                                                     DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+                                                    DEFAULT_MAX_PROBE_PACKETS,
+                                                    DEFAULT_MAX_PATH_VALIDATION_FAILURES,
+                                                    0, /* default_jumpstart_cwnd_bytes */
+                                                    0, /* max_jumpstart_cwnd_bytes */
                                                     0, /* enlarge_client_hello */
+                                                    1, /* enable_ecn */
+                                                    0, /* use_pacing */
+                                                    1, /* cc_recognize_app_limited */
                                                     NULL,
                                                     NULL, /* on_stream_open */
                                                     &quicly_default_stream_scheduler,
@@ -293,10 +309,12 @@ static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicl
 /**
  * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
  */
-static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, quicly_send_context_t *s)
+static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
+                                                       quicly_send_context_t *s)
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
-    int conn_is_blocked = quicly_is_blocked(conn), ret = 0;
+    int conn_is_blocked = quicly_is_blocked(conn);
+    quicly_error_t ret = 0;
 
     if (!conn_is_blocked)
         quicly_linklist_insert_list(&sched->active, &sched->blocked);
@@ -333,7 +351,7 @@ static int default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, qui
 /**
  * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
  */
-static int default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
+static void default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)stream->conn)->_default_scheduler;
 
@@ -345,8 +363,6 @@ static int default_stream_scheduler_update_state(quicly_stream_scheduler_t *self
         if (quicly_linklist_is_linked(&stream->_send_aux.pending_link.default_scheduler))
             quicly_linklist_unlink(&stream->_send_aux.pending_link.default_scheduler);
     }
-
-    return 0;
 }
 
 quicly_stream_scheduler_t quicly_default_stream_scheduler = {default_stream_scheduler_can_send, default_stream_scheduler_do_send,

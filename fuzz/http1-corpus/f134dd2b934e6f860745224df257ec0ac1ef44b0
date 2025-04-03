@@ -1,0 +1,10 @@
+GET / HTTP/1.1
+host:h­st.examplÿÿapplica*/*
+accept-encoding:gmplÿÿÿDEV
+Accept: */*
+accept-encoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+
+
+--MARK--

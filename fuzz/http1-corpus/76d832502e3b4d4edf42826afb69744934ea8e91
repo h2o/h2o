@@ -1,0 +1,46 @@
+POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*/
+Connectiction: Upgraœ›ept: */*
+Connectiction: Upgrade, HTT
+--MARK--
+P3-Settings
+Upsgrade: h2c
+HTTP2-Settings: AAMAAABk
+Content-Length: 5
+Contelt-Type: application/x-www-form-urlencmded
+
+
+--POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*
+Connecttion: Upgrade, HTT
+--MARK--
+P2-Settings
+Upsgrade: h2c
+HTTP2-Settings: AAMAAABkAAQAAP__
+Content-Length: 5
+Contelt-Type: appST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›epte: application/x-www-for--urlencmded
+
+
+--POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ep4: */*
+Connecttion: Upgrade, HTT
+--MARK--
+P2-Settings
+Upsgrade: h2c
+HTTP2-Settings: AAMAAABkAAQAAP__
+Content-Length: 5
+Contelt-Type: application/x-www-form-urlencoded
+
+
+--POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*video/-POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ep4: */*
+Connecttion: Upgrade, HTT
+--MARK--
+P2-Settingsgrade, HTTPexamplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-encoding:gzip
+
+
+GE

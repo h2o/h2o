@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -77,5 +77,8 @@ EOR
 
 test(0);
 test(1);
-done_testing();
 
+undef $upstream;
+undef $server;
+
+done_testing();

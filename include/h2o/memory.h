@@ -37,7 +37,7 @@
 extern "C" {
 #endif
 
-#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p)-offsetof(s, m)))
+#define H2O_STRUCT_FROM_MEMBER(s, m, p) ((s *)((char *)(p) - offsetof(s, m)))
 #define H2O_ALIGNOF(type) (__alignof__(type))
 
 #if __GNUC__ >= 3
@@ -54,11 +54,11 @@ extern "C" {
 #define H2O_GNUC_VERSION 0
 #endif
 
-#if __STDC_VERSION__ >= 201112L
-#define H2O_NORETURN _Noreturn
-#elif defined(__clang__) || defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500
 // noreturn was not defined before gcc 2.5
+#if defined(__clang__) || (defined(__GNUC__) && H2O_GNUC_VERSION >= 0x20500)
 #define H2O_NORETURN __attribute__((noreturn))
+#elif __STDC_VERSION__ >= 201112L
+#define H2O_NORETURN _Noreturn
 #else
 #define H2O_NORETURN
 #endif
@@ -182,9 +182,9 @@ typedef struct st_h2o_doublebuffer_t {
 extern void *(*volatile h2o_mem__set_secure)(void *, int, size_t);
 
 /**
- * prints an error message and aborts
+ * prints an error message and aborts. h2o_fatal can be modified by setting the function pointer it expands to, which is h2o__fatal.
  */
-H2O_NORETURN void h2o__fatal(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
+extern H2O_NORETURN void (*h2o__fatal)(const char *file, int line, const char *msg, ...) __attribute__((format(printf, 3, 4)));
 #ifndef h2o_fatal
 #define h2o_fatal(...) h2o__fatal(__FILE__, __LINE__, __VA_ARGS__)
 #endif

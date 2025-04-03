@@ -255,8 +255,9 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
 
 #define DEFINE_CMD(name, cb)                                                                                                       \
     h2o_configurator_define_command(&c->super, name,                                                                               \
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR |                       \
-                                        H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,              \
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |       \
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE |              \
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,                                                      \
                                     cb)
     DEFINE_CMD(add_directive, on_config_header_add);
     DEFINE_CMD(append_directive, on_config_header_append);

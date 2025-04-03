@@ -129,8 +129,11 @@ static int dh_encap(ptls_hpke_kem_t *kem, void *secret, ptls_iovec_t *pk_s, ptls
 
     *pk_s = ptls_iovec_init(NULL, 0);
 
-    if ((ret = kem->keyex->exchange(kem->keyex, pk_s, &dh, pk_r)) != 0)
+    if ((ret = kem->keyex->exchange(kem->keyex, pk_s, &dh, pk_r)) != 0) {
+        assert(pk_s->base == NULL);
+        assert(dh.base == NULL);
         goto Exit;
+    }
 
     if ((ret = dh_derive(kem, secret, *pk_s, pk_r, dh)) != 0)
         goto Exit;
@@ -152,8 +155,10 @@ static int dh_decap(ptls_hpke_kem_t *kem, void *secret, ptls_key_exchange_contex
     ptls_iovec_t dh = {NULL};
     int ret;
 
-    if ((ret = keyex->on_exchange(&keyex, 0, &dh, pk_s)) != 0)
+    if ((ret = keyex->on_exchange(&keyex, 0, &dh, pk_s)) != 0) {
+        assert(dh.base == NULL);
         goto Exit;
+    }
 
     if ((ret = dh_derive(kem, secret, pk_s, pk_r, dh)) != 0)
         goto Exit;

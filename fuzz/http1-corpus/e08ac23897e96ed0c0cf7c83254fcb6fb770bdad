@@ -1,0 +1,10 @@
+GET /reproxy-test HTTP/1.1
+host: 127.0.0.1:51458
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: EAMAAABk____________________________________________ept: */*
+user-agent: nghttp2nec16.1
+
+
+--MARK--
+PRIapplication/v

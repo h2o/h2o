@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
@@ -110,13 +110,12 @@ EOT
     $doit->("ascii");
 };
 
-done_testing;
-
 my $server;
 
 sub spawn_with {
     my ($opts, $cb) = @_;
-    $server = spawn_h2o(<< "EOT");
+    # FIXME server stalls if H3 is enabled and ticket encryption key cannot be read from file?
+    $server = spawn_h2o({conf => << "EOT", disable_quic => 1});
 ssl-session-resumption:
 $opts
 hosts:
@@ -135,3 +134,7 @@ sub test {
         or die "failed to parse the output of s_client:{{{$lines}}}";
     $1;
 }
+
+undef $server;
+
+done_testing;

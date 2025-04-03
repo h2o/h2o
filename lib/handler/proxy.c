@@ -52,6 +52,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     overrides->client_ctx = handler_ctx->client_ctx;
     overrides->headers_cmds = self->config.headers_cmds;
     overrides->proxy_preserve_host = self->config.preserve_host;
+    overrides->proxy_expect_mode = self->config.expect_mode;
     overrides->forward_close_connection = self->config.forward_close_connection;
 
     /* request reprocess (note: path may become an empty string, to which one of the target URL within the socketpool will be
@@ -62,22 +63,29 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_gso)
+static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso)
 {
 #if H2O_USE_LIBUV
-    fprintf(stderr, "no HTTP/3 support for libuv\n");
-    abort();
+    h2o_fatal("no HTTP/3 support for libuv");
 #else
 
     h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
 
-    /* tls (FIXME provide knobs to configure, incl. certificate validation) */
+    /* tls (TODO inherit session cache setting of ssl_ctx) */
     h3ctx->tls = (ptls_context_t){
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
         .key_exchanges = ptls_openssl_key_exchanges,
         .cipher_suites = ptls_openssl_cipher_suites,
     };
+    h3ctx->verify_cert = (ptls_openssl_verify_certificate_t){};
+    if ((SSL_CTX_get_verify_mode(ssl_ctx) & SSL_VERIFY_PEER) != 0) {
+        X509_STORE *store;
+        if ((store = SSL_CTX_get_cert_store(ssl_ctx)) == NULL)
+            h2o_fatal("failed to obtain the store to be used for server certificate verification");
+        ptls_openssl_init_verify_certificate(&h3ctx->verify_cert, store);
+        h3ctx->tls.verify_certificate = &h3ctx->verify_cert.super;
+    }
     quicly_amend_ptls_context(&h3ctx->tls);
 
     /* quic */
@@ -91,19 +99,23 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, int use_g
     ptls_clear_memory(cid_key, sizeof(cid_key));
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
 
-    /* http3 */
+    /* http3 client-specific fields */
+    h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
+                                                                                           directions */
+
+    /* h2o server http3 integration */
     int sockfd;
     if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
-        perror("failed to open UDP socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to open UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     struct sockaddr_in sin = {};
     if (bind(sockfd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
-        perror("failed to bind default address to UDP socket");
-        abort();
+        char buf[256];
+        h2o_fatal("failed to bind default address to UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
     h2o_socket_t *sock = h2o_evloop_socket_create(ctx->loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, NULL,
+    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, &ctx->http3.next_cid, NULL,
                                   h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */
@@ -116,6 +128,8 @@ static void destroy_http3_context(h2o_http3client_ctx_t *h3ctx)
 {
     h2o_quic_dispose_context(&h3ctx->h3);
     quicly_free_default_cid_encryptor(h3ctx->quic.cid_encryptor);
+    if (h3ctx->verify_cert.super.cb != NULL)
+        ptls_openssl_dispose_verify_certificate(&h3ctx->verify_cert);
     free(h3ctx);
 }
 
@@ -158,7 +172,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
                 .latency_optimization = ctx->globalconf->http2.latency_optimization, /* TODO provide config knob, or disable? */
                 .max_concurrent_streams = self->config.http2.max_concurrent_streams,
             },
-        .http3 = self->config.protocol_ratio.http3 != 0 ? create_http3_context(ctx, ctx->globalconf->http3.use_gso) : NULL,
+        .http3 = self->config.protocol_ratio.http3 != 0
+                     ? create_http3_context(ctx, self->sockpool->_ssl_ctx, ctx->globalconf->http3.use_gso)
+                     : NULL,
     };
 
     handler_ctx->client_ctx = client_ctx;
@@ -197,6 +213,7 @@ void h2o_proxy_register_reverse_proxy(h2o_pathconf_t *pathconf, h2o_proxy_config
     self->super.dispose = on_handler_dispose;
     self->super.on_req = on_req;
     self->super.supports_request_streaming = 1;
+    self->super.handles_expect = config->expect_mode == H2O_PROXY_EXPECT_FORWARD;
     self->config = *config;
     self->sockpool = sockpool;
 }

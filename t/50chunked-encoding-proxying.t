@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 use Time::HiRes qw(usleep);
@@ -78,4 +78,6 @@ for my $w (1 .. 5) {
 doit("5\r\nHello\r\n5\r\nThere\r\n", "HelloThere", 14);
 
 $socket->close();
+undef $server;
+
 done_testing();

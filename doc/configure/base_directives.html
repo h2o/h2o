@@ -14,7 +14,7 @@
 
 <link rel="stylesheet" href="assets/style.css" type="text/css" />
 
-<title>Base Directives - Configure - H2O - the optimized HTTP/2 server</title>
+<title>Base Directives - Configure - H2O - the optimized HTTP server</title>
 </head>
 <body>
 <div id="body">
@@ -23,7 +23,7 @@
 <h1>
 <a href="index.html">H2O</a>
 </h1>
-<p class="description">the optimized HTTP/1.x, HTTP/2 server</p>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
 
 <!-- oktavia -->
 <form id="searchform">
@@ -73,11 +73,17 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#listen">
 <code>listen</code>
 </a></li>
+<li><a href="configure/base_directives.html#capabilities">
+<code>capabilities</code>
+</a></li>
 <li><a href="configure/base_directives.html#error-log">
 <code>error-log</code>
 </a></li>
 <li><a href="configure/base_directives.html#error-log.emit-request-errors">
 <code>error-log.emit-request-errors</code>
+</a></li>
+<li><a href="configure/base_directives.html#h2olog">
+<code>h2olog</code>
 </a></li>
 <li><a href="configure/base_directives.html#handshake-timeout">
 <code>handshake-timeout</code>
@@ -88,8 +94,17 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#max-connections">
 <code>max-connections</code>
 </a></li>
+<li><a href="configure/base_directives.html#max-quic-connections">
+<code>max-quic-connections</code>
+</a></li>
 <li><a href="configure/base_directives.html#max-delegations">
 <code>max-delegations</code>
+</a></li>
+<li><a href="configure/base_directives.html#max-reprocesses">
+<code>max-reprocesses</code>
+</a></li>
+<li><a href="configure/base_directives.html#neverbleed-offload">
+<code>neverbleed-offload</code>
 </a></li>
 <li><a href="configure/base_directives.html#num-name-resolution-threads">
 <code>num-name-resolution-threads</code>
@@ -99,6 +114,9 @@ This document describes the configuration directives common to all the protocols
 </a></li>
 <li><a href="configure/base_directives.html#num-threads">
 <code>num-threads</code>
+</a></li>
+<li><a href="configure/base_directives.html#num-quic-threads">
+<code>num-quic-threads</code>
 </a></li>
 <li><a href="configure/base_directives.html#pid-file">
 <code>pid-file</code>
@@ -121,8 +139,23 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#send-informational">
 <code>send-informational</code>
 </a></li>
+<li><a href="configure/base_directives.html#soft-connection-limit">
+<code>soft-connection-limit</code>
+</a></li>
+<li><a href="configure/base_directives.html#soft-connection-limit.min-age">
+<code>soft-connection-limit.min-age</code>
+</a></li>
+<li><a href="configure/base_directives.html#ssl-offload">
+<code>ssl-offload</code>
+</a></li>
 <li><a href="configure/base_directives.html#ssl-session-resumption">
 <code>ssl-session-resumption</code>
+</a></li>
+<li><a href="configure/base_directives.html#strict-match">
+<code>strict-match</code>
+</a></li>
+<li><a href="configure/base_directives.html#tcp-reuseport">
+<code>tcp-reuseport</code>
 </a></li>
 <li><a href="configure/base_directives.html#temp-buffer-path">
 <code>temp-buffer-path</code>
@@ -168,9 +201,19 @@ Otherwise, the entry will match the requests targetting the specified port.
 Since version 1.7, a wildcard character <code>*</code> can be used as the first component of the hostname.
 If used, they are matched using the rule defined in <a href="https://tools.ietf.org/html/rfc2818#section-3.1" target="_blank">RFC 2818 Section 3.1</a>.
 For example, <code>*.example.com</code> will match HTTP requests for both <code>foo.example.com</code> and <code>bar.example.com</code>.
-Note that an exact match is preferred over host definitions using wildcard characters.
 </p>
 
+<p>
+For each HTTP request to be processed, the matching host entry is determined by the steps below:
+<ol>
+<li>Among the host elements that do not use wildcards, find the first element that matches the host and port being specified by the URI.</li>
+<li>If none is found in the previous step, find a matching element among the entries that use wildcards.</li>
+<li>If none is found in the previous steps, use the first host element without a <a href="configure/base_directives.html#strict-match"><code>strict-match</code></a> flag.
+</ol>
+</p>
+<p>
+When the hostname of the HTTP request is unknown (i.e., processing an HTTP/1.0 request without a host header field), only the last step is being used.
+</p>
 
 <div class="example">
 <div class="caption">Example. A host redirecting all HTTP requests to HTTPS</div>
@@ -258,7 +301,7 @@ Specifies the port at which the server should listen to.
 
 </p>
 <p>
-In addition to specifying the port number, it is also possible to designate the bind address or the SSL configuration.
+In addition to specifying the port number, it is also possible to designate the bind address or the SSL and HTTP/3 (QUIC) configuration.
 </p>
 <div class="example">
 <div class="caption">Example. Various ways of using the Listen Directive</div>
@@ -287,6 +330,9 @@ listen:
 </code></pre>
 </div>
 
+<p>
+To configure HTTP/3 (QUIC), see <a href="configure/http3_directives.html">HTTP/3</a>.
+</p>
 <h4 id="listen-configuration-levels">Configuration Levels</h4>
 <p>
 The directive can be used either at global-level or at host-level.
@@ -374,6 +420,8 @@ synonym of <code>maximum-version</code>.
 </dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
+<dt id="cipher-suite-tls1.3">cipher-suite-tls1.3:</dt>
+<dd>list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the <a href="https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4" target=_blank>IANA TLS Cipher Suite Registry</a>; e.g., <code>TLS_AES_128_GCM_SHA256</code>, <code>TLS_CHACHA20_POLY1305_SHA256</code>.
 <dt id="cipher-preferences">cipher-preference:</dt>
 <dd>
 side of the list that should be used for selecting the cipher-suite; should be either of: <code>client</code>, <code>server</code>.
@@ -385,6 +433,8 @@ path of a PEM file containing the Diffie-Hellman parameters to be used.
 Use of the file is recommended for servers using Diffie-Hellman key agreement.
 (optional)
 </dd>
+<dt id="key-exchange-tls1.3">key-exchange-tls1.3:</dt>
+<dd>list of TLS 1.3 key exchange algorithms to use; the list must be a YAML sequence of algorithms. <code>x25519</code> and <code>secp256r1</code> are supported and enabled by default. In addition, <code>secp384r1</code>, <code>secp521r1</code>, and <code>x25519mlkem768</code> might be available if they are supported by libcrypto.</dd>
 <dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
 interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
@@ -394,6 +444,11 @@ Default is <code>14400</code> (4 hours).
 <dd>
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
+</dd>
+<dt id="max-tickets">max-tickets:</dt>
+<dd>
+maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
+Default is 4.
 </dd>
 <dt id="ech">ech:</dt>
 <dd>
@@ -434,11 +489,29 @@ The <code>ech</code> attribute must be set only in the first <code>ssl</code> at
 </dd>
 <dt id="neverbleed">neverbleed:</dt>
 <dd>
-unless set to <code>OFF</code>, H2O isolates RSA private key operations to an isolated process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+unless set to <code>OFF</code>, H2O isolates SSL private key operations to a different process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
 Default is <code>ON</code>.
 </dl>
 <p>
 <a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
+</p>
+<h4 id="listen-cc">The CC Attribute</h4>
+<p>
+The <code>CC</code> attribute specifies the congestion controller to be used for incoming HTTP connections.
+</p>
+<p>
+For TCP connections, the congestion controller is set using the <code>TCP_CONGESTION</code> socket option on platforms that have support for that socket option.
+To find out the default and the list of supported congestion controllers, please refer to <code>man 7 tcp</code>.
+If the platform does not have support for that socket option, the attribute has no effect.
+</p>
+<p>
+For QUIC connections, the congestion controller is one of <code>Reno</code>, <code>Cubic</code>, <code>Pico</code>.
+The default is <code>Reno</code>.
+</p>
+<h4 id="listen-initcwnd">The Initcwnd Attribute</h4>
+<p>
+The <code>initcwnd</code> attribute specifies the initial congestion window of each incoming HTTP connection in the unit of packets.
+At the moment, this option only applies to QUIC. It has no effect for TCP connections.
 </p>
 <h4 id="listen-proxy-protocol">The Proxy-Protocol Attribute</h4>
 <p>
@@ -452,6 +525,14 @@ If the first octets do not accord with the specification, it is considered as th
 <p>
 Default is <code>OFF</code>.
 </p>
+<h4 id="listen-sndbuf">The Sndbuf and Rcvbuf Attributes</h4>
+<p>
+The <code>sndbuf</code> and <code>rcvbuf</code> attributes specify the send and receive buffer size for each TCP or UNIX socket used for accepting incoming HTTP connections.
+If set, the values of these attributes are applied to the sockets using <code>SO_SNDBUF</code> and <code>SO_RCVBUF</code> socket options.
+</p>
+<p>
+These attributes have no effect for QUIC connections.
+</p>
 <h4 id="listen-unix-socket">Listening to a Unix Socket</h4>
 <p>
 If the <code>type</code> attribute is set to <code>unix</code>, then the <code>port</code> attribute is assumed to specify the path of the unix socket to which the standalone server should bound.
@@ -462,6 +543,11 @@ Also following attributes are recognized.
 <dd>
 username of the owner of the socket file.
 If omitted, the socket file will be owned by the launching user.
+</dd>
+<dt>group</dt>
+<dd>
+name of the group of the socket file.
+If omitted, group ID associated to the socket file will be the group ID of the owner.
 </dd>
 <dt>permission</dt>
 <dd>
@@ -480,15 +566,32 @@ If omitted, the permission of the socket file will reflect the umask of the call
 </code></pre>
 </div>
 
-<h4 id="listen-quic">Listening to HTTP/3 (QUIC)</h4>
-<p>
-If the <code>type</code> attribute is set to <code>quic</code>, the <code>port</code> attribute is assumed to specify the UDP port number to which the standalone server should bound and accept HTTP/3 connections.
-This is an experimental feature introduced in v2.3.0-beta3.
-</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global, host</dd>
+</dl>
+
+<div id="capabilities" class="directive-head">
+<h3><a href="configure/base_directives.html#capabilities"><code>"capabilities"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Set capabilities to be added to the process before dropping root privileges.
+</p>
+
+<p>
+This directive can be used only on Linux.
+The argument is a YAML sequence of capabilites, where each capability is a name that is accepted by <code>cap_from_name</code>.
+See <code>man 7 capabilities</code> for details.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
 </dl>
 
 <div id="error-log" class="directive-head">
@@ -554,6 +657,40 @@ By setting the value to <code>OFF</code> and by using the <code>%{error}x</code>
 </dd>
 </dl>
 
+<div id="h2olog" class="directive-head">
+<h3><a href="configure/base_directives.html#h2olog"><code>"h2olog"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Under the path <code>/.well-known/h2olog</code> for the current host, registers a h2olog handler that emits the internals of traffic that the h2o process is handling.
+</p>
+
+<p>
+The <code>h2olog</code> command can be used to gather information through this endpoint.
+As the handler emits the internals of h2o to the client, only requests via a UNIX socket are accepted.
+</p>
+<p>
+This directive takes one of the following three arguments:
+<dl>
+<dt>off</dt>
+<dd>The h2olog endpoint is disabled.</dt>
+<dt>on</dt>
+<dd>The h2olog endpoint is enabled, but only information to gather performance data will be emitted.</dd>
+<dt>appdata</dt>
+<dd>The h2olog endpoint is enabled, and in addition to information necessary for gathering performance data, some payload of HTTP is emitted as well. The additional information might help diagnose issues specific to certain HTTP connections but might include sensitive information (e.g., HTTP cookies).</dd>
+</dl>
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>host</dd>
+<dt>Default:</dt>
+<dd><code><pre>h2olog: OFF</pre></code>
+</dl>
+
 <div id="handshake-timeout" class="directive-head">
 <h3><a href="configure/base_directives.html#handshake-timeout"><code>"handshake-timeout"</code></a></h3>
 </div>
@@ -602,15 +739,49 @@ Default is 1073741824 (1GB).
 <dt>Description:</dt>
 <dd>
 <p>
-Number of connections to handle at once at maximum.
+Maximum number of incoming connections to handle at once.
 </p>
+
+This includes TCP and QUIC connections.
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>max-connections: 1024</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
+<a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>
+</dd>
 </dl>
+
+<div id="max-quic-connections" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/base_directives.html#max-quic-connections"><code>"max-quic-connections"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum number of incoming QUIC connections to handle at once.
+</p>
+
+<p>
+By default, maximum number of incoming connections is governed by <code>max-connections</code> regardless of the transport protocol (i.e., TCP or QUIC) being used.
+</p>
+<p>
+This directive introduces an additional cap for incoming QUIC connections. By setting <code>max-quic-connections</code> to a value smaller than <code>max-connections</code>, it would be possible to serve incoming requests that arrive on top of TCP (i.e., HTTP/1 and HTTP/2) even when there are issues with handling QUIC connections.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#num-quic-threads"><code>num-quic-threads</code></a>
+</dd>
+</dl>
+
 <div id="max-delegations" class="directive-head">
 <h3><a href="configure/base_directives.html#max-delegations"><code>"max-delegations"</code></a></h3>
 </div>
@@ -619,7 +790,7 @@ Number of connections to handle at once at maximum.
 <dt>Description:</dt>
 <dd>
 <p>
-Limits the number of delegations (i.e. internal redirects using the <code>X-Reproxy-URL</code> header).
+Limits the number of delegations (i.e. fetching the response body from an alternate source as specified by the <code>X-Reproxy-URL</code> header).
 </p>
 
 </dd>
@@ -627,6 +798,52 @@ Limits the number of delegations (i.e. internal redirects using the <code>X-Repr
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>max-delegations: 5</pre></code>
+</dl>
+<div id="max-reprocesses" class="directive-head">
+<h3><a href="configure/base_directives.html#max-reprocesses"><code>"max-reprocesses"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Limits the number of internal redirects.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>max-reprocesses: 5</pre></code>
+</dl>
+<div id="neverbleed-offload" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/base_directives.html#neverbleed-offload"><code>"neverbleed-offload"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Sets an offload engine to be used with neverbleed.
+</p>
+
+<p>
+When <a href="configure/base_directives.html#neverbleed">neverbleed</a> is in use, RSA private key operations can be offload to accelerators using the <a href="https://www.intel.com/content/www/us/en/architecture-and-technology/intel-quick-assist-technology-overview.html" target=_blank>Intel QuickAssist technology</a>.
+</p>
+<p>This directive takes one of the three values that changes how the accelerators are used:
+<ul>
+<li>OFF - the accelerator is not used</li>
+<li>QAT - use of QAT is enforced; startup will fail if the acclerator is unavailable</li>
+<li>QAT-AUTO - QAT is used if available</li>
+</ul>
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>neverbleed-offload: OFF</pre></code>
 </dl>
 <div id="num-name-resolution-threads" class="directive-head">
 <h3><a href="configure/base_directives.html#num-name-resolution-threads"><code>"num-name-resolution-threads"</code></a></h3>
@@ -687,12 +904,49 @@ Number of worker threads.
 </p>
 
 <p>
-Default is the number of the processors connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+By default, the number of worker threads spawned by h2o is the number of the CPU cores connected to the system as obtained by <code>getconf NPROCESSORS_ONLN</code>.
+</p>
+<p>
+This directive is used to override the behavior.
+</p>
+<p>
+If the argument is a YAML scalar, it specifies in integer the number of worker threads to spawn.
+</p>
+<p>
+If the argument is a YAML sequence, it specifies a list of CPU IDs on each of which one worker thread will be spawned and pinned.
+This mode can be used oly on systems that have <code>pthread_setaffinity_np</code>.
 </p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
+</dl>
+
+<div id="num-quic-threads" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/base_directives.html#num-quic-threads"><code>"num-quic-threads"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Restricts the number of worker threads that handle incoming QUIC connections.
+</p>
+
+<p>
+By default, all worker threads handle incoming QUIC connections as well as TCP connections.
+</p>
+<p>
+If <a href="configure/base_directives.html#num-threads"><code>num-threads</code></a> was given a YAML sequence specifying the CPU IDs on which each worker thread will run, the threads pinned to first <code>num-quic-threads</code> threads will handle incoming QUIC connections.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a>
+</dd>
 </dl>
 
 <div id="pid-file" class="directive-head">
@@ -870,12 +1124,11 @@ The directive can be used to have an exception for the paths that have an enviro
 <dt>Description:</dt>
 <dd>
 <p>
-Specify the client protocols to which H2O can send 1xx informational responses.
+Specifies the client protocols to which H2O can send 1xx informational responses.
 </p>
 
 <p>
-This directive can be used to forward 1xx informational responses generated by the upstream or <a href="configure/headers_directives.html">headers</a> directive to the clients.
-
+This directive can be used to forward 1xx informational responses (e.g., <a href="https://www.rfc-editor.org/rfc/rfc8297.html" target=_blank>103 Early Hints</a>) generated by <a href="configure/proxy_directives.html">upstream servers</a> or <a href="configure/headers_directives.html">headers</a> directive to the clients.
 </p>
 <p>
 If the value is <code>all</code>, H2O always sends informational responses to the client whenever possible (i.e. unless the procotol is HTTP/1.0).
@@ -887,13 +1140,94 @@ If the value is <code>none</code>, H2O never sends informational responses to th
 If the value is <code>except-h1</code>, H2O sends informational if the protocol is not HTTP/1.x.
 </p>
 
-
-
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>except-h1</pre></code>
+</dl>
+
+<div id="soft-connection-limit" class="directive-head">
+<h3><a href="configure/base_directives.html#soft-connection-limit"><code>"soft-connection-limit"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Number of connections above which idle connections are closed agressively.
+</p>
+
+<p>
+H2O accepts up to <a href="configure/base_directives.html#max-connections"><code>max-connections</code></a> TCP connections and <a href="configure/base_directives.html#max-quic-connections"><code>max-quic-connections</code></a> QUIC connections.
+Once the number of connections reach these maximums, new connection attempts are ignored until existing connections close.
+</p>
+<p>
+To reduce the possibility of the number of connections reaching the maximum and new connection attempts getting ignored, <code>soft-connection-limit</code> can be used to introduce another threshold.
+When <code>soft-connection-limit</code> is set, connections that have been idle at least for <a href="configure/base_directives.html#soft-connection-limit.min-age"><code>soft-connection-limit.min-age</code></a> seconds will start to get closed until the number of connections becomes no greater than <code>soft-connection-limit</code>.
+</p>
+<p>
+As the intention of this directive is to close connections more agressively under high load than usual, <code>soft-connection-limit.min-age</code> should be set to a smaller value than the other idle timeouts; e.g., <a href="configure/http1_directives.html#http1-request-timeout"><code>http1-request-timeout</code></a>, <a href="configure/http2_directives.html#http2-idle-timeout"><code>http2-idle-timeout</code></a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+</dl>
+<div id="soft-connection-limit.min-age" class="directive-head">
+<h3><a href="configure/base_directives.html#soft-connection-limit.min-age"><code>"soft-connection-limit.min-age"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Minimum amount of idle time to be guaranteed for HTTP connections even when the connections are closed agressively due to the number of connections exceeding <code>soft-connection-limit</code>.
+</p>
+
+<p>
+See <a href="configure/base_directives.html#soft-connection-limit"><code>soft-connection-limit</code></a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>soft-connection-limit.min-age: 30</pre></code>
+</dl>
+
+<div id="ssl-offload" class="directive-head">
+<h3><a href="configure/base_directives.html#ssl-offload"><code>"ssl-offload"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Knob for changing how TLS encryption is handled.
+</p>
+
+<p>
+This directive takes one of the following values:
+<ul>
+<li><code>OFF</code> - TLS encryption is handled in userspace and the encrypted bytes are sent to the kernel using a write (2) system call.</li>
+<li><code>kernel</code> - TLS encryption is offloaded to the kernel. When the network interface card supports TLS offloading, actual encryption might get offloaded to the interface, depending on the kernel configuration.</li>
+<li><code>zerocopy</code> - TLS encryption is handled in userspace, but if the encryption logic is capable of writing directly to main memory without polluting the cache, the encrypted data is passed to the kernel without copying (i.e., sendmsg (2) with  <code>MSG_ZEROCOPY</code> socket option is used). Otherwise, this option is identical to <code>OFF</code>. This option minimizes cache pollution next to hardware offload.</li>
+</ul>
+</p>
+<p>
+<code>Kernel</code> option can be used only on Linux.
+<code>Zerocopy</code> is only available on Linux running on CPUs that support the necessary features; see <a href="https://github.com/h2o/picotls/pull/384" target=_blank>picotls PR#384</a> and <a href="https://github.com/h2o/h2o/pull/3007" target=_blank>H2O PR#3007</a>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>ssl-offload: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+</dd>
 </dl>
 
 <div id="ssl-session-resumption" class="directive-head">
@@ -1086,6 +1420,45 @@ Users can opt-in to using the legacy <a href="https://github.com/memcached/memca
 <dd>global</dd>
 </dl>
 
+<div id="strict-match" class="directive-head">
+<h3><a href="configure/base_directives.html#strict-match"><code>"strict-match"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag designating if the current host element should not be considered as the fallback element.
+</p>
+
+See <a href="configure/base_directives.html#hosts"><code>hosts</code></a>.
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>host</dd>
+<dt>Default:</dt>
+<dd><code><pre>strict-match: OFF</pre></code>
+</dl>
+
+<div id="tcp-reuseport" class="directive-head">
+<h3><a href="configure/base_directives.html#tcp-reuseport"><code>"tcp-reuseport"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag designating if TCP socket listeners should be opened with the SO_REUSEPORT option.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>tcp-reuseport: OFF</pre></code>
+</dl>
+
+
 <div id="temp-buffer-path" class="directive-head">
 <div class="directive-since">since v2.0</div>
 <h3><a href="configure/base_directives.html#temp-buffer-path"><code>"temp-buffer-path"</code></a></h3>
@@ -1271,7 +1644,7 @@ hosts:
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
-<dd>global, host, path, extensions</dd>
+<dd>global, host, path, extension</dd>
 </dl>
 
 
@@ -1282,7 +1655,7 @@ hosts:
 </div>
 <div id="footer">
 <p>
-Copyright &copy; 2015-2020 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+Copyright &copy; 2015-2023 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
 </p>
 </div>
 </body>

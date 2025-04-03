@@ -408,9 +408,9 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
     return conn->remote.len;
 }
 
-static int skip_tracing(h2o_conn_t *conn)
+static ptls_log_conn_state_t *log_state(h2o_conn_t *conn)
 {
-    return 1;
+    return &ptls_log.dummy_conn_state;
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -638,7 +638,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     static const h2o_conn_callbacks_t callbacks = {
         .get_sockname = get_sockname,
         .get_peername = get_peername,
-        .skip_tracing = skip_tracing,
+        .log_state = log_state,
         .get_req_id = get_req_id,
     };
 
@@ -761,7 +761,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     }
     h2o_iovec_t url_str = h2o_concat_list(&subreq->super.pool, url_comps, num_comps);
     h2o_url_t url_parsed;
-    if (h2o_url_parse(url_str.base, url_str.len, &url_parsed) != 0) {
+    if (h2o_url_parse(&subreq->super.pool, url_str.base, url_str.len, &url_parsed) != 0) {
         /* TODO is there any other way to show better error message? */
         mrb->exc = mrb_obj_ptr(mrb_exc_new_lit(mrb, E_ARGUMENT_ERROR, "env variable contains invalid values"));
         goto Failed;

@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Digest::MD5 qw(md5_hex);
 use Test::More;
 use t::Util;
@@ -52,5 +52,7 @@ foreach my $cl (@clopts) {
     }
 }
 
-done_testing();
+undef $upstream;
+undef $server;
 
+done_testing();
