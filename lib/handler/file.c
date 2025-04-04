@@ -43,6 +43,7 @@
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
+    h2o_req_t *src_req;
     struct {
         h2o_filecache_ref_t *ref;
         off_t off;
@@ -66,6 +67,9 @@ struct st_h2o_sendfile_generator_t {
         char last_modified[H2O_TIMESTR_RFC1123_LEN + 1];
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
     } header_bufs;
+#ifdef H2O_USE_IO_URING
+    int splice_fds[2];
+#endif
 };
 
 struct st_h2o_file_handler_t {
@@ -119,6 +123,14 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         h2o_filecache_close_file(self->file.ref);
         self->file.ref = NULL;
     }
+#if H2O_USE_IO_URING
+    if (self->splice_fds[0] != -1) {
+        close(self->splice_fds[0]);
+        self->splice_fds[0] = -1;
+        close(self->splice_fds[1]);
+        self->splice_fds[1] = -1;
+    }
+#endif
 }
 
 static void on_generator_dispose(void *_self)
@@ -126,6 +138,34 @@ static void on_generator_dispose(void *_self)
     struct st_h2o_sendfile_generator_t *self = _self;
     close_file(self);
 }
+
+#ifdef H2O_USE_IO_URING
+
+static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
+{
+    struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
+
+    if (self->src_req == NULL) {
+        h2o_mem_release_shared(self);
+        return;
+    }
+
+    h2o_mem_release_shared(self);
+
+    if (cmd->result <= 0) {
+        assert(cmd->result != -EINTR); /* could this ever happen? */
+        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_ERROR);
+        return;
+    }
+
+    self->file.off += cmd->result;
+    self->bytesleft -= cmd->result;
+
+    h2o_send_from_pipe(self->src_req, self->splice_fds[0], cmd->result,
+                       self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
+}
+
+#endif
 
 static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
 {
@@ -149,7 +189,7 @@ static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
 }
 
 #if defined(__linux__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t iooff = off;
     ssize_t ret;
@@ -160,7 +200,7 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
     return ret;
 }
 #elif defined(__APPLE__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t iolen = len;
     int ret;
@@ -171,7 +211,7 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
     return iolen;
 }
 #elif defined(__FreeBSD__)
-size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
+static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
     off_t outlen;
     int ret;
@@ -182,10 +222,10 @@ size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
     return outlen;
 }
 #else
-#define NO_SENDFILE 1
+#define sendvec_sendfile NULL
 #endif
-#if !NO_SENDFILE
-static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
+#if !defined(sendvec_sendfile)
+static size_t sendvec_sendfile(h2o_sendvec_t *src, int sockfd, size_t len)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     ssize_t bytes_sent = do_sendfile(sockfd, self->file.ref->fd, (off_t)src->cb_arg[1], len);
@@ -199,32 +239,28 @@ static size_t sendvec_send(h2o_sendvec_t *src, int sockfd, size_t len)
 
 static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {
-        do_pread,
-#if !NO_SENDFILE
-        sendvec_send,
-#endif
-    };
-
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    h2o_sendvec_t vec;
-    h2o_send_state_t send_state;
+    size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
 
-    vec.len = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.callbacks = &sendvec_callbacks;
-    vec.cb_arg[0] = (uint64_t)self;
-    vec.cb_arg[1] = self->file.off;
+    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_async_io_splice_file` */
+#if H2O_USE_IO_URING
+    if (self->splice_fds[0] != -1) {
+        h2o_async_io_cmd_t *cmd;
+        h2o_mem_addref_shared(self);
+        h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1],
+                                 bytes_to_send, do_proceed_on_splice_complete, self);
+        return;
+    }
+#endif
+
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = do_pread, .send_ = sendvec_sendfile};
+    h2o_sendvec_t vec = {
+        .callbacks = &sendvec_callbacks, .len = bytes_to_send, .cb_arg[0] = (uint64_t)self, .cb_arg[1] = self->file.off};
 
     self->file.off += vec.len;
     self->bytesleft -= vec.len;
-    if (self->bytesleft == 0) {
-        send_state = H2O_SEND_STATE_FINAL;
-    } else {
-        send_state = H2O_SEND_STATE_IN_PROGRESS;
-    }
 
-    /* send (closed in do_pread) */
-    h2o_sendvec(req, &vec, 1, send_state);
+    h2o_sendvec(req, &vec, 1, self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
@@ -279,6 +315,12 @@ Error:
     return;
 }
 
+static void do_stop(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    self->src_req = NULL;
+}
+
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
                                                             int flags)
 {
@@ -331,7 +373,8 @@ Opened:
 
     self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
     self->super.proceed = do_proceed;
-    self->super.stop = NULL;
+    self->super.stop = do_stop;
+    self->src_req = req;
     self->file.ref = fileref;
     self->file.off = 0;
     self->req = NULL;
@@ -342,6 +385,17 @@ Opened:
     self->send_vary = (flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0;
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
+#if H2O_USE_IO_URING
+    if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
+        if (pipe2(self->splice_fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+    } else {
+        self->splice_fds[0] = -1;
+        self->splice_fds[1] = -1;
+    }
+#endif
 
     return self;
 }

@@ -13,6 +13,7 @@ plan skip_all => 'php-cgi not found'
 
 # spawn h2o
 my $server = spawn_h2o(<< "EOT");
+file.io_uring: OFF
 file.custom-handler:
   extension: .php
   fastcgi.spawn: "exec php-cgi"

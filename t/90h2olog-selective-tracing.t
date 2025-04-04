@@ -84,7 +84,7 @@ subtest "h2olog -S=0.00", sub {
       diag "h2olog output:\n", $trace;
     }
 
-    is $trace, "", "nothing has been logged";
+    unlike $trace, qr{^(?!.+"type":"async-io-).+}m, "nothing logged other than async-io-";
   };
 
   subtest "QUIC", sub {
