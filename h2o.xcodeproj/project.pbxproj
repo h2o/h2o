@@ -762,6 +762,8 @@
 		08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-qlog.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08AD2A402CCF219600301CD6 /* h2olog */ = {isa = PBXFileReference; lastKnownFileType = text; path = h2olog; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08B2EBF42D9F5E4000715398 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = test.pl; sourceTree = "<group>"; };
+		08B2EBF62DA09FD000715398 /* 40http3-io-batch10.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-io-batch10.t"; sourceTree = "<group>"; };
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1511,6 +1513,14 @@
 			path = 50mruby;
 			sourceTree = "<group>";
 		};
+		08B2EBF52D9F5E4000715398 /* 40http3 */ = {
+			isa = PBXGroup;
+			children = (
+				08B2EBF42D9F5E4000715398 /* test.pl */,
+			);
+			path = 40http3;
+			sourceTree = "<group>";
+		};
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
@@ -2253,12 +2263,14 @@
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				080590262A5E463A00B2B10E /* 40http2-header-softerror.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
+				08B2EBF52D9F5E4000715398 /* 40http3 */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
 				086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */,
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
+				08B2EBF62DA09FD000715398 /* 40http3-io-batch10.t */,
 				085BDAE72B1DB4C2002851EA /* 40http3-priority.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
