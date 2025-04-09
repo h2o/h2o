@@ -412,6 +412,11 @@ void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
                 nic->napi_ids.entries, nic->napi_ids.size);
 }
 
+void h2o_busypoll_clear_opts(struct busypoll_nic_t *nic)
+{
+    setup_queue(nic->ifindex, 0, 0, 0, nic->napi_ids.entries, nic->napi_ids.size);
+}
+
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus)
 {
     attach_cbpf(fd, cpus);
@@ -446,6 +451,11 @@ void h2o_busypoll_bind_interface(int fd, const char *iface)
 }
 
 void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
+{
+    /* noop */
+}
+
+void h2o_busypoll_clear_opts(struct busypoll_nic_t *nic)
 {
     /* noop */
 }

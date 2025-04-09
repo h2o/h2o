@@ -29,6 +29,7 @@ typedef H2O_VECTOR(struct busypoll_nic_t) h2o_busypoll_nic_vector_t;
 void h2o_busypoll_bind_interface(int fd, const char *iface);
 void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus);
 void h2o_busypoll_set_opts(struct busypoll_nic_t *nic);
+void h2o_busypoll_clear_opts(struct busypoll_nic_t *nic);
 void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, size_t thread_index,
                                         struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count);
 
