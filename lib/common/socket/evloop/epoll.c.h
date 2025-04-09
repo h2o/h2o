@@ -237,11 +237,15 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     if (update_status(loop) != 0)
         return -1;
 
-    /* poll */
-    if (!loop->super.bp.epoll_bp_usecs) {
-        max_wait = adjust_max_wait(&loop->super, max_wait);
-        nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
-    } else {
+        /* poll */
+#ifdef H2O_HAS_YNL_H
+    /* save a few syscalls if epoll bp params are unchanged */
+    if (loop->super.bp.epoll_bp_changed) {
+        evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.prefer_busy_poll);
+        loop->super.bp.epoll_bp_changed = false;
+    }
+
+    if (loop->super.bp.epoll_bp_usecs) {
         uint64_t _time = loop->super.bp.epoll_bp_usecs;
         time_t seconds = 0;
         long int nsec = 0;
@@ -252,20 +256,14 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         }
 
         struct timespec ts = {.tv_sec = seconds, .tv_nsec = nsec};
-
-        /* save a few syscalls if epoll bp params are unchanged */
-        if (loop->super.bp.epoll_bp_changed) {
-            evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.prefer_busy_poll);
-            loop->super.bp.epoll_bp_changed = false;
-        }
-
-#ifdef H2O_HAS_YNL_H
         nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
-#else
-        (void)ts;
+    } else {
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
-#endif
     }
+#else
+    max_wait = adjust_max_wait(&loop->super, max_wait);
+    nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
+#endif
 
     update_now(&loop->super);
     if (nevents == -1)
@@ -390,7 +388,7 @@ static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint
         h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
 
-    if (time_budget) {
+    if (time_budget || packet_budget || prefer) {
         loop->super.bp.epoll_bp_usecs = time_budget;
         loop->super.bp.epoll_bp_budget = packet_budget;
         loop->super.bp.prefer_busy_poll = prefer;
