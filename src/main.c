@@ -3714,6 +3714,7 @@ static void on_sigterm(int notify_threads)
     if (notify_threads)
         notify_all_threads();
     h2o_set_signal_handler(SIGTERM, SIG_IGN);
+    h2o_set_signal_handler(SIGINT, SIG_IGN);
 }
 
 static void on_sigterm_set_flag_only(int signo)
@@ -3784,6 +3785,7 @@ static void on_sigfatal(int signo)
 
 static void setup_signal_handlers(void)
 {
+    h2o_set_signal_handler(SIGINT, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 #ifdef LIBC_HAS_BACKTRACE
@@ -4431,6 +4433,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* remove the pid file */
     if (conf.pid_file != NULL)
         unlink(conf.pid_file);
+
+    /* reset nic queue configs */
+    for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+        if (conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].mode != BP_MODE_OFF) {
+            h2o_busypoll_clear_opts(&conf.globalconf.bp.nic_to_cpu_map.entries[nic_i]);
+        }
+    }
 
     /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
      * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
