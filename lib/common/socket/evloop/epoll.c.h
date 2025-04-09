@@ -43,14 +43,13 @@
  *
  */
 #ifndef EPOLL_IOC_TYPE
-struct epoll_params
-{
-  uint32_t busy_poll_usecs;
-  uint16_t busy_poll_budget;
-  uint8_t prefer_busy_poll;
+struct epoll_params {
+    uint32_t busy_poll_usecs;
+    uint16_t busy_poll_budget;
+    uint8_t prefer_busy_poll;
 
-  /* pad the struct to a multiple of 64bits */
-  uint8_t __pad;
+    /* pad the struct to a multiple of 64bits */
+    uint8_t __pad;
 };
 
 #define EPOLL_IOC_TYPE 0x8A
@@ -224,7 +223,8 @@ static void evloop_set_bp(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, ui
     params.prefer_busy_poll = prefer == 0 ? 0 : 1;
 
     if (ioctl(loop->ep, EPIOCSPARAMS, &params) != 0)
-        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n", usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n",
+                  usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
 }
 
 int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
@@ -251,8 +251,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
             nsec = (_time % 1000000) * 1000;
         }
 
-        struct timespec ts = { .tv_sec = seconds,
-                               .tv_nsec = nsec };
+        struct timespec ts = {.tv_sec = seconds, .tv_nsec = nsec};
 
         /* save a few syscalls if epoll bp params are unchanged */
         if (loop->super.bp.epoll_bp_changed) {
