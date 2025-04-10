@@ -37,41 +37,41 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
     h2o_vector_reserve(NULL, nic_to_cpu_map, nic_count);
 
     /* now gather the actual values from the config file */
-    for (int i = 0; i != (*if_node)->data.sequence.size; ++i) {
+    for (int i = 0; i != nic_count; ++i) {
         yoml_t *cur_node = (*if_node)->data.sequence.elements[i];
         yoml_t **index_node = NULL, **cpus_node = NULL, **options_node = NULL;
+        struct busypoll_nic_t *nic = &nic_to_cpu_map->entries[i];
+        memset(nic, 0, sizeof(*nic));
         if (h2o_configurator_parse_mapping(cmd, cur_node, "ifindex:s,cpus:a,options:m", NULL, &index_node, &cpus_node,
                                            &options_node) != 0) {
             h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface block at index %d is invalid\n", i);
             return -1;
         }
-        h2o_configurator_scanf(cmd, *index_node, "%zu", &nic_to_cpu_map->entries[i].ifindex);
+        h2o_configurator_scanf(cmd, *index_node, "%zu", &nic->ifindex);
 
         char iface[IF_NAMESIZE] = {0};
-        if (!if_indextoname(nic_to_cpu_map->entries[i].ifindex, iface)) {
-            h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface index %zu is invalid\n",
-                                       nic_to_cpu_map->entries[i].ifindex);
+        if (!if_indextoname(nic->ifindex, iface)) {
+            h2o_configurator_errprintf(cmd, *if_node, "busy-poll-map interface index %zu is invalid\n", nic->ifindex);
             return -1;
         }
-        nic_to_cpu_map->entries[i].iface = h2o_strdup(NULL, iface, SIZE_MAX);
+        nic->iface = h2o_strdup(NULL, iface, SIZE_MAX);
 
-        pthread_mutex_init(&nic_to_cpu_map->entries[i].mutex, NULL);
-        nic_to_cpu_map->entries[i].cpu_count = 0;
-        CPU_ZERO(&nic_to_cpu_map->entries[i].cpu_map);
+        pthread_mutex_init(&nic->mutex, NULL);
+        nic->cpu_count = 0;
+        CPU_ZERO(&nic->cpu_map);
         for (int j = 0; j < (*cpus_node)->data.sequence.size; j++) {
             yoml_t *cpu_node = (*cpus_node)->data.sequence.elements[j];
             if (cpu_node->type != YOML_TYPE_SCALAR) {
-                h2o_configurator_errprintf(cmd, cpu_node, "cpu specified for iface %s is not a scalar\n",
-                                           nic_to_cpu_map->entries[i].iface.base);
+                h2o_configurator_errprintf(cmd, cpu_node, "cpu specified for iface %s is not a scalar\n", nic->iface.base);
                 return -1;
             }
             unsigned cpu_num;
             if (h2o_configurator_scanf(cmd, cpu_node, "%u", &cpu_num) == 0)
-                CPU_SET(cpu_num, &nic_to_cpu_map->entries[i].cpu_map);
+                CPU_SET(cpu_num, &nic->cpu_map);
         }
-        nic_to_cpu_map->entries[i].cpu_count = CPU_COUNT(&nic_to_cpu_map->entries[i].cpu_map);
-        h2o_vector_reserve(NULL, &nic_to_cpu_map->entries[i].napi_ids, nic_to_cpu_map->entries[i].cpu_count);
-        nic_to_cpu_map->entries[i].napi_ids.size = nic_to_cpu_map->entries[i].cpu_count;
+        nic->cpu_count = CPU_COUNT(&nic->cpu_map);
+        h2o_vector_reserve(NULL, &nic->napi_ids, nic->cpu_count);
+        nic->napi_ids.size = nic->cpu_count;
 
         yoml_t **mode_node = NULL, **gro_node = NULL, **irq_node = NULL, **st_node = NULL;
         if (h2o_configurator_parse_mapping(cmd, *options_node, "mode:s", "gro-flush-timeout:s,defer-hard-irqs:s,suspend-timeout:s",
@@ -81,45 +81,46 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         switch (h2o_configurator_get_one_of(cmd, *mode_node, "OFF,SUSPEND,BUSYPOLL")) {
         case 0:
-            nic_to_cpu_map->entries[i].mode = BP_MODE_OFF;
+            nic->mode = BP_MODE_OFF;
             break;
         case 1:
-            nic_to_cpu_map->entries[i].mode = BP_MODE_SUSPEND;
+            nic->mode = BP_MODE_SUSPEND;
             break;
         case 2:
-            nic_to_cpu_map->entries[i].mode = BP_MODE_BUSYPOLL;
+            nic->mode = BP_MODE_BUSYPOLL;
             break;
         default:
             return -1;
         }
 
 #ifndef H2O_HAS_YNL_H
-        if (nic_to_cpu_map->entries[i].mode == BP_MODE_SUSPEND || nic_to_cpu_map->entries[i].mode == BP_MODE_BUSYPOLL) {
+        if (nic->mode == BP_MODE_SUSPEND || nic->mode == BP_MODE_BUSYPOLL) {
             h2o_configurator_errprintf(cmd, node, "libynl is not available and required to busypoll");
             return -1;
         }
 #endif
 
-        nic_to_cpu_map->entries[i].options.gro_flush_timeout = 0;
-        nic_to_cpu_map->entries[i].options.defer_hard_irqs = 0;
-        nic_to_cpu_map->entries[i].options.suspend_timeout = 0;
+        nic->options.gro_flush_timeout = 0;
+        nic->options.defer_hard_irqs = 0;
+        nic->options.suspend_timeout = 0;
         if (gro_node) {
-            h2o_configurator_scanf(cmd, *gro_node, "%zu", &nic_to_cpu_map->entries[i].options.gro_flush_timeout);
+            h2o_configurator_scanf(cmd, *gro_node, "%zu", &nic->options.gro_flush_timeout);
         }
         if (irq_node) {
-            h2o_configurator_scanf(cmd, *irq_node, "%zu", &nic_to_cpu_map->entries[i].options.defer_hard_irqs);
+            h2o_configurator_scanf(cmd, *irq_node, "%zu", &nic->options.defer_hard_irqs);
         }
-        if (st_node && nic_to_cpu_map->entries[i].mode == BP_MODE_SUSPEND) {
-            h2o_configurator_scanf(cmd, *st_node, "%zu", &nic_to_cpu_map->entries[i].options.suspend_timeout);
+        if (st_node && nic->mode == BP_MODE_SUSPEND) {
+            h2o_configurator_scanf(cmd, *st_node, "%zu", &nic->options.suspend_timeout);
         }
 
-        fprintf(stderr, " ifindex %zu has %zd cpus\n", nic_to_cpu_map->entries[i].ifindex, nic_to_cpu_map->entries[i].cpu_count);
+        fprintf(stderr, " ifindex %zu has %zd cpus\n", nic->ifindex, nic->cpu_count);
     }
 
     /* setup queues */
     for (int i = 0; i != nic_count; ++i) {
-        if (nic_to_cpu_map->entries[i].mode != BP_MODE_OFF) {
-            h2o_busypoll_set_opts(&nic_to_cpu_map->entries[i]);
+        struct busypoll_nic_t *nic = &nic_to_cpu_map->entries[i];
+        if (nic->mode != BP_MODE_OFF) {
+            h2o_busypoll_set_opts(nic);
         }
     }
 
