@@ -71,6 +71,9 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         }
         nic->cpu_count = CPU_COUNT(&nic->cpu_map);
         h2o_vector_reserve(NULL, &nic->napi_ids, nic->cpu_count);
+        for (int j = 0; j < nic->cpu_count; j++) {
+            nic->napi_ids.entries[j] = 0;
+        }
         nic->napi_ids.size = nic->cpu_count;
 
         yoml_t **mode_node = NULL, **gro_node = NULL, **irq_node = NULL, **st_node = NULL;
