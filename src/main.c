@@ -4281,6 +4281,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (!loop) {
             h2o_fatal("internal error; creating busy poll loop on unsupported backend");
         }
+        h2o_loop_set_nonblock(loop, conf.bp.epoll_nonblock);
         h2o_context_init(&conf.threads[thread_index].ctx, loop, &conf.globalconf);
     } else {
         h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
