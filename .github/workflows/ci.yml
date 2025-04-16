@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-24.04]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -25,7 +25,7 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: boringssl
             command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
-          - name: ASan (Ubuntu 20.04)
+          - name: ASan (Ubuntu 24.04)
             command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: Coverage
             command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
