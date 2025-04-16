@@ -336,6 +336,7 @@ static struct {
     struct {
         uint64_t epoll_bp_usecs;
         uint64_t epoll_bp_budget;
+        bool epoll_bp_prefer;
         bool epoll_bp_changed;
         bool epoll_nonblock;
     } bp;
@@ -366,6 +367,7 @@ static struct {
     .bp = {
          .epoll_bp_usecs = 0,
          .epoll_bp_budget = 0,
+         .epoll_bp_prefer = false,
          .epoll_bp_changed = false,
          .epoll_nonblock = false,
      }
@@ -3504,6 +3506,16 @@ static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
+static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int prefer = 0;
+    if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.bp.epoll_bp_prefer = prefer == 1;
+    return 0;
+}
+
 static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node) 
 {
     if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_budget) != 0) {
@@ -4276,8 +4288,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     if (conf.globalconf.bp.nic_count > 0) {
-        uint8_t prefer_busy_poll = 0; /* prefer will be set later for nics in SUSPEND mode */
-        h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, prefer_busy_poll);
+        h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, conf.bp.epoll_bp_prefer);
         if (!loop) {
             h2o_fatal("internal error; creating busy poll loop on unsupported backend");
         }
@@ -4739,6 +4750,7 @@ static void setup_configurators(void)
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
         h2o_configurator_define_command(c, "epoll-nonblock", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_epoll_nonblock);
+        h2o_configurator_define_command(c, "epoll-prefer-bp", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_epoll_prefer_bp);
         h2o_configurator_define_command(c, "busy-poll-budget", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_busy_poll_budget);
         h2o_configurator_define_command(c, "busy-poll-usecs", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_busy_poll_usecs);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
