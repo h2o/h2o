@@ -794,7 +794,7 @@ h2o_evloop_t *create_evloop(size_t sz)
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
     loop->bp.epoll_bp_usecs = 0;
     loop->bp.epoll_bp_budget = 0;
-    loop->bp.prefer_busy_poll = 0;
+    loop->bp.epoll_bp_prefer = false;
     loop->bp.epoll_bp_changed = false;
     return loop;
 }

@@ -241,6 +241,7 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
                     }
 
                     struct busypoll_nic_t *nic = &nic_to_cpu_map[i];
+                    h2o_loop_set_bp_mode(loop, nic->mode);
                     if (nic && nic->mode == BP_MODE_SUSPEND) {
                         h2o_loop_set_bp_prefer(loop, 1);
                     }

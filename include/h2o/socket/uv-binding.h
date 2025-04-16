@@ -26,6 +26,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <uv.h>
+#include <h2o/busypoll.h>
 
 #if !(defined(UV_VERSION_MAJOR) && UV_VERSION_MAJOR == 1)
 #error "libh2o (libuv binding) requires libuv version 1.x.y"
@@ -90,6 +91,16 @@ static inline void h2o_loop_set_bp_budget(h2o_loop_t *loop, uint64_t budget)
 }
 
 static inline void h2o_loop_set_bp_prefer(h2o_loop_t *loop, bool prefer)
+{
+    (void)loop; /* noop */
+}
+
+static inline void h2o_loop_set_bp_mode(h2o_evloop_t *loop, enum busypoll_mode_t mode)
+{
+    (void)loop; /* noop */
+}
+
+static inline void h2o_loop_set_nonblock(h2o_evloop_t *loop, bool nonblock)
 {
     (void)loop; /* noop */
 }

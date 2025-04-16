@@ -241,10 +241,15 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 #ifdef H2O_HAS_YNL_H
     /* save a few syscalls if epoll bp params are unchanged */
     if (loop->super.bp.epoll_bp_changed) {
-        evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.prefer_busy_poll);
+        evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.epoll_bp_prefer);
         loop->super.bp.epoll_bp_changed = false;
     }
 
+    if (loop->super.bp.mode == BP_MODE_SUSPEND) {
+        max_wait = -1;
+    } else {
+        max_wait = adjust_max_wait(&loop->super, max_wait);
+    }
     if (loop->super.bp.epoll_bp_usecs) {
         uint64_t _time = loop->super.bp.epoll_bp_usecs;
         time_t seconds = 0;
@@ -261,7 +266,6 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
     }
 #else
-    max_wait = adjust_max_wait(&loop->super, max_wait);
     nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
 #endif
 
@@ -391,7 +395,7 @@ static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint
     if (time_budget || packet_budget || prefer) {
         loop->super.bp.epoll_bp_usecs = time_budget;
         loop->super.bp.epoll_bp_budget = packet_budget;
-        loop->super.bp.prefer_busy_poll = prefer;
+        loop->super.bp.epoll_bp_prefer = prefer;
         evloop_set_bp(loop, time_budget, packet_budget, prefer);
     }
 
