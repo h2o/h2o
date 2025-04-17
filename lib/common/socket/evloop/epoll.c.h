@@ -245,7 +245,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         loop->super.bp.epoll_bp_changed = false;
     }
 
-    if (loop->super.bp.mode == BP_MODE_SUSPEND) {
+    if (loop->super.bp.mode == 1) {
         max_wait = -1;
     } else {
         max_wait = adjust_max_wait(&loop->super, max_wait);

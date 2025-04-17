@@ -3,17 +3,15 @@
 
 #include <stdint.h>
 
-enum busypoll_mode_t {
-    BP_MODE_OFF = 0,
-    BP_MODE_SUSPEND,
-    BP_MODE_BUSYPOLL,
-};
+#define BP_MODE_OFF      0
+#define BP_MODE_SUSPEND  1
+#define BP_MODE_BUSYPOLL 2
 
 struct busypoll_nic_t {
     h2o_iovec_t iface;
     size_t ifindex;
     size_t cpu_count;
-    enum busypoll_mode_t mode;
+    uint8_t mode;
     cpu_set_t cpu_map;
     H2O_VECTOR(uint32_t) napi_ids;
     pthread_mutex_t mutex;

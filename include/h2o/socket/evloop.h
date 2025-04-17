@@ -25,7 +25,6 @@
 #include <stdbool.h>
 #include "h2o/linklist.h"
 #include "h2o/timerwheel.h"
-#include "h2o/busypoll.h"
 
 #define H2O_SOCKET_FLAG_IS_DISPOSED 0x1
 #define H2O_SOCKET_FLAG_IS_READ_READY 0x2
@@ -61,7 +60,7 @@ typedef struct st_h2o_evloop_t {
         bool epoll_bp_prefer;
         bool epoll_bp_changed;
         bool epoll_nonblock;
-        enum busypoll_mode_t mode;
+        uint8_t mode;
     } bp;
 } h2o_evloop_t;
 
@@ -136,7 +135,7 @@ static inline void h2o_loop_set_bp_prefer(h2o_evloop_t *loop, bool prefer)
     }
 }
 
-static inline void h2o_loop_set_bp_mode(h2o_evloop_t *loop, enum busypoll_mode_t mode)
+static inline void h2o_loop_set_bp_mode(h2o_evloop_t *loop, uint8_t mode)
 {
     loop->bp.mode = mode;
 }
