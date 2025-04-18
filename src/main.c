@@ -228,6 +228,7 @@ struct listener_config_t {
     unsigned sndbuf, rcvbuf;
     int proxy_protocol;
     h2o_iovec_t tcp_congestion_controller; /* default CC for this address */
+    int need_finish;
 };
 
 struct listener_ctx_t {
@@ -332,6 +333,13 @@ static struct {
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
+    struct {
+        uint64_t epoll_bp_usecs;
+        uint64_t epoll_bp_budget;
+        bool epoll_bp_prefer;
+        bool epoll_bp_changed;
+        bool epoll_nonblock;
+    } bp;
 } conf = {
     .globalconf = {0},
     .run_mode = RUN_MODE_WORKER,
@@ -356,9 +364,16 @@ static struct {
     .tcp_reuseport = 0,
     .ssl_zerocopy = 0,
     .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
+    .bp = {
+         .epoll_bp_usecs = 0,
+         .epoll_bp_budget = 0,
+         .epoll_bp_prefer = false,
+         .epoll_bp_changed = false,
+         .epoll_nonblock = false,
+     }
 };
 
-static __thread size_t thread_index;
+static __thread size_t thread_index = SIZE_MAX;
 
 static neverbleed_t *neverbleed = NULL;
 
@@ -2512,12 +2527,13 @@ static void socket_reuseport(int fd)
 /**
  * Opens an INET or INET6 socket for accepting connections. When the protocol is UDP, SO_REUSEPORT is set if available.
  */
-static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+static int open_listener(int domain, int type, int protocol, struct sockaddr *addr, socklen_t addrlen, const char *iface)
 {
     int fd;
-
-    if ((fd = socket(domain, type, protocol)) == -1)
+    if ((fd = socket(domain, type, protocol)) == -1) {
+        h2o_perror("socket failed");
         goto Error;
+    }
     set_cloexec(fd);
 
     /* set SO_*, IP_* options */
@@ -2530,6 +2546,11 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         }
     }
 #endif
+
+    if (conf.globalconf.bp.nic_count > 0) {
+        h2o_busypoll_bind_interface(fd, iface);
+    }
+
     switch (type) {
     case SOCK_STREAM: {
         if (conf.tcp_reuseport)
@@ -2550,21 +2571,82 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
     }
 
     /* bind */
-    if (bind(fd, addr, addrlen) != 0)
+    if (bind(fd, addr, addrlen) != 0) {
+        h2o_perror("bind failed");
+        goto Error;
+    }
+
+    /* XXX we just assume for non TCP listeners we are not using the BPF
+     * filter
+     */
+    if (protocol != IPPROTO_TCP) {
+        int ret;
+        struct sockaddr_storage ss;
+        socklen_t len = sizeof(ss);
+        ret = getsockname(fd, (struct sockaddr *)&ss, &len);
+        if (ret != 0) {
+            fprintf(stderr, "getsockname failed on listener: %s\n", strerror(errno));
+        }
+    }
+
+    return fd;
+
+Error:
+    if (fd != -1)
+        close(fd);
+
+    return -1;
+}
+
+static int finish_open_listener(int fd, int apply_bpf_filter, int cpus)
+{
+    struct sockaddr_storage ss;
+    socklen_t sslen = sizeof(ss);
+    int ret = 0;
+
+    if (fd < 0)
         goto Error;
 
+    ret = getsockname(fd, (struct sockaddr *)&ss, &sslen);
+    if (ret != 0) {
+        fprintf(stderr, "getsockname failed on listener: %s\n", strerror(errno));
+    }
+    if (ss.ss_family == AF_UNIX) {
+        fprintf(stderr, "dont finish AF_UNIX socket listener\n");
+        return 0;
+    } else if (ss.ss_family == AF_INET) {
+        fprintf(stderr, "will finish AF_INET socket\n");
+    } else if (ss.ss_family == AF_INET6) {
+        fprintf(stderr, "will finish AF_INET6 socket\n");
+    } else {
+        fprintf(stderr, "unknown family: %lu, skipping finish\n", (unsigned long)ss.ss_family);
+        return 0;
+    }
+
     /* TCP-specific actions */
-    if (protocol == IPPROTO_TCP) {
+    if (1) {
 #ifdef TCP_DEFER_ACCEPT
         { /* set TCP_DEFER_ACCEPT */
             int flag = 1;
-            if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0)
+            if (setsockopt(fd, IPPROTO_TCP, TCP_DEFER_ACCEPT, &flag, sizeof(flag)) != 0) {
+                h2o_perror("cant set defer accept");
                 goto Error;
+            }
         }
 #endif
+
+        /* if the cBPF filter is going to be applied, do it before the call
+         * to listen
+         */
+        if (apply_bpf_filter) {
+            h2o_busypoll_attach_cbpf(fd, cpus);
+        }
+
         /* listen */
-        if (listen(fd, H2O_SOMAXCONN) != 0)
+        if (listen(fd, H2O_SOMAXCONN) != 0) {
+            h2o_perror("cant listen");
             goto Error;
+        }
 #ifdef SO_ACCEPTFILTER
         { /* set SO_ACCEPTFILTER */
             struct accept_filter_arg arg = {0};
@@ -2600,11 +2682,11 @@ Error:
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
-                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
+                              int type, int protocol, struct sockaddr *addr, socklen_t addrlen, const char *iface)
 {
     int fd;
 
-    if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
+    if ((fd = open_listener(domain, type, protocol, addr, addrlen, iface)) == -1)
         h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
@@ -2785,6 +2867,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             listener = add_listener(fd, (struct sockaddr *)&sa, sizeof(sa), ctx->hostconf == NULL, proxy_protocol, stream_sndbuf,
                                     stream_rcvbuf);
             listener_is_new = 1;
+            listener->need_finish = 0;
         } else if (listener->proxy_protocol != proxy_protocol) {
             goto ProxyConflict;
         }
@@ -2821,8 +2904,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else {
+                        const char *iface = NULL;
+                        if (conf.globalconf.bp.nic_count > 0 && conf.globalconf.bp.nic_to_cpu_map.entries[0].mode != BP_MODE_OFF) {
+                            iface = conf.globalconf.bp.nic_to_cpu_map.entries[0].iface.base;
+                        }
+
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
-                                                     ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                     ai->ai_addr, ai->ai_addrlen, iface)) == -1) {
                             freeaddrinfo(res);
                             return -1;
                         }
@@ -2836,6 +2924,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (cc_node != NULL)
                     listener->tcp_congestion_controller = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
                 listener_is_new = 1;
+                listener->need_finish = (ai->ai_protocol == IPPROTO_TCP ? 1 : 0);
             } else if (listener->proxy_protocol != proxy_protocol) {
                 freeaddrinfo(res);
                 goto ProxyConflict;
@@ -2880,7 +2969,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype,
-                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen)) == -1) {
+                                                        ai->ai_protocol, ai->ai_addr, ai->ai_addrlen, NULL)) == -1) {
                         freeaddrinfo(res);
                         return -1;
                     }
@@ -2899,6 +2988,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 else if (ai->ai_family == AF_INET6)
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
+                listener->need_finish = 0;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
@@ -3406,6 +3496,43 @@ static int on_config_onoff(h2o_configurator_command_t *cmd, yoml_t *node, int *s
     return 0;
 }
 
+static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int nonblock_mode = 0;
+    if ((nonblock_mode = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.bp.epoll_nonblock = nonblock_mode;
+    return 0;
+}
+
+static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int prefer = 0;
+    if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.bp.epoll_bp_prefer = prefer == 1;
+    return 0;
+}
+
+static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node) 
+{
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_budget) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int on_busy_poll_usecs(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_usecs) != 0)
+        return -1;
+
+    return 0;
+}
+
 static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return on_config_onoff(cmd, node, &conf.crash_handler_wait_pipe_close);
@@ -3599,6 +3726,7 @@ static void on_sigterm(int notify_threads)
     if (notify_threads)
         notify_all_threads();
     h2o_set_signal_handler(SIGTERM, SIG_IGN);
+    h2o_set_signal_handler(SIGINT, SIG_IGN);
 }
 
 static void on_sigterm_set_flag_only(int signo)
@@ -3669,6 +3797,7 @@ static void on_sigfatal(int signo)
 
 static void setup_signal_handlers(void)
 {
+    h2o_set_signal_handler(SIGINT, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
 #ifdef LIBC_HAS_BACKTRACE
@@ -3975,6 +4104,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.cb = on_socketclose;
         sock->on_close.data = ctx->accept_ctx.ctx;
 
+        if (conf.globalconf.bp.nic_count > 0) {
+            h2o_busypoll_handle_nic_map_accept(sock, listener, thread_index, conf.globalconf.bp.nic_to_cpu_map.entries, conf.globalconf.bp.nic_count);
+        }
+
         struct listener_config_t *listener_config = conf.listeners[ctx->listener_index];
         if (listener_config->sndbuf != 0 && setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &listener_config->sndbuf,
                                                        sizeof(listener_config->sndbuf)) != 0)
@@ -4154,7 +4287,21 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
-    h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    if (conf.globalconf.bp.nic_count > 0) {
+        h2o_loop_t *loop = h2o_evloop_create_busy_poll(conf.bp.epoll_bp_usecs, conf.bp.epoll_bp_budget, conf.bp.epoll_bp_prefer);
+        if (!loop) {
+            h2o_fatal("internal error; creating busy poll loop on unsupported backend");
+        }
+        h2o_loop_set_nonblock(loop, conf.bp.epoll_nonblock);
+        h2o_context_init(&conf.threads[thread_index].ctx, loop, &conf.globalconf);
+    } else {
+        h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
+    }
+
+    // these are initiallized by h2o_context_init and need to be updated afterwards
+    conf.threads[thread_index].ctx.thread_index = thread_index;
+    conf.threads[thread_index].ctx.thread_count = conf.thread_map.size;
+
     conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
@@ -4298,6 +4445,13 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     /* remove the pid file */
     if (conf.pid_file != NULL)
         unlink(conf.pid_file);
+
+    /* reset nic queue configs */
+    for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+        if (conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].mode != BP_MODE_OFF) {
+            h2o_busypoll_clear_opts(&conf.globalconf.bp.nic_to_cpu_map.entries[nic_i]);
+        }
+    }
 
     /* Use `_exit` to prevent functions registered via `atexit` from being invoked, otherwise we might see some threads die while
      * trying to use whatever state that are cleaned up. Specifically, we see the ticket updater thread dying inside RAND_bytes,
@@ -4595,6 +4749,10 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "crash-handler.wait-pipe-close",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_crash_handler_wait_pipe_close);
+        h2o_configurator_define_command(c, "epoll-nonblock", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_epoll_nonblock);
+        h2o_configurator_define_command(c, "epoll-prefer-bp", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_epoll_prefer_bp);
+        h2o_configurator_define_command(c, "busy-poll-budget", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_busy_poll_budget);
+        h2o_configurator_define_command(c, "busy-poll-usecs", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_busy_poll_usecs);
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
@@ -4603,6 +4761,7 @@ static void setup_configurators(void)
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
+    h2o_busypoll_register_configurator(&conf.globalconf);
     h2o_compress_register_configurator(&conf.globalconf);
     h2o_expires_register_configurator(&conf.globalconf);
     h2o_errordoc_register_configurator(&conf.globalconf);
@@ -4626,7 +4785,7 @@ static void setup_configurators(void)
     h2o_config_register_status_handler(&conf.globalconf, &extra_status_handler);
 }
 
-static int dup_listener(struct listener_config_t *config)
+static int dup_listener(struct listener_config_t *config, const char *iface)
 {
     int reuseport = 0;
 
@@ -4656,7 +4815,7 @@ static int dup_listener(struct listener_config_t *config)
             h2o_fatal("failed to obtain local address of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
         }
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
-                                sslen)) != -1) {
+                                sslen, iface)) != -1) {
             if (type == SOCK_DGRAM)
                 set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
@@ -4678,9 +4837,130 @@ static void create_per_thread_listeners(void)
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
+
+        /* call listen on the first listen socket if needed */
+        if (listener_config->need_finish) {
+            int listener_fd = listener_config->fds.entries[listener_config->fds.size-1];
+            finish_open_listener(listener_fd, 0, 0);
+        }
+
         while (listener_config->fds.size < conf.thread_map.size) {
-            int fd = dup_listener(listener_config);
+            int fd = dup_listener(listener_config, NULL);
             listener_config->fds.entries[listener_config->fds.size++] = fd;
+
+            /* duplicated listeners may also need listen called */
+            if (listener_config->need_finish)
+                finish_open_listener(fd, 0, 0);
+        }
+    }
+}
+
+static void create_per_thread_nic_map_listeners(void)
+{
+    int nic_map_cpus = 0;
+    for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+        nic_map_cpus += conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
+    }
+    if (conf.thread_map.size != nic_map_cpus) {
+        h2o_fatal("%zu threads configured, (%d) assigned in busypoll map\n", conf.thread_map.size, nic_map_cpus);
+    }
+
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        struct listener_config_t *listener_config = conf.listeners[i];
+        h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
+        for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+            int cpus = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
+            const char *iface = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].iface.base;
+            /* we've already taken care of adding 1 fd for nic 0's first
+             * CPU because the listener when initially created takes this
+             * CPU for nic0.
+             *
+             * nic0 needs a listener for every other CPU (except the
+             * first), and all other NICs need fds for all CPUs.
+             */
+            if (nic_i == 0 && cpus == 1) {
+                fprintf(stderr, "the first nic (%s) had only 1 thread, no additional duping is required.\n", iface);
+                continue;
+            }
+
+            /* in this case, the first NIC has multiple threads, so we need
+             * to dup listeners for each thread other than the first
+             */
+            if (nic_i == 0)
+                cpus--;
+
+            fprintf(stderr, " current fd size: %zd\n", listener_config->fds.size);
+            fprintf(stderr, " got %d cpus for nic: %s\n", cpus, iface);
+            while (cpus > 0) {
+                int fd = dup_listener(listener_config, iface);
+                fprintf(stderr, " --> bound fd %d for listener %lu to iface: %s for thread: %zd\n", fd, i, iface,
+                        listener_config->fds.size);
+                listener_config->fds.entries[listener_config->fds.size++] = fd;
+                cpus--;
+            }
+        }
+    }
+
+    /* at this point, all the fds are created, and bound to NICs, but:
+     *
+     *   1. the cBPF program has not yet been attached, and
+     *   2. listen has not been called yet
+     *
+     * note that cBPF must be attached _before_ the call to listen.
+     */
+    fprintf(stderr, "all listeners created and bound, set cBPF and call listen...\n");
+
+    for (size_t i = 0; i < conf.num_listeners; i++) {
+        int running_offset = 0;
+        struct listener_config_t *listener_config = conf.listeners[i];
+
+        /* this listener could be a unix listener (so need_finish = 0), in
+         * that case there is nothing to do so skip it.
+         *
+         * unix listeners have listen called in open_unix_listener and
+         * don't need "finishing" or the cBPF program.
+         */
+        if (!listener_config->need_finish)
+            continue;
+
+        for (int nic_i = 0; nic_i < conf.globalconf.bp.nic_count; nic_i++) {
+            int cpus = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
+            const char *iface = conf.globalconf.bp.nic_to_cpu_map.entries[nic_i].iface.base;
+            for (int cpu_i = 0; cpu_i < cpus; cpu_i++) {
+                int idx = running_offset + cpu_i;
+                int fd = listener_config->fds.entries[idx];
+                fprintf(stderr, "finishing listener for fd %d via %s [%d]\n", fd, iface, idx);
+
+                /* the cBPF filter only needs to be installed on one socket
+                 * in the reuseport group (it can be installed on multiple,
+                 * but there's no reason to do that).
+                 *
+                 * this logic only installs the filter on the first socket
+                 * in the group.
+                 */
+                int enable_filter = 0;
+                if (cpu_i == 0)
+                    enable_filter = 1;
+
+                /* now call listen (which will optionally enable the bpf
+                 * filter first).
+                 */
+                if (finish_open_listener(fd, enable_filter, cpus) < 0) {
+                    h2o_fatal("unable to open listener\n");
+                }
+            }
+
+            /* each nic > 0 has its offset in the listener FD array
+             * starting at the end of every other nic's FDs before it.
+             *
+             * running_offset tracks this by adding the cpu_count for the
+             * previous nic.
+             *
+             * could also solve this by having NICs hold a pointer to their
+             * offset in the listener fd array
+             */
+            running_offset += cpus;
+            fprintf(stderr, " finished iface: %s, which had %d cpus, new offset: %d\n", iface, cpus, running_offset);
         }
     }
 }
@@ -5005,7 +5285,12 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     /* call `bind()` before setuid(), different uids can't bind the same address */
-    create_per_thread_listeners();
+    if (conf.globalconf.bp.nic_count > 0) {
+        fprintf(stderr, "nic map was setup, creating per thread listeners\n");
+        create_per_thread_nic_map_listeners();
+    } else {
+        create_per_thread_listeners();
+    }
 
     capabilities_set_keepcaps();
     /* setuid */
