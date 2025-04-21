@@ -4300,7 +4300,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
     // these are initiallized by h2o_context_init and need to be updated afterwards
     conf.threads[thread_index].ctx.thread_index = thread_index;
-    conf.threads[thread_index].ctx.thread_count = conf.thread_map.size;
 
     conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
