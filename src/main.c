@@ -373,7 +373,7 @@ static struct {
      }
 };
 
-static __thread size_t thread_index = SIZE_MAX;
+static __thread size_t thread_index;
 
 static neverbleed_t *neverbleed = NULL;
 
