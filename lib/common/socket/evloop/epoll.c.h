@@ -242,7 +242,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     /* save a few syscalls if epoll bp params are unchanged */
     if (loop->super.bp.epoll_bp_changed) {
         evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.epoll_bp_prefer);
-        loop->super.bp.epoll_bp_changed = false;
+        loop->super.bp.epoll_bp_changed = 0;
     }
 
     if (loop->super.bp.mode == 1) {

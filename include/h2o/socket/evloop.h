@@ -22,7 +22,6 @@
 #ifndef h2o__evloop_h
 #define h2o__evloop_h
 
-#include <stdbool.h>
 #include "h2o/linklist.h"
 #include "h2o/timerwheel.h"
 
@@ -57,10 +56,10 @@ typedef struct st_h2o_evloop_t {
     struct {
         uint64_t epoll_bp_usecs;
         uint64_t epoll_bp_budget;
-        bool epoll_bp_prefer;
-        bool epoll_bp_changed;
-        bool epoll_nonblock;
-        uint8_t mode;
+        uint8_t epoll_bp_prefer : 1;
+        uint8_t epoll_bp_changed : 1;
+        uint8_t epoll_nonblock : 1;
+        uint8_t mode : 2;
     } bp;
 } h2o_evloop_t;
 
@@ -115,7 +114,7 @@ static inline void h2o_loop_set_bp_usecs(h2o_evloop_t *loop, uint64_t usecs)
 {
     if (loop->bp.epoll_bp_usecs != usecs) {
         loop->bp.epoll_bp_usecs = usecs;
-        loop->bp.epoll_bp_changed = true;
+        loop->bp.epoll_bp_changed = 1;
     }
 }
 
@@ -123,26 +122,28 @@ static inline void h2o_loop_set_bp_budget(h2o_evloop_t *loop, uint64_t budget)
 {
     if (loop->bp.epoll_bp_budget != budget) {
         loop->bp.epoll_bp_budget = budget;
-        loop->bp.epoll_bp_changed = true;
+        loop->bp.epoll_bp_changed = 1;
     }
 }
 
-static inline void h2o_loop_set_bp_prefer(h2o_evloop_t *loop, bool prefer)
+static inline void h2o_loop_set_bp_prefer(h2o_evloop_t *loop, uint8_t prefer)
 {
     if (loop->bp.epoll_bp_prefer != prefer) {
-        loop->bp.epoll_bp_prefer = prefer;
-        loop->bp.epoll_bp_changed = true;
+        loop->bp.epoll_bp_prefer = prefer ? 1 : 0;
+        loop->bp.epoll_bp_changed = 1;
     }
 }
 
 static inline void h2o_loop_set_bp_mode(h2o_evloop_t *loop, uint8_t mode)
 {
+    if (mode >= 3)
+        return;
     loop->bp.mode = mode;
 }
 
-static inline void h2o_loop_set_nonblock(h2o_evloop_t *loop, bool nonblock)
+static inline void h2o_loop_set_nonblock(h2o_evloop_t *loop, uint8_t nonblock)
 {
-    loop->bp.epoll_nonblock = nonblock;
+    loop->bp.epoll_nonblock = nonblock ? 1 : 0;
 }
 
 static inline uint64_t h2o_evloop_get_execution_time_millisec(h2o_evloop_t *loop)

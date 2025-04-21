@@ -336,9 +336,9 @@ static struct {
     struct {
         uint64_t epoll_bp_usecs;
         uint64_t epoll_bp_budget;
-        bool epoll_bp_prefer;
-        bool epoll_bp_changed;
-        bool epoll_nonblock;
+        uint8_t epoll_bp_prefer : 1;
+        uint8_t epoll_bp_changed : 1;
+        uint8_t epoll_nonblock : 1;
     } bp;
 } conf = {
     .globalconf = {0},
@@ -367,9 +367,9 @@ static struct {
     .bp = {
          .epoll_bp_usecs = 0,
          .epoll_bp_budget = 0,
-         .epoll_bp_prefer = false,
-         .epoll_bp_changed = false,
-         .epoll_nonblock = false,
+         .epoll_bp_prefer = 0,
+         .epoll_bp_changed = 0,
+         .epoll_nonblock = 0,
      }
 };
 
