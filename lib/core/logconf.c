@@ -921,8 +921,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             APPEND_SAFE_STRING_WITH_LEN(pos, s.base, s.len);
         } break;
         case ELEMENT_TYPE_THREAD_INDEX:
-            RESERVE(sizeof(H2O_INT16_LONGEST_STR));
-			pos += sprintf(pos, "%" PRIu16, (uint16_t)req->conn->ctx->thread_index);
+            RESERVE(sizeof(H2O_SIZE_T_LONGEST_STR));
+            pos += sprintf(pos, "%zu", req->conn->ctx->thread_index);
             break;
         case ELEMENT_TYPE_BUSYPOLL_IFACE:
             APPEND_SAFE_STRING(pos, h2o_busypoll_get_iface());
