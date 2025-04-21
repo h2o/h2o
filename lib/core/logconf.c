@@ -928,7 +928,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             APPEND_SAFE_STRING(pos, h2o_busypoll_get_iface());
             break;
         case ELEMENT_TYPE_BUSYPOLL_NAPI_ID:
-            RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
+            RESERVE(sizeof(H2O_UINT32_LONGEST_STR));
             pos += sprintf(pos, "%" PRIu32, h2o_busypoll_get_napi_id());
             break;
         case ELEMENT_TYPE_BUSYPOLL_CPU_IDX:
