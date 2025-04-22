@@ -194,17 +194,45 @@ static void test_decode_literal_invalid_value(void)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
 
-    static const uint8_t input[] = {
-        0,    0,                 /* required_inesrt_count=0, base=0 */
-        0xd1,                    /* :method: GET */
-        0xd7,                    /* :scheme: https */
-        0x50, 3, 'a', '\n', 'b', /* :authority: a\nb */
-        0xc1,                    /* :path: / */
-    };
-    do_test_decode_request(dec, 0, h2o_iovec_init(input, sizeof(input)), H2O_HTTP2_ERROR_INVALID_HEADER_CHAR,
-                           h2o_hpack_soft_err_found_invalid_char_in_header_value, h2o_iovec_init(H2O_STRLIT("GET")),
-                           &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("a\nb")), h2o_iovec_init(H2O_STRLIT("/")), SIZE_MAX,
-                           NULL, 0, h2o_iovec_init(NULL, 0));
+    {
+        static const uint8_t input[] = {
+            0,    0,                 /* required_inesrt_count=0, base=0 */
+            0xd1,                    /* :method: GET */
+            0xd7,                    /* :scheme: https */
+            0x50, 3, 'a', '\n', 'b', /* :authority: a\nb */
+            0xc1,                    /* :path: / */
+        };
+        do_test_decode_request(dec, 0, h2o_iovec_init(input, sizeof(input)), H2O_HTTP2_ERROR_INVALID_HEADER_CHAR,
+                               h2o_hpack_soft_err_found_invalid_char_in_header_value, h2o_iovec_init(H2O_STRLIT("GET")),
+                               &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("a\nb")), h2o_iovec_init(H2O_STRLIT("/")), SIZE_MAX,
+                               NULL, 0, h2o_iovec_init(NULL, 0));
+    }
+    {
+        static const uint8_t input[] = {
+            0,    0,                /* required_inesrt_count=0, base=0 */
+            0xd1,                   /* :method: GET */
+            0xd7,                   /* :scheme: https */
+            0x50, 3, ' ', 'a', 'b', /* :authority: SP ab */
+            0xc1,                   /* :path: / */
+        };
+        do_test_decode_request(dec, 0, h2o_iovec_init(input, sizeof(input)), H2O_HTTP2_ERROR_INVALID_HEADER_CHAR,
+                               h2o_hpack_soft_err_found_invalid_char_in_header_value, h2o_iovec_init(H2O_STRLIT("GET")),
+                               &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT(" ab")), h2o_iovec_init(H2O_STRLIT("/")), SIZE_MAX,
+                               NULL, 0, h2o_iovec_init(NULL, 0));
+    }
+    {
+        static const uint8_t input[] = {
+            0,    0,                      /* required_inesrt_count=0, base=0 */
+            0xd1,                         /* :method: GET */
+            0xd7,                         /* :scheme: https */
+            0x50, 0x83, 0x50, 0x71, 0xff, /* :authority: SP ab (in huffman)*/
+            0xc1,                         /* :path: / */
+        };
+        do_test_decode_request(dec, 0, h2o_iovec_init(input, sizeof(input)), H2O_HTTP2_ERROR_INVALID_HEADER_CHAR,
+                               h2o_hpack_soft_err_found_invalid_char_in_header_value, h2o_iovec_init(H2O_STRLIT("GET")),
+                               &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT(" ab")), h2o_iovec_init(H2O_STRLIT("/")), SIZE_MAX,
+                               NULL, 0, h2o_iovec_init(NULL, 0));
+    }
 
     h2o_qpack_destroy_decoder(dec);
 }
