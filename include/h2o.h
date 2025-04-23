@@ -400,6 +400,10 @@ struct st_h2o_globalconf_t {
      * SSL handshake timeout
      */
     uint64_t handshake_timeout;
+    /**
+     * maximum number of pipes to retain for reuse
+     */
+    size_t max_spare_pipes;
 
     struct {
         /**
@@ -534,10 +538,6 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
-        /**
-         * maximum number of pipes to retain for reuse
-         */
-        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -686,6 +686,13 @@ struct st_h2o_context_t {
      */
     h2o_filecache_t *filecache;
     /**
+     * the list of spare pipes currently retained for reuse
+     */
+    struct {
+        int (*pipes)[2];
+        size_t count;
+    } spare_pipes;
+    /**
      * context scope storage for general use
      */
     h2o_context_storage_t storage;
@@ -787,13 +794,6 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
-        /**
-         * the list of spare pipes currently retained for reuse
-         */
-        struct {
-            int (*pipes)[2];
-            size_t count;
-        } spare_pipes;
     } proxy;
 
     struct {

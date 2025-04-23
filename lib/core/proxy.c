@@ -347,8 +347,8 @@ static void do_close(struct rp_generator_t *self)
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
         h2o_context_t *ctx = self->src_req->conn->ctx;
-        if (ctx->proxy.spare_pipes.count < ctx->globalconf->proxy.max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
-            int *dst = ctx->proxy.spare_pipes.pipes[ctx->proxy.spare_pipes.count++];
+        if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
+            int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
             dst[0] = self->pipe_reader.fds[0];
             dst[1] = self->pipe_reader.fds[1];
         } else {
@@ -674,8 +674,8 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
 #ifdef __linux__
-        if (req->conn->ctx->proxy.spare_pipes.count > 0) {
-            int *src = req->conn->ctx->proxy.spare_pipes.pipes[--req->conn->ctx->proxy.spare_pipes.count];
+        if (req->conn->ctx->spare_pipes.count > 0) {
+            int *src = req->conn->ctx->spare_pipes.pipes[--req->conn->ctx->spare_pipes.count];
             self->pipe_reader.fds[0] = src[0];
             self->pipe_reader.fds[1] = src[1];
         } else {
