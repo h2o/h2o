@@ -398,6 +398,8 @@ h2o_evloop_t *h2o_evloop_create(void)
         char buf[128];
         h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
+    loop->bp.mode = 0;
+    loop->bp.epoll_nonblock = 0;
     loop->bp.epoll_bp_usecs = 0;
     loop->bp.epoll_bp_budget = 0;
     loop->bp.epoll_bp_prefer = 0;
