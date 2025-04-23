@@ -457,6 +457,19 @@ Times spent for receiving <a href="configure/base_directives.html#listen-proxy-p
 
 <?
 $ctx->{directive}->(
+    name         => "io_uring-batch-size",
+    levels       => [ qw(global) ],
+    default      => "io_uring-batch-size: 1",
+    desc         => q{Number of io_uring calls to issue at once. Increasing this number might reduce overhead.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>
+EOT
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
     name   => "limit-request-body",
     levels => [ qw(global) ],
     desc   => q{Maximum size of request body in bytes (e.g. content of POST).},

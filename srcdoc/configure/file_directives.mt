@@ -116,6 +116,24 @@ The sequence of filenames are searched from left to right, and the first file th
 
 <?
 $ctx->{directive}->(
+    name     => "file.io_uring",
+    levels   => [ qw(global host path) ],
+    default  => "file.io_uring: ON",
+    desc     => q{If io_uring should be used for serving files.},
+    see_also => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>
+EOT
+)->(sub {
+?>
+<p>
+io_uring is a Linux feature that allows applications to read from disk without blocking.
+This option is enabled by default, so that HTTP connections can make progress while disk I/O is performed.
+When all files are known to be on memory, this option can be disabled to reduce the overhead of using io_uring.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),
