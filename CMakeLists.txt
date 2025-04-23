@@ -188,6 +188,7 @@ OPTION(WITH_AEGIS "enable AEGIS (requires libaegis)" ${WITH_AEGIS_DEFAULT})
 
 INCLUDE_DIRECTORIES(
     include
+    lib
     deps/cloexec
     deps/brotli/c/include
     deps/golombset
