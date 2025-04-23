@@ -77,10 +77,19 @@ subtest 'default' => sub {
     run_tests('');
 };
 
-subtest 'io_uring-batch-10' => sub {
-    plan skip_all => 'io_uring is not unavaialble'
+subtest 'io_uring' => sub {
+    plan skip_all => 'io_uring is not availble'
         unless server_features()->{io_uring};
-    run_tests('io_uring-batch-size: 10');
+    subtest 'file.io_uring=off' => sub {
+        run_tests('file.io_uring: OFF');
+    };
+    for my $batch_size (qw(1 10)) {
+        for my $spare_pipes (qw(0 10)) {
+            subtest "(batch_size,spare_pipes)=($batch_size,$spare_pipes)" => sub {
+                run_tests(join "\n", "io_uring-batch-size: $batch_size", "max-spare-pipes: $spare_pipes");
+            };
+        }
+    }
 };
 
 done_testing;
