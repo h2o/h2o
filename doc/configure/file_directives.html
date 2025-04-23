@@ -86,6 +86,9 @@ Other directives modify the behavior of the mappings defined by the two.
 <li><a href="configure/file_directives.html#file.index">
 <code>file.index</code>
 </a></li>
+<li><a href="configure/file_directives.html#file.io_uring">
+<code>file.io_uring</code>
+</a></li>
 <li><a href="configure/file_directives.html#file.mime.addtypes">
 <code>file.mime.addtypes</code>
 </a></li>
@@ -264,6 +267,33 @@ The sequence of filenames are searched from left to right, and the first file th
 <dd><code><pre>file.index: [ &#39;index.html&#39;, &#39;index.htm&#39;, &#39;index.txt&#39; ]</pre></code>
 <dt>See also:</dt>
 <dd><a href="configure/file_directives.html#file.dir"><code>file.dir</code></a>
+</dd>
+</dl>
+
+<div id="file.io_uring" class="directive-head">
+<h3><a href="configure/file_directives.html#file.io_uring"><code>"file.io_uring"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+If io_uring should be used for serving files.
+</p>
+
+<p>
+io_uring is a Linux feature that allows applications to read from disk without blocking.
+This option is enabled by default, so that HTTP connections can make progress while disk I/O is performed.
+When all files are known to be on memory, this option can be disabled to reduce the overhead of using io_uring.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path</dd>
+<dt>Default:</dt>
+<dd><code><pre>file.io_uring: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>
 </dd>
 </dl>
 

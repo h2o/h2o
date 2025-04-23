@@ -88,6 +88,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#handshake-timeout">
 <code>handshake-timeout</code>
 </a></li>
+<li><a href="configure/base_directives.html#io_uring-batch-size">
+<code>io_uring-batch-size</code>
+</a></li>
 <li><a href="configure/base_directives.html#limit-request-body">
 <code>limit-request-body</code>
 </a></li>
@@ -710,6 +713,29 @@ Times spent for receiving <a href="configure/base_directives.html#listen-proxy-p
 <dt>Default:</dt>
 <dd><code><pre>handshake-timeout: 10</pre></code>
 </dl>
+
+<div id="io_uring-batch-size" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/base_directives.html#io_uring-batch-size"><code>"io_uring-batch-size"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Number of io_uring calls to issue at once. Increasing this number might reduce overhead.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>io_uring-batch-size: 1</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>
+</dd>
+</dl>
+
 
 <div id="limit-request-body" class="directive-head">
 <h3><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>

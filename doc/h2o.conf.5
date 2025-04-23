@@ -896,6 +896,19 @@ Times spent for receiving the PROXY protocol and TLS handshake are counted.
 .RE
 .RE
 
+.SS io_uring-batch-size
+Number of io_uring calls to issue at once. Increasing this number might reduce overhead.
+
+.PP
+
+.PP
+.BR See\ also:
+file.io_uring
+
+.RE
+.RE
+
+
 .SS limit-request-body
 Maximum size of request body in bytes (e.g. content of POST).
 
@@ -2919,6 +2932,24 @@ The sequence of filenames are searched from left to right, and the first file th
 .PP
 .BR See\ also:
 file.dir
+
+.RE
+.RE
+
+.SS file.io_uring
+If io_uring should be used for serving files.
+
+.PP
+
+
+io_uring is a Linux feature that allows applications to read from disk without blocking.
+This option is enabled by default, so that HTTP connections can make progress while disk I/O is performed.
+When all files are known to be on memory, this option can be disabled to reduce the overhead of using io_uring.
+
+
+.PP
+.BR See\ also:
+io_uring-batch-size
 
 .RE
 .RE
