@@ -306,27 +306,6 @@ static h2o_httpclient_t *detach_client(struct rp_generator_t *self)
     return client;
 }
 
-static int empty_pipe(int fd)
-{
-    ssize_t ret;
-    char buf[1024];
-
-drain_more:
-    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
-        ;
-    if (ret == 0) {
-        return 0;
-    } else if (ret == -1) {
-        if (errno == EAGAIN)
-            return 1;
-        return 0;
-    } else if (ret == sizeof(buf)) {
-        goto drain_more;
-    }
-
-    return 1;
-}
-
 static void do_close(struct rp_generator_t *self)
 {
     /**
@@ -346,16 +325,7 @@ static void do_close(struct rp_generator_t *self)
     }
     h2o_timer_unlink(&self->send_headers_timeout);
     if (self->pipe_reader.fds[0] != -1) {
-        h2o_context_t *ctx = self->src_req->conn->ctx;
-        if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(self->pipe_reader.fds[0])) {
-            int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
-            dst[0] = self->pipe_reader.fds[0];
-            dst[1] = self->pipe_reader.fds[1];
-        } else {
-            close(self->pipe_reader.fds[0]);
-            close(self->pipe_reader.fds[1]);
-        }
-
+        h2o_context_return_spare_pipe(self->src_req->conn->ctx, self->pipe_reader.fds);
         self->pipe_reader.fds[0] = -1;
     }
 }
@@ -673,20 +643,9 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
-#ifdef __linux__
-        if (req->conn->ctx->spare_pipes.count > 0) {
-            int *src = req->conn->ctx->spare_pipes.pipes[--req->conn->ctx->spare_pipes.count];
-            self->pipe_reader.fds[0] = src[0];
-            self->pipe_reader.fds[1] = src[1];
-        } else {
-            if (pipe2(self->pipe_reader.fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-                char errbuf[256];
-                h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-            }
-        }
+        h2o_context_new_pipe(req->conn->ctx, self->pipe_reader.fds);
         args->pipe_reader->fd = self->pipe_reader.fds[1];
         args->pipe_reader->on_body_piped = on_body_piped;
-#endif
     }
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */

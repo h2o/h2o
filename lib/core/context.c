@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include "cloexec.h"
 #include "h2o.h"
 #include "h2o/memcached.h"
 
@@ -295,5 +296,61 @@ void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
         unlink_conn(conn);
         conn->state = state;
         link_conn(conn);
+    }
+}
+
+void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
+{
+    if (ctx->spare_pipes.count > 0) {
+        int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
+        fds[0] = src[0];
+        fds[1] = src[1];
+    } else {
+#ifdef __linux__
+        if (pipe2(fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+#else
+        if (cloexec_pipe(fds) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        fcntl(fds[0], F_SETFL, O_NONBLOCK);
+        fcntl(fds[1], F_SETFL, O_NONBLOCK);
+#endif
+    }
+}
+
+static int empty_pipe(int fd)
+{
+    ssize_t ret;
+    char buf[1024];
+
+drain_more:
+    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 0;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(buf)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
+void h2o_context_return_spare_pipe(h2o_context_t *ctx, int fds[2])
+{
+    if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(fds[0])) {
+        int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
+        dst[0] = fds[0];
+        dst[1] = fds[1];
+    } else {
+        close(fds[0]);
+        close(fds[1]);
     }
 }

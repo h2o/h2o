@@ -1831,6 +1831,14 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
  * return the address associated with the key in the context storage
  */
 static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
+/**
+ * provides a new pipe that has O_NONBLOCK set, possibly reusing a cached one that is empty
+ */
+void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2]);
+/**
+ * returns a pipe to the spare pipe cache
+ */
+void h2o_context_return_spare_pipe(h2o_context_t *ctx, int fds[2]);
 
 /* built-in generators */
 
