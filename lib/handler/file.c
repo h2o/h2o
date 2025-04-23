@@ -125,9 +125,8 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
     }
 #if H2O_USE_IO_URING
     if (self->splice_fds[0] != -1) {
-        close(self->splice_fds[0]);
+        h2o_context_return_spare_pipe(self->req->conn->ctx, self->splice_fds);
         self->splice_fds[0] = -1;
-        close(self->splice_fds[1]);
         self->splice_fds[1] = -1;
     }
 #endif
@@ -387,10 +386,7 @@ Opened:
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
     if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
-        if (pipe2(self->splice_fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
+        h2o_context_new_pipe(req->conn->ctx, self->splice_fds);
     } else {
         self->splice_fds[0] = -1;
         self->splice_fds[1] = -1;

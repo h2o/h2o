@@ -345,6 +345,9 @@ drain_more:
 
 void h2o_context_return_spare_pipe(h2o_context_t *ctx, int fds[2])
 {
+    assert(fds[0] != -1);
+    assert(fds[1] != -1);
+
     if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(fds[0])) {
         int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
         dst[0] = fds[0];
