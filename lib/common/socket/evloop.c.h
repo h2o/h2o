@@ -792,10 +792,7 @@ h2o_evloop_t *create_evloop(size_t sz)
     update_now(loop);
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
-    loop->bp.epoll_bp_usecs = 0;
-    loop->bp.epoll_bp_budget = 0;
-    loop->bp.epoll_bp_prefer = 0;
-    loop->bp.epoll_bp_changed = 0;
+
     return loop;
 }
 

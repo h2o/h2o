@@ -463,7 +463,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/status/ssl.c
     lib/handler/status/durations.c
     lib/handler/configurator/access_log.c
-    lib/handler/configurator/busypoll.c
     lib/handler/configurator/compress.c
     lib/handler/configurator/errordoc.c
     lib/handler/configurator/expires.c

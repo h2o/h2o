@@ -60,6 +60,14 @@ struct epoll_params {
 struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
     int ep;
+    struct {
+        uint32_t epoll_bp_usecs;
+        uint16_t epoll_bp_budget;
+        uint8_t epoll_bp_prefer : 1;
+        uint8_t epoll_bp_changed : 1;
+        uint8_t epoll_nonblock : 1;
+        uint8_t mode : 2;
+    } bp;
 };
 
 static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t events)
@@ -240,22 +248,22 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         /* poll */
 #ifdef H2O_HAS_YNL_H
     /* save a few syscalls if epoll bp params are unchanged */
-    if (loop->super.bp.epoll_bp_changed) {
-        evloop_set_bp(loop, loop->super.bp.epoll_bp_usecs, loop->super.bp.epoll_bp_budget, loop->super.bp.epoll_bp_prefer);
-        loop->super.bp.epoll_bp_changed = 0;
+    if (loop->bp.epoll_bp_changed) {
+        evloop_set_bp(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
+        loop->bp.epoll_bp_changed = 0;
     }
 
-    if (loop->super.bp.mode == 1) {
+    if (loop->bp.mode == 1) {
         max_wait = -1;
     } else {
         max_wait = adjust_max_wait(&loop->super, max_wait);
     }
-    if (loop->super.bp.epoll_bp_usecs) {
-        uint64_t _time = loop->super.bp.epoll_bp_usecs;
+    if (loop->bp.epoll_bp_usecs) {
+        uint64_t _time = loop->bp.epoll_bp_usecs;
         time_t seconds = 0;
         long int nsec = 0;
 
-        if (!loop->super.bp.epoll_nonblock) {
+        if (!loop->bp.epoll_nonblock) {
             seconds = _time / 1000000;
             nsec = (_time % 1000000) * 1000;
         }
@@ -382,32 +390,39 @@ static void evloop_do_dispose(h2o_evloop_t *_loop)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     close(loop->ep);
 }
-
-static h2o_evloop_t *_do_h2o_evloop_create(int flags, uint64_t time_budget, uint64_t packet_budget, uint8_t prefer)
+h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
-    char buf[128];
 
-    if ((loop->ep = epoll_create1(flags)) == -1) {
+    if ((loop->ep = epoll_create1(EPOLL_CLOEXEC)) == -1) {
+        char buf[128];
         h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
-
-    if (time_budget || packet_budget || prefer) {
-        loop->super.bp.epoll_bp_usecs = time_budget;
-        loop->super.bp.epoll_bp_budget = packet_budget;
-        loop->super.bp.epoll_bp_prefer = prefer;
-        evloop_set_bp(loop, time_budget, packet_budget, prefer);
-    }
-
+    loop->bp.epoll_bp_usecs = 0;
+    loop->bp.epoll_bp_budget = 0;
+    loop->bp.epoll_bp_prefer = 0;
+    loop->bp.epoll_bp_changed = 0;
     return &loop->super;
 }
 
-h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t packet_budget, uint8_t prefer)
+void h2o_loop_update_bp_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode)
 {
-    return _do_h2o_evloop_create(EPOLL_CLOEXEC, nsecs, packet_budget, prefer);
-}
-
-h2o_evloop_t *h2o_evloop_create(void)
-{
-    return _do_h2o_evloop_create(EPOLL_CLOEXEC, 0, 0, 0);
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    loop->bp.epoll_nonblock = nonblock ? 1 : 0;
+    loop->bp.mode = (mode < 3) ? mode : 0;
+    if (mode == 1) {
+        prefer = 1;
+    }
+    if (loop->bp.epoll_bp_usecs != usecs) {
+        loop->bp.epoll_bp_usecs = usecs;
+        loop->bp.epoll_bp_changed = 1;
+    }
+    if (loop->bp.epoll_bp_budget != budget) {
+        loop->bp.epoll_bp_budget = budget;
+        loop->bp.epoll_bp_changed = 1;
+    }
+    if (loop->bp.epoll_bp_prefer != prefer) {
+        loop->bp.epoll_bp_prefer = prefer ? 1 : 0;
+        loop->bp.epoll_bp_changed = 1;
+    }
 }

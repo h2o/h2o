@@ -78,29 +78,4 @@ inline int h2o_timer_is_linked(h2o_timer_t *entry)
     return entry->is_linked;
 }
 
-static inline void h2o_loop_set_bp_usecs(h2o_loop_t *loop, uint64_t usecs)
-{
-    (void)loop; /* noop */
-}
-
-static inline void h2o_loop_set_bp_budget(h2o_loop_t *loop, uint64_t budget)
-{
-    (void)loop; /* noop */
-}
-
-static inline void h2o_loop_set_bp_prefer(h2o_loop_t *loop, uint8_t prefer)
-{
-    (void)loop; /* noop */
-}
-
-static inline void h2o_loop_set_bp_mode(h2o_loop_t *loop, uint8_t mode)
-{
-    (void)loop; /* noop */
-}
-
-static inline void h2o_loop_set_nonblock(h2o_loop_t *loop, uint8_t nonblock)
-{
-    (void)loop; /* noop */
-}
-
 #endif

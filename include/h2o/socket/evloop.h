@@ -53,14 +53,6 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
     uint64_t run_count;
-    struct {
-        uint64_t epoll_bp_usecs;
-        uint64_t epoll_bp_budget;
-        uint8_t epoll_bp_prefer : 1;
-        uint8_t epoll_bp_changed : 1;
-        uint8_t epoll_nonblock : 1;
-        uint8_t mode : 2;
-    } bp;
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
@@ -79,7 +71,6 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *listener);
 void h2o_evloop_socket_set_max_read_size(h2o_socket_t *sock, size_t max_size);
 
 h2o_evloop_t *h2o_evloop_create(void);
-h2o_evloop_t *h2o_evloop_create_busy_poll(uint64_t nsecs, uint64_t budget, uint8_t prefer);
 void h2o_evloop_destroy(h2o_evloop_t *loop);
 /**
  * runs a event loop once. The function returns 0 if successful, or -1 if it aborts the operation due to a system call returning an
@@ -110,42 +101,6 @@ static inline uint64_t h2o_now_nanosec(h2o_evloop_t *loop)
     return loop->_now_nanosec;
 }
 
-static inline void h2o_loop_set_bp_usecs(h2o_evloop_t *loop, uint64_t usecs)
-{
-    if (loop->bp.epoll_bp_usecs != usecs) {
-        loop->bp.epoll_bp_usecs = usecs;
-        loop->bp.epoll_bp_changed = 1;
-    }
-}
-
-static inline void h2o_loop_set_bp_budget(h2o_evloop_t *loop, uint64_t budget)
-{
-    if (loop->bp.epoll_bp_budget != budget) {
-        loop->bp.epoll_bp_budget = budget;
-        loop->bp.epoll_bp_changed = 1;
-    }
-}
-
-static inline void h2o_loop_set_bp_prefer(h2o_evloop_t *loop, uint8_t prefer)
-{
-    if (loop->bp.epoll_bp_prefer != prefer) {
-        loop->bp.epoll_bp_prefer = prefer ? 1 : 0;
-        loop->bp.epoll_bp_changed = 1;
-    }
-}
-
-static inline void h2o_loop_set_bp_mode(h2o_evloop_t *loop, uint8_t mode)
-{
-    if (mode >= 3)
-        return;
-    loop->bp.mode = mode;
-}
-
-static inline void h2o_loop_set_nonblock(h2o_evloop_t *loop, uint8_t nonblock)
-{
-    loop->bp.epoll_nonblock = nonblock ? 1 : 0;
-}
-
 static inline uint64_t h2o_evloop_get_execution_time_millisec(h2o_evloop_t *loop)
 {
     return loop->exec_time_nanosec_counter.average / 1000000;
@@ -161,4 +116,7 @@ inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t
     h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now_millisec + delay_ticks);
 }
 
+#if defined(__linux__)
+void h2o_loop_update_bp_params(h2o_evloop_t *loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode);
+#endif
 #endif

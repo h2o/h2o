@@ -1,7 +1,40 @@
-#include "h2o.h"
-#include "h2o/configurator.h"
 
-#include <net/if.h>
+static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int nonblock_mode = 0;
+    if ((nonblock_mode = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.bp.epoll_nonblock = nonblock_mode;
+    return 0;
+}
+
+static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    int prefer = 0;
+    if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+
+    conf.bp.epoll_bp_prefer = prefer == 1;
+    return 0;
+}
+
+static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_budget) != 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static int on_busy_poll_usecs(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_usecs) != 0)
+        return -1;
+
+    return 0;
+}
 
 static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -31,8 +64,8 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         h2o_configurator_errprintf(cmd, *if_node, "number of interfaces should be between 1-32\n");
         return -1;
     }
-    ctx->globalconf->bp.nic_count = nic_count;
-    h2o_busypoll_nic_vector_t *nic_to_cpu_map = &ctx->globalconf->bp.nic_to_cpu_map;
+    conf.bp.nic_count = nic_count;
+    h2o_busypoll_nic_vector_t *nic_to_cpu_map = &conf.bp.nic_to_cpu_map;
 
     h2o_vector_reserve(NULL, nic_to_cpu_map, nic_count);
 
@@ -128,12 +161,5 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 
     return 0;
-}
-
-void h2o_busypoll_register_configurator(h2o_globalconf_t *conf)
-{
-    struct st_h2o_configurator_t *c = (void *)h2o_configurator_create(conf, sizeof(*c));
-
-    h2o_configurator_define_command(c, "busy-poll-map", H2O_CONFIGURATOR_FLAG_GLOBAL, on_busy_poll_map);
 }
 
