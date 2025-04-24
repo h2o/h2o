@@ -47,7 +47,6 @@ struct st_h2o_sendfile_generator_t {
         h2o_filecache_ref_t *ref;
         off_t off;
     } file;
-    h2o_req_t *req;
     size_t bytesleft;
     h2o_iovec_t content_encoding;
     unsigned send_vary : 1;
@@ -334,7 +333,6 @@ Opened:
     self->super.stop = NULL;
     self->file.ref = fileref;
     self->file.off = 0;
-    self->req = NULL;
     self->bytesleft = self->file.ref->st.st_size;
     self->ranged.range_count = 0;
     self->ranged.range_infos = NULL;
@@ -378,9 +376,6 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
                          h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
 {
-    /* link the request */
-    self->req = req;
-
     /* setup response */
     req->res.status = status;
     req->res.reason = reason;
