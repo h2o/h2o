@@ -245,7 +245,8 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     if (update_status(loop) != 0)
         return -1;
 
-        /* poll */
+    /* poll */
+    max_wait = adjust_max_wait(&loop->super, max_wait);
 #ifdef H2O_HAS_YNL_H
     /* save a few syscalls if epoll bp params are unchanged */
     if (loop->bp.epoll_bp_changed) {
@@ -253,11 +254,6 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         loop->bp.epoll_bp_changed = 0;
     }
 
-    if (loop->bp.mode == 1) {
-        max_wait = -1;
-    } else {
-        max_wait = adjust_max_wait(&loop->super, max_wait);
-    }
     if (loop->bp.epoll_bp_usecs) {
         uint64_t _time = loop->bp.epoll_bp_usecs;
         time_t seconds = 0;
@@ -271,6 +267,9 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         struct timespec ts = {.tv_sec = seconds, .tv_nsec = nsec};
         nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
     } else {
+        if (loop->bp.mode == 1) {
+            max_wait = -1;
+        }
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
     }
 #else
