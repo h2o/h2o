@@ -529,6 +529,34 @@ $ctx->{directive}->(
     desc    => q{Limits the number of internal redirects.},
 )->(sub {});
 
+<?
+$ctx->{directive}->(
+    name     => "max-spare-pipes",
+    levels   => [ qw(global) ],
+    desc     => q{This setting specifies the maximum number of pipes retained for reuse, when <code>file.io_uring</code> or <code>proxy.zerocopy</code> is used.},
+    default  => 0,
+    see_also => render_mt(<<'EOT'),
+<a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>, <a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+EOT
+)->(sub {
+?>
+<p>
+The setting can be used to reduce lock contention in the kernel under high load.
+</p>
+<p>
+This maximum is applied per each worker thread.
+If this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
+</p>
+<p>
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+</p>
+<p>
+In previous versions, this configuration directive was called <code>proxy.max-spare-pipes</code>.
+</p>
+? })
+
+<?
 $ctx->{directive}->(
     name         => "neverbleed-offload",
     levels       => [ qw(global) ],

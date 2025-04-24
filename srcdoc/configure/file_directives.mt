@@ -121,7 +121,8 @@ $ctx->{directive}->(
     default  => "file.io_uring: ON",
     desc     => q{If io_uring should be used for serving files.},
     see_also => render_mt(<<'EOT'),
-<a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>
+<a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>,
+<a href="configure/base_directives.html#max-spare-pipes"><code>max-spare-pipes</code></a>
 EOT
 )->(sub {
 ?>
