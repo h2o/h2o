@@ -1,7 +1,8 @@
 #include "h2o.h"
-#include "h2o/busypoll.h"
 
 #if defined(__linux__) && defined(SO_REUSEPORT) && defined(H2O_HAS_YNL_H)
+
+#include "h2o/busypoll.h"
 #include <linux/genetlink.h>
 #include <linux/netlink.h>
 #include <linux/filter.h>
@@ -445,6 +446,9 @@ uint16_t h2o_busypoll_get_cpu_idx(void)
 }
 
 #else
+
+struct busypoll_nic_t {
+};
 
 void h2o_busypoll_bind_interface(int fd, const char *iface)
 {

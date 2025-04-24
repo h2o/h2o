@@ -2917,9 +2917,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         }
                     } else {
                         const char *iface = NULL;
+#if defined(__linux__)
                         if (conf.bp.nic_count > 0 && conf.bp.nic_to_cpu_map.entries[0].mode != BP_MODE_OFF) {
                             iface = conf.bp.nic_to_cpu_map.entries[0].iface.base;
                         }
+#endif
 
                         if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
                                                      ai->ai_addr, ai->ai_addrlen, iface)) == -1) {
@@ -4844,6 +4846,7 @@ static void create_per_thread_listeners(void)
     }
 }
 
+#if defined(__linux__)
 static void create_per_thread_nic_map_listeners(void)
 {
     int nic_map_cpus = 0;
@@ -4953,6 +4956,7 @@ static void create_per_thread_nic_map_listeners(void)
         }
     }
 }
+#endif
 
 int main(int argc, char **argv)
 {
@@ -5274,10 +5278,14 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
 
     /* call `bind()` before setuid(), different uids can't bind the same address */
+#if defined(__linux__)
     if (conf.bp.nic_count > 0) {
         fprintf(stderr, "nic map was setup, creating per thread listeners\n");
         create_per_thread_nic_map_listeners();
     } else {
+# else
+    {
+#endif
         create_per_thread_listeners();
     }
 
