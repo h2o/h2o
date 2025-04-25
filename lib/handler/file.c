@@ -43,7 +43,6 @@
 
 struct st_h2o_sendfile_generator_t {
     h2o_generator_t super;
-    h2o_req_t *src_req;
     struct {
         h2o_filecache_ref_t *ref;
         off_t off;
@@ -67,6 +66,10 @@ struct st_h2o_sendfile_generator_t {
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
     } header_bufs;
 #ifdef H2O_USE_IO_URING
+    /**
+     * back pointer to the request which is necessary for splicing async; becomes NULL when the generator is stopped
+     */
+    h2o_req_t *src_req;
     int splice_fds[2];
 #endif
 };
@@ -124,7 +127,13 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
     }
 #if H2O_USE_IO_URING
     if (self->splice_fds[0] != -1) {
-        h2o_context_return_spare_pipe(self->req->conn->ctx, self->splice_fds);
+        if (self->src_req != NULL) {
+            h2o_context_return_spare_pipe(self->src_req->conn->ctx, self->splice_fds);
+        } else {
+            /* TODO return pipe upon abrupt close too? maybe that's not need */
+            close(self->splice_fds[0]);
+            close(self->splice_fds[1]);
+        }
         self->splice_fds[0] = -1;
         self->splice_fds[1] = -1;
     }
@@ -138,6 +147,12 @@ static void on_generator_dispose(void *_self)
 }
 
 #ifdef H2O_USE_IO_URING
+
+static void do_stop_async_splice(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    self->src_req = NULL;
+}
 
 static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
 {
@@ -313,12 +328,6 @@ Error:
     return;
 }
 
-static void do_stop(h2o_generator_t *_self, h2o_req_t *req)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)_self;
-    self->src_req = NULL;
-}
-
 static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, const char *path, size_t path_len, int *is_dir,
                                                             int flags)
 {
@@ -371,8 +380,7 @@ Opened:
 
     self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
     self->super.proceed = do_proceed;
-    self->super.stop = do_stop;
-    self->src_req = req;
+    self->super.stop = NULL;
     self->file.ref = fileref;
     self->file.off = 0;
     self->bytesleft = self->file.ref->st.st_size;
@@ -384,6 +392,8 @@ Opened:
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
     if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
+        self->super.stop = do_stop_async_splice;
+        self->src_req = req;
         h2o_context_new_pipe(req->conn->ctx, self->splice_fds);
     } else {
         self->splice_fds[0] = -1;
