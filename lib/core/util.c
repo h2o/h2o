@@ -29,6 +29,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
+#include "h2o/http3_server.h"
 #include "h2o/hiredis_.h"
 
 struct st_h2o_accept_data_t {
@@ -337,6 +338,15 @@ static void on_memcached_accept_timeout(h2o_timer_t *entry)
     accept_timeout(&data->super);
 }
 
+static int is_protocol(h2o_iovec_t selected, const h2o_iovec_t *ident)
+{
+    for (; ident->len != 0; ++ident) {
+        if (h2o_memis(selected.base, selected.len, ident->base, ident->len))
+            return 1;
+    }
+    return 0;
+}
+
 static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
@@ -360,19 +370,20 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
-    const h2o_iovec_t *ident;
-    for (ident = h2o_http2_alpn_protocols; ident->len != 0; ++ident) {
-        if (proto.len == ident->len && memcmp(proto.base, ident->base, proto.len) == 0) {
-            /* connect as http2 */
-            ++data->ctx->ctx->ssl.alpn_h2;
-            h2o_http2_accept(data->ctx, sock, data->connected_at);
-            goto Exit;
-        }
+    if (is_protocol(proto, h2o_h3_on_streams_alpn_protocols)) {
+        /* connected as h3-on-streams */
+        ++data->ctx->ctx->ssl.alpn_h3_on_streams;
+        h2o_http3_accept_on_streams(data->ctx, sock, data->connected_at);
+    } else if (is_protocol(proto, h2o_http2_alpn_protocols)) {
+        /* connect as http2 */
+        ++data->ctx->ctx->ssl.alpn_h2;
+        h2o_http2_accept(data->ctx, sock, data->connected_at);
+    } else {
+        /* connect as http1 */
+        if (proto.len != 0)
+            ++data->ctx->ctx->ssl.alpn_h1;
+        h2o_http1_accept(data->ctx, sock, data->connected_at);
     }
-    /* connect as http1 */
-    if (proto.len != 0)
-        ++data->ctx->ctx->ssl.alpn_h1;
-    h2o_http1_accept(data->ctx, sock, data->connected_at);
 
 Exit:
     accept_data_callbacks.destroy(data);
@@ -920,7 +931,7 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
 
 /* h2-14 and h2-16 are kept for backwards compatibility, as they are often used */
 #define ALPN_ENTRY(s) {H2O_STRLIT(s)}
-#define ALPN_PROTOCOLS_CORE ALPN_ENTRY("h2"), ALPN_ENTRY("h2-16"), ALPN_ENTRY("h2-14")
+#define ALPN_PROTOCOLS_H2 ALPN_ENTRY("h2"), ALPN_ENTRY("h2-16"), ALPN_ENTRY("h2-14")
 #define NPN_PROTOCOLS_CORE                                                                                                         \
     "\x02"                                                                                                                         \
     "h2"                                                                                                                           \
@@ -928,9 +939,13 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     "h2-16"                                                                                                                        \
     "\x05"                                                                                                                         \
     "h2-14"
+#define ALPN_PROTOCOLS_H3_ON_STREAMS ALPN_ENTRY("h3")
 
-const h2o_iovec_t h2o_http2_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, {NULL}};
-const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_CORE, ALPN_ENTRY("http/1.1"), {NULL}};
+const h2o_iovec_t h2o_http2_alpn_protocols[] = {ALPN_PROTOCOLS_H2, {NULL}};
+const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_H2, ALPN_ENTRY("http/1.1"), {NULL}};
+const h2o_iovec_t h2o_h3_on_streams_alpn_protocols[] = {ALPN_PROTOCOLS_H3_ON_STREAMS, {NULL}};
+const h2o_iovec_t h2o_alpn_protocols_including_h3_on_streams[] = {
+    ALPN_PROTOCOLS_H3_ON_STREAMS, ALPN_PROTOCOLS_H2, ALPN_ENTRY("http/1.1"), {NULL}};
 
 const char h2o_http2_npn_protocols[] = NPN_PROTOCOLS_CORE;
 const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"

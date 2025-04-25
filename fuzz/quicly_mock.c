@@ -498,5 +498,23 @@ quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn)
     return 0;
 }
 
+quicly_error_t quicly_qos_send(quicly_conn_t *conn, void *buf, size_t *bufsize)
+{
+    assert(0 && "unimplemented");
+    return 1;
+}
+
+quicly_error_t quicly_qos_receive(quicly_conn_t *conn, const void *src, size_t *len)
+{
+    assert(0 && "unimplemented");
+    return 1;
+}
+
+quicly_conn_t *quicly_qos_new(quicly_context_t *ctx, int is_client, void *appdata)
+{
+    assert(0 && "unimplemented");
+    return NULL;
+}
+
 const uint32_t quicly_supported_versions[] = {QUICLY_PROTOCOL_VERSION_1, QUICLY_PROTOCOL_VERSION_DRAFT29,
                                               QUICLY_PROTOCOL_VERSION_DRAFT27, 0};

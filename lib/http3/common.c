@@ -1092,18 +1092,71 @@ void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_qu
 void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
 {
     if (conn->quic != NULL) {
-        khiter_t iter;
-        /* unregister from maps */
-        if ((iter = kh_get_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
-            kh_end(conn->ctx->conns_by_id))
-            kh_del_h2o_quic_idmap(conn->ctx->conns_by_id, iter);
-        drop_from_acceptmap(conn->ctx, conn);
+        if (conn->streams_sock == NULL) {
+            khiter_t iter;
+            /* unregister from maps */
+            if ((iter = kh_get_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id)) !=
+                kh_end(conn->ctx->conns_by_id))
+                kh_del_h2o_quic_idmap(conn->ctx->conns_by_id, iter);
+            drop_from_acceptmap(conn->ctx, conn);
+        }
         quicly_free(conn->quic);
     }
+    if (conn->streams_sock != NULL)
+        h2o_socket_close(conn->streams_sock);
     h2o_timer_unlink(&conn->_timeout);
 }
 
-void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
+static void qos_on_read(h2o_socket_t *sock, const char *err)
+{
+    h2o_quic_conn_t *conn = sock->data;
+    assert(conn->streams_sock != NULL);
+
+    if (err != NULL) {
+        conn->callbacks->destroy_connection(conn);
+        return;
+    }
+
+    size_t len = sock->input->size;
+    quicly_error_t ret = quicly_qos_receive(conn->quic, sock->input->bytes, &len);
+    switch (ret) {
+    case QUICLY_ERROR_STATE_EXHAUSTION:
+    case PTLS_ERROR_NO_MEMORY:
+        conn->callbacks->destroy_connection(conn);
+        return;
+    default:
+        break;
+    }
+    h2o_buffer_consume(&sock->input, len);
+
+    h2o_quic_schedule_timer(conn);
+}
+
+static void qos_on_write_complete(h2o_socket_t *sock, const char *err)
+{
+    h2o_quic_conn_t *conn = sock->data;
+    assert(conn->streams_sock != NULL);
+
+    if (err != NULL) {
+        conn->callbacks->destroy_connection(conn);
+        return;
+    }
+
+    h2o_quic_schedule_timer(conn);
+}
+
+static int qos_is_writing(quicly_qos_is_writing_t *_self, quicly_conn_t *quic)
+{
+    h2o_quic_conn_t *conn = *quicly_get_data(quic);
+    assert(conn->streams_sock != NULL);
+
+    return h2o_socket_is_writing(conn->streams_sock);
+}
+
+quicly_qos_is_writing_t h2o_quic_qos_is_writing = {.cb = qos_is_writing};
+
+
+void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
     /* Setup relation between `h2o_quic_conn_t` and `quicly_conn_t`. At this point, `conn` will not have `quic` associated, though
      * the back pointer might have alreday been set up (see how we call `quicly_accept`). */
@@ -1116,11 +1169,18 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic)
     }
     conn->quic = quic;
 
-    /* register to the idmap */
-    int r;
-    khiter_t iter = kh_put_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
-    assert(iter != kh_end(conn->ctx->conns_by_id));
-    kh_val(conn->ctx->conns_by_id, iter) = conn;
+    if (streams_sock != NULL) {
+        assert(!h2o_socket_is_reading(streams_sock));
+        conn->streams_sock = streams_sock;
+        conn->streams_sock->data = conn;
+        h2o_socket_read_start(conn->streams_sock, qos_on_read);
+    } else {
+        /* register to the idmap */
+        int r;
+        khiter_t iter = kh_put_h2o_quic_idmap(conn->ctx->conns_by_id, quicly_get_master_id(conn->quic)->master_id, &r);
+        assert(iter != kh_end(conn->ctx->conns_by_id));
+        kh_val(conn->ctx->conns_by_id, iter) = conn;
+    }
 }
 
 void h2o_http3_init_conn(h2o_http3_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_http3_conn_callbacks_t *callbacks,
@@ -1173,11 +1233,11 @@ Exit:
     h2o_fatal("unreachable");
 }
 
-quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
     quicly_error_t ret;
 
-    h2o_quic_setup(&conn->super, quic);
+    h2o_quic_setup(&conn->super, quic, streams_sock);
     conn->state = H2O_HTTP3_CONN_STATE_OPEN;
 
     /* setup h3 objects, only when the connection state has been created */
@@ -1212,30 +1272,42 @@ Exit:
 
 quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
 {
-    quicly_address_t dest, src;
-    struct iovec datagrams[10];
-    size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
-    uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
+    quicly_error_t send_result;
 
-    quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
-    switch (ret) {
-    case 0:
-        if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
-            /* FIXME close the connection immediately */
-            break;
-        }
-        break;
-    case QUICLY_ERROR_STATE_EXHAUSTION:
-    case QUICLY_ERROR_FREE_CONNECTION:
-        conn->callbacks->destroy_connection(conn);
-        return 0;
-    default:
-        h2o_fatal("quicly_send returned %" PRId64, ret);
+    if (conn->streams_sock != NULL) {
+        if (h2o_socket_is_writing(conn->streams_sock))
+            return 1;
+        uint8_t buf[16384];
+        h2o_iovec_t vec = h2o_iovec_init(buf, sizeof(buf));
+        if ((send_result = quicly_qos_send(conn->quic, vec.base, &vec.len)) != 0)
+            goto Fail;
+        if (vec.len != 0)
+            h2o_socket_write(conn->streams_sock, &vec, 1, qos_on_write_complete);
+    } else {
+        quicly_address_t dest, src;
+        struct iovec datagrams[10];
+        size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
+        uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
+        if ((send_result = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf))) !=
+            0)
+            goto Fail;
+        if (num_datagrams != 0)
+            h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams); /* FIXME detect errors and close */
     }
 
     h2o_quic_schedule_timer(conn);
-
     return 1;
+
+Fail:
+    switch (send_result) {
+    case QUICLY_ERROR_STATE_EXHAUSTION:
+    case QUICLY_ERROR_FREE_CONNECTION:
+        conn->callbacks->destroy_connection(conn);
+        break;
+    default:
+        h2o_fatal("quicly_send returned %" PRId64, send_result);
+    }
+    return 0;
 }
 
 void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, size_t len)

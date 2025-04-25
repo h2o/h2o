@@ -131,6 +131,10 @@ typedef struct st_h2o_httpclient_connection_pool_t {
 
     struct {
         h2o_linklist_t conns;
+    } http3_on_streams;
+
+    struct {
+        h2o_linklist_t conns;
     } http3;
 
 } h2o_httpclient_connection_pool_t;
@@ -143,6 +147,10 @@ typedef struct st_h2o_httpclient_protocol_ratio_t {
      * H2 and some supporting only H1.
      */
     int8_t http2;
+    /**
+     * Indicates the percentage of requests for which HTTP/3-on-Streams should be used (TODO support negative value).
+     */
+    int8_t h3_on_streams;
     /**
      * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative, because
      * unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
@@ -169,7 +177,7 @@ typedef struct st_h2o_httpclient_ctx_t {
          * Each deficit is initialized to zero, then incremented by the respective percentage, and the protocol corresponding to the
          * one with the highest value is chosen. Then, the chosen variable is decremented by 100.
          */
-        int16_t _deficits[4];
+        int16_t _deficits[5];
     } protocol_selector;
 
     /**
@@ -417,6 +425,11 @@ extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);
+void h2o_httpclient__h3s_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin);
+struct st_h2o_httpclient__h3_conn_t *h2o_httpclient__find_h3_connection(h2o_httpclient_connection_pool_t *pool, int on_streams,
+                                                                        h2o_url_t *origin);
+extern const size_t h2o_httpclient__h3_size;
+
 /**
  * internal API for checking if the stream is to be turned into a tunnel
  */

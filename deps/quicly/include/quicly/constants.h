@@ -65,6 +65,8 @@ extern "C" {
 #define QUICLY_EPOCH_HANDSHAKE 2
 #define QUICLY_EPOCH_1RTT 3
 #define QUICLY_NUM_EPOCHS 4
+#define QUICLY_EPOCH_ON_STREAMS_TP 4 /* used internally */
+#define QUICLY_EPOCH_ON_STREAMS_OTHER 5
 
 /**
  * Error code used by quicly. The code coalesces the following to an int64_t.
@@ -118,6 +120,7 @@ typedef int64_t quicly_error_t;
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
 #define QUICLY_ERROR_INVALID_INITIAL_VERSION 0xff08
 #define QUICLY_ERROR_DECRYPTION_FAILED 0xff09
+#define QUICLY_ERROR_PARTIAL_FRAME 0xff0a
 
 typedef int64_t quicly_stream_id_t;
 
