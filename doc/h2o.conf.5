@@ -2969,9 +2969,9 @@ If io_uring should be used for serving files.
 .PP
 
 
-io_uring is a Linux feature that allows applications to read from disk without blocking.
-This option is enabled by default, so that HTTP connections can make progress while disk I/O is performed.
-When all files are known to be on memory, this option can be disabled to reduce the overhead of using io_uring.
+By default, H2O uses system calls such as pread (2) or sendfile (2), which block if the file being read is not in the page cache.
+This can prevent H2O's worker threads from making progress on any connection handled by the affected thread.
+When this flag is enabled, H2O is no longer blocked by the I/O calls, as the data is asynchronously copied from disk to the page cache before h2o attempts to access it.
 
 
 .PP
