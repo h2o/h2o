@@ -30,11 +30,12 @@ hosts:
         file.dir: $tempdir
         header.add: "X-Traffic: 200000" # takes about 5 seconds
 throttle-response: ON
+file.io_uring: OFF
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 
 my $doit = sub {
-    my ($fetch, $shrink_exit_status_is_todo) = @_;
+    my $fetch = shift;
 
     # write file
     open my $fh, ">", "$tempdir/index.txt"
@@ -60,14 +61,7 @@ my $doit = sub {
         }
         # fetch file (which would return a partial result)
         my $resp = $fetch->("index.txt");
-        if ($shrink_exit_status_is_todo) {
-            TODO: {
-                local $TODO = "splice generates H2O_SEND_ERROR, however h3 yet lacks the capability to convert them to reliable resets";
-                isnt $?, 0, "exit status";
-            }
-        } else {
-            isnt $?, 0, "exit status";
-        }
+        isnt $?, 0, "exit status";
         cmp_ok length($resp), "<", length($testdata), "length";
         is md5_hex($resp), md5_hex(substr($testdata, 0, length($resp))), "data";
         # reap pid
@@ -90,7 +84,7 @@ subtest 'http/3' => sub {
     $doit->(sub {
         my $fn = shift;
         `$h3client -3 100 https://127.0.0.1:$quic_port/$fn 2> /dev/null`;
-    }, server_features()->{io_uring});
+    });
 };
 
 undef $server;

@@ -54,7 +54,12 @@ EOT
     }
     if ($io_uring_batch_size) {
         $conf .= << "EOT";
+file.io_uring: ON
 io_uring-batch-size: $io_uring_batch_size
+EOT
+    } else {
+        $conf .= << "EOT";
+file.io_uring: OFF
 EOT
     }
     my $guard = spawn_h2o($conf);
