@@ -49,7 +49,11 @@ provider h2o {
     /**
      *
      */
-    probe io_uring_start_splice_file(struct st_h2o_io_uring_cmd_t *cmd);
+    probe io_uring_splice(struct st_h2o_io_uring_cmd_t *cmd);
+    /**
+     *
+     */
+    probe io_uring_submit(struct st_h2o_io_uring_cmd_t *cmd);
     /**
      *
      */

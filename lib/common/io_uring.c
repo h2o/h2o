@@ -86,6 +86,7 @@ static int submit_commands(h2o_loop_t *loop, int can_delay)
             break;
         struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->submission);
         assert(cmd != NULL);
+        H2O_PROBE(IO_URING_SUBMIT, cmd);
         io_uring_prep_splice(sqe, cmd->splice_.filefd, cmd->splice_.offset, cmd->splice_.pipefd, -1, cmd->splice_.len, 0);
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
@@ -186,12 +187,11 @@ void h2o_io_uring_splice_file(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int _
         .splice_.offset = _offset,
         .splice_.len = _len,
     };
+    H2O_PROBE(IO_URING_SPLICE, cmd);
 
     cmd = start_command(loop, cmd);
 
     *_cmd = cmd;
-    if (cmd != NULL)
-        H2O_PROBE(IO_URING_START_SPLICE_FILE, cmd);
 }
 
 static void run_uring(h2o_loop_t *loop)
