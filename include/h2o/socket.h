@@ -111,16 +111,14 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
-/* forward declaration of async_io.h */
-struct st_h2o_async_io_t;
+/* used by probes */
+struct st_h2o_io_uring_cmd_t;
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
 #else
 #include "socket/evloop.h"
 #endif
-
-#include "h2o/async_io.h"
 
 struct st_h2o_socket_addr_t {
     socklen_t len;

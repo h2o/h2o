@@ -30,6 +30,9 @@
 #endif
 #include "cloexec.h"
 #include "h2o/linklist.h"
+#if H2O_USE_IO_URING
+#include "h2o/async_io.h"
+#endif
 
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__

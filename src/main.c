@@ -95,6 +95,9 @@
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
+#if H2O_USE_IO_URING
+#include "h2o/async_io.h"
+#endif
 #include "standalone.h"
 #include "../lib/probes_.h"
 

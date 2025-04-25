@@ -22,6 +22,10 @@
 #ifndef h2o__async_io_h
 #define h2o__async_io_h
 
+#if !H2O_USE_IO_URING
+#error "this file may be included only when io_uring support is available"
+#endif
+
 typedef struct st_h2o_async_io_t h2o_async_io_t;
 typedef struct st_h2o_async_io_cmd_t h2o_async_io_cmd_t;
 typedef void (*h2o_async_io_cb)(h2o_async_io_cmd_t *);
@@ -34,9 +38,7 @@ struct st_h2o_async_io_cmd_t {
     int result;
 };
 
-#if H2O_USE_IO_URING
 extern size_t h2o_io_uring_batch_size;
-#endif
 
 /**
  * initializes structure related to async I/O of `loop`

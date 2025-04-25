@@ -34,8 +34,10 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-
 #include "h2o.h"
+#if H2O_USE_IO_URING
+#include "h2o/async_io.h"
+#endif
 
 #define MAX_BUF_SIZE 65000
 #define BOUNDARY_SIZE 20
@@ -65,7 +67,7 @@ struct st_h2o_sendfile_generator_t {
         char last_modified[H2O_TIMESTR_RFC1123_LEN + 1];
         char etag[H2O_FILECACHE_ETAG_MAXLEN + 1];
     } header_bufs;
-#ifdef H2O_USE_IO_URING
+#if H2O_USE_IO_URING
     /**
      * back pointer to the request which is necessary for splicing async; becomes NULL when the generator is stopped
      */
@@ -146,7 +148,7 @@ static void on_generator_dispose(void *_self)
     close_file(self);
 }
 
-#ifdef H2O_USE_IO_URING
+#if H2O_USE_IO_URING
 
 static void do_stop_async_splice(h2o_generator_t *_self, h2o_req_t *req)
 {

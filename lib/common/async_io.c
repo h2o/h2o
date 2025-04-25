@@ -24,9 +24,7 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#if H2O_USE_IO_URING
 #include <liburing.h>
-#endif
 #include "h2o/socket.h"
 #include "h2o/async_io.h"
 #include "../probes_.h"

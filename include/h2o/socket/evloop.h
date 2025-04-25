@@ -40,6 +40,11 @@
  */
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
+#if H2O_USE_IO_URING
+/* forward declaration of async_io.h */
+struct st_h2o_async_io_t;
+#endif
+
 typedef struct st_h2o_evloop_t {
     struct st_h2o_evloop_socket_t *_pending_as_client;
     struct st_h2o_evloop_socket_t *_pending_as_server;
