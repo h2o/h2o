@@ -36,7 +36,7 @@
 #include <unistd.h>
 #include "h2o.h"
 #if H2O_USE_IO_URING
-#include "h2o/async_io.h"
+#include "h2o/io_uring.h"
 #endif
 
 #define MAX_BUF_SIZE 65000
@@ -156,7 +156,7 @@ static void do_stop_async_splice(h2o_generator_t *_self, h2o_req_t *req)
     self->src_req = NULL;
 }
 
-static void do_proceed_on_splice_complete(h2o_async_io_cmd_t *cmd)
+static void do_proceed_on_splice_complete(h2o_io_uring_cmd_t *cmd)
 {
     struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
 
@@ -257,12 +257,12 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
 
-    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_async_io_splice_file` */
+    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
 #if H2O_USE_IO_URING
     if (self->splice_fds[0] != -1) {
-        h2o_async_io_cmd_t *cmd;
+        h2o_io_uring_cmd_t *cmd;
         h2o_mem_addref_shared(self);
-        h2o_async_io_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1],
+        h2o_io_uring_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1],
                                  bytes_to_send, do_proceed_on_splice_complete, self);
         return;
     }

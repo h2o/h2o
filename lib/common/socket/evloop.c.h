@@ -31,7 +31,7 @@
 #include "cloexec.h"
 #include "h2o/linklist.h"
 #if H2O_USE_IO_URING
-#include "h2o/async_io.h"
+#include "h2o/io_uring.h"
 #endif
 
 #if !defined(H2O_USE_ACCEPT4)
@@ -797,7 +797,7 @@ h2o_evloop_t *create_evloop(size_t sz)
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
 
 #if H2O_USE_IO_URING
-    h2o_async_io_setup(loop);
+    h2o_io_uring_setup(loop);
 #endif
 
     return loop;

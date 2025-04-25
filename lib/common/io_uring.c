@@ -26,18 +26,8 @@
 #include <unistd.h>
 #include <liburing.h>
 #include "h2o/socket.h"
-#include "h2o/async_io.h"
+#include "h2o/io_uring.h"
 #include "../probes_.h"
-
-struct st_h2o_io_uring_cmd_t {
-    h2o_async_io_cmd_t super;
-    struct {
-        int filefd, pipefd;
-        uint64_t offset;
-        size_t len;
-    } splice_;
-    struct st_h2o_io_uring_cmd_t *next;
-};
 
 struct st_h2o_io_uring_queue_t {
     struct st_h2o_io_uring_cmd_t *head;
@@ -45,7 +35,7 @@ struct st_h2o_io_uring_queue_t {
     size_t size;
 };
 
-struct st_h2o_async_io_t {
+struct st_h2o_io_uring_t {
     h2o_loop_t *loop;
     struct io_uring uring;
     h2o_socket_t *sock_notify;
@@ -89,16 +79,16 @@ static struct st_h2o_io_uring_cmd_t *pop_queue(struct st_h2o_io_uring_queue_t *q
 
 static int submit_commands(h2o_loop_t *loop, int can_delay)
 {
-    if (can_delay && loop->_async_io->submission.size < h2o_io_uring_batch_size)
+    if (can_delay && loop->_io_uring->submission.size < h2o_io_uring_batch_size)
         return 0;
 
     int made_progress = 0;
 
-    while (loop->_async_io->submission.head != NULL) {
+    while (loop->_io_uring->submission.head != NULL) {
         struct io_uring_sqe *sqe;
-        if ((sqe = io_uring_get_sqe(&loop->_async_io->uring)) == NULL)
+        if ((sqe = io_uring_get_sqe(&loop->_io_uring->uring)) == NULL)
             break;
-        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_async_io->submission);
+        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->submission);
         assert(cmd != NULL);
         io_uring_prep_splice(sqe, cmd->splice_.filefd, cmd->splice_.offset, cmd->splice_.pipefd, -1, cmd->splice_.len, 0);
         sqe->user_data = (uint64_t)cmd;
@@ -107,7 +97,7 @@ static int submit_commands(h2o_loop_t *loop, int can_delay)
 
     if (made_progress) {
         int ret;
-        while ((ret = io_uring_submit(&loop->_async_io->uring)) == -EINTR)
+        while ((ret = io_uring_submit(&loop->_io_uring->uring)) == -EINTR)
             ;
         if (ret < 0)
             h2o_fatal("io_uring_submit:%s", strerror(-ret));
@@ -125,20 +115,20 @@ static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_
 
         { /* obtain completed command and its result */
             struct io_uring_cqe *cqe;
-            while ((ret = io_uring_peek_cqe(&loop->_async_io->uring, &cqe)) == -EINTR)
+            while ((ret = io_uring_peek_cqe(&loop->_io_uring->uring, &cqe)) == -EINTR)
                 ;
             if (ret != 0)
                 break;
             cmd = (struct st_h2o_io_uring_cmd_t *)cqe->user_data;
-            cmd->super.result = cqe->res;
-            io_uring_cqe_seen(&loop->_async_io->uring, cqe);
+            cmd->result = cqe->res;
+            io_uring_cqe_seen(&loop->_io_uring->uring, cqe);
         }
 
         /* link to completion list or indicate to the caller that `cmd_sync` has completed */
         if (cmd == cmd_sync) {
             cmd_sync_done = 1;
         } else {
-            insert_queue(&loop->_async_io->completion, cmd);
+            insert_queue(&loop->_io_uring->completion, cmd);
         }
     }
 
@@ -147,15 +137,15 @@ static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_
 
 static int dispatch_completed(h2o_loop_t *loop)
 {
-    if (loop->_async_io->completion.head == NULL)
+    if (loop->_io_uring->completion.head == NULL)
         return 0;
 
     do {
-        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_async_io->completion);
-        H2O_PROBE(ASYNC_IO_END, cmd);
-        cmd->super.cb.func(&cmd->super);
+        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->completion);
+        H2O_PROBE(IO_URING_END, cmd);
+        cmd->cb.func(cmd);
         free(cmd);
-    } while (loop->_async_io->completion.head != NULL);
+    } while (loop->_io_uring->completion.head != NULL);
     return 1;
 }
 
@@ -163,53 +153,52 @@ static struct st_h2o_io_uring_cmd_t *start_command(h2o_loop_t *loop, struct st_h
 {
     int needs_timer = 0;
 
-    insert_queue(&loop->_async_io->submission, cmd);
+    insert_queue(&loop->_io_uring->submission, cmd);
 
     submit_commands(loop, 1);
 
     /* if we have submitted all commands up to the current one, fetch completion events in hope that we might be able to complete
      * the current one synchronously (as doing so improves locality) */
-    if (loop->_async_io->submission.head == NULL) {
+    if (loop->_io_uring->submission.head == NULL) {
         if (check_completion(loop, cmd)) {
-            cmd->super.cb.func(&cmd->super);
+            cmd->cb.func(cmd);
             free(cmd);
             cmd = NULL;
         }
-        if (loop->_async_io->completion.head != NULL)
+        if (loop->_io_uring->completion.head != NULL)
             needs_timer = 1;
     } else {
         needs_timer = 1;
     }
 
-    if (needs_timer && !h2o_timer_is_linked(&loop->_async_io->delayed))
-        h2o_timer_link(loop, 0, &loop->_async_io->delayed);
+    if (needs_timer && !h2o_timer_is_linked(&loop->_io_uring->delayed))
+        h2o_timer_link(loop, 0, &loop->_io_uring->delayed);
 
     return cmd;
 }
 
-void h2o_async_io_splice_file(h2o_async_io_cmd_t **_cmd, h2o_loop_t *loop, int _filefd, uint64_t _offset, int _pipefd, size_t _len,
-                              h2o_async_io_cb _cb, void *_data)
+void h2o_io_uring_splice_file(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int _filefd, uint64_t _offset, int _pipefd, size_t _len,
+                              h2o_io_uring_cb _cb, void *_data)
 {
     /* build command */
     struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
     *cmd = (struct st_h2o_io_uring_cmd_t){
-        .super = {.cb = {.func = _cb, .data = _data}},
-        .splice_ = {
-            .filefd = _filefd,
-            .pipefd = _pipefd,
-            .offset = _offset,
-            .len = _len,
-        },
+        .cb.func = _cb,
+        .cb.data = _data,
+        .splice_.filefd = _filefd,
+        .splice_.pipefd = _pipefd,
+        .splice_.offset = _offset,
+        .splice_.len = _len,
     };
 
     cmd = start_command(loop, cmd);
 
-    *_cmd = &cmd->super;
+    *_cmd = cmd;
     if (cmd != NULL)
-        H2O_PROBE(ASYNC_IO_START_SPLICE_FILE, cmd);
+        H2O_PROBE(IO_URING_START_SPLICE_FILE, cmd);
 }
 
-int h2o_async_io_can_splice(void)
+int h2o_io_uring_can_splice(void)
 {
     return 1;
 }
@@ -221,7 +210,7 @@ static void run_uring(h2o_loop_t *loop)
         check_completion(loop, NULL);
     } while (dispatch_completed(loop) || submit_commands(loop, 0));
 
-    assert(loop->_async_io->completion.head == NULL);
+    assert(loop->_io_uring->completion.head == NULL);
 }
 
 void on_notify(h2o_socket_t *sock, const char *err)
@@ -234,25 +223,25 @@ void on_notify(h2o_socket_t *sock, const char *err)
 
 void on_delayed(h2o_timer_t *_timer)
 {
-    struct st_h2o_async_io_t *async_io = H2O_STRUCT_FROM_MEMBER(struct st_h2o_async_io_t, delayed, _timer);
-    h2o_loop_t *loop = async_io->loop;
+    struct st_h2o_io_uring_t *io_uring = H2O_STRUCT_FROM_MEMBER(struct st_h2o_io_uring_t, delayed, _timer);
+    h2o_loop_t *loop = io_uring->loop;
 
     run_uring(loop);
 }
 
-void h2o_async_io_setup(h2o_loop_t *loop)
+void h2o_io_uring_setup(h2o_loop_t *loop)
 {
-    loop->_async_io = h2o_mem_alloc(sizeof(*loop->_async_io));
-    loop->_async_io->loop = loop;
+    loop->_io_uring = h2o_mem_alloc(sizeof(*loop->_io_uring));
+    loop->_io_uring->loop = loop;
 
     int ret;
-    if ((ret = io_uring_queue_init(16, &loop->_async_io->uring, 0)) != 0)
+    if ((ret = io_uring_queue_init(16, &loop->_io_uring->uring, 0)) != 0)
         h2o_fatal("io_uring_queue_init:%s", strerror(-ret));
 
-    loop->_async_io->sock_notify = h2o_evloop_socket_create(loop, loop->_async_io->uring.ring_fd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_socket_read_start(loop->_async_io->sock_notify, on_notify);
+    loop->_io_uring->sock_notify = h2o_evloop_socket_create(loop, loop->_io_uring->uring.ring_fd, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_socket_read_start(loop->_io_uring->sock_notify, on_notify);
 
-    init_queue(&loop->_async_io->submission);
-    init_queue(&loop->_async_io->completion);
-    h2o_timer_init(&loop->_async_io->delayed, on_delayed);
+    init_queue(&loop->_io_uring->submission);
+    init_queue(&loop->_io_uring->completion);
+    h2o_timer_init(&loop->_io_uring->delayed, on_delayed);
 }
