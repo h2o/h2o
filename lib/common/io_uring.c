@@ -45,11 +45,7 @@ struct st_h2o_io_uring_t {
 
 size_t h2o_io_uring_batch_size = 1;
 
-static void init_queue(struct st_h2o_io_uring_queue_t *queue);
-static void on_notify(h2o_socket_t *_sock, const char *err);
-static void on_delayed(h2o_timer_t *timer);
-
-void init_queue(struct st_h2o_io_uring_queue_t *queue)
+static void init_queue(struct st_h2o_io_uring_queue_t *queue)
 {
     queue->head = NULL;
     queue->tail = &queue->head;
@@ -198,11 +194,6 @@ void h2o_io_uring_splice_file(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int _
         H2O_PROBE(IO_URING_START_SPLICE_FILE, cmd);
 }
 
-int h2o_io_uring_can_splice(void)
-{
-    return 1;
-}
-
 static void run_uring(h2o_loop_t *loop)
 {
     /* Repeatedly read cqe, until we bocome certain we haven't issued more read commands. */
@@ -213,7 +204,7 @@ static void run_uring(h2o_loop_t *loop)
     assert(loop->_io_uring->completion.head == NULL);
 }
 
-void on_notify(h2o_socket_t *sock, const char *err)
+static void on_notify(h2o_socket_t *sock, const char *err)
 {
     assert(err == NULL);
 
@@ -221,7 +212,7 @@ void on_notify(h2o_socket_t *sock, const char *err)
     run_uring(loop);
 }
 
-void on_delayed(h2o_timer_t *_timer)
+static void on_delayed(h2o_timer_t *_timer)
 {
     struct st_h2o_io_uring_t *io_uring = H2O_STRUCT_FROM_MEMBER(struct st_h2o_io_uring_t, delayed, _timer);
     h2o_loop_t *loop = io_uring->loop;
