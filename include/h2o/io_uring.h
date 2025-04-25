@@ -54,9 +54,10 @@ extern size_t h2o_io_uring_batch_size;
  */
 void h2o_io_uring_setup(h2o_loop_t *loop);
 /**
- *
+ * Calls splice using io_uring. The callback might get called synchronously, depending on the condition (e.g., if data being read is
+ * in page cache and h2o_io_uring_batch_size == 1).
  */
-void h2o_io_uring_splice(h2o_io_uring_cmd_t **cmd, h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out,
-                         unsigned nbytes, unsigned splice_flags, h2o_io_uring_cb cb, void *data);
+void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned nbytes,
+                         unsigned splice_flags, h2o_io_uring_cb cb, void *data);
 
 #endif

@@ -147,7 +147,7 @@ static int dispatch_completed(h2o_loop_t *loop)
     return 1;
 }
 
-static struct st_h2o_io_uring_cmd_t *start_command(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd)
+static void start_command(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd)
 {
     int needs_timer = 0;
 
@@ -171,8 +171,6 @@ static struct st_h2o_io_uring_cmd_t *start_command(h2o_loop_t *loop, struct st_h
 
     if (needs_timer && !h2o_timer_is_linked(&loop->_io_uring->delayed))
         h2o_timer_link(loop, 0, &loop->_io_uring->delayed);
-
-    return cmd;
 }
 
 void h2o_io_uring_splice(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out,
@@ -192,9 +190,7 @@ void h2o_io_uring_splice(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int fd_in,
     };
     H2O_PROBE(IO_URING_SPLICE, cmd);
 
-    cmd = start_command(loop, cmd);
-
-    *_cmd = cmd;
+    start_command(loop, cmd);
 }
 
 static void run_uring(h2o_loop_t *loop)
