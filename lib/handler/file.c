@@ -262,8 +262,8 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     if (self->splice_fds[0] != -1) {
         h2o_io_uring_cmd_t *cmd;
         h2o_mem_addref_shared(self);
-        h2o_io_uring_splice_file(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1],
-                                 bytes_to_send, do_proceed_on_splice_complete, self);
+        h2o_io_uring_splice(&cmd, self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->splice_fds[1], -1,
+                            bytes_to_send, 0, do_proceed_on_splice_complete, self);
         return;
     }
 #endif

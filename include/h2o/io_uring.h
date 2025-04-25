@@ -38,9 +38,12 @@ struct st_h2o_io_uring_cmd_t {
     int result;
     struct st_h2o_io_uring_cmd_t *next;
     struct {
-        int filefd, pipefd;
-        uint64_t offset;
-        size_t len;
+        int fd_in;
+        int64_t off_in;
+        int fd_out;
+        int64_t off_out;
+        unsigned nbytes;
+        unsigned splice_flags;
     } splice_;
 };
 
@@ -51,9 +54,9 @@ extern size_t h2o_io_uring_batch_size;
  */
 void h2o_io_uring_setup(h2o_loop_t *loop);
 /**
- * Runs `splice` on linux. Buffer size of `outfd` must be large enough to contain `len` bytes.
+ *
  */
-void h2o_io_uring_splice_file(h2o_io_uring_cmd_t **cmd, h2o_loop_t *loop, int filefd, uint64_t offset, int pipefd, size_t len,
-                              h2o_io_uring_cb cb, void *data);
+void h2o_io_uring_splice(h2o_io_uring_cmd_t **cmd, h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out,
+                         unsigned nbytes, unsigned splice_flags, h2o_io_uring_cb cb, void *data);
 
 #endif

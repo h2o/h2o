@@ -87,7 +87,8 @@ static int submit_commands(h2o_loop_t *loop, int can_delay)
         struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->submission);
         assert(cmd != NULL);
         H2O_PROBE(IO_URING_SUBMIT, cmd);
-        io_uring_prep_splice(sqe, cmd->splice_.filefd, cmd->splice_.offset, cmd->splice_.pipefd, -1, cmd->splice_.len, 0);
+        io_uring_prep_splice(sqe, cmd->splice_.fd_in, cmd->splice_.off_in, cmd->splice_.fd_out, cmd->splice_.off_out,
+                             cmd->splice_.nbytes, cmd->splice_.splice_flags);
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
     }
@@ -174,18 +175,20 @@ static struct st_h2o_io_uring_cmd_t *start_command(h2o_loop_t *loop, struct st_h
     return cmd;
 }
 
-void h2o_io_uring_splice_file(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int _filefd, uint64_t _offset, int _pipefd, size_t _len,
-                              h2o_io_uring_cb _cb, void *_data)
+void h2o_io_uring_splice(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out,
+                         unsigned nbytes, unsigned splice_flags, h2o_io_uring_cb cb, void *data)
 {
     /* build command */
     struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
     *cmd = (struct st_h2o_io_uring_cmd_t){
-        .cb.func = _cb,
-        .cb.data = _data,
-        .splice_.filefd = _filefd,
-        .splice_.pipefd = _pipefd,
-        .splice_.offset = _offset,
-        .splice_.len = _len,
+        .cb.func = cb,
+        .cb.data = data,
+        .splice_.fd_in = fd_in,
+        .splice_.off_in = off_in,
+        .splice_.fd_out = fd_out,
+        .splice_.off_out = off_out,
+        .splice_.nbytes = nbytes,
+        .splice_.splice_flags = splice_flags,
     };
     H2O_PROBE(IO_URING_SPLICE, cmd);
 
