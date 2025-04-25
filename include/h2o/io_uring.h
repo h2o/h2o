@@ -30,6 +30,10 @@ typedef struct st_h2o_io_uring_t h2o_io_uring_t;
 typedef struct st_h2o_io_uring_cmd_t h2o_io_uring_cmd_t;
 typedef void (*h2o_io_uring_cb)(h2o_io_uring_cmd_t *);
 
+/**
+ * Object used for buffering and tracking requests to io_uring. It is defined here as a public type, because h2o-probes.d referes to
+ * the type, in addition to io_uring.c.
+ */
 struct st_h2o_io_uring_cmd_t {
     struct {
         h2o_io_uring_cb func;
