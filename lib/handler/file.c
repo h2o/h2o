@@ -391,7 +391,7 @@ Opened:
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
-    if ((flags & H2O_FILE_FLAG_DISABLE_IO_URING) == 0 && self->bytesleft != 0) {
+    if ((flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0) {
         self->super.stop = do_stop_async_splice;
         self->src_req = req;
         h2o_context_new_pipe(req->conn->ctx, self->splice_fds);

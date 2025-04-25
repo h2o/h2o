@@ -133,10 +133,10 @@ static int on_config_io_uring(h2o_configurator_command_t *cmd, h2o_configurator_
 
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
     case 0: /* off */
-        self->vars->flags |= H2O_FILE_FLAG_DISABLE_IO_URING;
+        self->vars->flags &= ~H2O_FILE_FLAG_IO_URING;
         break;
     case 1: /* on */
-        self->vars->flags &= ~H2O_FILE_FLAG_DISABLE_IO_URING;
+        self->vars->flags |= H2O_FILE_FLAG_IO_URING;
         break;
     default: /* error */
         return -1;
