@@ -173,8 +173,8 @@ static void start_command(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd)
         h2o_timer_link(loop, 0, &loop->_io_uring->delayed);
 }
 
-void h2o_io_uring_splice(h2o_io_uring_cmd_t **_cmd, h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out,
-                         unsigned nbytes, unsigned splice_flags, h2o_io_uring_cb cb, void *data)
+void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned nbytes,
+                         unsigned splice_flags, h2o_io_uring_cb cb, void *data)
 {
     /* build command */
     struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
