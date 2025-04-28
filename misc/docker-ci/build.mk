@@ -11,7 +11,7 @@ ALL:
 
 
 build:
-	cd misc/docker-ci/docker-root && docker build --tag "$(IMAGE_NAME):$(VARIANT)" -f "../Dockerfile.$(VARIANT)" .
+	cd misc/docker-ci/docker-root && docker build --network=host --tag "$(IMAGE_NAME):$(VARIANT)" -f "../Dockerfile.$(VARIANT)" .
 
 push: build
 	docker push "$(IMAGE_NAME):$(VARIANT)"
