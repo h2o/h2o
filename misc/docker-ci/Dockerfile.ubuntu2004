@@ -46,6 +46,7 @@ RUN apt-get install --yes libnghttp2-dev \
 # perl
 RUN apt-get install --yes \
 	cpanminus \
+	libbsd-resource-perl \
 	libfcgi-perl \
 	libfcgi-procmanager-perl \
 	libipc-signal-perl \
