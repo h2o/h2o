@@ -30,6 +30,7 @@ hosts:
         file.dir: $tempdir
         header.add: "X-Traffic: 200000" # takes about 5 seconds
 throttle-response: ON
+file.io_uring: OFF
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 

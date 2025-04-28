@@ -116,6 +116,26 @@ The sequence of filenames are searched from left to right, and the first file th
 
 <?
 $ctx->{directive}->(
+    name         => "file.io_uring",
+    levels       => [ qw(global host path) ],
+    default      => "file.io_uring: OFF",
+    desc         => q{If io_uring should be used for serving files.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>,
+<a href="configure/base_directives.html#max-spare-pipes"><code>max-spare-pipes</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, H2O uses system calls such as pread (2) or sendfile (2), which block if the file being read is not in the page cache.
+This can prevent H2O's worker threads from making progress on any connection handled by the affected thread.
+When this flag is enabled, H2O is no longer blocked by the I/O calls, as the data is asynchronously copied from disk to the page cache before h2o attempts to access it.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),

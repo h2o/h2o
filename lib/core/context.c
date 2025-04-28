@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include "cloexec.h"
 #include "h2o.h"
 #include "h2o/memcached.h"
 
@@ -94,6 +95,18 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
 
+    ctx->spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->spare_pipes.pipes[0]) * config->max_spare_pipes);
+#ifdef __linux__
+    /* pre-fill the pipe cache at context init */
+    for (i = 0; i < config->max_spare_pipes; ++i) {
+        if (pipe2(ctx->spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        ctx->spare_pipes.count++;
+    }
+#endif
+
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
     h2o_linklist_init_anchor(&ctx->_conns.shutdown);
@@ -109,19 +122,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
     ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
-    ctx->proxy.spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->proxy.spare_pipes.pipes[0]) * config->proxy.max_spare_pipes);
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
-
-#ifdef __linux__
-    /* pre-fill the pipe cache at context init */
-    for (i = 0; i < config->proxy.max_spare_pipes; ++i) {
-        if (pipe2(ctx->proxy.spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        ctx->proxy.spare_pipes.count++;
-    }
-#endif
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
@@ -146,19 +147,12 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 void h2o_context_dispose(h2o_context_t *ctx)
 {
     h2o_globalconf_t *config = ctx->globalconf;
-    size_t i, j;
-
-    for (size_t i = 0; i < ctx->proxy.spare_pipes.count; ++i) {
-        close(ctx->proxy.spare_pipes.pipes[i][0]);
-        close(ctx->proxy.spare_pipes.pipes[i][1]);
-    }
-    free(ctx->proxy.spare_pipes.pipes);
 
     h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
 
-    for (i = 0; config->hosts[i] != NULL; ++i) {
+    for (size_t i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
-        for (j = 0; j != hostconf->paths.size; ++j) {
+        for (size_t j = 0; j != hostconf->paths.size; ++j) {
             h2o_pathconf_t *pathconf = hostconf->paths.entries[j];
             h2o_context_dispose_pathconf_context(ctx, pathconf);
         }
@@ -168,11 +162,17 @@ void h2o_context_dispose(h2o_context_t *ctx)
     free(ctx->_module_configs);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
+    for (size_t i = 0; i < ctx->spare_pipes.count; ++i) {
+        close(ctx->spare_pipes.pipes[i][0]);
+        close(ctx->spare_pipes.pipes[i][1]);
+    }
+    free(ctx->spare_pipes.pipes);
+
     h2o_filecache_destroy(ctx->filecache);
     ctx->filecache = NULL;
 
     /* clear storage */
-    for (i = 0; i != ctx->storage.size; ++i) {
+    for (size_t i = 0; i != ctx->storage.size; ++i) {
         h2o_context_storage_item_t *item = ctx->storage.entries + i;
         if (item->dispose != NULL) {
             item->dispose(item->data);
@@ -296,5 +296,64 @@ void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
         unlink_conn(conn);
         conn->state = state;
         link_conn(conn);
+    }
+}
+
+void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
+{
+    if (ctx->spare_pipes.count > 0) {
+        int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
+        fds[0] = src[0];
+        fds[1] = src[1];
+    } else {
+#ifdef __linux__
+        if (pipe2(fds, O_NONBLOCK | O_CLOEXEC) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+#else
+        if (cloexec_pipe(fds) != 0) {
+            char errbuf[256];
+            h2o_fatal("pipe(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
+        }
+        fcntl(fds[0], F_SETFL, O_NONBLOCK);
+        fcntl(fds[1], F_SETFL, O_NONBLOCK);
+#endif
+    }
+}
+
+static int empty_pipe(int fd)
+{
+    ssize_t ret;
+    char buf[1024];
+
+drain_more:
+    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 0;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(buf)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
+void h2o_context_return_spare_pipe(h2o_context_t *ctx, int fds[2])
+{
+    assert(fds[0] != -1);
+    assert(fds[1] != -1);
+
+    if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(fds[0])) {
+        int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
+        dst[0] = fds[0];
+        dst[1] = fds[1];
+    } else {
+        close(fds[0]);
+        close(fds[1]);
     }
 }

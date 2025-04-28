@@ -95,6 +95,9 @@
 #if H2O_USE_MRUBY
 #include "h2o/mruby_.h"
 #endif
+#if H2O_USE_IO_URING
+#include "h2o/io_uring.h"
+#endif
 #include "standalone.h"
 #include "../lib/probes_.h"
 
@@ -3466,6 +3469,22 @@ static int on_config_neverbleed_offload(h2o_configurator_command_t *cmd, h2o_con
     return 0;
 }
 
+static int on_config_io_uring_batch_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+#if H2O_USE_IO_URING
+    if (h2o_configurator_scanf(cmd, node, "%zu", &h2o_io_uring_batch_size) != 0)
+        return -1;
+    if (h2o_io_uring_batch_size == 0) {
+        h2o_configurator_errprintf(cmd, node, "value must be above zero");
+        return -1;
+    }
+    return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for io_uring is not available");
+    return -1;
+#endif
+}
+
 static yoml_t *load_config(yoml_parse_args_t *parse_args, yoml_t *source)
 {
     FILE *fp;
@@ -4600,6 +4619,9 @@ static void setup_configurators(void)
                                         on_config_ssl_offload);
         h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_neverbleed_offload);
+        h2o_configurator_define_command(c, "io_uring-batch-size",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_io_uring_batch_size);
     }
 
     h2o_access_log_register_configurator(&conf.globalconf);
@@ -4776,6 +4798,9 @@ int main(int argc, char **argv)
 #endif
 #if PTLS_HAVE_AEGIS
                 printf("libaegis: YES\n");
+#endif
+#if H2O_USE_IO_URING
+                printf("io_uring: YES\n");
 #endif
                 exit(0);
             case 'h':
