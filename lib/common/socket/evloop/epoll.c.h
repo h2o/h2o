@@ -24,6 +24,10 @@
 #include <stdio.h>
 #include <sys/epoll.h>
 #include <sys/ioctl.h>
+#if H2O_USE_IO_URING
+#include "h2o/io_uring.h"
+#endif
+
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
 #else
@@ -60,6 +64,9 @@ struct epoll_params {
 struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
     int ep;
+#if H2O_USE_IO_URING
+    h2o_io_uring_t io_uring;
+#endif
     struct {
         uint32_t epoll_bp_usecs;
         uint16_t epoll_bp_budget;
@@ -389,6 +396,7 @@ static void evloop_do_dispose(h2o_evloop_t *_loop)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     close(loop->ep);
 }
+
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
@@ -397,6 +405,11 @@ h2o_evloop_t *h2o_evloop_create(void)
         char buf[128];
         h2o_fatal("h2o_evloop_create: epoll_create1 failed:%d:%s\n", errno, h2o_strerror_r(errno, buf, sizeof(buf)));
     }
+
+#if H2O_USE_IO_URING
+    h2o_io_uring_init(&loop->super);
+#endif
+
     loop->bp.mode = 0;
     loop->bp.epoll_nonblock = 0;
     loop->bp.epoll_bp_usecs = 0;
@@ -405,6 +418,14 @@ h2o_evloop_t *h2o_evloop_create(void)
     loop->bp.epoll_bp_changed = 0;
     return &loop->super;
 }
+
+#if H2O_USE_IO_URING
+struct st_h2o_io_uring_t *h2o_evloop__io_uring(h2o_evloop_t *_loop)
+{
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    return &loop->io_uring;
+}
+#endif
 
 void h2o_loop_update_bp_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode)
 {
