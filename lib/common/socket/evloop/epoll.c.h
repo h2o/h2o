@@ -36,7 +36,9 @@
 struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
     int ep;
+#if H2O_USE_IO_URING
     h2o_io_uring_t io_uring;
+#endif
 };
 
 static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t events)
