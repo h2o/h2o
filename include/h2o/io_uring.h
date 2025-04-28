@@ -26,9 +26,23 @@
 #error "this file may be included only when io_uring support is available"
 #endif
 
-typedef struct st_h2o_io_uring_t h2o_io_uring_t;
+#include <liburing.h>
+
 typedef struct st_h2o_io_uring_cmd_t h2o_io_uring_cmd_t;
 typedef void (*h2o_io_uring_cb)(h2o_io_uring_cmd_t *);
+
+struct st_h2o_io_uring_queue_t {
+    struct st_h2o_io_uring_cmd_t *head;
+    struct st_h2o_io_uring_cmd_t **tail;
+    size_t size;
+};
+
+typedef struct st_h2o_io_uring_t {
+    struct io_uring uring;
+    h2o_socket_t *sock_notify;
+    struct st_h2o_io_uring_queue_t submission, completion;
+    h2o_timer_t delayed;
+} h2o_io_uring_t;
 
 /**
  * Object used for buffering and tracking requests to io_uring. It is defined here as a public type, because h2o-probes.d referes to
@@ -56,7 +70,7 @@ extern size_t h2o_io_uring_batch_size;
 /**
  * initializes structure related to async I/O of `loop`
  */
-void h2o_io_uring_setup(h2o_loop_t *loop);
+void h2o_io_uring_init(h2o_loop_t *loop);
 /**
  * Calls splice using io_uring. The callback might get called synchronously, depending on the condition (e.g., if data being read is
  * in page cache and h2o_io_uring_batch_size == 1).

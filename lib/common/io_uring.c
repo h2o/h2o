@@ -24,23 +24,9 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <liburing.h>
 #include "h2o/socket.h"
 #include "h2o/io_uring.h"
 #include "../probes_.h"
-
-struct st_h2o_io_uring_queue_t {
-    struct st_h2o_io_uring_cmd_t *head;
-    struct st_h2o_io_uring_cmd_t **tail;
-    size_t size;
-};
-
-struct st_h2o_io_uring_t {
-    struct io_uring uring;
-    h2o_socket_t *sock_notify;
-    struct st_h2o_io_uring_queue_t submission, completion;
-    h2o_timer_t delayed;
-};
 
 size_t h2o_io_uring_batch_size = 1;
 
@@ -175,7 +161,7 @@ static void start_command(h2o_loop_t *loop, struct st_h2o_io_uring_t *io_uring, 
 void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned nbytes,
                          unsigned splice_flags, h2o_io_uring_cb cb, void *data)
 {
-    struct st_h2o_io_uring_t *io_uring = *h2o_evloop__io_uring(loop);
+    struct st_h2o_io_uring_t *io_uring = h2o_evloop__io_uring(loop);
 
     /* build command */
     struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
@@ -209,7 +195,7 @@ static void on_notify(h2o_socket_t *sock, const char *err)
     assert(err == NULL);
 
     h2o_loop_t *loop = h2o_socket_get_loop(sock);
-    struct st_h2o_io_uring_t *io_uring = *h2o_evloop__io_uring(loop);
+    struct st_h2o_io_uring_t *io_uring = h2o_evloop__io_uring(loop);
     run_uring(io_uring);
 }
 
@@ -219,9 +205,9 @@ static void on_delayed(h2o_timer_t *_timer)
     run_uring(io_uring);
 }
 
-void h2o_io_uring_setup(h2o_loop_t *loop)
+void h2o_io_uring_init(h2o_loop_t *loop)
 {
-    struct st_h2o_io_uring_t *io_uring = h2o_mem_alloc(sizeof(*io_uring));
+    struct st_h2o_io_uring_t *io_uring = h2o_evloop__io_uring(loop);
 
     int ret;
     if ((ret = io_uring_queue_init(16, &io_uring->uring, 0)) != 0)
@@ -233,6 +219,4 @@ void h2o_io_uring_setup(h2o_loop_t *loop)
     init_queue(&io_uring->submission);
     init_queue(&io_uring->completion);
     h2o_timer_init(&io_uring->delayed, on_delayed);
-
-    *h2o_evloop__io_uring(loop) = io_uring;
 }

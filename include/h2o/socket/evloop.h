@@ -86,7 +86,7 @@ static void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t
 
 #if H2O_USE_IO_URING
 struct st_h2o_io_uring_t;
-struct st_h2o_io_uring_t **h2o_evloop__io_uring(h2o_evloop_t *loop);
+struct st_h2o_io_uring_t *h2o_evloop__io_uring(h2o_evloop_t *loop);
 #endif
 
 /* inline definitions */
