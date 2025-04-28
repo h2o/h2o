@@ -30,9 +30,6 @@
 #endif
 #include "cloexec.h"
 #include "h2o/linklist.h"
-#if H2O_USE_IO_URING
-#include "h2o/io_uring.h"
-#endif
 
 #if !defined(H2O_USE_ACCEPT4)
 #ifdef __linux__
@@ -795,10 +792,6 @@ h2o_evloop_t *create_evloop(size_t sz)
     update_now(loop);
     /* 3 levels * 32-slots => 1 second goes into 2nd, becomes O(N) above approx. 31 seconds */
     loop->_timeouts = h2o_timerwheel_create(3, loop->_now_millisec);
-
-#if H2O_USE_IO_URING
-    h2o_io_uring_setup(loop);
-#endif
 
     return loop;
 }

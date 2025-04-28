@@ -40,11 +40,6 @@
  */
 #define H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED 0x1000
 
-#if H2O_USE_IO_URING
-/* forward declaration of h2o/io_uring.h */
-struct st_h2o_io_uring_t;
-#endif
-
 typedef struct st_h2o_evloop_t {
     struct st_h2o_evloop_socket_t *_pending_as_client;
     struct st_h2o_evloop_socket_t *_pending_as_server;
@@ -58,9 +53,6 @@ typedef struct st_h2o_evloop_t {
     h2o_timerwheel_t *_timeouts;
     h2o_sliding_counter_t exec_time_nanosec_counter;
     uint64_t run_count;
-#if H2O_USE_IO_URING
-    struct st_h2o_io_uring_t *_io_uring;
-#endif
 } h2o_evloop_t;
 
 typedef h2o_evloop_t h2o_loop_t;
@@ -91,6 +83,11 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait);
 #define h2o_timer_is_linked h2o_timerwheel_is_linked
 static void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t *timer);
 #define h2o_timer_unlink h2o_timerwheel_unlink
+
+#if H2O_USE_IO_URING
+struct st_h2o_io_uring_t;
+struct st_h2o_io_uring_t **h2o_evloop__io_uring(h2o_evloop_t *loop);
+#endif
 
 /* inline definitions */
 

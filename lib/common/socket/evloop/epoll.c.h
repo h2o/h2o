@@ -33,6 +33,9 @@
 struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
     int ep;
+#if H2O_USE_IO_URING
+    struct st_h2o_io_uring_t *io_uring;
+#endif
 };
 
 static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t events)
@@ -312,6 +315,7 @@ static void evloop_do_dispose(h2o_evloop_t *_loop)
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     close(loop->ep);
 }
+
 h2o_evloop_t *h2o_evloop_create(void)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)create_evloop(sizeof(*loop));
@@ -323,3 +327,11 @@ h2o_evloop_t *h2o_evloop_create(void)
 
     return &loop->super;
 }
+
+#if H2O_USE_IO_URING
+struct st_h2o_io_uring_t **h2o_evloop__io_uring(h2o_evloop_t *_loop)
+{
+    struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
+    return &loop->io_uring;
+}
+#endif

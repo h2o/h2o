@@ -36,7 +36,6 @@ struct st_h2o_io_uring_queue_t {
 };
 
 struct st_h2o_io_uring_t {
-    h2o_loop_t *loop;
     struct io_uring uring;
     h2o_socket_t *sock_notify;
     struct st_h2o_io_uring_queue_t submission, completion;
@@ -73,18 +72,18 @@ static struct st_h2o_io_uring_cmd_t *pop_queue(struct st_h2o_io_uring_queue_t *q
     return popped;
 }
 
-static int submit_commands(h2o_loop_t *loop, int can_delay)
+static int submit_commands(struct st_h2o_io_uring_t *io_uring, int can_delay)
 {
-    if (can_delay && loop->_io_uring->submission.size < h2o_io_uring_batch_size)
+    if (can_delay && io_uring->submission.size < h2o_io_uring_batch_size)
         return 0;
 
     int made_progress = 0;
 
-    while (loop->_io_uring->submission.head != NULL) {
+    while (io_uring->submission.head != NULL) {
         struct io_uring_sqe *sqe;
-        if ((sqe = io_uring_get_sqe(&loop->_io_uring->uring)) == NULL)
+        if ((sqe = io_uring_get_sqe(&io_uring->uring)) == NULL)
             break;
-        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->submission);
+        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&io_uring->submission);
         assert(cmd != NULL);
         H2O_PROBE(IO_URING_SUBMIT, cmd);
         io_uring_prep_splice(sqe, cmd->splice_.fd_in, cmd->splice_.off_in, cmd->splice_.fd_out, cmd->splice_.off_out,
@@ -95,7 +94,7 @@ static int submit_commands(h2o_loop_t *loop, int can_delay)
 
     if (made_progress) {
         int ret;
-        while ((ret = io_uring_submit(&loop->_io_uring->uring)) == -EINTR)
+        while ((ret = io_uring_submit(&io_uring->uring)) == -EINTR)
             ;
         if (ret < 0)
             h2o_fatal("io_uring_submit:%s", strerror(-ret));
@@ -104,7 +103,7 @@ static int submit_commands(h2o_loop_t *loop, int can_delay)
     return made_progress;
 }
 
-static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_sync)
+static int check_completion(struct st_h2o_io_uring_t *io_uring, struct st_h2o_io_uring_cmd_t *cmd_sync)
 {
     int cmd_sync_done = 0, ret;
 
@@ -113,69 +112,71 @@ static int check_completion(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd_
 
         { /* obtain completed command and its result */
             struct io_uring_cqe *cqe;
-            while ((ret = io_uring_peek_cqe(&loop->_io_uring->uring, &cqe)) == -EINTR)
+            while ((ret = io_uring_peek_cqe(&io_uring->uring, &cqe)) == -EINTR)
                 ;
             if (ret != 0)
                 break;
             cmd = (struct st_h2o_io_uring_cmd_t *)cqe->user_data;
             cmd->result = cqe->res;
-            io_uring_cqe_seen(&loop->_io_uring->uring, cqe);
+            io_uring_cqe_seen(&io_uring->uring, cqe);
         }
 
         /* link to completion list or indicate to the caller that `cmd_sync` has completed */
         if (cmd == cmd_sync) {
             cmd_sync_done = 1;
         } else {
-            insert_queue(&loop->_io_uring->completion, cmd);
+            insert_queue(&io_uring->completion, cmd);
         }
     }
 
     return cmd_sync_done;
 }
 
-static int dispatch_completed(h2o_loop_t *loop)
+static int dispatch_completed(struct st_h2o_io_uring_t *io_uring)
 {
-    if (loop->_io_uring->completion.head == NULL)
+    if (io_uring->completion.head == NULL)
         return 0;
 
     do {
-        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&loop->_io_uring->completion);
+        struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&io_uring->completion);
         H2O_PROBE(IO_URING_END, cmd);
         cmd->cb.func(cmd);
         free(cmd);
-    } while (loop->_io_uring->completion.head != NULL);
+    } while (io_uring->completion.head != NULL);
     return 1;
 }
 
-static void start_command(h2o_loop_t *loop, struct st_h2o_io_uring_cmd_t *cmd)
+static void start_command(h2o_loop_t *loop, struct st_h2o_io_uring_t *io_uring, struct st_h2o_io_uring_cmd_t *cmd)
 {
     int needs_timer = 0;
 
-    insert_queue(&loop->_io_uring->submission, cmd);
+    insert_queue(&io_uring->submission, cmd);
 
-    submit_commands(loop, 1);
+    submit_commands(io_uring, 1);
 
     /* if we have submitted all commands up to the current one, fetch completion events in hope that we might be able to complete
      * the current one synchronously (as doing so improves locality) */
-    if (loop->_io_uring->submission.head == NULL) {
-        if (check_completion(loop, cmd)) {
+    if (io_uring->submission.head == NULL) {
+        if (check_completion(io_uring, cmd)) {
             cmd->cb.func(cmd);
             free(cmd);
             cmd = NULL;
         }
-        if (loop->_io_uring->completion.head != NULL)
+        if (io_uring->completion.head != NULL)
             needs_timer = 1;
     } else {
         needs_timer = 1;
     }
 
-    if (needs_timer && !h2o_timer_is_linked(&loop->_io_uring->delayed))
-        h2o_timer_link(loop, 0, &loop->_io_uring->delayed);
+    if (needs_timer && !h2o_timer_is_linked(&io_uring->delayed))
+        h2o_timer_link(loop, 0, &io_uring->delayed);
 }
 
 void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned nbytes,
                          unsigned splice_flags, h2o_io_uring_cb cb, void *data)
 {
+    struct st_h2o_io_uring_t *io_uring = *h2o_evloop__io_uring(loop);
+
     /* build command */
     struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
     *cmd = (struct st_h2o_io_uring_cmd_t){
@@ -190,17 +191,17 @@ void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out
     };
     H2O_PROBE(IO_URING_SPLICE, cmd);
 
-    start_command(loop, cmd);
+    start_command(loop, io_uring, cmd);
 }
 
-static void run_uring(h2o_loop_t *loop)
+static void run_uring(struct st_h2o_io_uring_t *io_uring)
 {
     /* Repeatedly read cqe, until we bocome certain we haven't issued more read commands. */
     do {
-        check_completion(loop, NULL);
-    } while (dispatch_completed(loop) || submit_commands(loop, 0));
+        check_completion(io_uring, NULL);
+    } while (dispatch_completed(io_uring) || submit_commands(io_uring, 0));
 
-    assert(loop->_io_uring->completion.head == NULL);
+    assert(io_uring->completion.head == NULL);
 }
 
 static void on_notify(h2o_socket_t *sock, const char *err)
@@ -208,30 +209,30 @@ static void on_notify(h2o_socket_t *sock, const char *err)
     assert(err == NULL);
 
     h2o_loop_t *loop = h2o_socket_get_loop(sock);
-    run_uring(loop);
+    struct st_h2o_io_uring_t *io_uring = *h2o_evloop__io_uring(loop);
+    run_uring(io_uring);
 }
 
 static void on_delayed(h2o_timer_t *_timer)
 {
     struct st_h2o_io_uring_t *io_uring = H2O_STRUCT_FROM_MEMBER(struct st_h2o_io_uring_t, delayed, _timer);
-    h2o_loop_t *loop = io_uring->loop;
-
-    run_uring(loop);
+    run_uring(io_uring);
 }
 
 void h2o_io_uring_setup(h2o_loop_t *loop)
 {
-    loop->_io_uring = h2o_mem_alloc(sizeof(*loop->_io_uring));
-    loop->_io_uring->loop = loop;
+    struct st_h2o_io_uring_t *io_uring = h2o_mem_alloc(sizeof(*io_uring));
 
     int ret;
-    if ((ret = io_uring_queue_init(16, &loop->_io_uring->uring, 0)) != 0)
+    if ((ret = io_uring_queue_init(16, &io_uring->uring, 0)) != 0)
         h2o_fatal("io_uring_queue_init:%s", strerror(-ret));
 
-    loop->_io_uring->sock_notify = h2o_evloop_socket_create(loop, loop->_io_uring->uring.ring_fd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_socket_read_start(loop->_io_uring->sock_notify, on_notify);
+    io_uring->sock_notify = h2o_evloop_socket_create(loop, io_uring->uring.ring_fd, H2O_SOCKET_FLAG_DONT_READ);
+    h2o_socket_read_start(io_uring->sock_notify, on_notify);
 
-    init_queue(&loop->_io_uring->submission);
-    init_queue(&loop->_io_uring->completion);
-    h2o_timer_init(&loop->_io_uring->delayed, on_delayed);
+    init_queue(&io_uring->submission);
+    init_queue(&io_uring->completion);
+    h2o_timer_init(&io_uring->delayed, on_delayed);
+
+    *h2o_evloop__io_uring(loop) = io_uring;
 }
