@@ -643,9 +643,13 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
-        h2o_context_new_pipe(req->conn->ctx, self->pipe_reader.fds);
-        args->pipe_reader->fd = self->pipe_reader.fds[1];
-        args->pipe_reader->on_body_piped = on_body_piped;
+        if (h2o_context_new_pipe(req->conn->ctx, self->pipe_reader.fds)) {
+            args->pipe_reader->fd = self->pipe_reader.fds[1];
+            args->pipe_reader->on_body_piped = on_body_piped;
+        } else {
+            assert(self->pipe_reader.fds[0] == -1); /* check the field remains marked as unused */
+            h2o_req_log_error(req, "lib/core/proxy.c", "failed to allocate zero-copy pipe; falling back to read/write");
+        }
     }
 
     /* if httpclient has no received body at this time, immediately send only headers using zero timeout */

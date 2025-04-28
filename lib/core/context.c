@@ -299,27 +299,24 @@ void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
     }
 }
 
-void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
+int h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
 {
     if (ctx->spare_pipes.count > 0) {
         int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
         fds[0] = src[0];
         fds[1] = src[1];
-    } else {
-#ifdef __linux__
-        if (pipe2(fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-#else
-        if (cloexec_pipe(fds) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        fcntl(fds[0], F_SETFL, O_NONBLOCK);
-        fcntl(fds[1], F_SETFL, O_NONBLOCK);
-#endif
+        return 1;
     }
+
+#ifdef __linux__
+    return pipe2(fds, O_NONBLOCK | O_CLOEXEC) == 0;
+#else
+    if (cloexec_pipe(fds) != 0)
+        return 0;
+    fcntl(fds[0], F_SETFL, O_NONBLOCK);
+    fcntl(fds[1], F_SETFL, O_NONBLOCK);
+    return 1;
+#endif
 }
 
 static int empty_pipe(int fd)

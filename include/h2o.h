@@ -1832,9 +1832,9 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
  */
 static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
 /**
- * provides a new pipe that has O_NONBLOCK set, possibly reusing a cached one that is empty
+ * provides a new pipe that has O_NONBLOCK set, possibly reusing a cached one that is empty; returns a boolean indicating success
  */
-void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2]);
+int h2o_context_new_pipe(h2o_context_t *ctx, int fds[2]);
 /**
  * returns a pipe to the spare pipe cache
  */
