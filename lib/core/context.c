@@ -94,18 +94,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
-
     ctx->spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->spare_pipes.pipes[0]) * config->max_spare_pipes);
-#ifdef __linux__
-    /* pre-fill the pipe cache at context init */
-    for (i = 0; i < config->max_spare_pipes; ++i) {
-        if (pipe2(ctx->spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        ctx->spare_pipes.count++;
-    }
-#endif
 
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
