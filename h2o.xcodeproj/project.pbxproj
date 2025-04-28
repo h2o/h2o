@@ -715,6 +715,7 @@
 		082E1CCD2692F52200603AED /* driver_common.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_common.cc; sourceTree = "<group>"; };
 		082E1CCE2692F52200603AED /* h3_header_generator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = h3_header_generator.c; sourceTree = "<group>"; };
 		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
+		083453D62DBF48CE00CAB789 /* 80issues3479.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues3479.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -2415,6 +2416,7 @@
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
 				104481271BFC05FC0007863F /* 80issues595.t */,
+				083453D62DBF48CE00CAB789 /* 80issues3479.t */,
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
