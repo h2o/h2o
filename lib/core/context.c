@@ -94,18 +94,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
-
     ctx->spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->spare_pipes.pipes[0]) * config->max_spare_pipes);
-#ifdef __linux__
-    /* pre-fill the pipe cache at context init */
-    for (i = 0; i < config->max_spare_pipes; ++i) {
-        if (pipe2(ctx->spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        ctx->spare_pipes.count++;
-    }
-#endif
 
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
@@ -299,27 +288,24 @@ void h2o_conn_set_state(h2o_conn_t *conn, h2o_conn_state_t state)
     }
 }
 
-void h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
+int h2o_context_new_pipe(h2o_context_t *ctx, int fds[2])
 {
     if (ctx->spare_pipes.count > 0) {
         int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
         fds[0] = src[0];
         fds[1] = src[1];
-    } else {
-#ifdef __linux__
-        if (pipe2(fds, O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-#else
-        if (cloexec_pipe(fds) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        fcntl(fds[0], F_SETFL, O_NONBLOCK);
-        fcntl(fds[1], F_SETFL, O_NONBLOCK);
-#endif
+        return 1;
     }
+
+#ifdef __linux__
+    return pipe2(fds, O_NONBLOCK | O_CLOEXEC) == 0;
+#else
+    if (cloexec_pipe(fds) != 0)
+        return 0;
+    fcntl(fds[0], F_SETFL, O_NONBLOCK);
+    fcntl(fds[1], F_SETFL, O_NONBLOCK);
+    return 1;
+#endif
 }
 
 static int empty_pipe(int fd)
