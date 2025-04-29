@@ -258,12 +258,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     max_wait = adjust_max_wait(&loop->super, max_wait);
 #ifdef H2O_USE_EPOLL_BUSYPOLL
     /* save a few syscalls if epoll bp params are unchanged */
-    if (loop->bp.epoll_bp_changed) {
+    if (loop->bp.mode > 0 && loop->bp.epoll_bp_changed) {
         evloop_set_bp(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
         loop->bp.epoll_bp_changed = 0;
     }
 
-    if (loop->bp.epoll_bp_usecs) {
+    if (loop->bp.mode > 0 && loop->bp.epoll_bp_usecs) {
         uint64_t _time = loop->bp.epoll_bp_usecs;
         time_t seconds = 0;
         long int nsec = 0;

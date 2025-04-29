@@ -26,6 +26,9 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
     if (!ys)
         h2o_fatal("ynl, failed to create socket: %s\n", yerr.msg);
 
+    if (cfg_ifindex == 1)
+        return;
+
     /* fetch napi ids for first available queues on the provided interface */
     for (int i = 0; i < napi_ids_size; i++) {
         get_req = netdev_queue_get_req_alloc();

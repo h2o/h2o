@@ -51,8 +51,9 @@ subtest "busypoller" => sub {
     create_devices();
     setup_ns();
     link_devices();
-    ok(test_busypoll(0, $nsim_sv_queues) == 0, "busypoll multi queue test succeeded");
-    ok(test_busypoll($suspend_timeout, $nsim_sv_queues) == 0, "busypoll multi queue with suspend test succeeded");
+    ok(test_busypoll('OFF', 0, $nsim_sv_queues) == 0, "busypoll off");
+    ok(test_busypoll('BUSYPOLL', 0, $nsim_sv_queues) == 0, "always busypoll");
+    ok(test_busypoll('SUSPEND', $suspend_timeout, $nsim_sv_queues) == 0, "suspend mode");
     unlink_devices();
     cleanup_ns();
     ok(system("modprobe -r netdevsim") == 0, "unload netdevsim");
@@ -117,9 +118,11 @@ sub cleanup_ns {
 }
 
 sub test_busypoll {
+    my $busypoll_mode = shift // 'OFF';
     my $suspend_value = shift // 0;
     my $num_threads = shift // 1;
-    my $busypoll_mode = ($suspend_value > 0) ? 'BUSYPOLL' : 'SUSPEND';
+
+    $busypoll_mode = 'OFF' unless $busypoll_mode =~ /^(BUSYPOLL|SUSPEND)$/;
 
     my ($port) = empty_ports(1, { host => "0.0.0.0" });
 

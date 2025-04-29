@@ -2924,7 +2924,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     } else {
                         const char *iface = NULL;
 #if H2O_USE_EPOLL_BUSYPOLL
-                        if (conf.bp.nic_count > 0 && conf.bp.nic_to_cpu_map.entries[0].mode != BP_MODE_OFF) {
+                        if (conf.bp.nic_count > 0) {
                             iface = conf.bp.nic_to_cpu_map.entries[0].iface.base;
                         }
 #endif
@@ -4452,9 +4452,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 #if H2O_USE_EPOLL_BUSYPOLL
     /* reset nic queue configs */
     for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-        if (conf.bp.nic_to_cpu_map.entries[nic_i].mode != BP_MODE_OFF) {
-            h2o_busypoll_clear_opts(&conf.bp.nic_to_cpu_map.entries[nic_i]);
-        }
+        h2o_busypoll_clear_opts(&conf.bp.nic_to_cpu_map.entries[nic_i]);
     }
 #endif
 
