@@ -400,6 +400,10 @@ struct st_h2o_globalconf_t {
      * SSL handshake timeout
      */
     uint64_t handshake_timeout;
+    /**
+     * maximum number of pipes to retain for reuse
+     */
+    size_t max_spare_pipes;
 
     struct {
         /**
@@ -534,10 +538,6 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
-        /**
-         * maximum number of pipes to retain for reuse
-         */
-        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -686,6 +686,13 @@ struct st_h2o_context_t {
      */
     h2o_filecache_t *filecache;
     /**
+     * the list of spare pipes currently retained for reuse
+     */
+    struct {
+        int (*pipes)[2];
+        size_t count;
+    } spare_pipes;
+    /**
      * context scope storage for general use
      */
     h2o_context_storage_t storage;
@@ -787,13 +794,6 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
-        /**
-         * the list of spare pipes currently retained for reuse
-         */
-        struct {
-            int (*pipes)[2];
-            size_t count;
-        } spare_pipes;
     } proxy;
 
     struct {
@@ -1653,7 +1653,15 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
  * @param state describes if the output is final, has an error, or is in progress
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+/**
+ * Same as `h2o_send` but sends `h2o_sendvec_t`s
+ */
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *vecs, size_t veccnt, h2o_send_state_t state);
+/**
+ * Wrapper around `h2o_sendvec` that sends the contents of pipe
+ */
+void h2o_send_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state);
+
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
@@ -1823,6 +1831,14 @@ static void *h2o_context_get_logger_context(h2o_context_t *ctx, h2o_logger_t *lo
  * return the address associated with the key in the context storage
  */
 static void **h2o_context_get_storage(h2o_context_t *ctx, size_t *key, void (*dispose_cb)(void *));
+/**
+ * provides a new pipe that has O_NONBLOCK set, possibly reusing a cached one that is empty; returns a boolean indicating success
+ */
+int h2o_context_new_pipe(h2o_context_t *ctx, int fds[2]);
+/**
+ * returns a pipe to the spare pipe cache
+ */
+void h2o_context_return_spare_pipe(h2o_context_t *ctx, int fds[2]);
 
 /* built-in generators */
 
@@ -2169,7 +2185,8 @@ enum {
     H2O_FILE_FLAG_NO_ETAG = 0x1,
     H2O_FILE_FLAG_DIR_LISTING = 0x2,
     H2O_FILE_FLAG_SEND_COMPRESSED = 0x4,
-    H2O_FILE_FLAG_GUNZIP = 0x8
+    H2O_FILE_FLAG_GUNZIP = 0x8,
+    H2O_FILE_FLAG_IO_URING = 0x16,
 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;

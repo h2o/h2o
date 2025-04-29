@@ -106,6 +106,13 @@ const char h2o_hpack_err_invalid_content_length_header[] = "invalid content-leng
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
 
+static int header_value_valid_as_whole(const char *s, size_t len)
+{
+    if (len != 0 && (s[0] == 0x20 || s[0] == 0x09 || s[len - 1] == 0x20 || s[len - 1] == 0x09))
+        return 0;
+    return 1;
+}
+
 size_t h2o_hpack_decode_huffman(char *_dst, unsigned *soft_errors, const uint8_t *src, size_t len, int is_name,
                                 const char **err_desc)
 {
@@ -140,7 +147,7 @@ size_t h2o_hpack_decode_huffman(char *_dst, unsigned *soft_errors, const uint8_t
             }
         }
     } else {
-        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) != 0)
+        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) != 0 || !header_value_valid_as_whole(_dst, dst - _dst))
             *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
     }
 
@@ -180,13 +187,6 @@ int h2o_hpack_validate_header_name(unsigned *soft_errors, const char *s, size_t 
             }
         }
     }
-    return 1;
-}
-
-static int header_value_valid_as_whole(const char *s, size_t len)
-{
-    if (len != 0 && (s[0] == 0x20 || s[0] == 0x09 || s[len - 1] == 0x20 || s[len - 1] == 0x09))
-        return 0;
     return 1;
 }
 
@@ -240,8 +240,6 @@ static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, c
         if ((ret->len = h2o_hpack_decode_huffman(ret->base, soft_errors, *src, len, is_header_name, err_desc)) == SIZE_MAX)
             return NULL;
         ret->base[ret->len] = '\0';
-        if (!is_header_name && !header_value_valid_as_whole(ret->base, ret->len))
-            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
     } else {
         if (len > src_end - *src)
             return NULL;
