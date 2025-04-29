@@ -2640,7 +2640,13 @@ static int finish_open_listener(int fd, int apply_bpf_filter, int cpus)
     }
 
     /* TCP-specific actions */
-    if (1) {
+    int type;
+    socklen_t typelen = sizeof(type);
+    if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &typelen) != 0) {
+        char buf[256];
+        h2o_fatal("failed to obtain the type of a listening socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+    } 
+    if (type == SOCK_STREAM) {
 #ifdef TCP_DEFER_ACCEPT
         { /* set TCP_DEFER_ACCEPT */
             int flag = 1;
