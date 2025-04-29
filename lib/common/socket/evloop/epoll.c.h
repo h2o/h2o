@@ -27,6 +27,9 @@
 #if H2O_USE_IO_URING
 #include "h2o/io_uring.h"
 #endif
+#if H2O_USE_EPOLL_BUSYPOLL
+#include "h2o/busypoll.h"
+#endif
 
 #if 0
 #define DEBUG_LOG(...) h2o_error_printf(__VA_ARGS__)
@@ -258,12 +261,12 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     max_wait = adjust_max_wait(&loop->super, max_wait);
 #ifdef H2O_USE_EPOLL_BUSYPOLL
     /* save a few syscalls if epoll bp params are unchanged */
-    if (loop->bp.mode > 0 && loop->bp.epoll_bp_changed) {
+    if (loop->bp.mode != BP_MODE_OFF && loop->bp.epoll_bp_changed) {
         evloop_set_bp(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
         loop->bp.epoll_bp_changed = 0;
     }
 
-    if (loop->bp.mode > 0 && loop->bp.epoll_bp_usecs) {
+    if (loop->bp.mode != BP_MODE_OFF && loop->bp.epoll_bp_usecs) {
         uint64_t _time = loop->bp.epoll_bp_usecs;
         time_t seconds = 0;
         long int nsec = 0;
@@ -276,7 +279,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         struct timespec ts = {.tv_sec = seconds, .tv_nsec = nsec};
         nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
     } else {
-        if (loop->bp.mode == 1) {
+        if (loop->bp.mode == BP_MODE_SUSPEND) {
             max_wait = -1;
         }
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
@@ -413,7 +416,7 @@ h2o_evloop_t *h2o_evloop_create(void)
 #endif
 
 #if H2O_USE_EPOLL_BUSYPOLL
-    loop->bp.mode = 0;
+    loop->bp.mode = BP_MODE_OFF;
     loop->bp.epoll_nonblock = 0;
     loop->bp.epoll_bp_usecs = 0;
     loop->bp.epoll_bp_budget = 0;
@@ -437,8 +440,8 @@ void h2o_loop_update_bp_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t bud
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
     loop->bp.epoll_nonblock = nonblock ? 1 : 0;
-    loop->bp.mode = (mode < 3) ? mode : 0;
-    if (mode == 1) {
+    loop->bp.mode = (mode < BP_MODE_NUM) ? mode : BP_MODE_OFF;
+    if (mode == BP_MODE_SUSPEND) {
         prefer = 1;
     }
     if (loop->bp.epoll_bp_usecs != usecs) {
