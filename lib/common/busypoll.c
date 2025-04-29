@@ -1,7 +1,5 @@
 #include "h2o.h"
 
-#if defined(__linux__) && defined(SO_REUSEPORT) && defined(H2O_HAS_YNL_H)
-
 #include "h2o/busypoll.h"
 #include <linux/genetlink.h>
 #include <linux/netlink.h>
@@ -444,52 +442,4 @@ uint16_t h2o_busypoll_get_cpu_idx(void)
 {
     return cpu_claimed;
 }
-
-#else
-
-struct busypoll_nic_t {
-};
-
-void h2o_busypoll_bind_interface(int fd, const char *iface)
-{
-    /* noop */
-}
-
-void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
-{
-    /* noop */
-}
-
-void h2o_busypoll_clear_opts(struct busypoll_nic_t *nic)
-{
-    /* noop */
-}
-
-void h2o_busypoll_attach_cbpf(int fd, uint16_t cpus)
-{
-    /* noop */
-}
-
-void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, size_t thread_index,
-                                        struct busypoll_nic_t *nic_to_cpu_map, size_t nic_count)
-{
-    /* noop */
-}
-
-const char *h2o_busypoll_get_iface(void)
-{
-    return "-";
-}
-
-uint32_t h2o_busypoll_get_napi_id(void)
-{
-    return 0;
-}
-
-uint16_t h2o_busypoll_get_cpu_idx(void)
-{
-    return 0;
-}
-
-#endif
 

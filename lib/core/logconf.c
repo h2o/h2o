@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include "h2o.h"
 
-#if defined(__linux__)
+#if H2O_USE_EPOLL_BUSYPOLL
 #include "h2o/busypoll.h"
 #endif
 
@@ -930,14 +930,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
         case ELEMENT_TYPE_BUSYPOLL_IFACE: {
             const char *iface = "-";
-#if defined(__linux__)
+#if H2O_USE_EPOLL_BUSYPOLL
             iface = h2o_busypoll_get_iface();
 #endif
             APPEND_SAFE_STRING(pos, iface);
         } break;
         case ELEMENT_TYPE_BUSYPOLL_NAPI_ID: {
             uint32_t napi_id = 0;
-#if defined(__linux__)
+#if H2O_USE_EPOLL_BUSYPOLL
             napi_id = h2o_busypoll_get_napi_id();
 #endif
             RESERVE(sizeof(H2O_UINT32_LONGEST_STR));
@@ -945,7 +945,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         } break;
         case ELEMENT_TYPE_BUSYPOLL_CPU_IDX: {
             uint16_t cpu_idx = 0;
-#if defined(__linux__)
+#if H2O_USE_EPOLL_BUSYPOLL
             cpu_idx = h2o_busypoll_get_cpu_idx();
 #endif
             RESERVE(sizeof(H2O_INT16_LONGEST_STR));

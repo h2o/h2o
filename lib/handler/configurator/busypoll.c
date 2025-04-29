@@ -129,13 +129,6 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
             return -1;
         }
 
-#ifndef H2O_HAS_YNL_H
-        if (nic->mode == BP_MODE_SUSPEND || nic->mode == BP_MODE_BUSYPOLL) {
-            h2o_configurator_errprintf(cmd, node, "libynl is not available and required to busypoll");
-            return -1;
-        }
-#endif
-
         nic->options.gro_flush_timeout = 0;
         nic->options.defer_hard_irqs = 0;
         nic->options.suspend_timeout = 0;

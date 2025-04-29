@@ -67,6 +67,7 @@ struct st_h2o_evloop_epoll_t {
 #if H2O_USE_IO_URING
     h2o_io_uring_t io_uring;
 #endif
+#if H2O_USE_EPOLL_BUSYPOLL
     struct {
         uint32_t epoll_bp_usecs;
         uint16_t epoll_bp_budget;
@@ -75,6 +76,7 @@ struct st_h2o_evloop_epoll_t {
         uint8_t epoll_nonblock : 1;
         uint8_t mode : 2;
     } bp;
+#endif
 };
 
 static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t events)
@@ -254,7 +256,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 
     /* poll */
     max_wait = adjust_max_wait(&loop->super, max_wait);
-#ifdef H2O_HAS_YNL_H
+#ifdef H2O_USE_EPOLL_BUSYPOLL
     /* save a few syscalls if epoll bp params are unchanged */
     if (loop->bp.epoll_bp_changed) {
         evloop_set_bp(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
@@ -410,12 +412,15 @@ h2o_evloop_t *h2o_evloop_create(void)
     h2o_io_uring_init(&loop->super);
 #endif
 
+#if H2O_USE_EPOLL_BUSYPOLL
     loop->bp.mode = 0;
     loop->bp.epoll_nonblock = 0;
     loop->bp.epoll_bp_usecs = 0;
     loop->bp.epoll_bp_budget = 0;
     loop->bp.epoll_bp_prefer = 0;
     loop->bp.epoll_bp_changed = 0;
+#endif
+
     return &loop->super;
 }
 
@@ -427,6 +432,7 @@ struct st_h2o_io_uring_t *h2o_evloop__io_uring(h2o_evloop_t *_loop)
 }
 #endif
 
+#if H2O_USE_EPOLL_BUSYPOLL
 void h2o_loop_update_bp_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
@@ -448,3 +454,4 @@ void h2o_loop_update_bp_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t bud
         loop->bp.epoll_bp_changed = 1;
     }
 }
+#endif

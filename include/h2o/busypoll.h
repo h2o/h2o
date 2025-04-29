@@ -1,6 +1,10 @@
 #ifndef h2o__busypoll_h
 #define h2o__busypoll_h
 
+#if !H2O_USE_EPOLL_BUSYPOLL
+#error "this file may be included only on linux and when ynl support is available"
+#endif
+
 #include <stdint.h>
 
 #define BP_MODE_OFF      0
