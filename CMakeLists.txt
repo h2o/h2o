@@ -198,7 +198,6 @@ OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 
 INCLUDE_DIRECTORIES(
     include
-    lib
     deps/cloexec
     deps/brotli/c/include
     deps/golombset
