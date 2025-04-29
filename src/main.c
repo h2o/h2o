@@ -3516,9 +3516,7 @@ static int on_config_onoff(h2o_configurator_command_t *cmd, yoml_t *node, int *s
     return 0;
 }
 
-#if H2O_USE_EPOLL_BUSYPOLL
 #include "handler/configurator/busypoll.c"
-#endif
 
 static int on_config_crash_handler_wait_pipe_close(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {

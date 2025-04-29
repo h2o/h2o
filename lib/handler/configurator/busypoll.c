@@ -1,43 +1,64 @@
 
 static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_EPOLL_BUSYPOLL
     int nonblock_mode = 0;
     if ((nonblock_mode = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
     conf.bp.epoll_nonblock = nonblock_mode;
     return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
+    return -1;
+#endif
 }
 
 static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_EPOLL_BUSYPOLL
     int prefer = 0;
     if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
     conf.bp.epoll_bp_prefer = prefer == 1;
     return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
+    return -1;
+#endif
 }
 
 static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_EPOLL_BUSYPOLL
     if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_budget) != 0) {
         return -1;
     }
 
     return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
+    return -1;
+#endif
 }
 
 static int on_busy_poll_usecs(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_EPOLL_BUSYPOLL
     if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_usecs) != 0)
         return -1;
 
     return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
+    return -1;
+#endif
 }
 
 static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_EPOLL_BUSYPOLL
     if (node->type != YOML_TYPE_MAPPING) {
         h2o_configurator_errprintf(cmd, node, "busy-poll-map not a mapping\n");
         return -1;
@@ -154,5 +175,9 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
     }
 
     return 0;
+#else
+    h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
+    return -1;
+#endif
 }
 
