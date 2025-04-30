@@ -239,7 +239,7 @@ EOT
 )->(sub {
 ?>
 <p>
-If set to <code>ON</code>, the handler looks for a file with <code>.br</code>, <code>.zstd</code>, or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://www.rfc-editor.org/rfc/rfc7932.html" target=_blank>brotli</a>, <a href="https://www.rfc-editor.org/rfc/rfc8878.html" target=_blank>zstd</a>, or <a href="https://tools.ietf.org/html/rfc1952" target=_blank>gzip</a>-encoded response.
+If set to <code>ON</code>, the handler looks for a file with <code>.br</code>, <code>.zst</code>, or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://www.rfc-editor.org/rfc/rfc7932.html" target=_blank>brotli</a>, <a href="https://www.rfc-editor.org/rfc/rfc8878.html" target=_blank>zstd</a>, or <a href="https://tools.ietf.org/html/rfc1952" target=_blank>gzip</a>-encoded response.
 For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
 When both the client and the server support multiple content encodings, the encoding chosen is the first one listed in the following order: brotli, zstd, gzip.
 </p>
