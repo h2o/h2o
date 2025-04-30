@@ -165,7 +165,8 @@ ENDIF()
 CHECK_C_SOURCE_COMPILES("
 #include <ynl/ynl.h>
 int main(void) {
-return YNL_ERROR_NONE;
+    ynl_ntf_free(NULL);
+    return 0;
 }" LIBYNL_FOUND)
 CMAKE_POP_CHECK_STATE()
 
