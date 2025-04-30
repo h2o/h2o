@@ -377,7 +377,7 @@ static struct {
     .ssl_zerocopy = 0,
     .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
 #if H2O_USE_EPOLL_BUSYPOLL
-    .bp = {
+    .busypoll = {
          .epoll_bp_usecs = 0,
          .epoll_bp_budget = 0,
          .epoll_bp_prefer = 0,
@@ -2562,7 +2562,7 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
 #endif
 
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (conf.bp.nic_count > 0) {
+    if (conf.busypoll.nic_count > 0) {
         h2o_busypoll_bind_interface(fd, iface);
     }
 #endif
@@ -2930,8 +2930,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     } else {
                         const char *iface = NULL;
 #if H2O_USE_EPOLL_BUSYPOLL
-                        if (conf.bp.nic_count > 0) {
-                            iface = conf.bp.nic_to_cpu_map.entries[0].iface.base;
+                        if (conf.busypoll.nic_count > 0) {
+                            iface = conf.busypoll.nic_to_cpu_map.entries[0].iface.base;
                         }
 #endif
 
@@ -3529,7 +3529,7 @@ static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_c
     if ((nonblock_mode = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.bp.epoll_nonblock = nonblock_mode;
+    conf.busypoll.epoll_nonblock = nonblock_mode;
     return 0;
 #else
     h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
@@ -3544,7 +3544,7 @@ static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_
     if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.bp.epoll_bp_prefer = prefer == 1;
+    conf.busypoll.epoll_bp_prefer = prefer == 1;
     return 0;
 #else
     h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
@@ -3555,7 +3555,7 @@ static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_
 static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_budget) != 0) {
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.busypoll.epoll_bp_budget) != 0) {
         return -1;
     }
 
@@ -3569,7 +3569,7 @@ static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_busy_poll_usecs(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.bp.epoll_bp_usecs) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.busypoll.epoll_bp_usecs) != 0)
         return -1;
 
     return 0;
@@ -3608,8 +3608,8 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
         h2o_configurator_errprintf(cmd, *if_node, "number of interfaces should be between 1-32\n");
         return -1;
     }
-    conf.bp.nic_count = nic_count;
-    h2o_busypoll_nic_vector_t *nic_to_cpu_map = &conf.bp.nic_to_cpu_map;
+    conf.busypoll.nic_count = nic_count;
+    h2o_busypoll_nic_vector_t *nic_to_cpu_map = &conf.busypoll.nic_to_cpu_map;
 
     h2o_vector_reserve(NULL, nic_to_cpu_map, nic_count);
 
@@ -4290,8 +4290,8 @@ static void on_accept(h2o_socket_t *listener, const char *err)
         sock->on_close.data = ctx->accept_ctx.ctx;
 
 #if H2O_USE_EPOLL_BUSYPOLL
-        if (conf.bp.nic_count > 0) {
-            h2o_busypoll_handle_nic_map_accept(sock, listener, thread_index, conf.bp.nic_to_cpu_map.entries, conf.bp.nic_count);
+        if (conf.busypoll.nic_count > 0) {
+            h2o_busypoll_handle_nic_map_accept(sock, listener, thread_index, conf.busypoll.nic_to_cpu_map.entries, conf.busypoll.nic_count);
         }
 #endif
 
@@ -4476,11 +4476,11 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
 #if H2O_USE_EPOLL_BUSYPOLL
     /* clone busypoll epoll settings to all nics */
-    for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-        conf.bp.nic_to_cpu_map.entries[nic_i].epoll_prm.usecs = conf.bp.epoll_bp_usecs;
-        conf.bp.nic_to_cpu_map.entries[nic_i].epoll_prm.budget = conf.bp.epoll_bp_budget;
-        conf.bp.nic_to_cpu_map.entries[nic_i].epoll_prm.prefer = conf.bp.epoll_bp_prefer;
-        conf.bp.nic_to_cpu_map.entries[nic_i].epoll_prm.nonblock = conf.bp.epoll_nonblock;
+    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.usecs = conf.busypoll.epoll_bp_usecs;
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.budget = conf.busypoll.epoll_bp_budget;
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.prefer = conf.busypoll.epoll_bp_prefer;
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.nonblock = conf.busypoll.epoll_nonblock;
     }
 #endif
 
@@ -4635,8 +4635,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
 #if H2O_USE_EPOLL_BUSYPOLL
     /* reset nic queue configs */
-    for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-        h2o_busypoll_clear_opts(&conf.bp.nic_to_cpu_map.entries[nic_i]);
+    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
+        h2o_busypoll_clear_opts(&conf.busypoll.nic_to_cpu_map.entries[nic_i]);
     }
 #endif
 
@@ -5053,8 +5053,8 @@ static void create_per_thread_listeners(void)
 static void create_per_thread_nic_map_listeners(void)
 {
     int nic_map_cpus = 0;
-    for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-        nic_map_cpus += conf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
+    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
+        nic_map_cpus += conf.busypoll.nic_to_cpu_map.entries[nic_i].cpu_count;
     }
     if (conf.thread_map.size != nic_map_cpus) {
         h2o_fatal("%zu threads configured, (%d) assigned in busypoll map\n", conf.thread_map.size, nic_map_cpus);
@@ -5063,9 +5063,9 @@ static void create_per_thread_nic_map_listeners(void)
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         struct listener_config_t *listener_config = conf.listeners[i];
         h2o_vector_reserve(NULL, &listener_config->fds, conf.thread_map.size);
-        for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-            int cpus = conf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
-            const char *iface = conf.bp.nic_to_cpu_map.entries[nic_i].iface.base;
+        for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
+            int cpus = conf.busypoll.nic_to_cpu_map.entries[nic_i].cpu_count;
+            const char *iface = conf.busypoll.nic_to_cpu_map.entries[nic_i].iface.base;
             /* we've already taken care of adding 1 fd for nic 0's first
              * CPU because the listener when initially created takes this
              * CPU for nic0.
@@ -5118,9 +5118,9 @@ static void create_per_thread_nic_map_listeners(void)
         if (!listener_config->need_finish)
             continue;
 
-        for (int nic_i = 0; nic_i < conf.bp.nic_count; nic_i++) {
-            int cpus = conf.bp.nic_to_cpu_map.entries[nic_i].cpu_count;
-            const char *iface = conf.bp.nic_to_cpu_map.entries[nic_i].iface.base;
+        for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
+            int cpus = conf.busypoll.nic_to_cpu_map.entries[nic_i].cpu_count;
+            const char *iface = conf.busypoll.nic_to_cpu_map.entries[nic_i].iface.base;
             for (int cpu_i = 0; cpu_i < cpus; cpu_i++) {
                 int idx = running_offset + cpu_i;
                 int fd = listener_config->fds.entries[idx];
@@ -5488,7 +5488,7 @@ int main(int argc, char **argv)
 
     /* call `bind()` before setuid(), different uids can't bind the same address */
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (conf.bp.nic_count > 0) {
+    if (conf.busypoll.nic_count > 0) {
         fprintf(stderr, "nic map was setup, creating per thread listeners\n");
         create_per_thread_nic_map_listeners();
     } else {

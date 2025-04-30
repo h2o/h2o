@@ -29,7 +29,7 @@ struct busypoll_nic_t {
         size_t defer_hard_irqs;
         size_t suspend_timeout;
     } options;
-    struct busypoll_epoll_params epoll_prm;
+    struct busypoll_epoll_params epoll_params;
 };
 
 typedef H2O_VECTOR(struct busypoll_nic_t) h2o_busypoll_nic_vector_t;

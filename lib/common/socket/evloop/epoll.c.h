@@ -243,7 +243,7 @@ static void set_busypoll(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uin
     params.prefer_busy_poll = prefer == 0 ? 0 : 1;
 
     if (ioctl(loop->ep, EPIOCSPARAMS, &params) != 0)
-        h2o_fatal("evloop_set_bp: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n",
+        h2o_fatal("set_busypoll: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n",
                   usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
 }
 
@@ -262,7 +262,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 #ifdef H2O_USE_EPOLL_BUSYPOLL
     /* save a few syscalls if epoll bp params are unchanged */
     if (loop->bp.mode != BP_MODE_OFF && loop->bp.epoll_bp_changed) {
-        evloop_set_bp(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
+        set_busypoll(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
         loop->bp.epoll_bp_changed = 0;
     }
 
