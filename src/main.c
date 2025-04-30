@@ -345,11 +345,7 @@ static struct {
     struct {
         size_t nic_count;
         h2o_busypoll_nic_vector_t nic_to_cpu_map;
-        uint64_t epoll_bp_usecs;
-        uint64_t epoll_bp_budget;
-        uint8_t epoll_bp_prefer : 1;
-        uint8_t epoll_bp_changed : 1;
-        uint8_t epoll_nonblock : 1;
+        struct busypoll_epoll_params epoll_params;
     } busypoll;
 #endif
 } conf = {
@@ -378,11 +374,8 @@ static struct {
     .ocsp_updater = {.capacity = H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS},
 #if H2O_USE_EPOLL_BUSYPOLL
     .busypoll = {
-         .epoll_bp_usecs = 0,
-         .epoll_bp_budget = 0,
-         .epoll_bp_prefer = 0,
-         .epoll_bp_changed = 0,
-         .epoll_nonblock = 0,
+         .nic_count = 0,
+         .epoll_params = {0},
      }
 #endif
 };
@@ -3529,7 +3522,7 @@ static int on_epoll_nonblock(h2o_configurator_command_t *cmd, h2o_configurator_c
     if ((nonblock_mode = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.busypoll.epoll_nonblock = nonblock_mode;
+    conf.busypoll.epoll_params.nonblock = nonblock_mode;
     return 0;
 #else
     h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
@@ -3544,7 +3537,7 @@ static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_
     if ((prefer = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
         return -1;
 
-    conf.busypoll.epoll_bp_prefer = prefer == 1;
+    conf.busypoll.epoll_params.prefer = prefer == 1;
     return 0;
 #else
     h2o_configurator_errprintf(cmd, node, "support for epoll busypolling is not available");
@@ -3555,9 +3548,11 @@ static int on_epoll_prefer_bp(h2o_configurator_command_t *cmd, h2o_configurator_
 static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.busypoll.epoll_bp_budget) != 0) {
+    unsigned budget = 0;
+    if (h2o_configurator_scanf(cmd, node, "%u", &budget) != 0) {
         return -1;
     }
+    conf.busypoll.epoll_params.budget = budget;
 
     return 0;
 #else
@@ -3569,8 +3564,10 @@ static int on_busy_poll_budget(h2o_configurator_command_t *cmd, h2o_configurator
 static int on_busy_poll_usecs(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
 #if H2O_USE_EPOLL_BUSYPOLL
-    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &conf.busypoll.epoll_bp_usecs) != 0)
+    unsigned usecs;
+    if (h2o_configurator_scanf(cmd, node, "%u", &usecs) != 0)
         return -1;
+    conf.busypoll.epoll_params.usecs = usecs;
 
     return 0;
 #else
@@ -4476,12 +4473,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
 
 #if H2O_USE_EPOLL_BUSYPOLL
     /* clone busypoll epoll settings to all nics */
-    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++) {
-        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.usecs = conf.busypoll.epoll_bp_usecs;
-        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.budget = conf.busypoll.epoll_bp_budget;
-        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.prefer = conf.busypoll.epoll_bp_prefer;
-        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params.nonblock = conf.busypoll.epoll_nonblock;
-    }
+    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++)
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params = conf.busypoll.epoll_params;
 #endif
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);

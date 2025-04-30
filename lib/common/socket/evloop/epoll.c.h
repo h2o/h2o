@@ -37,6 +37,7 @@
 #define DEBUG_LOG(...)
 #endif
 
+#if H2O_USE_EPOLL_BUSYPOLL
 /*
  * The defines below can be removed if:
  *
@@ -63,6 +64,7 @@ struct epoll_params {
 #define EPIOCSPARAMS _IOW(EPOLL_IOC_TYPE, 0x01, struct epoll_params)
 #define EPIOCGPARAMS _IOR(EPOLL_IOC_TYPE, 0x02, struct epoll_params)
 #endif
+#endif
 
 struct st_h2o_evloop_epoll_t {
     h2o_evloop_t super;
@@ -72,13 +74,11 @@ struct st_h2o_evloop_epoll_t {
 #endif
 #if H2O_USE_EPOLL_BUSYPOLL
     struct {
-        uint32_t epoll_bp_usecs;
-        uint16_t epoll_bp_budget;
-        uint8_t epoll_bp_prefer : 1;
-        uint8_t epoll_bp_changed : 1;
+        struct epoll_params epoll_params;
+        uint8_t epoll_params_changed : 1;
         uint8_t epoll_nonblock : 1;
-        uint8_t mode : 2;
-    } bp;
+        enum en_h2o_bp_mode_t mode;
+    } busypoll;
 #endif
 };
 
@@ -233,19 +233,17 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
-static void set_busypoll(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget, uint8_t prefer)
+#if H2O_USE_EPOLL_BUSYPOLL
+static void set_busypoll(struct st_h2o_evloop_epoll_t *loop, struct epoll_params *params)
 {
     char buf[128];
-    struct epoll_params params = {0};
 
-    params.busy_poll_usecs = usecs;
-    params.busy_poll_budget = budget;
-    params.prefer_busy_poll = prefer == 0 ? 0 : 1;
-
-    if (ioctl(loop->ep, EPIOCSPARAMS, &params) != 0)
-        h2o_fatal("set_busypoll: ioctl failed to set busy poll params usec %" PRId64 " budget %" PRId64 " prefer %d err: %d:%s\n",
-                  usecs, budget, prefer, errno, h2o_strerror_r(errno, buf, sizeof(buf)));
+    if (ioctl(loop->ep, EPIOCSPARAMS, params) != 0)
+        h2o_fatal("set_busypoll: ioctl failed to set busy poll params usec %" PRId32 " budget %" PRId16 " prefer %d err: %d:%s\n",
+                  params->busy_poll_usecs, params->busy_poll_budget, params->prefer_busy_poll, errno,
+                  h2o_strerror_r(errno, buf, sizeof(buf)));
 }
+#endif
 
 int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
 {
@@ -261,17 +259,17 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
     max_wait = adjust_max_wait(&loop->super, max_wait);
 #ifdef H2O_USE_EPOLL_BUSYPOLL
     /* save a few syscalls if epoll bp params are unchanged */
-    if (loop->bp.mode != BP_MODE_OFF && loop->bp.epoll_bp_changed) {
-        set_busypoll(loop, loop->bp.epoll_bp_usecs, loop->bp.epoll_bp_budget, loop->bp.epoll_bp_prefer);
-        loop->bp.epoll_bp_changed = 0;
+    if (loop->busypoll.mode != BP_MODE_OFF && loop->busypoll.epoll_params_changed) {
+        set_busypoll(loop, &loop->busypoll.epoll_params);
+        loop->busypoll.epoll_params_changed = 0;
     }
 
-    if (loop->bp.mode != BP_MODE_OFF && loop->bp.epoll_bp_usecs) {
-        uint64_t _time = loop->bp.epoll_bp_usecs;
+    if (loop->busypoll.mode != BP_MODE_OFF && loop->busypoll.epoll_params.busy_poll_usecs) {
+        uint64_t _time = loop->busypoll.epoll_params.busy_poll_usecs;
         time_t seconds = 0;
         long int nsec = 0;
 
-        if (!loop->bp.epoll_nonblock) {
+        if (!loop->busypoll.epoll_nonblock) {
             seconds = _time / 1000000;
             nsec = (_time % 1000000) * 1000;
         }
@@ -279,7 +277,7 @@ int evloop_do_proceed(h2o_evloop_t *_loop, int32_t max_wait)
         struct timespec ts = {.tv_sec = seconds, .tv_nsec = nsec};
         nevents = epoll_pwait2(loop->ep, events, sizeof(events) / sizeof(events[0]), &ts, NULL);
     } else {
-        if (loop->bp.mode == BP_MODE_SUSPEND) {
+        if (loop->busypoll.mode == BP_MODE_SUSPEND) {
             max_wait = -1;
         }
         nevents = epoll_wait(loop->ep, events, sizeof(events) / sizeof(events[0]), max_wait);
@@ -416,12 +414,10 @@ h2o_evloop_t *h2o_evloop_create(void)
 #endif
 
 #if H2O_USE_EPOLL_BUSYPOLL
-    loop->bp.mode = BP_MODE_OFF;
-    loop->bp.epoll_nonblock = 0;
-    loop->bp.epoll_bp_usecs = 0;
-    loop->bp.epoll_bp_budget = 0;
-    loop->bp.epoll_bp_prefer = 0;
-    loop->bp.epoll_bp_changed = 0;
+    loop->busypoll.mode = BP_MODE_OFF;
+    loop->busypoll.epoll_nonblock = 0;
+    memset(&loop->busypoll.epoll_params, 0, sizeof(loop->busypoll.epoll_params));
+    loop->busypoll.epoll_params_changed = 0;
 #endif
 
     return &loop->super;
@@ -436,25 +432,26 @@ struct st_h2o_io_uring_t *h2o_evloop__io_uring(h2o_evloop_t *_loop)
 #endif
 
 #if H2O_USE_EPOLL_BUSYPOLL
-void h2o_evloop_update_busypoll_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode)
+void h2o_evloop_update_busypoll_params(h2o_evloop_t *_loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock,
+                                       uint8_t mode)
 {
     struct st_h2o_evloop_epoll_t *loop = (struct st_h2o_evloop_epoll_t *)_loop;
-    loop->bp.epoll_nonblock = nonblock ? 1 : 0;
-    loop->bp.mode = (mode < BP_MODE_NUM) ? mode : BP_MODE_OFF;
+    loop->busypoll.epoll_nonblock = nonblock ? 1 : 0;
+    loop->busypoll.mode = (mode < BP_MODE_NUM) ? mode : BP_MODE_OFF;
     if (mode == BP_MODE_SUSPEND) {
         prefer = 1;
     }
-    if (loop->bp.epoll_bp_usecs != usecs) {
-        loop->bp.epoll_bp_usecs = usecs;
-        loop->bp.epoll_bp_changed = 1;
+    if (loop->busypoll.epoll_params.busy_poll_usecs != usecs) {
+        loop->busypoll.epoll_params.busy_poll_usecs = usecs;
+        loop->busypoll.epoll_params_changed = 1;
     }
-    if (loop->bp.epoll_bp_budget != budget) {
-        loop->bp.epoll_bp_budget = budget;
-        loop->bp.epoll_bp_changed = 1;
+    if (loop->busypoll.epoll_params.busy_poll_budget != budget) {
+        loop->busypoll.epoll_params.busy_poll_budget = budget;
+        loop->busypoll.epoll_params_changed = 1;
     }
-    if (loop->bp.epoll_bp_prefer != prefer) {
-        loop->bp.epoll_bp_prefer = prefer ? 1 : 0;
-        loop->bp.epoll_bp_changed = 1;
+    if (loop->busypoll.epoll_params.prefer_busy_poll != prefer) {
+        loop->busypoll.epoll_params.prefer_busy_poll = prefer ? 1 : 0;
+        loop->busypoll.epoll_params_changed = 1;
     }
 }
 #endif
