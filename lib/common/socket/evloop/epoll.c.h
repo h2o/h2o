@@ -233,7 +233,7 @@ static int update_status(struct st_h2o_evloop_epoll_t *loop)
     return 0;
 }
 
-static void evloop_set_bp(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget, uint8_t prefer)
+static void set_busypoll(struct st_h2o_evloop_epoll_t *loop, uint64_t usecs, uint64_t budget, uint8_t prefer)
 {
     char buf[128];
     struct epoll_params params = {0};
