@@ -37,23 +37,14 @@ my $nsim_dev_sys_unlink = "/sys/bus/netdevsim/unlink_device";
 my $server_ip = "192.168.1.1";
 my $client_ip = "192.168.1.2";
 
-# busy poll config
-my $busy_poll_usecs = 0;
-my $busy_poll_budget = 16;
-
-# IRQ deferral config
-my $napi_defer_hard_irqs = 100;
-my $gro_flush_timeout = 50000;
-my $suspend_timeout = 20000000;
-
 subtest "busypoller" => sub {
     cleanup_ns();
     create_devices();
     setup_ns();
     link_devices();
-    ok(test_busypoll('OFF', 0, $nsim_sv_queues) == 0, "busypoll off");
-    ok(test_busypoll('BUSYPOLL', 0, $nsim_sv_queues) == 0, "always busypoll");
-    ok(test_busypoll('SUSPEND', $suspend_timeout, $nsim_sv_queues) == 0, "suspend mode");
+    ok(test_busypoll('OFF', $nsim_sv_queues) == 0, "busypoll off");
+    ok(test_busypoll('BUSYPOLL', $nsim_sv_queues) == 0, "always busypoll");
+    ok(test_busypoll('SUSPEND', $nsim_sv_queues) == 0, "suspend mode");
     unlink_devices();
     cleanup_ns();
     ok(system("modprobe -r netdevsim") == 0, "unload netdevsim");
@@ -117,15 +108,48 @@ sub cleanup_ns {
     system("ip netns del nssv 2>/dev/null");
 }
 
-sub test_busypoll {
-    my $busypoll_mode = shift // 'OFF';
-    my $suspend_value = shift // 0;
-    my $num_threads = shift // 1;
+sub get_busypoll_rx_packets {
+    my $nstat = `ip netns exec nssv cat /proc/net/netstat`;
+    my @lines = split("\n", $nstat);
+    my ($keys, $values);
+    foreach (@lines) {
+        if (/^TcpExt:/) {
+            if (!$keys) {
+                $keys = $_;
+                $keys =~ s/^TcpExt:\s*//;
+                $keys = [split /\s+/, $keys];
+            } else {
+                $values = $_;
+                $values =~ s/^TcpExt:\s*//;
+                $values = [split /\s+/, $values];
+                last;
+            }
+        }
+    }
+    my %hash;
+    @hash{@$keys} = @$values;
+    return $hash{BusyPollRxPackets};
+}
 
-    $busypoll_mode = 'OFF' unless $busypoll_mode =~ /^(BUSYPOLL|SUSPEND)$/;
+sub test_busypoll {
+    my $mode = shift // 'OFF';
+    my $num_threads = shift // 1;
+    my ($usecs, $budget, $gro_flush_timeout, $defer_hard_irqs, $suspend_timeout) = (0, 0, 0, 0, 0);
+
+    $mode = 'OFF' unless $mode =~ /^(BUSYPOLL|SUSPEND)$/;
+    if ($mode eq "BUSYPOLL") {
+        $usecs = 1000;
+        $gro_flush_timeout =  90000000;
+        $defer_hard_irqs =  100;
+    } elsif ($mode eq "SUSPEND") {
+        $usecs = 0;
+        $budget = 16;
+        $gro_flush_timeout =  90000000;
+        $defer_hard_irqs = 100;
+        $suspend_timeout = 180000000;
+    }
 
     my ($port) = empty_ports(1, { host => "0.0.0.0" });
-
     my $cpu_list = '[' . join(', ', 1..$num_threads) . ']';
     my $total_threads = $num_threads + 1;
     (my $ah, my $access_log) = tempfile(UNLINK => 1);
@@ -148,8 +172,8 @@ tcp-reuseport: ON
 num-threads: $total_threads
 
 epoll-nonblock: ON
-busy-poll-budget: $busy_poll_budget
-busy-poll-usecs: $busy_poll_usecs
+busy-poll-budget: $budget
+busy-poll-usecs: $usecs
 
 busy-poll-map:
   interfaces:
@@ -157,9 +181,9 @@ busy-poll-map:
       cpus: $cpu_list
       options:
         gro-flush-timeout: $gro_flush_timeout
-        defer-hard-irqs: $napi_defer_hard_irqs
-        suspend-timeout: $suspend_value
-        mode: $busypoll_mode
+        defer-hard-irqs: $defer_hard_irqs
+        suspend-timeout: $suspend_timeout
+        mode: $mode
     - ifindex: 1
       cpus: [$total_threads]
       options:
@@ -173,9 +197,12 @@ EOT
     my $ss_out = `ip netns exec nssv ss -tlnp`;
     diag("LISTENERS:\n" . $ss_out);
 
+    my $bprx = get_busypoll_rx_packets();
+
     for (1..5) {
         my $resp = `ip netns exec nssv curl -ksi http://127.0.0.1:$port`;
     }
+
     my $num_attempts = 100;
     for (1..$num_attempts) {
         my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
@@ -203,5 +230,11 @@ EOT
             ok(0, "served by unknown interface");
         }
     }
+    if ($mode eq "OFF") {
+        ok((get_busypoll_rx_packets() - $bprx) == 0, "zero busypoll rx packets with no busypolling");
+    } else {
+        ok((get_busypoll_rx_packets() - $bprx) > 0, "non-zero busypoll rx packets while busypolling");
+    }
+
     return 0;
 }
