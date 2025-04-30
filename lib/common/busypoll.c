@@ -241,8 +241,8 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
 
                     struct busypoll_nic_t *nic = &nic_to_cpu_map[i];
                     if (nic) {
-                        h2o_loop_update_bp_params(loop, nic->epoll_params.usecs, nic->epoll_params.budget, nic->epoll_params.prefer,
-                                                  nic->epoll_params.nonblock, nic->mode);
+                        h2o_evloop_update_busypoll_params(loop, nic->epoll_params.usecs, nic->epoll_params.budget,
+                                                          nic->epoll_params.prefer, nic->epoll_params.nonblock, nic->mode);
                     }
                     nic_claimed = nic->iface.base;
                     napi_id_claimed = napi_id;

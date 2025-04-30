@@ -89,6 +89,10 @@ struct st_h2o_io_uring_t;
 struct st_h2o_io_uring_t *h2o_evloop__io_uring(h2o_evloop_t *loop);
 #endif
 
+#if H2O_USE_EPOLL_BUSYPOLL
+void h2o_evloop_update_busypoll_params(h2o_evloop_t *loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode);
+#endif
+
 /* inline definitions */
 
 static inline struct timeval h2o_gettimeofday(h2o_evloop_t *loop)
@@ -121,7 +125,4 @@ inline void h2o_timer_link(h2o_evloop_t *loop, uint64_t delay_ticks, h2o_timer_t
     h2o_timerwheel_link_abs(loop->_timeouts, timer, loop->_now_millisec + delay_ticks);
 }
 
-#if H2O_USE_EPOLL_BUSYPOLL
-void h2o_loop_update_bp_params(h2o_evloop_t *loop, uint32_t usecs, uint16_t budget, uint8_t prefer, uint8_t nonblock, uint8_t mode);
-#endif
 #endif
