@@ -26,9 +26,6 @@ static void setup_queue(uint32_t cfg_ifindex, uint32_t cfg_defer_hard_irqs, uint
     if (!ys)
         h2o_fatal("ynl, failed to create socket: %s\n", yerr.msg);
 
-    if (cfg_ifindex == 1)
-        return;
-
     /* fetch napi ids for first available queues on the provided interface */
     for (int i = 0; i < napi_ids_size; i++) {
         get_req = netdev_queue_get_req_alloc();
@@ -411,12 +408,16 @@ void h2o_busypoll_bind_interface(int fd, const char *iface)
 
 void h2o_busypoll_set_opts(struct busypoll_nic_t *nic)
 {
+    if (h2o_memis(nic->iface.base, nic->iface.len, H2O_STRLIT("lo")))
+        return;
     setup_queue(nic->ifindex, nic->options.defer_hard_irqs, nic->options.gro_flush_timeout, nic->options.suspend_timeout,
                 nic->napi_ids.entries, nic->napi_ids.size);
 }
 
 void h2o_busypoll_clear_opts(struct busypoll_nic_t *nic)
 {
+    if (h2o_memis(nic->iface.base, nic->iface.len, H2O_STRLIT("lo")))
+        return;
     setup_queue(nic->ifindex, 0, 0, 0, nic->napi_ids.entries, nic->napi_ids.size);
 }
 
