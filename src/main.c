@@ -350,7 +350,7 @@ static struct {
         uint8_t epoll_bp_prefer : 1;
         uint8_t epoll_bp_changed : 1;
         uint8_t epoll_nonblock : 1;
-    } bp;
+    } busypoll;
 #endif
 } conf = {
     .globalconf = {0},
