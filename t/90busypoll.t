@@ -139,11 +139,11 @@ sub test_busypoll {
     $mode = 'OFF' unless $mode =~ /^(BUSYPOLL|SUSPEND)$/;
     if ($mode eq "BUSYPOLL") {
         $usecs = 1000;
+        $budget = 16;
         $gro_flush_timeout =  90000000;
         $defer_hard_irqs =  100;
     } elsif ($mode eq "SUSPEND") {
         $usecs = 0;
-        $budget = 16;
         $gro_flush_timeout =  90000000;
         $defer_hard_irqs = 100;
         $suspend_timeout = 180000000;
@@ -203,9 +203,9 @@ EOT
         my $resp = `ip netns exec nssv curl -ksi http://127.0.0.1:$port`;
     }
 
-    my $num_attempts = 100;
+    my $num_attempts = 3000;
     for (1..$num_attempts) {
-        my $resp = `ip netns exec nscl curl -ksi http://$server_ip:$port`;
+        my $resp = `ip netns exec nscl curl -ksi -XPOST -F \"file=\@t/assets/doc_root/halfdome.jpg" http://$server_ip:$port`;
         #like $resp, qr{^HTTP/1.1 200 OK\r\n}s, "curl request ok";
     }
     for (1..5) {
