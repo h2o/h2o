@@ -177,6 +177,10 @@ busy-poll-usecs: $usecs
 
 busy-poll-map:
   interfaces:
+    - ifindex: 1
+      cpus: [0]
+      options:
+        mode: OFF
     - ifindex: $nsim_sv_ifidx
       cpus: $cpu_list
       options:
@@ -184,10 +188,6 @@ busy-poll-map:
         defer-hard-irqs: $defer_hard_irqs
         suspend-timeout: $suspend_timeout
         mode: $mode
-    - ifindex: 1
-      cpus: [$total_threads]
-      options:
-        mode: OFF
 EOT
 
     # h2o was spawned without a port for the is_ready check as it would fail in a namespace

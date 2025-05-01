@@ -944,12 +944,12 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%" PRIu32, napi_id);
         } break;
         case ELEMENT_TYPE_BUSYPOLL_CPU_IDX: {
-            uint16_t cpu_idx = 0;
+            int16_t cpu_idx = -1;
 #if H2O_USE_EPOLL_BUSYPOLL
             cpu_idx = h2o_busypoll_get_cpu_idx();
 #endif
             RESERVE(sizeof(H2O_INT16_LONGEST_STR));
-            pos += sprintf(pos, "%" PRIu16, cpu_idx);
+            pos += sprintf(pos, "%" PRIi16, cpu_idx);
         } break;
         case ELEMENT_TYPE_LOGNAME:      /* %l */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */

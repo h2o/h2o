@@ -43,6 +43,6 @@ void h2o_busypoll_handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listen
 
 const char *h2o_busypoll_get_iface(void);
 uint32_t h2o_busypoll_get_napi_id(void);
-uint16_t h2o_busypoll_get_cpu_idx(void);
+int h2o_busypoll_get_cpu_idx(void);
 
 #endif

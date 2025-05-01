@@ -10,7 +10,7 @@
 #include <ynl/ynl.h>
 #include <ynl/netdev-user.h>
 
-static __thread int cpu_claimed = 0;
+static __thread int cpu_claimed = -1;
 static __thread const char *nic_claimed = NULL;
 static __thread unsigned int napi_id_claimed = 0;
 
@@ -274,7 +274,7 @@ static void handle_nic_map_accept(h2o_socket_t *sock, h2o_socket_t *listener, si
     napi_id = get_napi_id(sockfd);
 
     /* if this thread has claimed a CPU, check the incoming connection to make sure it is correct */
-    if (cpu_claimed > 0) {
+    if (cpu_claimed != -1) {
         /* start by getting a verdict on the incoming connection */
         int verdict = is_local_conn(sockfd, napi_id);
         if (verdict == -2) {
@@ -442,7 +442,7 @@ uint32_t h2o_busypoll_get_napi_id(void)
     return napi_id_claimed;
 }
 
-uint16_t h2o_busypoll_get_cpu_idx(void)
+int h2o_busypoll_get_cpu_idx(void)
 {
     return cpu_claimed;
 }
