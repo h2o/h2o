@@ -4471,12 +4471,6 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     struct listener_ctx_t *listeners = alloca(sizeof(*listeners) * conf.num_listeners);
     size_t i;
 
-#if H2O_USE_EPOLL_BUSYPOLL
-    /* clone busypoll epoll settings to all nics */
-    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++)
-        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params = conf.busypoll.epoll_params;
-#endif
-
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
 
     // these are initiallized by h2o_context_init and need to be updated afterwards
@@ -5595,6 +5589,12 @@ int main(int argc, char **argv)
         close(error_log_fd);
         error_log_fd = -1;
     }
+
+#if H2O_USE_EPOLL_BUSYPOLL
+    /* clone busypoll epoll settings to all nics */
+    for (int nic_i = 0; nic_i < conf.busypoll.nic_count; nic_i++)
+        conf.busypoll.nic_to_cpu_map.entries[nic_i].epoll_params = conf.busypoll.epoll_params;
+#endif
 
     /* start the threads */
     conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
