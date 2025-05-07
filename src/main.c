@@ -103,6 +103,7 @@
 
 #if H2O_USE_EPOLL_BUSYPOLL
 #include "h2o/busypoll.h"
+#include "sys/sysinfo.h"
 #include "net/if.h"
 #endif
 
@@ -3640,8 +3641,14 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
                 return -1;
             }
             unsigned cpu_num;
-            if (h2o_configurator_scanf(cmd, cpu_node, "%u", &cpu_num) == 0)
+            if (h2o_configurator_scanf(cmd, cpu_node, "%u", &cpu_num) == 0) {
+                if (cpu_num >= get_nprocs_conf()) {
+                    h2o_configurator_errprintf(cmd, cpu_node, "cpu %u specified for iface %s is not available\n", cpu_num,
+                                               nic->iface.base);
+                    return -1;
+                }
                 CPU_SET(cpu_num, &nic->cpu_map);
+            }
         }
         nic->cpu_count = CPU_COUNT(&nic->cpu_map);
         h2o_vector_reserve(NULL, &nic->napi_ids, nic->cpu_count);
