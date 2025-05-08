@@ -896,6 +896,19 @@ Times spent for receiving the PROXY protocol and TLS handshake are counted.
 .RE
 .RE
 
+.SS io_uring-batch-size
+Number of io_uring calls to issue at once. Increasing this number might reduce overhead.
+
+.PP
+
+.PP
+.BR See\ also:
+file.io_uring
+
+.RE
+.RE
+
+
 .SS limit-request-body
 Maximum size of request body in bytes (e.g. content of POST).
 
@@ -956,6 +969,32 @@ Limits the number of internal redirects.
 
 .RE
 .RE
+.SS max-spare-pipes
+This setting specifies the maximum number of pipes retained for reuse, when file.io_uring or proxy.zerocopy is used.
+
+.PP
+
+
+The setting can be used to reduce lock contention in the kernel under high load.
+
+
+This maximum is applied per each worker thread.
+
+
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+
+
+In previous versions, this configuration directive was called proxy.max-spare-pipes.
+
+
+.PP
+.BR See\ also:
+file.io_uring, proxy.zerocopy
+
+.RE
+.RE
+
 .SS neverbleed-offload
 Sets an offload engine to be used with neverbleed.
 
@@ -2923,6 +2962,25 @@ file.dir
 .RE
 .RE
 
+.SS file.io_uring
+If io_uring should be used for serving files.
+
+.PP
+
+
+By default, H2O uses system calls such as pread (2) or sendfile (2), which block if the file being read is not in the page cache.
+This can prevent H2O's worker threads from making progress on any connection handled by the affected thread.
+When this flag is enabled, H2O is no longer blocked by the I/O calls, as the data is asynchronously copied from disk to the page cache before h2o attempts to access it.
+
+
+.PP
+.BR See\ also:
+io_uring-batch-size,
+max-spare-pipes
+
+.RE
+.RE
+
 .SS file.mime.addtypes
 The directive modifies the MIME mappings by adding the specified MIME type mappings.
 
@@ -3054,7 +3112,7 @@ A flag indicating how a pre-compressed file should be served.
 .PP
 
 
-If set to ON, the handler looks for a file with .br, .zstd, or .gz appended and sends the file, if the client is capable of transparently decoding a brotli, zstd, or gzip-encoded response.
+If set to ON, the handler looks for a file with .br, .zst, or .gz appended and sends the file, if the client is capable of transparently decoding a brotli, zstd, or gzip-encoded response.
 For example, if a client requests a file named index.html with Accept-Encoding: gzip header and if index.html.gz exists, the .gz file is sent as a response together with a Content-Encoding: gzip response header.
 When both the client and the server support multiple content encodings, the encoding chosen is the first one listed in the following order: brotli, zstd, gzip.
 
@@ -3821,28 +3879,6 @@ temp-buffer-threshold
 .RE
 .RE
 
-.SS proxy.max-spare-pipes
-This setting specifies the maximum number of pipes retained for reuse, when proxy.zerocopy is used.
-
-.PP
-
-
-This maximum is applied per each worker thread.
-The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
-When this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
-
-
-Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
-In this case, h2o will create new pipes each time they are needed.
-
-
-.PP
-.BR See\ also:
-proxy.zerocopy
-
-.RE
-.RE
-
 .SS proxy.preserve-host
 A boolean flag (ON or OFF) designating whether or not to pass Host header from incoming request to upstream.
 
@@ -4039,7 +4075,7 @@ This approach does not reduce the total amount of bytes flowing through the CPU,
 
 .PP
 .BR See\ also:
-ssl-offload, proxy.max-spare-pipes
+proxy.max-spare-pipes, ssl-offload
 
 .RE
 .RE

@@ -413,6 +413,14 @@ static int on_config_handshake_timeout(h2o_configurator_command_t *cmd, h2o_conf
     return config_timeout(cmd, node, &ctx->globalconf->handshake_timeout);
 }
 
+static int on_config_max_spare_pipes(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    if (h2o_configurator_scanf(cmd, node, "%zu", &ctx->globalconf->max_spare_pipes) != 0)
+        return -1;
+
+    return 0;
+}
+
 static int on_config_http1_request_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->http1.req_timeout);
@@ -1042,6 +1050,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "handshake-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_handshake_timeout);
+        h2o_configurator_define_command(&c->super, "max-spare-pipes",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_spare_pipes);
+        h2o_configurator_define_command(&c->super, "proxy.max-spare-pipes" /* for compatibility, retain old name as an alias */,
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_max_spare_pipes);
         h2o_configurator_define_command(&c->super, "http1-request-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_request_timeout);

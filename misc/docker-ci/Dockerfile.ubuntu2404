@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -9,6 +9,7 @@ RUN apt-get install --yes \
 	bison \
 	bpftrace \
 	brotli \
+	bzip2 \
 	clang \
 	cmake \
 	cmake-data \
@@ -41,7 +42,6 @@ RUN apt-get install --yes \
 	php-cgi \
 	pkgconf \
 	python3 \
-	python3-distutils \
 	redis-server \
 	rsync \
 	ruby-dev \
@@ -54,6 +54,7 @@ RUN apt-get install --yes \
 # perl
 RUN apt-get install --yes \
 	cpanminus \
+	libbsd-resource-perl \
 	libfcgi-perl \
 	libfcgi-procmanager-perl \
 	libipc-signal-perl \
@@ -97,7 +98,7 @@ RUN mkdir -p /opt/src \
 RUN apt-get install --yes golang-go
 RUN mkdir -p /opt/src && cd /opt/src && git clone --depth=1 https://github.com/google/boringssl.git \
  && (cd boringssl && mkdir build && cd build \
-      && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/boringssl && make install && cp decrepit/libdecrepit.a /opt/boringssl/lib/ \
+      && cmake .. -DCMAKE_INSTALL_PREFIX=/opt/boringssl && make install && cp libdecrepit.a /opt/boringssl/lib/ \
       && make clean \
     )
 

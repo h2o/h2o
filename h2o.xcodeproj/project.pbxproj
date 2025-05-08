@@ -64,6 +64,7 @@
 		08F320E01E7A9CBD0038FA5A /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
 		08F320E11E7A9CBF0038FA5A /* read.c in Sources */ = {isa = PBXBuildFile; fileRef = 0812AB291D7FD54700004F23 /* read.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
 		08F320E21E7A9CC20038FA5A /* sds.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DDB1D80154C00A04BC1 /* sds.c */; settings = {COMPILER_FLAGS = "-Wno-conversion"; }; };
+		08FE0365299F9F8B00141FA2 /* io_uring.h in Headers */ = {isa = PBXBuildFile; fileRef = 08FE0364299F9F8B00141FA2 /* io_uring.h */; };
 		100A55101C2BB15600C4E3E0 /* http_request.c in Sources */ = {isa = PBXBuildFile; fileRef = 100A550E1C2BB15100C4E3E0 /* http_request.c */; };
 		101788B219B561AA0084C6D8 /* socket.c in Sources */ = {isa = PBXBuildFile; fileRef = 101788B119B561AA0084C6D8 /* socket.c */; };
 		101B670C19ADD3380084A351 /* access_log.c in Sources */ = {isa = PBXBuildFile; fileRef = 101B670B19ADD3380084A351 /* access_log.c */; };
@@ -714,6 +715,7 @@
 		082E1CCD2692F52200603AED /* driver_common.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver_common.cc; sourceTree = "<group>"; };
 		082E1CCE2692F52200603AED /* h3_header_generator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = h3_header_generator.c; sourceTree = "<group>"; };
 		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
+		083453D62DBF48CE00CAB789 /* 80issues3479.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues3479.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -761,6 +763,8 @@
 		08AD2A3E2CCB840800301CD6 /* 90h2olog-qlog.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-qlog.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08AD2A3F2CCB840800301CD6 /* 90h2olog-socket.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "90h2olog-socket.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08AD2A402CCF219600301CD6 /* h2olog */ = {isa = PBXFileReference; lastKnownFileType = text; path = h2olog; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		08B2EBF42D9F5E4000715398 /* test.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = test.pl; sourceTree = "<group>"; };
+		08B2EBF62DA09FD000715398 /* 40http3-io-batch10.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-io-batch10.t"; sourceTree = "<group>"; };
 		08B3297E29407664009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		08B329832941B407009D6766 /* 40tls-ech.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40tls-ech.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08B3D43A26042CAF002F195C /* 50connect-deadlock.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50connect-deadlock.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -780,6 +784,8 @@
 		08E9CC4D1E41F6660049DD26 /* embedded.c.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = embedded.c.h; sourceTree = "<group>"; };
 		08EFC4CF27FD8FAA004C532C /* 50file-shrink.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50file-shrink.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		08EFC4DF27FE9F96004C532C /* throttle_resp.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = throttle_resp.c; sourceTree = "<group>"; };
+		08FE0364299F9F8B00141FA2 /* io_uring.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = io_uring.h; sourceTree = "<group>"; };
+		08FE0366299FA1FE00141FA2 /* io_uring.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = io_uring.c; sourceTree = "<group>"; };
 		100A550C1C22857B00C4E3E0 /* 50mruby-htpasswd.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-htpasswd.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		100A550E1C2BB15100C4E3E0 /* http_request.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http_request.c; sourceTree = "<group>"; };
 		100A55131C2E5FAC00C4E3E0 /* 50mruby-http-request.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "50mruby-http-request.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1508,6 +1514,14 @@
 			path = 50mruby;
 			sourceTree = "<group>";
 		};
+		08B2EBF52D9F5E4000715398 /* 40http3 */ = {
+			isa = PBXGroup;
+			children = (
+				08B2EBF42D9F5E4000715398 /* test.pl */,
+			);
+			path = 40http3;
+			sourceTree = "<group>";
+		};
 		08B4D4391D75A2950079DFB5 /* hiredis */ = {
 			isa = PBXGroup;
 			children = (
@@ -1574,6 +1588,7 @@
 				10D0905419F102C70043D458 /* http1client.c */,
 				7D0341FA1FE4D5B60052E0A1 /* http2client.c */,
 				E9E50472214A5B8A004DC170 /* http3client.c */,
+				08FE0366299FA1FE00141FA2 /* io_uring.c */,
 				10A3D3D11B4CDBDC00327CF9 /* memcached.c */,
 				08CEA9D126701D7600B4BB6B /* rand.c */,
 				08790DE31D8276EA00A04BC1 /* redis.c */,
@@ -2007,6 +2022,7 @@
 				E9E50475214B3D28004DC170 /* http3_common.h */,
 				E9757708221BB78C00D1EF74 /* http3_internal.h */,
 				E9E5049321501CA5004DC170 /* http3_server.h */,
+				08FE0364299F9F8B00141FA2 /* io_uring.h */,
 				10A3D3D01B4CDBC700327CF9 /* memcached.h */,
 				10D0904219F0BA780043D458 /* linklist.h */,
 				10D0903919F0A51C0043D458 /* memory.h */,
@@ -2248,12 +2264,14 @@
 				E9F677CA1FF47BD0006476D3 /* 40http2-h2spec.t */,
 				080590262A5E463A00B2B10E /* 40http2-header-softerror.t */,
 				E9BCE6921FF344D4003CEA11 /* 40http2-request-window-size.t */,
+				08B2EBF52D9F5E4000715398 /* 40http3 */,
 				E98041C22230C45E008B9745 /* 40http3.t */,
 				086001BE2730B6E30043886F /* 40http3-corrupted-scid-initial.t */,
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
+				08B2EBF62DA09FD000715398 /* 40http3-io-batch10.t */,
 				085BDAE72B1DB4C2002851EA /* 40http3-priority.t */,
 				E9414F8D24EBFBDA00273C59 /* 40http3-reconnect.t */,
 				E9FC525C234B0A630076F35D /* 40http3-retry.t */,
@@ -2398,6 +2416,7 @@
 				105534FE1A46134A00627ECB /* 80issues61.t */,
 				1092E0011BEB1DDC001074BF /* 80issues579.t */,
 				104481271BFC05FC0007863F /* 80issues595.t */,
+				083453D62DBF48CE00CAB789 /* 80issues3479.t */,
 				10952D591C5082F7000D664C /* 80issues-from-proxy-reproxy-to-different-host.t */,
 				E9BCE6911FF326AC003CEA11 /* 80no-handler-vs-h2-post.t */,
 				109EEFD81D77B336001F11D1 /* 80one-byte-window.t */,
@@ -2966,6 +2985,7 @@
 				0812AB211D7FCFEB00004F23 /* async.h in Headers */,
 				10D0903A19F0A51C0043D458 /* memory.h in Headers */,
 				7DA3F5AF20E0B0400000222F /* token_table.h in Headers */,
+				08FE0365299F9F8B00141FA2 /* io_uring.h in Headers */,
 				104B9A2D1A4BE029009EEE64 /* version.h in Headers */,
 				E980423B22463044008B9745 /* cc.h in Headers */,
 				E9E5049421501CA5004DC170 /* http3_server.h in Headers */,

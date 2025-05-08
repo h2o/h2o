@@ -26,6 +26,7 @@ my $upstream = spawn_server(
 
 # spawn server
 my $server = spawn_h2o(<< "EOT");
+file.io_uring: OFF
 hosts:
   default:
     paths:

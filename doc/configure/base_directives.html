@@ -88,6 +88,9 @@ This document describes the configuration directives common to all the protocols
 <li><a href="configure/base_directives.html#handshake-timeout">
 <code>handshake-timeout</code>
 </a></li>
+<li><a href="configure/base_directives.html#io_uring-batch-size">
+<code>io_uring-batch-size</code>
+</a></li>
 <li><a href="configure/base_directives.html#limit-request-body">
 <code>limit-request-body</code>
 </a></li>
@@ -102,6 +105,9 @@ This document describes the configuration directives common to all the protocols
 </a></li>
 <li><a href="configure/base_directives.html#max-reprocesses">
 <code>max-reprocesses</code>
+</a></li>
+<li><a href="configure/base_directives.html#max-spare-pipes">
+<code>max-spare-pipes</code>
 </a></li>
 <li><a href="configure/base_directives.html#neverbleed-offload">
 <code>neverbleed-offload</code>
@@ -711,6 +717,29 @@ Times spent for receiving <a href="configure/base_directives.html#listen-proxy-p
 <dd><code><pre>handshake-timeout: 10</pre></code>
 </dl>
 
+<div id="io_uring-batch-size" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/base_directives.html#io_uring-batch-size"><code>"io_uring-batch-size"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Number of io_uring calls to issue at once. Increasing this number might reduce overhead.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>io_uring-batch-size: 1</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>
+</dd>
+</dl>
+
+
 <div id="limit-request-body" class="directive-head">
 <h3><a href="configure/base_directives.html#limit-request-body"><code>"limit-request-body"</code></a></h3>
 </div>
@@ -816,6 +845,41 @@ Limits the number of internal redirects.
 <dt>Default:</dt>
 <dd><code><pre>max-reprocesses: 5</pre></code>
 </dl>
+<div id="max-spare-pipes" class="directive-head">
+<h3><a href="configure/base_directives.html#max-spare-pipes"><code>"max-spare-pipes"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+This setting specifies the maximum number of pipes retained for reuse, when <code>file.io_uring</code> or <code>proxy.zerocopy</code> is used.
+</p>
+
+<p>
+The setting can be used to reduce lock contention in the kernel under high load.
+</p>
+<p>
+This maximum is applied per each worker thread.
+</p>
+<p>
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+</p>
+<p>
+In previous versions, this configuration directive was called <code>proxy.max-spare-pipes</code>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>0</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>, <a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+</dd>
+</dl>
+
 <div id="neverbleed-offload" class="directive-head">
 <div class="directive-since">experimental</div>
 <h3><a href="configure/base_directives.html#neverbleed-offload"><code>"neverbleed-offload"</code></a></h3>
