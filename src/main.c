@@ -3642,7 +3642,7 @@ static int on_busy_poll_map(h2o_configurator_command_t *cmd, h2o_configurator_co
             }
             unsigned cpu_num;
             if (h2o_configurator_scanf(cmd, cpu_node, "%u", &cpu_num) == 0) {
-                if (cpu_num >= get_nprocs_conf()) {
+                if (cpu_num >= get_nprocs()) {
                     h2o_configurator_errprintf(cmd, cpu_node, "cpu %u specified for iface %s is not available\n", cpu_num,
                                                nic->iface.base);
                     return -1;

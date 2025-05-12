@@ -194,7 +194,7 @@ static int assign_nic_map_cpu(h2o_loop_t *loop, const char *iface, size_t thread
         if (iface && strcmp(nic_to_cpu_map[i].iface.base, iface) == 0) {
             fprintf(stderr, "found matching iface in conf map: %s\n", iface);
             pthread_mutex_lock(&nic_to_cpu_map[i].mutex);
-            for (int j = 0; j < get_nprocs_conf(); j++) {
+            for (int j = 0; j < get_nprocs(); j++) {
 
                 if (CPU_ISSET(j, &nic_to_cpu_map[i].cpu_map)) {
                     /* take the first CPU that is set, and clear it so other threads can't have it */
