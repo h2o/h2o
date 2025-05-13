@@ -3112,7 +3112,7 @@ A flag indicating how a pre-compressed file should be served.
 .PP
 
 
-If set to ON, the handler looks for a file with .br, .zstd, or .gz appended and sends the file, if the client is capable of transparently decoding a brotli, zstd, or gzip-encoded response.
+If set to ON, the handler looks for a file with .br, .zst, or .gz appended and sends the file, if the client is capable of transparently decoding a brotli, zstd, or gzip-encoded response.
 For example, if a client requests a file named index.html with Accept-Encoding: gzip header and if index.html.gz exists, the .gz file is sent as a response together with a Content-Encoding: gzip response header.
 When both the client and the server support multiple content encodings, the encoding chosen is the first one listed in the following order: brotli, zstd, gzip.
 
