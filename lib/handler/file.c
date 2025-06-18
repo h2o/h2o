@@ -195,6 +195,25 @@ static int do_sequential_read(h2o_sendvec_t *src, void *dst, size_t len)
     return 1;
 }
 
+static int do_random_read(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_off = src->cb_arg[1] + chunk_off;
+    ssize_t rret;
+
+    while (len != 0) {
+        while ((rret = pread(self->file.ref->fd, dst, len, file_off)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0)
+            return 0;
+        file_off += rret;
+        dst = (char *)dst + rret;
+        len -= rret;
+    }
+
+    return 1;
+}
+
 #if defined(__linux__)
 static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
 {
@@ -259,7 +278,8 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
 #endif
 
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = do_sequential_read, .send_ = sendvec_sendfile};
+    static const h2o_sendvec_callbacks_t sendvec_callbacks = {
+        .read_ = do_sequential_read, .send_ = sendvec_sendfile, .random_read = do_random_read};
     h2o_sendvec_t vec = {
         .callbacks = &sendvec_callbacks, .len = bytes_to_send, .cb_arg[0] = (uint64_t)self, .cb_arg[1] = self->file.off};
 

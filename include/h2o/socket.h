@@ -150,6 +150,13 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * or, upon error, SIZE_MAX.
      */
     size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t len);
+    /**
+     * Optional callback for reading specific bytes within a sendvec. Once this function is called, `read_` must not be called for
+     * the same sendvec. Unlike `read_` and `send_`, this callback must remain usable until the generator is disposed of, rather
+     * than until when the proceed callback is called. This rule allows the HTTP/3 server to invoke the proceed callback before
+     * receiving acknowledgements for all data being sent.
+     */
+    int (*random_read)(h2o_sendvec_t *vec, void *dst, size_t len, size_t off);
 } h2o_sendvec_callbacks_t;
 
 /**
