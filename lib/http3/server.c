@@ -906,17 +906,22 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
+        /* skip random_read callbacks, as they remain accessible until the generator is closed */
+        if (vec->vec.callbacks->random_read != NULL)
+            continue;
+        /* skip vectors owned ourselves */
         assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
-        if (!(vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)) {
-            size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
-                   newlen = vec->vec.len - off_within_vec;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
-            memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
-            vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
-            if (stream->sendbuf.min_index_to_addref == 0)
-                stream->sendbuf.off_within_first_vec = 0;
-        }
+        if (vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)
+            continue;
+        /* convert */
+        size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
+               newlen = vec->vec.len - off_within_vec;
+        void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                                                           : h2o_mem_alloc(newlen);
+        memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
+        vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+        if (stream->sendbuf.min_index_to_addref == 0)
+            stream->sendbuf.off_within_first_vec = 0;
     }
 
     return 1;
@@ -1000,19 +1005,25 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         size_t sz = this_vec->vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
-        /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
-        if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-            size_t newlen = this_vec->vec.len;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
-            if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
-                free(newbuf);
+        /* read payload from vector (or if it a lazy-read vector without support for random-read, serialize the payload) */
+        if (this_vec->vec.callbacks->random_read != NULL) {
+            if (!this_vec->vec.callbacks->random_read(&this_vec->vec, dst, sz, off))
                 goto Error;
+        } else {
+            /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
+            if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
+                size_t newlen = this_vec->vec.len;
+                void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                : h2o_mem_alloc(newlen);
+                if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
+                    free(newbuf);
+                    goto Error;
+                }
+                this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
             }
-            this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+            /* copy payload */
+            memcpy(dst, this_vec->vec.raw + off, sz);
         }
-        /* copy payload */
-        memcpy(dst, this_vec->vec.raw + off, sz);
         /* adjust offsets */
         if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
             stream->req.bytes_sent = this_vec->entity_offset + off + sz;
