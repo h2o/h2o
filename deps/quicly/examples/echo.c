@@ -115,13 +115,13 @@ static int forward_stdin(quicly_conn_t *conn)
     }
 }
 
-static void on_stop_sending(quicly_stream_t *stream, int err)
+static void on_stop_sending(quicly_stream_t *stream, quicly_error_t err)
 {
     fprintf(stderr, "received STOP_SENDING: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
 }
 
-static void on_receive_reset(quicly_stream_t *stream, int err)
+static void on_receive_reset(quicly_stream_t *stream, quicly_error_t err)
 {
     fprintf(stderr, "received RESET_STREAM: %" PRIu16 "\n", QUICLY_ERROR_GET_ERROR_CODE(err));
     quicly_close(stream->conn, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
@@ -277,7 +277,7 @@ static int run_loop(int fd, quicly_conn_t *client)
     return 0;
 }
 
-static int on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
+static quicly_error_t on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     static const quicly_stream_callbacks_t stream_callbacks = {
         quicly_streambuf_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, on_stop_sending, on_receive,
