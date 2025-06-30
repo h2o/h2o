@@ -33,19 +33,13 @@ EOT
 
     wait_port($h2g->{tls_port});
 
-    my $resp;
-
-    $resp = `curl -m 5 --http1.1 -X POST -d @/bin/ls -ksvo /dev/null https://127.0.0.1:$server->{tls_port} https://127.0.0.1:$server->{tls_port} 2>&1`;
-    like $resp, qr{HTTP\/1.1 200.*?HTTP\/1.1 200}is, "h2, two 200 ok";
-    unlike $resp, qr{Operation timed out after}, "time out";
-
-    $resp = `curl -m 5 --http2 -X POST -d @/bin/ls -ksvo /dev/null https://127.0.0.1:$server->{tls_port} https://127.0.0.1:$server->{tls_port} 2>&1`;
-    like $resp, qr{HTTP\/2 200.*?HTTP\/2 200}is, "h2, two 200 ok";
-    unlike $resp, qr{Operation timed out after}, "time out";
-
-    $resp = `curl -m 5 --http3 -X POST -d @/bin/ls -ksvo /dev/null https://127.0.0.1:$server->{quic_port} https://127.0.0.1:$server->{quic_port} 2>&1`;
-    like $resp, qr{HTTP\/3 200.*?HTTP\/3 200}is, "h3, two 200 ok";
-    unlike $resp, qr{Operation timed out after}, "time out";
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl_cmd) = @_;
+        my $url = "$proto://127.0.0.1:$port";
+        my $resp = `$curl_cmd -m 5 -X POST -d @/bin/ls -ksvo /dev/null $url $url 2>&1`;
+        like $resp, qr{HTTP\/[0-9\.]+ 200.*?HTTP\/[0-9\.]+ 200}is, "$proto, two 200 ok";
+        unlike $resp, qr{Operation timed out after}, "time out";
+    });
 
     my ($out, $err) = $h2g->{kill}->();
 }
