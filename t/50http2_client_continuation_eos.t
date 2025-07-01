@@ -28,6 +28,7 @@ hosts:
         proxy.ssl.verify-peer: OFF
         proxy.http2.ratio: 100
         proxy.http2.force-cleartext: OFF
+        proxy.http2.max-concurrent-streams: 1
         proxy.timeout.keepalive: 10000
 EOT
 
@@ -37,7 +38,7 @@ EOT
         my ($proto, $port, $curl_cmd) = @_;
         my $url = "$proto://127.0.0.1:$port";
         my $resp = `$curl_cmd -m 5 -X POST -d @/bin/ls -ksvo /dev/null $url $url 2>&1`;
-        like $resp, qr{HTTP\/[0-9\.]+ 200.*?HTTP\/[0-9\.]+ 200}is, "$proto, two 200 ok";
+        like $resp, qr{HTTP\/[0-9\.]+ 200.*?HTTP\/[0-9\.]+ 200}is, "$curl_cmd, two 200 ok";
         unlike $resp, qr{Operation timed out after}, "time out";
     });
 
