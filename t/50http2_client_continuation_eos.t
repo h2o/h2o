@@ -7,6 +7,9 @@ use File::Temp qw(tempfile tempdir);
 use Net::EmptyPort qw(check_port wait_port);
 use JSON;
 
+plan skip_all => "h2get not found"
+    unless h2get_exists();
+
 my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
 my $code = shift;
 my $h2g = spawn_h2get_backend(<< "EOC"
