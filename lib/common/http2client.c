@@ -446,7 +446,7 @@ SendRSTStream:
 
 ssize_t expect_default(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len,
-                                              const char **err_desc)
+                                              const char **err_desc, int headers_had_end_stream)
 {
     h2o_http2_frame_t frame;
     ssize_t ret;
@@ -471,7 +471,6 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     conn->input.headers_unparsed->size += frame.length;
 
     if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-        int is_end_stream = (frame.flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
         conn->input.read_frame = expect_default;
 
         if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
@@ -479,7 +478,7 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
                                conn->input.headers_unparsed->size, err_desc);
         } else {
             hret = on_head(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes, conn->input.headers_unparsed->size,
-                           err_desc, is_end_stream);
+                           err_desc, headers_had_end_stream);
         }
         if (hret != 0)
             ret = hret;
@@ -489,6 +488,18 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
     }
 
     return ret;
+}
+
+static ssize_t expect_continuation_of_headers_eos(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len,
+                                                  const char **err_desc)
+{
+    return expect_continuation_of_headers(conn, src, len, err_desc, 1);
+}
+
+static ssize_t expect_continuation_of_headers_no_eos(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len,
+        const char **err_desc)
+{
+    return expect_continuation_of_headers(conn, src, len, err_desc, 0);
 }
 
 static void do_update_window(h2o_httpclient_t *client);
@@ -632,7 +643,7 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
 
     if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0) {
         /* header is not complete, store in buffer */
-        conn->input.read_frame = expect_continuation_of_headers;
+        conn->input.read_frame = is_end_stream ? expect_continuation_of_headers_eos : expect_continuation_of_headers_no_eos;
         h2o_buffer_init(&conn->input.headers_unparsed, &h2o_socket_buffer_prototype);
         h2o_buffer_reserve(&conn->input.headers_unparsed, payload.headers_len);
         memcpy(conn->input.headers_unparsed->bytes, payload.headers, payload.headers_len);
