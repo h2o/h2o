@@ -400,18 +400,22 @@ static void usage(const char *cmd)
            "  -y cipher-suite      cipher-suite to be used\n"
            "  -h                   print this help\n"
            "\n"
-           "Supported named groups: secp256r1"
+           "Supported named groups: " PTLS_GROUP_NAME_SECP256R1
 #if PTLS_OPENSSL_HAVE_SECP384R1
-           ", secp384r1"
+           ", " PTLS_GROUP_NAME_SECP384R1
 #endif
 #if PTLS_OPENSSL_HAVE_SECP521R1
-           ", secp521r1"
+           ", " PTLS_GROUP_NAME_SECP521R1
 #endif
 #if PTLS_OPENSSL_HAVE_X25519
-           ", X25519"
+           ", " PTLS_GROUP_NAME_X25519
 #endif
 #if PTLS_OPENSSL_HAVE_X25519MLKEM768
-           ", X5519MLKEM768"
+           ", " PTLS_GROUP_NAME_X25519MLKEM768
+#endif
+#if PTLS_OPENSSL_HAVE_MLKEM
+           ", " PTLS_GROUP_NAME_SECP256R1MLKEM768 ", " PTLS_GROUP_NAME_SECP384R1MLKEM1024 ", " PTLS_GROUP_NAME_MLKEM512 ", "
+           PTLS_GROUP_NAME_MLKEM768 ", " PTLS_GROUP_NAME_MLKEM1024
 #endif
            "\n"
            "Supported signature algorithms: rsa, secp256r1"
