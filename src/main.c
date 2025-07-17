@@ -1329,6 +1329,16 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #else
             &ptls_minicrypto_x25519,
 #endif
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+            &ptls_openssl_x25519mlkem768,
+#endif
+#if PTLS_OPENSSL_HAVE_MLKEM
+            &ptls_openssl_mlkem512,
+            &ptls_openssl_mlkem768,
+            &ptls_openssl_mlkem1024,
+            &ptls_openssl_secp256r1mlkem768,
+            &ptls_openssl_secp384r1mlkem1024,
+#endif
             &ptls_openssl_secp256r1,
             &ptls_openssl_secp384r1, NULL};
         key_exchanges = default_key_exchanges;
