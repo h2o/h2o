@@ -24,6 +24,10 @@
 #include <stdlib.h>
 #include "h2o.h"
 
+#if H2O_USE_EPOLL_BUSYPOLL
+#include "h2o/busypoll.h"
+#endif
+
 enum {
     ELEMENT_TYPE_EMPTY,                         /* empty element (with suffix only) */
     ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
@@ -85,6 +89,10 @@ enum {
     ELEMENT_TYPE_PROXY_SSL_CIPHER,              /* ${proxy.ssl.cipher}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS,         /* ${proxy.ssl.cipher_bits}x */
     ELEMENT_TYPE_SSL_SERVER_NAME,               /* ${ssl.server-name}x */
+    ELEMENT_TYPE_THREAD_INDEX,                  /* ${thread-index}x */
+    ELEMENT_TYPE_BUSYPOLL_IFACE,                /* ${bp.iface}x */
+    ELEMENT_TYPE_BUSYPOLL_NAPI_ID,              /* ${bp.napi-id}x */
+    ELEMENT_TYPE_BUSYPOLL_CPU_IDX,              /* ${bp.cpu-idx}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -315,6 +323,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.ech.cipher", ssl.ech_cipher);
                     MAP_EXT_TO_PROTO("ssl.ech.cipher-bits", ssl.ech_cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.backend", ssl.backend);
+                    MAP_EXT_TO_TYPE("thread-index", ELEMENT_TYPE_THREAD_INDEX);
+                    MAP_EXT_TO_TYPE("bp.iface", ELEMENT_TYPE_BUSYPOLL_IFACE);
+                    MAP_EXT_TO_TYPE("bp.napi-id", ELEMENT_TYPE_BUSYPOLL_NAPI_ID);
+                    MAP_EXT_TO_TYPE("bp.cpu-idx", ELEMENT_TYPE_BUSYPOLL_CPU_IDX);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
@@ -912,7 +924,33 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             h2o_iovec_t s = cb(req);
             APPEND_SAFE_STRING_WITH_LEN(pos, s.base, s.len);
         } break;
-
+        case ELEMENT_TYPE_THREAD_INDEX:
+            RESERVE(sizeof(H2O_SIZE_T_LONGEST_STR));
+            pos += sprintf(pos, "%zu", req->conn->ctx->thread_index);
+            break;
+        case ELEMENT_TYPE_BUSYPOLL_IFACE: {
+            const char *iface = "-";
+#if H2O_USE_EPOLL_BUSYPOLL
+            iface = h2o_busypoll_get_iface();
+#endif
+            APPEND_SAFE_STRING(pos, iface);
+        } break;
+        case ELEMENT_TYPE_BUSYPOLL_NAPI_ID: {
+            uint32_t napi_id = 0;
+#if H2O_USE_EPOLL_BUSYPOLL
+            napi_id = h2o_busypoll_get_napi_id();
+#endif
+            RESERVE(sizeof(H2O_UINT32_LONGEST_STR));
+            pos += sprintf(pos, "%" PRIu32, napi_id);
+        } break;
+        case ELEMENT_TYPE_BUSYPOLL_CPU_IDX: {
+            int16_t cpu_idx = -1;
+#if H2O_USE_EPOLL_BUSYPOLL
+            cpu_idx = h2o_busypoll_get_cpu_idx();
+#endif
+            RESERVE(sizeof(H2O_INT16_LONGEST_STR));
+            pos += sprintf(pos, "%" PRIi16, cpu_idx);
+        } break;
         case ELEMENT_TYPE_LOGNAME:      /* %l */
         case ELEMENT_TYPE_EXTENDED_VAR: /* %{...}x */
         EmitNull:
