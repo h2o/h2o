@@ -773,6 +773,10 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->super.input.authority = h2o_strdup(&subreq->super.pool, url_parsed.authority.base, url_parsed.authority.len);
     subreq->super.input.path = h2o_strdup(&subreq->super.pool, url_parsed.path.base, url_parsed.path.len);
     h2o_hostconf_t *hostconf = h2o_req_setup(&subreq->super);
+    if (hostconf == NULL) {
+        /* h2o_req_setup already sent an error response */
+        goto Failed;
+    }
     subreq->super.hostconf = hostconf;
     subreq->super.pathconf = ctx->handler->pathconf;
     subreq->super.handler = &ctx->handler->super;

@@ -543,6 +543,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http3/server.c
     t/00unit/src/ssl.c
     t/00unit/issues/293.c
+    t/00unit/issues/null-byte-path-rejection.c
     t/00unit/issues/percent-encode-zero-byte.c)
 
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
