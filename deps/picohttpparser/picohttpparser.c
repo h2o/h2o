@@ -521,8 +521,10 @@ int phr_parse_headers(const char *buf_start, size_t len, struct phr_header *head
 enum {
     CHUNKED_IN_CHUNK_SIZE,
     CHUNKED_IN_CHUNK_EXT,
+    CHUNKED_IN_CHUNK_HEADER_EXPECT_LF,
     CHUNKED_IN_CHUNK_DATA,
-    CHUNKED_IN_CHUNK_CRLF,
+    CHUNKED_IN_CHUNK_DATA_EXPECT_CR,
+    CHUNKED_IN_CHUNK_DATA_EXPECT_LF,
     CHUNKED_IN_TRAILERS_LINE_HEAD,
     CHUNKED_IN_TRAILERS_LINE_MIDDLE
 };
@@ -588,8 +590,22 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
             for (;; ++src) {
                 if (src == bufsz)
                     goto Exit;
-                if (buf[src] == '\012')
+                if (buf[src] == '\015') {
                     break;
+                } else if (buf[src] == '\012') {
+                    ret = -1;
+                    goto Exit;
+                }
+            }
+            ++src;
+            decoder->_state = CHUNKED_IN_CHUNK_HEADER_EXPECT_LF;
+        /* fallthru */
+        case CHUNKED_IN_CHUNK_HEADER_EXPECT_LF:
+            if (src == bufsz)
+                goto Exit;
+            if (buf[src] != '\012') {
+                ret = -1;
+                goto Exit;
             }
             ++src;
             if (decoder->bytes_left_in_chunk == 0) {
@@ -617,16 +633,22 @@ ssize_t phr_decode_chunked(struct phr_chunked_decoder *decoder, char *buf, size_
             src += decoder->bytes_left_in_chunk;
             dst += decoder->bytes_left_in_chunk;
             decoder->bytes_left_in_chunk = 0;
-            decoder->_state = CHUNKED_IN_CHUNK_CRLF;
+            decoder->_state = CHUNKED_IN_CHUNK_DATA_EXPECT_CR;
         }
         /* fallthru */
-        case CHUNKED_IN_CHUNK_CRLF:
-            for (;; ++src) {
-                if (src == bufsz)
-                    goto Exit;
-                if (buf[src] != '\015')
-                    break;
+        case CHUNKED_IN_CHUNK_DATA_EXPECT_CR:
+            if (src == bufsz)
+                goto Exit;
+            if (buf[src] != '\015') {
+                ret = -1;
+                goto Exit;
             }
+            ++src;
+            decoder->_state = CHUNKED_IN_CHUNK_DATA_EXPECT_LF;
+        /* fallthru */
+        case CHUNKED_IN_CHUNK_DATA_EXPECT_LF:
+            if (src == bufsz)
+                goto Exit;
             if (buf[src] != '\012') {
                 ret = -1;
                 goto Exit;
