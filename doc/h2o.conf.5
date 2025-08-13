@@ -705,6 +705,13 @@ neverbleed:
 unless set to OFF, H2O isolates SSL private key operations to a different process by using Neverbleed.
 Default is ON.
 
+client-ca-file:
+
+path to a file of Certificate Authority (CA) certificates used to verify client certificates (optional).
+If set, H2O will request a client certificate from connecting clients and validate it against these CAs.
+Connections lacking a valid client certificate (either not provided or not signed by one of the given CAs) will be rejected.
+This enables mutual TLS (mTLS) authentication.
+
 
 ssl-session-resumption directive is provided for tuning parameters related to session resumption and session tickets.
 
