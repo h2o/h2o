@@ -158,7 +158,7 @@ static void add_proxy_status_header(struct st_connect_handler_t *handler, h2o_re
     }
     if (rcode != NULL) {
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; rcode="));
-        parts[nparts++] = h2o_iovec_init(rcode, strlen(rcode));
+        parts[nparts++] = h2o_encode_sf_string(pool, rcode, SIZE_MAX);
     }
     if (details != NULL) {
         parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; details="));
