@@ -112,8 +112,18 @@ struct st_h2o_http2_stream_t {
             unsigned casper_is_ready : 1;
         } pull;
     };
+    /**
+     * see h2o_http2_conn_t::num_streams.blocked_by_server
+     */
     unsigned blocked_by_server : 1;
+    /**
+     * if the stream was reset by peer sending an RST_STREAM
+     */
     unsigned reset_by_peer : 1;
+    /**
+     * if the stream was reset by peer's invalid action
+     */
+    unsigned reset_by_peer_action : 1;
     /**
      *  state of the ostream, only used in push mode
      */
@@ -167,6 +177,9 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t priority;
         h2o_http2_conn_num_streams_t pull;
         h2o_http2_conn_num_streams_t push;
+        /**
+         * number of streams current blocked due to the internal concurrency limit
+         */
         uint32_t blocked_by_server;
         /**
          * number of streams that have the flag with the same name being set
