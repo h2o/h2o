@@ -83,6 +83,7 @@ void test_lib__http3_qpack(void);
 void test_lib__http3_server(void);
 void test_src__ssl_c(void);
 void test_issues293(void);
+void test_null_byte_path_rejection(void);
 void test_percent_encode_zero_byte(void);
 
 #endif
