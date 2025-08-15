@@ -131,8 +131,10 @@
 #define H2O_DEFAULT_OCSP_UPDATER_MAX_THREADS 10
 
 struct listener_ssl_parsed_identity_t {
-    yoml_t **certificate_file;
-    yoml_t **key_file;
+    struct {
+        char *str;
+        yoml_t **node;
+    } certificate_file, key_file;
 };
 
 struct listener_ssl_ocsp_stapling_t {
@@ -417,6 +419,120 @@ static void on_neverbleed_fork(void)
         memset(cmd_argv[i], 0, strlen(cmd_argv[i]));
     strcpy(cmd_argv[0], "neverbleed");
 #endif
+}
+
+static struct {
+    char *dir;
+    char *helper_cmd;
+} acme;
+
+/**
+ * initializes `acme` and the related processes, returns if successful
+ */
+static int init_acme(h2o_configurator_command_t *cmd, yoml_t *node)
+{
+    static const char ENV_ACME_DIR[] = "H2O_ACME_DIR";
+
+    if (conf.run_mode != RUN_MODE_WORKER) {
+        /* running as master: create the acme directory */
+        acme.dir = h2o_strdup(NULL, h2o_socket_buffer_mmap_settings.fn_template, SIZE_MAX).base;
+        if (mkdtemp(acme.dir) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "failed to create temporary directory using template:%s",
+                                       h2o_socket_buffer_mmap_settings.fn_template);
+            return 0;
+        }
+        setenv("H2O_ACME_DIR", acme.dir, 1);
+
+        { /* spawn helper that removes the acme directory upon exit */
+            char *rmdir_on_close = h2o_configurator_get_cmd_path("share/h2o/rmdir-on-close");
+            int fds[2];
+            if (pipe(fds) != 0)
+                h2o_fatal("pipe failed:%s", strerror(errno));
+            if (h2o_spawnp(rmdir_on_close, (char *[]){rmdir_on_close, acme.dir, NULL}, (int[]){fds[0], 0, fds[1], -1, -1}, 0) == -1)
+                h2o_fatal("failed to invoke %s:%s, did you run `make install` or set `H2O_ROOT`?", rmdir_on_close, strerror(errno));
+            close(fds[0]);
+            if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) == -1)
+                h2o_fatal("fcntl(FD_CLOEXEC) failed:%s", strerror(errno));
+        }
+
+        /* determine the name of the helper */
+        acme.helper_cmd = h2o_configurator_get_cmd_path("share/h2o/acme-helper");
+
+    } else {
+        /* running as worker: obtain the directory from the environment and return; only `acme.dir` is used */
+        if ((acme.dir = getenv(ENV_ACME_DIR)) == NULL) {
+            h2o_configurator_errprintf(cmd, node, "environment variable %s is not set; forgot to use `-m daemon` or `-m master`?",
+                                       ENV_ACME_DIR);
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+/**
+ * Given a hostname, returns the paths to the corresponding certificate and key files.
+ * The returned files are placed inside a temporary directory dedicated for ACME integration.
+ */
+static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listener_ssl_parsed_identity_t *identity, const char *host,
+                                 yoml_t **acme_node)
+{
+    if (acme.dir == NULL && !init_acme(cmd, *acme_node))
+        return 0;
+
+    struct stat st;
+
+    /* build paths */
+    identity->certificate_file.str = h2o_concat(NULL, h2o_iovec_init(acme.dir, strlen(acme.dir)), h2o_iovec_init(H2O_STRLIT("/")),
+                                                h2o_iovec_init(host, strlen(host)), h2o_iovec_init(H2O_STRLIT(".crt")))
+                                         .base;
+    identity->certificate_file.node = acme_node;
+    identity->key_file.str = h2o_concat(NULL, h2o_iovec_init(acme.dir, strlen(acme.dir)), h2o_iovec_init(H2O_STRLIT("/")),
+                                        h2o_iovec_init(host, strlen(host)), h2o_iovec_init(H2O_STRLIT(".key")))
+                                 .base;
+    identity->certificate_file.node = acme_node;
+
+    if (conf.run_mode != RUN_MODE_WORKER) {
+        /* running as master: if the key-cert pair does not yet exist, invoke the helper to have the certificate issued or
+         * refreshed, and have the pair intalled into the temporary directory */
+        if (stat(identity->certificate_file.str, &st) != 0) {
+            if (errno != ENOENT)
+                h2o_fatal("unexpected errno %d when calling stat(2) for a file in tmpdir", errno);
+            pid_t helper_pid =
+                h2o_spawnp(acme.helper_cmd, (char *[]){acme.helper_cmd, "-d", acme.dir, (char *)host, NULL}, NULL, 0);
+            if (helper_pid == -1) {
+                h2o_configurator_errprintf(cmd, *acme_node,
+                                           "failed to spawn helper %s, %s (%d); forgot to run `make install` or to set the "
+                                           "`H2O_ROOT` environment variable?",
+                                           acme.helper_cmd, strerror(errno), errno);
+                return 0;
+            }
+            int helper_status;
+            while (waitpid(helper_pid, &helper_status, 0) != helper_pid)
+                ;
+            if (!WIFEXITED(helper_status) || WEXITSTATUS(helper_status) != 0)
+                h2o_fatal("%s exited with unexpected status %d", acme.helper_cmd, helper_status);
+            /* assert that the files have been created */
+            if (stat(identity->certificate_file.str, &st) != 0)
+                h2o_fatal("ACME: %s should have been created but stat failed:%d", identity->certificate_file.str, errno);
+        }
+        if (stat(identity->key_file.str, &st) != 0)
+            h2o_fatal("ACME: %s should have been created but stat failed:%d", identity->key_file.str, errno);
+    } else {
+        /* running as worker, just make sure that the key-cert pair exists */
+        const char *fnlist[] = {identity->certificate_file.str, identity->key_file.str, NULL};
+        for (const char **fn = fnlist; *fn != NULL; ++fn) {
+            if (stat(*fn, &st) != 0) {
+                h2o_configurator_errprintf(cmd, *acme_node,
+                                           "%s not found in the ACME certificates directory; try restarting h2o, as it is most "
+                                           "likely due to a config mismatch",
+                                           *fn);
+                return 0;
+            }
+        }
+    }
+
+    return 1;
 }
 
 struct async_nb_transaction_t {
@@ -1568,9 +1684,9 @@ static int ssl_identity_is_equal(struct listener_ssl_config_t *conf, struct list
     do {
         if (identity->certificate_file == NULL)
             return 0;
-        if (strcmp(identity->certificate_file, (*parsed->certificate_file)->data.scalar) != 0)
+        if (strcmp(identity->certificate_file, parsed->certificate_file.str) != 0)
             return 0;
-        if (strcmp(identity->key_file, (*parsed->key_file)->data.scalar) != 0)
+        if (strcmp(identity->key_file, parsed->key_file.str) != 0)
             return 0;
     } while (++identity, ++parsed, --num_parsed != 0);
 
@@ -1586,18 +1702,18 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
 
     /* Load certificate. First, see if we can load the raw public key. If that fails, try to load the certificate chain. */
     size_t raw_pubkey_count;
-    if (ptls_load_pem_objects((*parsed->certificate_file)->data.scalar, "PUBLIC KEY", raw_pubkey, 1, &raw_pubkey_count) != 0 ||
+    if (ptls_load_pem_objects(parsed->certificate_file.str, "PUBLIC KEY", raw_pubkey, 1, &raw_pubkey_count) != 0 ||
         raw_pubkey_count == 0) {
         /* Load as certificate chain, then, if that succeeds, load PEM directly. */
-        if (SSL_CTX_use_certificate_chain_file(ssl_ctx, (*parsed->certificate_file)->data.scalar) != 1) {
-            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s\n",
-                                       (*parsed->certificate_file)->data.scalar);
+        if (SSL_CTX_use_certificate_chain_file(ssl_ctx, parsed->certificate_file.str) != 1) {
+            h2o_configurator_errprintf(cmd, *parsed->certificate_file.node, "failed to load certificate file:%s\n",
+                                       parsed->certificate_file.str);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             return -1;
         }
-        if ((*cert_chain_pem = h2o_file_read((*parsed->certificate_file)->data.scalar)).base == NULL) {
-            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "failed to load certificate file:%s:%s",
-                                       (*parsed->certificate_file)->data.scalar, strerror(errno));
+        if ((*cert_chain_pem = h2o_file_read(parsed->certificate_file.str)).base == NULL) {
+            h2o_configurator_errprintf(cmd, *parsed->certificate_file.node, "failed to load certificate file:%s:%s",
+                                       parsed->certificate_file.str, strerror(errno));
             return -1;
         }
     }
@@ -1614,15 +1730,14 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             }
             neverbleed_transaction_cb = async_nb_transaction;
         }
-        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, (*parsed->key_file)->data.scalar, errbuf) != 1) {
-            h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s:%s\n",
-                                       (*parsed->key_file)->data.scalar, errbuf);
+        if (neverbleed_load_private_key_file(neverbleed, ssl_ctx, parsed->key_file.str, errbuf) != 1) {
+            h2o_configurator_errprintf(cmd, *parsed->key_file.node, "failed to load private key file:%s:%s\n", parsed->key_file.str,
+                                       errbuf);
             return -1;
         }
     } else {
-        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, (*parsed->key_file)->data.scalar, SSL_FILETYPE_PEM) != 1) {
-            h2o_configurator_errprintf(cmd, *parsed->key_file, "failed to load private key file:%s\n",
-                                       (*parsed->key_file)->data.scalar);
+        if (SSL_CTX_use_PrivateKey_file(ssl_ctx, parsed->key_file.str, SSL_FILETYPE_PEM) != 1) {
+            h2o_configurator_errprintf(cmd, *parsed->key_file.node, "failed to load private key file:%s\n", parsed->key_file.str);
             ERR_print_errors_cb(on_openssl_print_errors, stderr);
             return -1;
         }
@@ -1910,25 +2025,26 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         return 0;
 
     { /* parse the command structure, building `identities` */
-        yoml_t **identity_node, **certificate_file, **key_file;
+        yoml_t **identity_node, **certificate_file, **key_file, **acme;
         if (h2o_configurator_parse_mapping(cmd, *ssl_node, NULL,
-                                           "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
-                                           "maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,cipher-suite-tls1.3:a,"
-                                           "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,"
-                                           "cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
+                                           "identity:a,certificate-file:s,key-file:s,acme:s,min-version:s,minimum-version:s,"
+                                           "max-version:s,maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,"
+                                           "cipher-suite-tls1.3:a,ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,"
+                                           "dh-file:s,cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
                                            "max-tickets:s",
-                                           &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
-                                           &max_version, &key_exchange_tls13_node, &cipher_suite, &cipher_suite_tls13_node,
-                                           &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file,
-                                           &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &client_ca_file,
-                                           &ech_node, &max_tickets_node) != 0)
+                                           &identity_node, &certificate_file, &key_file, &acme, &min_version, &min_version,
+                                           &max_version, &max_version, &key_exchange_tls13_node, &cipher_suite,
+                                           &cipher_suite_tls13_node, &ocsp_update_cmd, &ocsp_update_interval_node,
+                                           &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node,
+                                           &http2_origin_frame_node, &client_ca_file, &ech_node, &max_tickets_node) != 0)
             return -1;
+        if ((identity_node != NULL) + (acme != NULL) + (key_file != NULL || certificate_file != NULL) != 1) {
+            h2o_configurator_errprintf(cmd, *ssl_node,
+                                       "TLS identity must be speified by using exactly one of the following: `certificate-file`-`"
+                                       "key-file` pair, `acme: on`, or an `identity` array");
+            return -1;
+        }
         if (identity_node != NULL) {
-            if (certificate_file != NULL || key_file != NULL) {
-                h2o_configurator_errprintf(cmd, *identity_node,
-                                           "either one of `identity` or `certificate-file`-`key-file` pair can be used");
-                return -1;
-            }
             if ((*identity_node)->data.sequence.size == 0) {
                 h2o_configurator_errprintf(cmd, *identity_node, "at least one identity must be specified");
                 return -1;
@@ -1948,10 +2064,27 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                  *   stored in the order of preference. */
                 size_t dst_index = (src_index + 1) % (*identity_node)->data.sequence.size;
                 if (h2o_configurator_parse_mapping(cmd, src, "certificate-file:s,key-file:s", NULL,
-                                                   &parsed_identities[dst_index].certificate_file,
-                                                   &parsed_identities[dst_index].key_file) != 0)
+                                                   &parsed_identities[dst_index].certificate_file.node,
+                                                   &parsed_identities[dst_index].key_file.node) != 0)
                     return -1;
+                parsed_identities[dst_index].certificate_file.str =
+                    (*parsed_identities[dst_index].certificate_file.node)->data.scalar;
+                parsed_identities[dst_index].key_file.str = (*parsed_identities[dst_index].key_file.node)->data.scalar;
             }
+        } else if (acme != NULL) {
+            if (strcasecmp((*acme)->data.scalar, "on") != 0) {
+                h2o_configurator_errprintf(cmd, *acme, "value of the `acme` must be `on`");
+                return -1;
+            }
+            if (ctx->hostconf == NULL) {
+                h2o_configurator_errprintf(cmd, *acme, "`acme` can be used only within a host-level `listen` configuration");
+                return -1;
+            }
+            /* load certificate from acme.sh */
+            parsed_identities = alloca(sizeof(*parsed_identities));
+            num_parsed_identities = 1;
+            if (!get_acme_cert_and_key(cmd, &parsed_identities[0], ctx->hostconf->authority.host.base, acme))
+                return -1;
         } else {
             if (certificate_file == NULL || key_file == NULL) {
                 h2o_configurator_errprintf(cmd, *ssl_node, "cannot find mandatory attribute: %s",
@@ -1960,8 +2093,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             }
             parsed_identities = alloca(sizeof(*parsed_identities));
             num_parsed_identities = 1;
-            parsed_identities[0].certificate_file = certificate_file;
-            parsed_identities[0].key_file = key_file;
+            parsed_identities[0].certificate_file.node = certificate_file;
+            parsed_identities[0].certificate_file.str = (*certificate_file)->data.scalar;
+            parsed_identities[0].key_file.node = key_file;
+            parsed_identities[0].key_file.str = (*key_file)->data.scalar;
         }
     }
 
@@ -2168,8 +2303,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         struct listener_ssl_parsed_identity_t *parsed = &parsed_identities[identity_index];
         struct listener_ssl_identity_t *identity = &ssl_config->identities[identity_index];
         *identity = (struct listener_ssl_identity_t){
-            .certificate_file = h2o_strdup(NULL, (*parsed->certificate_file)->data.scalar, SIZE_MAX).base,
-            .key_file = h2o_strdup(NULL, (*parsed->key_file)->data.scalar, SIZE_MAX).base,
+            .certificate_file = h2o_strdup(NULL, parsed->certificate_file.str, SIZE_MAX).base,
+            .key_file = h2o_strdup(NULL, parsed->key_file.str, SIZE_MAX).base,
             .dynamic =
                 {
                     .mutex = PTHREAD_MUTEX_INITIALIZER,
@@ -2247,7 +2382,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             if (listener->quic.ctx != NULL && listener->quic.ctx->tls == NULL)
                 listener->quic.ctx->tls = ssl_config->identities[0].ptls.ctx;
         } else if (raw_pubkey.base != NULL) {
-            h2o_configurator_errprintf(cmd, *parsed->certificate_file, "raw public key can only be used with TLS 1.3 or QUIC");
+            h2o_configurator_errprintf(cmd, *parsed->certificate_file.node, "raw public key can only be used with TLS 1.3 or QUIC");
             goto Error;
         }
 
@@ -2289,11 +2424,11 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     fprintf(stderr, "[OCSP Stapling] stapling works for file:%s\n", identity->certificate_file);
                     break;
                 case EX_TEMPFAIL:
-                    h2o_configurator_errprintf(cmd, *parsed->certificate_file, "[OCSP Stapling] temporary failed for file:%s\n",
-                                               identity->certificate_file);
+                    h2o_configurator_errprintf(cmd, *parsed->certificate_file.node,
+                                               "[OCSP Stapling] temporary failed for file:%s\n", identity->certificate_file);
                     break;
                 default:
-                    h2o_configurator_errprintf(cmd, *parsed->certificate_file,
+                    h2o_configurator_errprintf(cmd, *parsed->certificate_file.node,
                                                "[OCSP Stapling] does not work, will be disabled for file:%s\n",
                                                identity->certificate_file);
                     break;
