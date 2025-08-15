@@ -4755,6 +4755,7 @@ int main(int argc, char **argv)
                     conf.run_mode = RUN_MODE_TEST;
                 } else {
                     fprintf(stderr, "unknown mode:%s\n", optarg);
+                    exit(EX_CONFIG);
                 }
                 switch (conf.run_mode) {
                 case RUN_MODE_MASTER:
