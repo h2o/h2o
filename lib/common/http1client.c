@@ -549,8 +549,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
      * transferring the content zero-copy. As switching to pipe involves the cost of creating a pipe (and disposing it when the
      * request is complete), we adopt this margin of 64KB, which offers clear improvement (5%) on 9th-gen Intel Core. */
     if (client->_app_prefers_pipe_reader && reader == on_body_content_length &&
-        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft &&
-        client->sock->ssl == NULL)
+        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft && client->sock->ssl == NULL)
         on_head.pipe_reader = &client->pipe_reader;
 #endif
 
