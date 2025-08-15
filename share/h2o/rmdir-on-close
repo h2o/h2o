@@ -1,0 +1,22 @@
+#! /bin/sh
+exec ${H2O_PERL:-perl} -x $0 "$@"
+#! perl
+# This scripts wait for stdin to become closed, then removes all the files in the directory specified as the argument.
+use strict;
+use warnings;
+use Errno qw(EINTR);
+
+die "no directory specified"
+    unless @ARGV;
+
+my $rmpath = shift @ARGV;
+
+$SIG{INT} = sub {};
+
+while (1) {
+    my $r = sysread STDIN, my $buf, 1;
+    last if !defined($r) || $r == 0 || ($r == -1 && $! != EINTR);
+}
+
+exec '/bin/rm', '-rf', $rmpath;
+die "failed to exec /bin/rm:$!";

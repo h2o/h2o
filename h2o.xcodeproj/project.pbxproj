@@ -716,6 +716,7 @@
 		082E1CCE2692F52200603AED /* h3_header_generator.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = h3_header_generator.c; sourceTree = "<group>"; };
 		082E224A2692F52E00603AED /* quicly_mock.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quicly_mock.c; sourceTree = "<group>"; };
 		083453D62DBF48CE00CAB789 /* 80issues3479.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues3479.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		0844863D2E4F0A0500E4AB4C /* rmdir-on-close */ = {isa = PBXFileReference; lastKnownFileType = text.script.sh; path = "rmdir-on-close"; sourceTree = "<group>"; };
 		084FC7C01D54B90D00E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		084FC7C31D54BB9200E89F66 /* http2_debug_state.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = http2_debug_state.c; sourceTree = "<group>"; };
 		08529A932AD4F6FF00A2C76B /* 80http2-reset-flood.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80http2-reset-flood.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
@@ -1566,6 +1567,7 @@
 		104B9A431A5D0028009EEE64 /* h2o */ = {
 			isa = PBXGroup;
 			children = (
+				0844863D2E4F0A0500E4AB4C /* rmdir-on-close */,
 				10F4EB881C195B5C003DA150 /* mruby */,
 				10835E061C9B8E8000197E59 /* status */,
 				10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */,
