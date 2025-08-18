@@ -664,6 +664,10 @@ typedef enum h2o_conn_state {
  */
 struct st_h2o_context_t {
     /**
+     * thread index of each worker
+     */
+    size_t thread_index;
+    /**
      * points to the loop (either uv_loop_t or h2o_evloop_t, depending on the value of H2O_USE_LIBUV)
      */
     h2o_loop_t *loop;

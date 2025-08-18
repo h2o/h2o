@@ -240,6 +240,9 @@ sub spawn_server {
         return wantarray ? ($guard, $pid) : $guard;
     }
     # child process
+    if ($args{namespace}) {
+        unshift(@{$args{argv}}, "ip", "netns", "exec", $args{namespace});
+    }
     exec @{$args{argv}};
     die "failed to exec $args{argv}->[0]:$!";
 }
@@ -325,7 +328,7 @@ EOT
 }
 
 sub spawn_h2o_raw {
-    my ($conf, $check_ports, $opts) = @_;
+    my ($conf, $check_ports, $opts, $settings) = @_;
 
     # By default, h2o will launch as many threads as there are CPU cores on the
     # host, unless 'num-threads' is specified. This results in the process
@@ -339,14 +342,24 @@ sub spawn_h2o_raw {
     $conffh->flush or confess("failed to write to $conffn: $!");
     debug($conf);
 
-    # spawn the server
-    my ($guard, $pid) = spawn_server(
-        argv     => [ bindir() . "/h2o", "-c", $conffn, @{$opts || []} ],
+    my @argv = (bindir() . "/h2o", "-c", $conffn, @{ $opts || [] });
+
+    my %args = (
+        argv     => \@argv,
         is_ready => sub {
             check_port($_) or return for @{ $check_ports || [] };
             1;
         },
     );
+
+    if (ref $settings eq 'HASH') {
+        if (exists $settings->{'namespace'}) {
+            $args{"namespace"} = $settings->{'namespace'};
+        }
+    }
+
+    # spawn the server
+    my ($guard, $pid) = spawn_server(%args);
     return {
         guard    => $guard,
         pid      => $pid,
