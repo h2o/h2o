@@ -101,6 +101,10 @@ struct st_connect_generator_t {
      */
     unsigned is_tcp : 1;
     /**
+     * Set just before h2o_start_response, cleared in the generator proceed callback
+     */
+    unsigned resp_header_write_pending : 1;
+    /**
      * TCP- and UDP-specific data
      */
     union {
@@ -254,6 +258,7 @@ static void stop_eyeballs(struct st_connect_generator_t *self)
 
 static void dispose_generator(struct st_connect_generator_t *self)
 {
+    self->resp_header_write_pending = 0;
     stop_eyeballs(self);
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);
@@ -299,6 +304,8 @@ static void close_readwrite(struct st_connect_generator_t *self)
         send_inflight = close_socket(self);
     else if (self->is_tcp)
         send_inflight = self->tcp.recvbuf_detached->size != 0;
+    if (self->resp_header_write_pending)
+        send_inflight = 1;
 
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
@@ -640,6 +647,7 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
 static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
+    self->resp_header_write_pending = 0;
 
     assert(!self->read_closed);
 
@@ -679,6 +687,7 @@ static void tcp_on_connect(h2o_socket_t *_sock, const char *err)
 
     /* build and submit 200 response */
     self->src_req->res.status = 200;
+    self->resp_header_write_pending = 1;
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 }
@@ -881,6 +890,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
 static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
+    self->resp_header_write_pending = 0;
 
     if (self->sock != NULL) {
         h2o_buffer_consume(&self->sock->input, self->sock->input->size);
@@ -941,6 +951,7 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     if (!self->udp.is_draft03)
         h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
                               H2O_STRLIT("?1"));
+    self->resp_header_write_pending = 1;
     h2o_start_response(self->src_req, &self->super);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
