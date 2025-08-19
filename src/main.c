@@ -3522,7 +3522,7 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
     yoml_t *loaded;
 
     if (node->type != YOML_TYPE_SCALAR) {
-        fprintf(stderr, "value of the !file node must be a scalar");
+        fprintf(stderr, "value of the !file node must be a scalar\n");
         return NULL;
     }
 
@@ -3563,7 +3563,7 @@ static yoml_t *resolve_file_tag(yoml_t *node, resolve_tag_arg_t *arg)
 static yoml_t *resolve_env_tag(yoml_t *node, resolve_tag_arg_t *arg)
 {
     if (node->type != YOML_TYPE_SCALAR) {
-        fprintf(stderr, "value of !env must be a scalar");
+        fprintf(stderr, "value of !env must be a scalar\n");
         return NULL;
     }
 
