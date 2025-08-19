@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <unistd.h>
 #include "yrmcds.h"
+#include "h2o.h"
 #include "h2o/linklist.h"
 #include "h2o/memcached.h"
 #include "h2o/rand.h"
@@ -427,4 +428,75 @@ h2o_memcached_context_t *h2o_memcached_create_context(const char *host, uint16_t
     }
 
     return ctx;
+}
+
+static struct {
+    h2o_memcached_context_t *ctx;
+    unsigned expiration;
+} async_resumption_context;
+
+struct st_h2o_memcached_resumption_accept_data_t {
+    struct st_h2o_accept_data_t super;
+    h2o_memcached_req_t *get_req;
+};
+
+static void on_memcached_accept_timeout(h2o_timer_t *entry);
+
+static struct st_h2o_accept_data_t *create_memcached_accept_data(h2o_accept_ctx_t *ctx, h2o_socket_t *sock,
+                                                                 struct timeval connected_at)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *data = (struct st_h2o_memcached_resumption_accept_data_t *)h2o_accept_data_create(
+        ctx, sock, connected_at, on_memcached_accept_timeout, sizeof(struct st_h2o_memcached_resumption_accept_data_t));
+    data->get_req = NULL;
+    return &data->super;
+}
+
+static void destroy_memcached_accept_data(struct st_h2o_accept_data_t *_accept_data)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *accept_data =
+        (struct st_h2o_memcached_resumption_accept_data_t *)_accept_data;
+    assert(accept_data->get_req == NULL);
+    h2o_accept_data_destroy(&accept_data->super);
+}
+
+static void memcached_resumption_on_get(h2o_iovec_t session_data, void *_accept_data)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *accept_data = _accept_data;
+    accept_data->get_req = NULL;
+    h2o_socket_ssl_resume_server_handshake(accept_data->super.sock, session_data);
+}
+
+static void memcached_resumption_get(h2o_socket_t *sock, h2o_iovec_t session_id)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *data = sock->data;
+
+    data->get_req = h2o_memcached_get(async_resumption_context.ctx, data->super.ctx->libmemcached_receiver, session_id,
+                                      memcached_resumption_on_get, data, H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
+}
+
+static void memcached_resumption_new(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data)
+{
+    h2o_memcached_set(async_resumption_context.ctx, session_id, session_data,
+                      (uint32_t)time(NULL) + async_resumption_context.expiration,
+                      H2O_MEMCACHED_ENCODE_KEY | H2O_MEMCACHED_ENCODE_VALUE);
+}
+
+void h2o_accept_setup_memcached_ssl_resumption(h2o_memcached_context_t *memc, unsigned expiration)
+{
+    async_resumption_context.ctx = memc;
+    async_resumption_context.expiration = expiration;
+    h2o_socket_ssl_async_resumption_init(memcached_resumption_get, memcached_resumption_new);
+    h2o_accept_data_set_callbacks(create_memcached_accept_data, destroy_memcached_accept_data);
+}
+
+static void on_memcached_accept_timeout(h2o_timer_t *entry)
+{
+    struct st_h2o_memcached_resumption_accept_data_t *data =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_memcached_resumption_accept_data_t, super.timeout, entry);
+    if (data->get_req != NULL) {
+        h2o_memcached_cancel_get(async_resumption_context.ctx, data->get_req);
+        data->get_req = NULL;
+    }
+
+    h2o_accept_data_timeout(&data->super);
 }
