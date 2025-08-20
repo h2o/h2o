@@ -434,7 +434,7 @@ static char *get_localstate_path(const char *fmt, ...)
     if ((root_path = getenv("H2O_ROOT")) != NULL) {
         localstate = h2o_concat(NULL, h2o_iovec_init(root_path, strlen(root_path)), h2o_iovec_init(H2O_STRLIT("/var/h2o")));
     } else {
-        localstate = h2o_strdup(NULL, H2O_TO_STR(H2O_DEFAULT_LOCALSTATEDIR), SIZE_MAX);
+        localstate = h2o_strdup(NULL, H2O_TO_STR(H2O_LOCALSTATEDIR) "/h2o", SIZE_MAX);
     }
 
     va_start(args, fmt);
