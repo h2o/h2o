@@ -362,6 +362,13 @@ static int on_config_hosts(h2o_configurator_command_t *cmd, h2o_configurator_con
             h2o_configurator_errprintf(cmd, key, "wildcard (*) can only be used at the start of the hostname");
             return -1;
         }
+        for (size_t i = 0; i != hostname.len; ++i) {
+            /* reject invalid chars; ACME support in the standalone server relies on this sanitization */
+            if (hostname.base[i] <= ' ' || hostname.base[i] == '/') {
+                h2o_configurator_errprintf(cmd, key, "hostname cotains an invalid character");
+                return -1;
+            }
+        }
         h2o_configurator_context_t *host_ctx = create_context(ctx, 0);
         if ((host_ctx->hostconf = h2o_config_register_host(host_ctx->globalconf, hostname, port)) == NULL) {
             h2o_configurator_errprintf(cmd, key, "duplicate host entry");
