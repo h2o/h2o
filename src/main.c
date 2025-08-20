@@ -338,6 +338,7 @@ static struct {
         char *email;
         H2O_VECTOR(char *) hosts;
     } acme;
+    yoml_t *yoml;
 #ifdef LIBCAP_FOUND
     H2O_VECTOR(cap_value_t) capabilities;
 #endif
@@ -425,7 +426,7 @@ static void on_neverbleed_fork(void)
 #endif
 }
 
-static char *get_localstate_path(const char *fmt, ...)
+static h2o_iovec_t get_localstate_path(const char *fmt, ...)
 {
     h2o_iovec_t localstate, suffix;
     char *root_path;
@@ -446,7 +447,7 @@ static char *get_localstate_path(const char *fmt, ...)
     vsnprintf(suffix.base, suffix.len + 1, fmt, args);
     va_end(args);
 
-    char *concat = h2o_concat(NULL, localstate, h2o_iovec_init(H2O_STRLIT("/")), suffix).base;
+    h2o_iovec_t concat = h2o_concat(NULL, localstate, h2o_iovec_init(H2O_STRLIT("/")), suffix);
 
     free(localstate.base);
     free(suffix.base);
@@ -460,31 +461,71 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
 {
     yoml_t **email, **accept_tos;
 
+    /* handle the node itself; i.e., make sure `accept-tos` exists, and record email */
     if (h2o_configurator_parse_mapping(cmd, node, "email:s,accept-tos:s", NULL, &email, &accept_tos) != 0)
         return -1;
-
     if (strcasecmp((*accept_tos)->data.scalar, "YES") != 0) {
         h2o_configurator_errprintf(cmd, *accept_tos, "accept-tos must be \"YES\"");
         return -1;
     }
-
     conf.acme.email = h2o_strdup(NULL, (*email)->data.scalar, SIZE_MAX).base;
+
+    /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
+    char *yaml = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("/.well-known/acme-challenge/:\n file.dirlisting: OFF\n file.dir: ")),
+                            get_localstate_path("acme/webroot/.well-known/acme-challenge/"), h2o_iovec_init(H2O_STRLIT("\n")))
+                     .base;
+    yaml_parser_t parser;
+    yaml_parser_initialize(&parser);
+    yaml_parser_set_input_string(&parser, (const unsigned char *)yaml, strlen(yaml));
+    yoml_parse_args_t parse_args = {.filename = "acme-internal"};
+    yoml_t *well_known = yoml_parse_document(&parser, NULL, &parse_args);
+    yaml_parser_delete(&parser);
+
+    assert(well_known->type == YOML_TYPE_MAPPING);
+    assert(well_known->data.mapping.size == 1);
+
+    /* add the well-known mapping to paths of each host entry */
+    assert(conf.yoml != NULL);
+    assert(conf.yoml->type == YOML_TYPE_MAPPING);
+    for (size_t l1 = 0; l1 < conf.yoml->data.mapping.size; ++l1) {
+        yoml_t *l1key = conf.yoml->data.mapping.elements[l1].key;
+        yoml_t *l1value = conf.yoml->data.mapping.elements[l1].value;
+        if (l1key->type != YOML_TYPE_SCALAR)
+            continue;
+        if (strcmp(l1key->data.scalar, "hosts") != 0)
+            continue;
+        if (l1value->type != YOML_TYPE_MAPPING)
+            continue;
+        /* found hosts */
+        for (size_t l2 = 0; l2 < l1value->data.mapping.size; ++l2) {
+            yoml_t *l2value = l1value->data.mapping.elements[l2].value;
+            if (l2value->type != YOML_TYPE_MAPPING)
+                continue;
+            for (size_t l3 = 0; l3 < l2value->data.mapping.size; ++l3) {
+                yoml_t *l3key = l2value->data.mapping.elements[l3].key;
+                yoml_t **l3value = &l2value->data.mapping.elements[l3].value;
+                if (l3key->type != YOML_TYPE_SCALAR)
+                    continue;
+                if (strcmp(l3key->data.scalar, "paths") != 0)
+                    continue;
+                if ((*l3value)->type != YOML_TYPE_MAPPING)
+                    continue;
+                /* found paths, append the entry at the end */
+                *l3value = h2o_mem_realloc(*l3value,
+                                           offsetof(yoml_t, data.mapping.elements) +
+                                               ((*l3value)->data.mapping.size + 1) * sizeof((*l3value)->data.mapping.elements[0]));
+                (*l3value)->data.mapping.elements[(*l3value)->data.mapping.size++] = well_known->data.mapping.elements[0];
+                ++well_known->data.mapping.elements[0].key->_refcnt;
+                ++well_known->data.mapping.elements[0].value->_refcnt;
+            }
+        }
+    }
+
+    yoml_free(well_known, NULL);
+    free(yaml);
     return 0;
 }
 
-/**
- * when exitting from host-level configurations, adds a path mapping for the well-known directory
- */
-static int on_config_acme_exit(h2o_configurator_t *configurator, h2o_configurator_context_t *ctx, yoml_t *node)
-{
-    if (!(ctx->hostconf != NULL && ctx->pathconf == NULL))
-        return 0;
-
-    h2o_pathconf_t *pathconf = h2o_config_register_path(ctx->hostconf, "/.well-known/acme-challenge/", 0);
-    h2o_file_register(pathconf, get_localstate_path("acme/webroot/.well-known/acme-challenge"), NULL, NULL, 0);
-
-    return 0;
-}
 /**
  * Given a hostname, returns the paths to the corresponding certificate and key files.
  * The returned files are placed inside a temporary directory dedicated for ACME integration.
@@ -499,8 +540,8 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
     }
 
     /* generate paths (though they might not exist yet) */
-    identity->certificate_file.str = get_localstate_path("acme/certificates/%s.crt", host);
-    identity->key_file.str = get_localstate_path("acme/certificates/%s.key", host);
+    identity->certificate_file.str = get_localstate_path("acme/certificates/%s.crt", host).base;
+    identity->key_file.str = get_localstate_path("acme/certificates/%s.key", host).base;
 
     struct stat dummy_st;
     if (stat(identity->certificate_file.str, &dummy_st) != 0) {
@@ -556,7 +597,7 @@ static void spawn_acme_loader(void)
     sprintf(pidbuf, "%d", (int)getpid());
     helper_argv[2] = pidbuf;
     helper_argv[3] = "--directory";
-    helper_argv[4] = get_localstate_path("acme");
+    helper_argv[4] = get_localstate_path("acme").base;
     helper_argv[5] = "--email";
     helper_argv[6] = conf.acme.email;
     for (size_t i = 0; i != conf.acme.hosts.size; ++i)
@@ -4830,11 +4871,6 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "io_uring-batch-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_io_uring_batch_size);
-    }
-
-    {
-        h2o_configurator_t *c = h2o_configurator_create(&conf.globalconf, sizeof(*c));
-        c->exit = on_config_acme_exit;
         h2o_configurator_define_command(c, "acme", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING,
                                         on_config_acme);
     }
@@ -5084,7 +5120,6 @@ int main(int argc, char **argv)
     }
 
     { /* configure */
-        yoml_t *yoml;
         resolve_tag_arg_t resolve_tag_arg = {{NULL}};
         yoml_parse_args_t parse_args = {
             .filename = opt_config_file,
@@ -5092,12 +5127,13 @@ int main(int argc, char **argv)
             .resolve_alias = 1,
             .resolve_merge = 1,
         };
-        if ((yoml = load_config(&parse_args, NULL)) == NULL)
+        if ((conf.yoml = load_config(&parse_args, NULL)) == NULL)
             exit(EX_CONFIG);
-        if (h2o_configurator_apply(&conf.globalconf, yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
+        if (h2o_configurator_apply(&conf.globalconf, conf.yoml, conf.run_mode != RUN_MODE_WORKER) != 0)
             exit(EX_CONFIG);
         dispose_resolve_tag_arg(&resolve_tag_arg);
-        yoml_free(yoml, NULL);
+        yoml_free(conf.yoml, NULL);
+        conf.yoml = NULL;
     }
 
     { /* test if temporary files can be created */
