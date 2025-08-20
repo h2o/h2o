@@ -2147,6 +2147,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *acme, "`listen/ssl/acme` requires `acme` to be set at the global level");
                 return -1;
             }
+            if (conf.run_mode == RUN_MODE_WORKER && getenv("H2O_VIA_MASTER") == NULL)
+                h2o_configurator_errprintf(cmd, *acme,
+                                           "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                           "launched with neither `-m master` nor `-m worker`");
             /* load certificate from acme.sh */
             parsed_identities = alloca(sizeof(*parsed_identities));
             num_parsed_identities = 1;
