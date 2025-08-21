@@ -573,17 +573,28 @@ hosts:
 
 SSL Attribute
 
-The ssl attribute must be defined as a mapping, and recognizes the following attributes.
+The ssl attribute must be defined as a mapping.
+
+
+The identity of the TLS listener is specified in one of the following ways:
+
+by specifying the certificate-file and key-file attributes directly under ssl,
+by specifying a sequence of certificate- and key-file pairs inside identity, or
+if neither of the above is used, the identity is obtained using ACME; see acme.
+
+
+
+The ssl mapping recognizes the following attributes.
 
 
 certificate-file:
 
-Path of the SSL certificate file (mandatory).
+Path of the SSL certificate file.
 This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, RFC 7250 handshake will be used.
 
 key-file:
-Path of the SSL private key file (mandatory).
+Path of the SSL private key file.
 identity:
 List of certificate / key pairs.
 This attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
@@ -784,6 +795,56 @@ listen:
 .RE
 .fi
 .PP
+
+
+.RE
+.RE
+
+.SS acme
+Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).
+
+.PP
+
+
+Unless a custom loader program is specified, h2o obtains certificates from Let's Encrypt using the popular ACME client: Lego.
+On most distributions, Lego should be available as pre-build packages.
+
+This directive takes two mandatory and one optional parameters.
+
+email (mandatory)
+The email address to be registered to the ACME service provider.
+accept-tos (mandatory)
+Must be set to YES to accept the terms of service of the ACME service provider.
+loader (optional)
+The program to be launched for issuing and renewing the certificates.
+If omitted, H2O_ROOT/share/h2o/acme/lego-loader is used.
+
+
+
+The below example shows a configuration that relies on ACME for serving https://example.org.
+.PP
+.BR Example:\ 
+Simple h2o.conf using ACME
+.PP
+.nf
+.RS
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl: {}               # omission on an identity indicates the use of ACME
+    paths:
+      ...
+
+.RE
+.fi
+.PP
+
 
 
 .RE
