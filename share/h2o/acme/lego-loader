@@ -23,7 +23,7 @@ my ($root_dir, $email, $launcher_pid);
 GetOptions(
     "check|c" => sub {
         if (system("which lego > /dev/null 2>&1") != 0) {
-            print STDERR "Warning: lego command not installed! ACME integration is unlikely to work as expected\n";
+            print STDERR "!!!!WARNING!!!! lego command not installed! ACME integration is unlikely to work as expected\n";
         }
         exit 0;
     },
