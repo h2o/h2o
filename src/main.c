@@ -470,8 +470,22 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
         return -1;
     }
     conf.acme.email = h2o_strdup(NULL, (*email)->data.scalar, SIZE_MAX).base;
-    if (loader != NULL)
-        conf.acme.loader = h2o_strdup(NULL, (*loader)->data.scalar, SIZE_MAX).base;
+    conf.acme.loader = loader != NULL ? h2o_strdup(NULL, (*loader)->data.scalar, SIZE_MAX).base
+                                      : h2o_configurator_get_cmd_path("share/h2o/acme/lego-loader");
+
+    /* emit warnings */
+    if (conf.run_mode != RUN_MODE_WORKER) {
+        pid_t pid;
+        if ((pid = h2o_spawnp(conf.acme.loader, (char *[]){conf.acme.loader, "--check", NULL}, NULL, 0)) == -1)
+            h2o_fatal("failed to spawn %s:%s", conf.acme.loader, strerror(errno));
+        int status;
+        while (waitpid(pid, &status, 0) != pid)
+            ;
+    } else if (getenv("H2O_VIA_MASTER") == NULL) {
+        h2o_configurator_errprintf(cmd, node,
+                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                    "launched with neither `-m master` nor `-m worker`");
+    }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
     char *yaml = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("/.well-known/acme-challenge/:\n file.dirlisting: OFF\n file.dir: ")),
@@ -590,8 +604,7 @@ static void spawn_acme_loader(void)
 
     /* setup argv */
     char **helper_argv = h2o_mem_alloc(sizeof(helper_argv[0]) * (8 + conf.acme.hosts.size)), pidbuf[sizeof(H2O_INT64_LONGEST_STR)];
-    helper_argv[0] = conf.acme.loader != NULL ? h2o_strdup(NULL, conf.acme.loader, SIZE_MAX).base
-                                              : h2o_configurator_get_cmd_path("share/h2o/acme/lego-loader");
+    helper_argv[0] = conf.acme.loader;
     helper_argv[1] = "--pid";
     sprintf(pidbuf, "%d", (int)getpid());
     helper_argv[2] = pidbuf;
@@ -611,7 +624,6 @@ static void spawn_acme_loader(void)
         h2o_fatal("failed to spawn %s:%s", helper_argv[0], strerror(errno));
     close(fds[0]);
 
-    free(helper_argv[0]);
     free(helper_argv[4]);
     free(helper_argv);
 
@@ -2198,13 +2210,6 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *ssl_node,
                                            "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
-            }
-            if (conf.run_mode == RUN_MODE_WORKER && getenv("H2O_VIA_MASTER") == NULL) {
-                H2O_MULTITHREAD_ONCE({
-                    h2o_configurator_errprintf(cmd, *ssl_node,
-                                               "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o "
-                                               "was launched with neither `-m master` nor `-m worker`");
-                });
             }
             /* load certificate from acme.sh */
             parsed_identities = alloca(sizeof(*parsed_identities));
