@@ -2128,26 +2128,26 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         return 0;
 
     { /* parse the command structure, building `identities` */
-        yoml_t **identity_node, **certificate_file, **key_file, **acme;
+        yoml_t **identity_node, **certificate_file, **key_file;
         if (h2o_configurator_parse_mapping(cmd, *ssl_node, NULL,
-                                           "identity:a,certificate-file:s,key-file:s,acme:s,min-version:s,minimum-version:s,"
-                                           "max-version:s,maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,"
-                                           "cipher-suite-tls1.3:a,ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,"
-                                           "dh-file:s,cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
+                                           "identity:a,certificate-file:s,key-file:s,min-version:s,minimum-version:s,max-version:s,"
+                                           "maximum-version:s,key-exchange-tls1.3:a,cipher-suite:s,cipher-suite-tls1.3:a,"
+                                           "ocsp-update-cmd:s,ocsp-update-interval:*,ocsp-max-failures:*,dh-file:s,"
+                                           "cipher-preference:*,neverbleed:*,http2-origin-frame:*,client-ca-file:s,ech:a,"
                                            "max-tickets:s",
-                                           &identity_node, &certificate_file, &key_file, &acme, &min_version, &min_version,
-                                           &max_version, &max_version, &key_exchange_tls13_node, &cipher_suite,
-                                           &cipher_suite_tls13_node, &ocsp_update_cmd, &ocsp_update_interval_node,
-                                           &ocsp_max_failures_node, &dh_file, &cipher_preference_node, &neverbleed_node,
-                                           &http2_origin_frame_node, &client_ca_file, &ech_node, &max_tickets_node) != 0)
+                                           &identity_node, &certificate_file, &key_file, &min_version, &min_version, &max_version,
+                                           &max_version, &key_exchange_tls13_node, &cipher_suite, &cipher_suite_tls13_node,
+                                           &ocsp_update_cmd, &ocsp_update_interval_node, &ocsp_max_failures_node, &dh_file,
+                                           &cipher_preference_node, &neverbleed_node, &http2_origin_frame_node, &client_ca_file,
+                                           &ech_node, &max_tickets_node) != 0)
             return -1;
-        if ((identity_node != NULL) + (acme != NULL) + (key_file != NULL || certificate_file != NULL) != 1) {
-            h2o_configurator_errprintf(cmd, *ssl_node,
-                                       "TLS identity must be speified by using exactly one of the following: `certificate-file`-`"
-                                       "key-file` pair, `acme: on`, or an `identity` array");
-            return -1;
-        }
         if (identity_node != NULL) {
+            if (certificate_file != NULL || key_file != NULL) {
+                h2o_configurator_errprintf(cmd, certificate_file != NULL ? *certificate_file : *key_file,
+                                           "when `identity` is used, all `certificate-file`-`key-file` pairs must be stored within "
+                                           "that `identity`");
+                return -1;
+            }
             if ((*identity_node)->data.sequence.size == 0) {
                 h2o_configurator_errprintf(cmd, *identity_node, "at least one identity must be specified");
                 return -1;
@@ -2174,29 +2174,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                     (*parsed_identities[dst_index].certificate_file.node)->data.scalar;
                 parsed_identities[dst_index].key_file.str = (*parsed_identities[dst_index].key_file.node)->data.scalar;
             }
-        } else if (acme != NULL) {
-            if (strcasecmp((*acme)->data.scalar, "on") != 0) {
-                h2o_configurator_errprintf(cmd, *acme, "value of the `acme` must be `on`");
-                return -1;
-            }
-            if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *acme, "`acme` can be used only within a host-level `listen` configuration");
-                return -1;
-            }
-            if (conf.acme.email == NULL) {
-                h2o_configurator_errprintf(cmd, *acme, "`listen/ssl/acme` requires `acme` to be set at the global level");
-                return -1;
-            }
-            if (conf.run_mode == RUN_MODE_WORKER && getenv("H2O_VIA_MASTER") == NULL)
-                h2o_configurator_errprintf(cmd, *acme,
-                                           "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                           "launched with neither `-m master` nor `-m worker`");
-            /* load certificate from acme.sh */
-            parsed_identities = alloca(sizeof(*parsed_identities));
-            num_parsed_identities = 1;
-            if (!get_acme_cert_and_key(cmd, &parsed_identities[0], ctx->hostconf->authority.host.base, acme))
-                return -1;
-        } else {
+        } else if (certificate_file != NULL || key_file != NULL) {
             if (certificate_file == NULL || key_file == NULL) {
                 h2o_configurator_errprintf(cmd, *ssl_node, "cannot find mandatory attribute: %s",
                                            certificate_file == NULL ? "certificate-file" : "key-file");
@@ -2208,6 +2186,31 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             parsed_identities[0].certificate_file.str = (*certificate_file)->data.scalar;
             parsed_identities[0].key_file.node = key_file;
             parsed_identities[0].key_file.str = (*key_file)->data.scalar;
+        } else {
+            /* acme */
+            if (conf.acme.email == NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node,
+                                           "missing TLS identity - certificate file is not specified, ACME configuration could not "
+                                           "be found");
+                return -1;
+            }
+            if (ctx->hostconf == NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node,
+                                           "to use ACME, the `ssl` node must only be specified within each host");
+                return -1;
+            }
+            if (conf.run_mode == RUN_MODE_WORKER && getenv("H2O_VIA_MASTER") == NULL) {
+                H2O_MULTITHREAD_ONCE({
+                    h2o_configurator_errprintf(cmd, *ssl_node,
+                                               "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o "
+                                               "was launched with neither `-m master` nor `-m worker`");
+                });
+            }
+            /* load certificate from acme.sh */
+            parsed_identities = alloca(sizeof(*parsed_identities));
+            num_parsed_identities = 1;
+            if (!get_acme_cert_and_key(cmd, &parsed_identities[0], ctx->hostconf->authority.host.base, ssl_node))
+                return -1;
         }
     }
 
