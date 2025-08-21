@@ -173,17 +173,28 @@ EOT
 ?>
 <h4 id="listen-ssl">SSL Attribute</h4>
 <p>
-The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
+The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping.
+</p>
+<p>
+The identity of the TLS listener is specified in one of the following ways:
+<ul>
+<li>by specifying the <code>certificate-file</code> and <code>key-file</code> attributes directly under <code>ssl</code>,</li>
+<li>by specifying a sequence of certificate- and key-file pairs inside <code>identity</code>, or</li>
+<li>if neither of the above is used, the identity is obtained using ACME; see <a href="configure/base_directives.html#acme">acme</a>.
+</ul>
+</p>
+<p>
+The <code>ssl</code> mapping recognizes the following attributes.
 </p>
 <dl>
 <dt id="certificate-file">certificate-file:</dt>
 <dd>
-Path of the SSL certificate file (mandatory).
+Path of the SSL certificate file.
 This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
 </dd>
 <dt id="key-file">key-file:</dt>
-<dd>Path of the SSL private key file (mandatory).</dd>
+<dd>Path of the SSL private key file.</dd>
 <dt>identity:</dt>
 <dd>List of certificate / key pairs.
 This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
@@ -198,11 +209,6 @@ ssl:
     certificate-file: /path/to/ecdsa.crt
 EOT
 ?>
-<dt>acme:</dt>
-<dd>If this attribue is used with its agument set to <code>ON</code>, the key and the certificate is obtained using ACME.
-This attribute cannot be used together with <code>certificate-file</code>, <code>key-file</code>, or <code>identity</code>.
-For details regarding how to use ACME, refer to the <a href=configure/base_directives.html#acme>acme</a> directive.
-</dd>
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
@@ -376,7 +382,8 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-Unless a custom loader program is specified, h2o obtains certificates from <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> using the popular ACME client: <a href="https://github.com/go-acme/lego" target="_blank">Lego</a>. On most distributions, Lego should be available as pre-build packages.
+Unless a custom loader program is specified, h2o obtains certificates from <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> using the popular ACME client: <a href="https://github.com/go-acme/lego" target="_blank">Lego</a>.
+On most distributions, Lego should be available as pre-build packages.
 </p>
 <p>This directive takes two mandatory and one optional parameters.
 <dl>
@@ -390,7 +397,7 @@ If omitted, <code>H2O_ROOT/share/h2o/acme/lego-loader</code> is used.</dd>
 </dl>
 </p>
 <p>
-The below example shows a configuration that uses ACME to issue and renew certificates for <code>example.org</code>.
+The below example shows a configuration that relies on ACME for serving <code>https://example.org</code>.
 <?= $ctx->{example}->('Simple h2o.conf using ACME', <<'EOT')
 acme:
   email: admin@example.org  # email address to be used when contacting Let's Encrypt
@@ -401,8 +408,7 @@ hosts:
       port: 80
     listen:
       port: 443
-      ssl:
-        acme: ON            # use Let's Encrypt for this host (example.org)
+      ssl: {}               # omission on an identity indicates the use of ACME
     paths:
       ...
 EOT
