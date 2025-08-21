@@ -414,6 +414,10 @@ hosts:
 EOT
 ?>
 </p>
+<p>
+The certificates and keys being issued or generated are stored under the <code>$prefix/var/h2o/acme</code> directory.
+Output of the lego command (including errors) are emitted to the error log of h2o.
+</p>
 ? })
 
 <?
