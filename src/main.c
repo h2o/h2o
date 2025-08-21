@@ -543,7 +543,7 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
  * The returned files are placed inside a temporary directory dedicated for ACME integration.
  */
 static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listener_ssl_parsed_identity_t *identity, const char *host,
-                                 yoml_t **acme_node)
+                                 yoml_t **ssl_node)
 {
     if (conf.run_mode != RUN_MODE_WORKER) {
         /* running as master: add the given hostname to the list so that certificates can be obtained */
@@ -552,14 +552,16 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
     }
 
     /* generate paths (though they might not exist yet) */
+    identity->certificate_file.node = ssl_node;
     identity->certificate_file.str = get_localstate_path("acme/certificates/%s.crt", host).base;
+    identity->key_file.node = ssl_node;
     identity->key_file.str = get_localstate_path("acme/certificates/%s.key", host).base;
 
     struct stat dummy_st;
     if (stat(identity->certificate_file.str, &dummy_st) != 0) {
         if (errno == ENOENT)
             goto UseFake;
-        h2o_configurator_errprintf(cmd, *acme_node,
+        h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
                                    identity->certificate_file.str, strerror(errno));
@@ -568,7 +570,7 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
     if (stat(identity->key_file.str, &dummy_st) != 0) {
         if (errno == ENOENT)
             goto UseFake;
-        h2o_configurator_errprintf(cmd, *acme_node,
+        h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
                                    identity->certificate_file.str, strerror(errno));
