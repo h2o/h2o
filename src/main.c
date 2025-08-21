@@ -336,6 +336,7 @@ static struct {
     } ocsp_updater;
     struct {
         char *email;
+        char *loader;
         H2O_VECTOR(char *) hosts;
     } acme;
     yoml_t *yoml;
@@ -459,16 +460,18 @@ static h2o_iovec_t get_localstate_path(const char *fmt, ...)
  */
 static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t **email, **accept_tos;
+    yoml_t **email, **accept_tos, **loader;
 
-    /* handle the node itself; i.e., make sure `accept-tos` exists, and record email */
-    if (h2o_configurator_parse_mapping(cmd, node, "email:s,accept-tos:s", NULL, &email, &accept_tos) != 0)
+    /* handle the node itself; i.e., make sure `accept-tos` exists, and record email, loader */
+    if (h2o_configurator_parse_mapping(cmd, node, "email:s,accept-tos:s", "loader:s", &email, &accept_tos, &loader) != 0)
         return -1;
     if (strcasecmp((*accept_tos)->data.scalar, "YES") != 0) {
         h2o_configurator_errprintf(cmd, *accept_tos, "accept-tos must be \"YES\"");
         return -1;
     }
     conf.acme.email = h2o_strdup(NULL, (*email)->data.scalar, SIZE_MAX).base;
+    if (loader != NULL)
+        conf.acme.loader = h2o_strdup(NULL, (*loader)->data.scalar, SIZE_MAX).base;
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
     char *yaml = h2o_concat(NULL, h2o_iovec_init(H2O_STRLIT("/.well-known/acme-challenge/:\n file.dirlisting: OFF\n file.dir: ")),
@@ -592,7 +595,8 @@ static void spawn_acme_loader(void)
 
     /* setup argv */
     char **helper_argv = h2o_mem_alloc(sizeof(helper_argv[0]) * (8 + conf.acme.hosts.size)), pidbuf[sizeof(H2O_INT64_LONGEST_STR)];
-    helper_argv[0] = h2o_configurator_get_cmd_path("share/h2o/acme/lego-loader");
+    helper_argv[0] = conf.acme.loader != NULL ? h2o_strdup(NULL, conf.acme.loader, SIZE_MAX).base
+                                              : h2o_configurator_get_cmd_path("share/h2o/acme/lego-loader");
     helper_argv[1] = "--pid";
     sprintf(pidbuf, "%d", (int)getpid());
     helper_argv[2] = pidbuf;
