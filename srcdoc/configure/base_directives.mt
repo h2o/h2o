@@ -198,6 +198,11 @@ ssl:
     certificate-file: /path/to/ecdsa.crt
 EOT
 ?>
+<dt>acme:</dt>
+<dd>If this attribue is used with its agument set to <code>ON</code>, the key and the certificate is obtained using ACME.
+This attribute cannot be used together with <code>certificate-file</code>, <code>key-file</code>, or <code>identity</code>.
+For details regarding how to use ACME, refer to the <a href=configure/base_directives.html#acme>acme</a> directive.
+</dd>
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
@@ -361,6 +366,48 @@ listen:
   permission: 600
 EOT
 ?>
+? })
+
+<?
+$ctx->{directive}->(
+  name     => "acme",
+  levels   => [ qw(global) ],
+  desc   => "Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).",
+)->(sub {
+?>
+<p>
+Unless a custom loader program is specified, h2o obtains certificates from <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> using the popular ACME client: <a href="https://github.com/go-acme/lego" target="_blank">Lego</a>. On most distributions, Lego should be available as pre-build packages.
+</p>
+<p>This directive takes two mandatory and one optional parameters.
+<dl>
+<dt>email (mandatory)</dt>
+<dd>The email address to be registered to the ACME service provider.</dd>
+<dt>accept-tos (mandatory)</dt>
+<dd>Must be set to <code>YES</code> to accept the terms of service of the ACME service provider.</dd>
+<dt>loader (optional)</dt>
+<dd>The program to be launched for issuing and renewing the certificates.
+If omitted, <code>H2O_ROOT/share/h2o/acme/lego-loader</code> is used.</dd>
+</dl>
+</p>
+<p>
+The below example shows a configuration that uses ACME to issue and renew certificates for <code>example.org</code>.
+<?= $ctx->{example}->('Simple h2o.conf using ACME', <<'EOT')
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl:
+        acme: ON            # use Let's Encrypt for this host (example.org)
+    paths:
+      ...
+EOT
+?>
+</p>
 ? })
 
 <?
