@@ -1329,8 +1329,7 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
 #else
             &ptls_minicrypto_x25519,
 #endif
-            &ptls_openssl_secp256r1,
-            &ptls_openssl_secp384r1, NULL};
+            &ptls_openssl_secp256r1, &ptls_openssl_secp384r1, NULL};
         key_exchanges = default_key_exchanges;
     }
 
@@ -1463,11 +1462,9 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
         /* rebuild and replace the cipher suite list, replacing the corresponding ones to fusion */
         if (ptls_fusion_is_supported_by_cpu()) {
             static ptls_cipher_suite_t aes128gcmsha256 = {PTLS_CIPHER_SUITE_AES_128_GCM_SHA256, &ptls_fusion_aes128gcm,
-                                                          &ptls_openssl_sha256,
-                                                          PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256},
+                                                          &ptls_openssl_sha256, PTLS_CIPHER_SUITE_NAME_AES_128_GCM_SHA256},
                                        aes256gcmsha384 = {PTLS_CIPHER_SUITE_AES_256_GCM_SHA384, &ptls_fusion_aes256gcm,
-                                                          &ptls_openssl_sha384,
-                                                          PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384},
+                                                          &ptls_openssl_sha384, PTLS_CIPHER_SUITE_NAME_AES_256_GCM_SHA384},
                                        *fusion_all[] = {&aes128gcmsha256, &aes256gcmsha384, NULL};
             pctx->ctx.cipher_suites = replace_ciphersuites(pctx->ctx.cipher_suites, fusion_all);
         }
@@ -4758,6 +4755,7 @@ int main(int argc, char **argv)
                     conf.run_mode = RUN_MODE_TEST;
                 } else {
                     fprintf(stderr, "unknown mode:%s\n", optarg);
+                    exit(EX_CONFIG);
                 }
                 switch (conf.run_mode) {
                 case RUN_MODE_MASTER:

@@ -68,11 +68,34 @@ extern ptls_key_exchange_algorithm_t ptls_openssl_x25519;
 #define PTLS_OPENSSL_HAVE_X25519 0
 #define PTLS_OPENSSL_HAS_X25519 0 /* deprecated; use HAVE_ */
 #endif
+
 #ifdef OPENSSL_IS_BORINGSSL
+/**
+ * this flag is set when the various post-quantum key encapsulation algorithms are available; note however that, unlike the non-PQC
+ * key exchange methods above that test availability using using macros, the availability of these PQ algorithms can tested only by
+ * actually instantiating the key exchange objects
+ */
+#define PTLS_OPENSSL_HAVE_MLKEM 0
+/**
+ * this flag is set when either openssl or boringssl provides the algorithm
+ */
 #define PTLS_OPENSSL_HAVE_X25519MLKEM768 1
-extern ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768;
+#elif OPENSSL_VERSION_NUMBER >= 0x30500000L
+#define PTLS_OPENSSL_HAVE_MLKEM 1
+#define PTLS_OPENSSL_HAVE_X25519MLKEM768 1
 #else
+#define PTLS_OPENSSL_HAVE_MLKEM 0
 #define PTLS_OPENSSL_HAVE_X25519MLKEM768 0
+#endif
+#if PTLS_OPENSSL_HAVE_MLKEM
+extern ptls_key_exchange_algorithm_t ptls_openssl_mlkem512;
+extern ptls_key_exchange_algorithm_t ptls_openssl_mlkem768;
+extern ptls_key_exchange_algorithm_t ptls_openssl_mlkem1024;
+extern ptls_key_exchange_algorithm_t ptls_openssl_secp256r1mlkem768;
+extern ptls_key_exchange_algorithm_t ptls_openssl_secp384r1mlkem1024;
+#endif
+#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+extern ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768;
 #endif
 
 /* when boringssl is used, existence of libdecrepit is assumed */

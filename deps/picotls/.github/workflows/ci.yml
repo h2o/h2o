@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   linux:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-24.04]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -21,6 +21,8 @@ jobs:
             command: make -f misc/docker-ci.mk CMAKE_ARGS='-DWITH_AEGIS=1 -DAEGIS_INCLUDE_DIR=/usr/local/include'
           - name: "Linux / OpenSSL 3.0 + mbedtls"
             command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2204 CMAKE_ARGS='-DWITH_MBEDTLS=1'
+          - name: "Linux / OpenSSL 3.5"
+            command: make -f misc/docker-ci.mk CONTAINER_NAME=h2oserver/h2o-ci:ubuntu2404 CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/usr/local/openssl-3.5'
           - name: "Linux / OpenSSL 1.1.1 + ASan & UBSan"
             command: make -f misc/docker-ci.mk CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address,undefined -DCMAKE_CXX_FLAGS=-fsanitize=address,undefined' CHECK_ENVS='ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1'
           - name: "Linux / boringssl"
