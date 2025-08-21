@@ -19,18 +19,16 @@ The minimal configuration file looks like as follows.
 .PP
 .nf
 .RS
-listen:
-  port: 80
-
 hosts:
   "myhost.example.com":
-    listen: &listen_ssl
-      port: 443
-      ssl:
-        certificate-file: /path/to/certificate-file
-        key-file: /path/to/key-file
     listen:
-      <<: *listen_ssl
+      port: 80
+    listen:
+      port: 443
+      ssl: {}
+    listen:
+    　port: 443
+      ssl: {}
       type: quic
     paths:
       /:
@@ -41,6 +39,10 @@ access-log: /path/to/the/access-log
 error-log: /path/to/the/error-log
 pid-file: /path/to/the/pid-file
 
+acme:
+  email: admin@myhost.example.com
+  accept-tos: YES
+
 .RE
 .fi
 .PP
@@ -48,14 +50,15 @@ pid-file: /path/to/the/pid-file
 
 The configuration instructs the server to:
 
-listen on TCP port 80 for all hosts
-for myhost.example.com, listen on TCP port 443 using given TLS certificate and key pair
-listen on UDP port 443 (QUIC), reusing the previous setting named as listen_ssl
+serve contents under the hostname: myhost.example.com
+for HTTP, listen on TCP port 80
+for HTTPS, listen on TCP port 443 and UDP port 443
 serve files under /path/to/the/public-files
-under the privileges of nobody
+run under the privileges of nobody
 emit access logs to file: /path/to/the/access-log
 emit error logs to /path/to/the/error-log
 store the process id of the server in /path/to/the/pid-file
+use ACME to fetch the TLS certificates automatically (note: lego must be installed for this to work).
 
 
 
