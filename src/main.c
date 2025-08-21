@@ -514,12 +514,7 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
                 if ((*l3value)->type != YOML_TYPE_MAPPING)
                     continue;
                 /* found paths, append the entry at the end */
-                *l3value = h2o_mem_realloc(*l3value,
-                                           offsetof(yoml_t, data.mapping.elements) +
-                                               ((*l3value)->data.mapping.size + 1) * sizeof((*l3value)->data.mapping.elements[0]));
-                (*l3value)->data.mapping.elements[(*l3value)->data.mapping.size++] = well_known->data.mapping.elements[0];
-                ++well_known->data.mapping.elements[0].key->_refcnt;
-                ++well_known->data.mapping.elements[0].value->_refcnt;
+                yoml__merge(l3value, (*l3value)->data.mapping.size, 0, well_known, &parse_args);
             }
         }
     }
