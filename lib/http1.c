@@ -804,6 +804,10 @@ static void on_timeout(struct st_h2o_http1_conn_t *conn)
     if (conn->_req_index == 1) {
         /* assign hostconf and bind conf so that the request can be logged */
         h2o_hostconf_t *hostconf = h2o_req_setup(&conn->req);
+        if (hostconf == NULL) {
+            /* h2o_req_setup already sent an error response - should not happen in timeout context */
+            hostconf = conn->super.ctx->globalconf->hosts[0];
+        }
         h2o_req_bind_conf(&conn->req, hostconf, &hostconf->fallback_path);
         /* set error status for logging */
         conn->req.res.reason = "Request Timeout";

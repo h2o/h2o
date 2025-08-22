@@ -153,6 +153,11 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
     req->path_normalized =
         h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
     req->input.query_at = req->query_at; /* we can do this since input.path == path */
+    
+    /* check for null bytes in normalized path - reject with 400 Bad Request (issue #3483) */
+    if (memchr(req->path_normalized.base, '\0', req->path_normalized.len) != NULL) {
+        return NULL; /* return NULL to indicate null byte detected - caller should send 400 error */
+    }
 
     return hostconf;
 }
@@ -360,6 +365,10 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
+        if (hostconf == NULL) {
+            /* h2o_req_setup already sent an error response */
+            return NULL;
+        }
         setup_pathconf(req, hostconf);
     }
     return req->pathconf->handlers.size != 0 ? req->pathconf->handlers.entries[0] : NULL;
@@ -372,6 +381,11 @@ void h2o_process_request(h2o_req_t *req)
 
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
+        if (hostconf == NULL) {
+            /* h2o_req_setup failed - likely due to null byte in path */
+            h2o_send_error_400(req, "Bad Request", "null bytes in path are not allowed", 0);
+            return;
+        }
         setup_pathconf(req, hostconf);
     }
     call_handlers(req, req->pathconf->handlers.entries);
@@ -429,6 +443,13 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->authority = authority;
     req->path = path;
     req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
+    
+    /* check for null bytes in normalized path - reject with 400 Bad Request (issue #3483) */
+    if (memchr(req->path_normalized.base, '\0', req->path_normalized.len) != NULL) {
+        h2o_send_error_400(req, "Bad Request", "null bytes in path are not allowed", 0);
+        return;
+    }
+    
     req->authority_wildcard_match = h2o_iovec_init(NULL, 0);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;
@@ -699,6 +720,10 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 {
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
+        if (hostconf == NULL) {
+            /* h2o_req_setup failed - likely due to null byte in path, use default host */
+            hostconf = req->conn->hosts[0];
+        }
         h2o_req_bind_conf(req, hostconf, &hostconf->fallback_path);
     }
 
