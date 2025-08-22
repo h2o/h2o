@@ -19,18 +19,16 @@ The minimal configuration file looks like as follows.
 .PP
 .nf
 .RS
-listen:
-  port: 80
-
 hosts:
   "myhost.example.com":
-    listen: &listen_ssl
-      port: 443
-      ssl:
-        certificate-file: /path/to/certificate-file
-        key-file: /path/to/key-file
     listen:
-      <<: *listen_ssl
+      port: 80
+    listen:
+      port: 443
+      ssl: {}
+    listen:
+    　port: 443
+      ssl: {}
       type: quic
     paths:
       /:
@@ -41,6 +39,10 @@ access-log: /path/to/the/access-log
 error-log: /path/to/the/error-log
 pid-file: /path/to/the/pid-file
 
+acme:
+  email: admin@myhost.example.com
+  accept-tos: YES
+
 .RE
 .fi
 .PP
@@ -48,14 +50,15 @@ pid-file: /path/to/the/pid-file
 
 The configuration instructs the server to:
 
-listen on TCP port 80 for all hosts
-for myhost.example.com, listen on TCP port 443 using given TLS certificate and key pair
-listen on UDP port 443 (QUIC), reusing the previous setting named as listen_ssl
+serve contents under the hostname: myhost.example.com
+for HTTP, listen on TCP port 80
+for HTTPS, listen on TCP port 443 and UDP port 443
 serve files under /path/to/the/public-files
-under the privileges of nobody
+run under the privileges of nobody
 emit access logs to file: /path/to/the/access-log
 emit error logs to /path/to/the/error-log
 store the process id of the server in /path/to/the/pid-file
+use ACME to fetch the TLS certificates automatically (note: lego must be installed for this to work).
 
 
 
@@ -573,17 +576,28 @@ hosts:
 
 SSL Attribute
 
-The ssl attribute must be defined as a mapping, and recognizes the following attributes.
+The ssl attribute must be defined as a mapping.
+
+
+The identity of the TLS listener is specified in one of the following ways:
+
+by specifying the certificate-file and key-file attributes directly under ssl,
+by specifying a sequence of certificate- and key-file pairs inside identity, or
+if neither of the above is used, the identity is obtained using ACME; see acme.
+
+
+
+The ssl mapping recognizes the following attributes.
 
 
 certificate-file:
 
-Path of the SSL certificate file (mandatory).
+Path of the SSL certificate file.
 This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, RFC 7250 handshake will be used.
 
 key-file:
-Path of the SSL private key file (mandatory).
+Path of the SSL private key file.
 identity:
 List of certificate / key pairs.
 This attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
@@ -784,6 +798,60 @@ listen:
 .RE
 .fi
 .PP
+
+
+.RE
+.RE
+
+.SS acme
+Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).
+
+.PP
+
+
+Unless a custom loader program is specified, h2o obtains certificates from Let's Encrypt using the popular ACME client: Lego.
+On most distributions, Lego should be available as pre-build packages.
+
+This directive takes two mandatory and one optional parameters.
+
+email (mandatory)
+The email address to be registered to the ACME service provider.
+accept-tos (mandatory)
+Must be set to YES to accept the terms of service of the ACME service provider.
+loader (optional)
+The program to be launched for issuing and renewing the certificates.
+If omitted, H2O_ROOT/share/h2o/acme/lego-loader is used.
+
+
+
+The below example shows a configuration that relies on ACME for serving https://example.org.
+.PP
+.BR Example:\ 
+Simple h2o.conf using ACME
+.PP
+.nf
+.RS
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl: {}               # omission on an identity indicates the use of ACME
+    paths:
+      ...
+
+.RE
+.fi
+.PP
+
+
+
+The certificates and keys being issued or generated are stored under the $prefix/var/h2o/acme directory.
+Output of the lego command (including errors) are emitted to the error log of h2o.
 
 
 .RE

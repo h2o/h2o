@@ -4020,6 +4020,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
@@ -4166,6 +4167,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
@@ -4302,6 +4304,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 					"kh_inline=\"inline __unused\"",
@@ -4366,6 +4369,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);

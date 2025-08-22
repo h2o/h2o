@@ -173,17 +173,28 @@ EOT
 ?>
 <h4 id="listen-ssl">SSL Attribute</h4>
 <p>
-The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
+The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping.
+</p>
+<p>
+The identity of the TLS listener is specified in one of the following ways:
+<ul>
+<li>by specifying the <code>certificate-file</code> and <code>key-file</code> attributes directly under <code>ssl</code>,</li>
+<li>by specifying a sequence of certificate- and key-file pairs inside <code>identity</code>, or</li>
+<li>if neither of the above is used, the identity is obtained using ACME; see <a href="configure/base_directives.html#acme">acme</a>.
+</ul>
+</p>
+<p>
+The <code>ssl</code> mapping recognizes the following attributes.
 </p>
 <dl>
 <dt id="certificate-file">certificate-file:</dt>
 <dd>
-Path of the SSL certificate file (mandatory).
+Path of the SSL certificate file.
 This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
 </dd>
 <dt id="key-file">key-file:</dt>
-<dd>Path of the SSL private key file (mandatory).</dd>
+<dd>Path of the SSL private key file.</dd>
 <dt>identity:</dt>
 <dd>List of certificate / key pairs.
 This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
@@ -361,6 +372,52 @@ listen:
   permission: 600
 EOT
 ?>
+? })
+
+<?
+$ctx->{directive}->(
+  name     => "acme",
+  levels   => [ qw(global) ],
+  desc   => "Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).",
+)->(sub {
+?>
+<p>
+Unless a custom loader program is specified, h2o obtains certificates from <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> using the popular ACME client: <a href="https://github.com/go-acme/lego" target="_blank">Lego</a>.
+On most distributions, Lego should be available as pre-build packages.
+</p>
+<p>This directive takes two mandatory and one optional parameters.
+<dl>
+<dt>email (mandatory)</dt>
+<dd>The email address to be registered to the ACME service provider.</dd>
+<dt>accept-tos (mandatory)</dt>
+<dd>Must be set to <code>YES</code> to accept the terms of service of the ACME service provider.</dd>
+<dt>loader (optional)</dt>
+<dd>The program to be launched for issuing and renewing the certificates.
+If omitted, <code>H2O_ROOT/share/h2o/acme/lego-loader</code> is used.</dd>
+</dl>
+</p>
+<p>
+The below example shows a configuration that relies on ACME for serving <code>https://example.org</code>.
+<?= $ctx->{example}->('Simple h2o.conf using ACME', <<'EOT')
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl: {}               # omission on an identity indicates the use of ACME
+    paths:
+      ...
+EOT
+?>
+</p>
+<p>
+The certificates and keys being issued or generated are stored under the <code>$prefix/var/h2o/acme</code> directory.
+Output of the lego command (including errors) are emitted to the error log of h2o.
+</p>
 ? })
 
 <?
