@@ -208,6 +208,13 @@ EOT
 In addition, the <code>ssl</code> mapping recognizes the following attributes.
 </p>
 <dl>
+<dt id="client-ca-file">client-ca-file:</dt>
+<dd>
+path to a file of Certificate Authority (CA) certificates used to verify client certificates.
+If set, H2O will request a client certificate from connecting clients and validate it against these CAs.
+Connections lacking a valid client certificate (either not provided or not signed by one of the given CAs) will be rejected.
+This enables mutual TLS (mTLS) authentication.
+</dd>
 <dt id="cipher-suite">cipher-suite:</dt>
 <dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list</dd>
 <dt id="cipher-suite-tls1.3">cipher-suite-tls1.3:</dt>
