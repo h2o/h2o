@@ -37,6 +37,7 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 </ul>
 <li><a href="configure/base_directives.html#listen-ssl">TLS</a>
 <ul>
+<li><a href="configure/base_directives.html#acme">automated certificate retrieval using ACME</a>
 <li>session resumption (standalone &amp; memcached)
 <li>session tickets with automatic key rollover
 <li>automatic OCSP stapling
@@ -45,9 +46,12 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <li><a href="configure/base_directives.html#neverbleed">private key protection using privilege separation</a> with support for Intel QuickAssist Technology
 </ul>
 </li>
-<li><a href="configure/file_directives.html">static file serving</a>
+<li><a href="configure/file_directives.html">static file serving</a> using <a href="configure/file_directives.html#file.io_uring">asynchronous I/O</a>
 <li><a href="configure/fastcgi_directives.html">FastCGI</a>
 <li><a href="configure/proxy_directives.html">reverse proxy</a>
+<ul>
+<li>CONNECT and <a href="configure/proxy_directives.html#proxy.connect-udp">CONNECT-UDP (RFC 9218 a.k.a., MASQUE)</a>
+</ul>
 <li><a href="configure/mruby.html">scriptable using mruby</a> (Rack-based)
 <li>graceful restart and self-upgrade
 <li><a href="configure/h2olog.html">BPF-based tracing tool</a> (experimental)</li>
