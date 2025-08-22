@@ -1,0 +1,7 @@
+GET /reprst/index.txt HTTP/1.1
+host: 127.
+proxy-connection: de, HTTP4-Setti1:schem
+
+
+--MARK--
+PRI *ex.tx *TTP 

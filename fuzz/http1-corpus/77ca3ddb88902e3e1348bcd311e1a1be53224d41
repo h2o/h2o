@@ -1,0 +1,30 @@
+GET / HTTP/1.1
+host:h­stapplication/f-
+t: */*
+accept-ecnoding:gzip
+
+
+PET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12/1.1
+host: 127.0.0.1:513mplÿÿÿÿÿ curlushos.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+PET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127. hos.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+PET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 12/1.1
+host: 127.0.0.1:513mplÿÿÿÿÿ curlushos.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnodin					

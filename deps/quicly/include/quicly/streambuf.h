@@ -42,7 +42,7 @@ typedef struct st_quicly_sendbuf_vec_t quicly_sendbuf_vec_t;
  * @param len number of bytes to serialize
  * @return 0 if successful, otherwise an error code
  */
-typedef int (*quicly_sendbuf_flatten_vec_cb)(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len);
+typedef quicly_error_t (*quicly_sendbuf_flatten_vec_cb)(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len);
 /**
  * An optional callback that is called when an iovec is discarded.
  */
@@ -122,7 +122,7 @@ typedef struct st_quicly_streambuf_t {
 } quicly_streambuf_t;
 
 int quicly_streambuf_create(quicly_stream_t *stream, size_t sz);
-void quicly_streambuf_destroy(quicly_stream_t *stream, int err);
+void quicly_streambuf_destroy(quicly_stream_t *stream, quicly_error_t err);
 static void quicly_streambuf_egress_shift(quicly_stream_t *stream, size_t delta);
 void quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
 static int quicly_streambuf_egress_write(quicly_stream_t *stream, const void *src, size_t len);

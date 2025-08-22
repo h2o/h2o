@@ -387,7 +387,7 @@ static int do_on_body(h2o_httpclient_t *client, const char *errstr)
     return 0;
 }
 
-static int on_body(h2o_httpclient_t *client, const char *errstr)
+static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = client->data;
     if (try_dispose_context(ctx))
@@ -551,7 +551,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
 
     /* uri */
-    if (h2o_url_parse(arg_url, arg_url_len, &url) != 0)
+    if (h2o_url_parse(&ctx->pool, arg_url, arg_url_len, &url) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "invaild URL");
     h2o_url_copy(&ctx->pool, &ctx->req.url, &url);
 

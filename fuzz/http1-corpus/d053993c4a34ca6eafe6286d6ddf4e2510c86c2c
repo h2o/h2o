@@ -1,0 +1,5 @@
+GET /foo%1 HTTP
+pt: */*
+
+
+--MARK--

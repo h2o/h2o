@@ -1,0 +1,5 @@
+GET /fo%0A^:1 HTTP/1.1
+HoUser.-Acept: */*
+
+
+--MARK--

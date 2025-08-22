@@ -2,13 +2,13 @@
 ? $_mt->wrapper_file("wrapper.mt", "Configure", "HTTP/2 Directives")->(sub {
 
 <p>
-H2O provides one of the world's most sophisticated HTTP/2 protocol implementation, including following features.
+H2O provides one of the world's most sophisticated <a href="https://tools.ietf.org/html/rfc9113">HTTP/2 protocol</a> implementation, including following features.
 </p>
 
 <h3 id="prioritization">Prioritization</h3>
 
 <p>
-H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540">HTTP/2 specification</a>.
+H2O is one of the few servers that fully implement prioritization of HTTP responses conformant to what is defined in the <a href="https://tools.ietf.org/html/rfc7540" taget=_blank>HTTP/2 specification</a>.
 The server implements a O(1) scheduler that determines which HTTP response should be sent to the client, per every 16KB chunk.
 </p>
 <p>
@@ -243,6 +243,21 @@ The value is the maximum amount of request body (in bytes) that can be sent by t
 
 <?
 $ctx->{directive}->(
+    name    => "http2-max-streams",
+    levels  => [ qw(global) ],
+    default => 'http2-max-streams: 100',
+    desc    => <<'EOT',
+  Maximum number of streams to advertise via HTTP2 <a href="https://www.rfc-editor.org/rfc/rfc7540#section-6.5.2" target="_blank"><code>SETTINGS_MAX_CONCURRENT_STREAMS</code></a>.
+EOT
+)->(sub {
+?>
+<p>
+ Limits the number of active requests that the proxy will accept on a client connection.  Also see <a href="configure/http2_directives.html#http2-max-concurrent-requests-per-connection"><code>"http2-max-concurrent-requests-per-connection"</code></a> which controls the number of requests that the proxy will process concurrently.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name    => "http2-max-concurrent-requests-per-connection",
     levels  => [ qw(global) ],
     default => 'http2-max-concurrent-requests-per-connection: 100',
@@ -395,6 +410,21 @@ A boolean flag (<code>ON</code> or <code>OFF</code>) indicating whether if the s
 EOT
 )->(sub {
 ?>
+? })
+
+<?
+$ctx->{directive}->(
+    name    => "http2-dos-delay",
+    levels  => [ qw(global) ],
+    default => 'http2-dos-delay: 100',
+    desc    => << 'EOT',
+HTTP request processing delay to be applied when the client behavior is suspicious, in the unit of milliseconds.
+EOT
+)->(sub {
+?>
+<p>
+When the client behavior is suspicious and there is a concern of Denial-of-Service attack, h2o stops processing requests arriving on the suspicious connection for specified amount of time.
+</p>
 ? })
 
 ? })

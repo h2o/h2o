@@ -1,0 +1,10 @@
+GET /reproxy-test/in윜윜윜윜윜윜application/tamp-update윜윜윜윜d큫.txt HTTP/1.1
+host: 127.0.0.1:51046
+conn:sGET /ihdex.txt HTTP/1.1t: 127.0.0.1:51358
+connection: Upgrade, HTTP2-Settings
+upgrade: h2pt: */*
+user-agent: .1
+
+
+--MARK--
+PRI께께께께께께께

@@ -1,0 +1,12 @@
+GET /reproxy-tereproxy-test/halofdme.jpg HTTP/1.1
+Host: 127.0.0.1:5140
+User-e:!bytexy
+Host: .0.1:5140
+User-e:!bytes=st/halfdome.jpg HTTPer-Agent: curl7:5140
+User-e:b!ytes=120-
+User-Agent: curl/7.49.0/s=t: 127.0.0.1:5140
+User-e:!bytes=100-
+User-Agent: curl/7.49.0/*
+
+
+--MARK--

@@ -1,0 +1,9 @@
+GET /index.txt HTTP/1.1
+hon: Upgraderade, HTTP1-Ses
+content-language: h2c, HTTP1-Ses
+content-language: h2c
+http2-settings: AAMAAABkAAQA.1
+
+
+--MARK--
+PRI * HT;

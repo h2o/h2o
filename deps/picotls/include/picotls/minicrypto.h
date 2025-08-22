@@ -47,9 +47,18 @@ extern ptls_key_exchange_algorithm_t *ptls_minicrypto_key_exchanges[];
 extern ptls_cipher_algorithm_t ptls_minicrypto_aes128ecb, ptls_minicrypto_aes256ecb, ptls_minicrypto_aes128ctr,
     ptls_minicrypto_aes256ctr, ptls_minicrypto_chacha20;
 extern ptls_aead_algorithm_t ptls_minicrypto_aes128gcm, ptls_minicrypto_aes256gcm, ptls_minicrypto_chacha20poly1305;
-extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384;
+#ifdef PTLS_HAVE_AEGIS
+extern ptls_aead_algorithm_t ptls_minicrypto_aegis128l;
+extern ptls_aead_algorithm_t ptls_minicrypto_aegis256;
+#endif
+extern ptls_hash_algorithm_t ptls_minicrypto_sha256, ptls_minicrypto_sha384, ptls_minicrypto_sha512;
 extern ptls_cipher_suite_t ptls_minicrypto_aes128gcmsha256, ptls_minicrypto_aes256gcmsha384, ptls_minicrypto_chacha20poly1305sha256;
+#ifdef PTLS_HAVE_AEGIS
+extern ptls_cipher_suite_t ptls_minicrypto_aegis128lsha256;
+extern ptls_cipher_suite_t ptls_minicrypto_aegis256sha512;
+#endif
 extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites[];
+extern ptls_cipher_suite_t *ptls_minicrypto_cipher_suites_all[];
 
 typedef struct st_ptls_asn1_pkcs8_private_key_t {
     ptls_iovec_t vec;

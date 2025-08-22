@@ -3,7 +3,7 @@ use warnings;
 use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use IO::Handle;
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use Test::More;
 use t::Util;
 
@@ -30,6 +30,7 @@ hosts:
         file.dir: $tempdir
         header.add: "X-Traffic: 200000" # takes about 5 seconds
 throttle-response: ON
+file.io_uring: OFF
 EOT
 wait_port({port => $quic_port, proto => "udp"});
 

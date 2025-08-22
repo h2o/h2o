@@ -1,0 +1,8 @@
+POST / HTTP/1.1
+Host: curl/7.ÿÿÿÿÿÿÿÿ
+Accept: */*
+Te: applica-www-form-urlencod%^
+
+a:llo
+
+--MARK--

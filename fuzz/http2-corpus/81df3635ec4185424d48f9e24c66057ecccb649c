@@ -1,6 +1,0 @@
-POST /HTTP/1.0
-Tren;fer-Encoding: chunk HTTP/2.0
--Encoding: chunked
-
-0
-

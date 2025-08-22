@@ -24,6 +24,10 @@
 #include <limits.h>
 #include <pthread.h>
 #include <sys/stat.h>
+#ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED /* we'd like to use HMAC_Init_ex while it exists, to minimize code divergence between          \
+                                     * different TLS stacks. */
+#endif
 #include <openssl/crypto.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -136,7 +140,6 @@ static void setup_cache_enable(SSL_CTX **contexts, size_t num_contexts, int asyn
     size_t i;
     for (i = 0; i != num_contexts; ++i) {
         SSL_CTX_set_session_cache_mode(contexts[i], SSL_SESS_CACHE_SERVER | SSL_SESS_CACHE_NO_AUTO_CLEAR);
-        SSL_CTX_set_session_id_context(contexts[i], H2O_SESSID_CTX, H2O_SESSID_CTX_LEN);
         SSL_CTX_set_timeout(contexts[i], conf.lifetime);
         if (async_resumption)
             h2o_socket_ssl_async_resumption_setup_ctx(contexts[i]);
@@ -1337,7 +1340,7 @@ static int generate_stateless_reset_token(quicly_cid_encryptor_t *self, void *to
 
 quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid, generate_stateless_reset_token};
 
-int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc)
+quicly_error_t quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc)
 {
     struct st_quic_keyset_t *keyset;
 
@@ -1355,8 +1358,8 @@ ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix)
     return keyset->address_token.enc;
 }
 
-static int generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn, ptls_buffer_t *buf,
-                                     quicly_address_token_plaintext_t *token)
+static quicly_error_t generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn, ptls_buffer_t *buf,
+                                                quicly_address_token_plaintext_t *token)
 {
     uint8_t prefix;
     ptls_aead_context_t *aead = quic_get_address_token_encryptor(&prefix);

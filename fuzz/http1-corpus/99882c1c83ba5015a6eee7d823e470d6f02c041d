@@ -1,0 +1,16 @@
+GET /websocket/ HTTP/1.1
+Connection: upgpade
+Upgrade: websocket
+Sec-Websocket-Key-Websocket-Version: 13
+
+
+--MARK--
+hello wworld 8
+
+--MARK--
+hello world 9
+
+--MARK--
+hello world 10
+
+--MARK--

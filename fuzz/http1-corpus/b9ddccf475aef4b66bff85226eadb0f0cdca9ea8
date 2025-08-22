@@ -1,0 +1,49 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connect-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Stion: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settingsó÷upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrapplication/oggade,application/vnd.oracle.resource+jsons
+upgrade: h2c
+ettings: AAMAAABkAwebsocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Secmec-WebsSec-Websocket-Key: aGET /indGET /t/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Keyction: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Stion: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settingsó÷upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrapplication/oggade,application/vnd.oracle.resource+jsons
+upgrade: h2c
+ettings: AAMAAABkAwebsocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Secmec-WebsSec-Websocket-Key: aGET /indGET /t/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settin Upgrade, HTTP2-gs
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Section: upgrcket
+Sec-ec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2t: */*
+user-agent: ngèttp1/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

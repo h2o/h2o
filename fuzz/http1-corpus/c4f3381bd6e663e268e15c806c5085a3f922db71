@@ -1,0 +1,45 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon:GET /reprox Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2- h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settin[gs
+upgrade: h2c
+http2-settings: AAMCAGET est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settingÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿs
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websockde: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgr
+accept: */*
+user-agent: nghttp1/1:scheettings: AAMAAGET /websocket/ H¬«¯Í1.1
+Connection: upc
+ettings: AAMAAABkAAQAAP__
+accept-rangettp2-settings: AAMAAGET /websocket/  */*
+user-agent: ngèttp1/1:schem
+
+
+--MARK--
+PRIm
+
+
+--MARK--
+PRI *ex.tx *ex.txt H *ex.tx T*ex.TP txt HTTP 

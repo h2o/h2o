@@ -83,7 +83,7 @@ static const h2o_mem_recycle_conf_t mem_pool_allocator_conf = {.memsize = sizeof
 __thread h2o_mem_recycle_t h2o_mem_pool_allocator = {&mem_pool_allocator_conf};
 size_t h2o_mmap_errors = 0;
 
-void h2o__fatal(const char *file, int line, const char *msg, ...)
+static H2O_NORETURN void default_h2o_fatal(const char *file, int line, const char *msg, ...)
 {
     char buf[1024];
     va_list args;
@@ -96,6 +96,8 @@ void h2o__fatal(const char *file, int line, const char *msg, ...)
 
     abort();
 }
+
+H2O_NORETURN void (*h2o__fatal)(const char *, int, const char *, ...) = default_h2o_fatal;
 
 void *h2o_mem_alloc_recycle(h2o_mem_recycle_t *allocator)
 {
@@ -187,7 +189,7 @@ void h2o_mem_clear_pool(h2o_mem_pool_t *pool)
 
 void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, size_t sz)
 {
-#define ALIGN_TO(x, a) (((x) + (a)-1) & ~((a)-1))
+#define ALIGN_TO(x, a) (((x) + (a) - 1) & ~((a) - 1))
     void *ret;
 
     if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
@@ -263,7 +265,7 @@ static __thread struct {
     struct buffer_recycle_bin_t {
         h2o_mem_recycle_conf_t conf;
         h2o_mem_recycle_t recycle;
-    } * bins;
+    } *bins;
     /**
      * Bins for capacicties no greater than this value exist.
      */

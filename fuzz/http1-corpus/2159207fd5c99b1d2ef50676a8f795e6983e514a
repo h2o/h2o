@@ -1,0 +1,10 @@
+GET /index.txt HTTP/1.1
+upgrade: h2c
+http2-sent-Type: appluser-nnection: Upgrade, HTTP2-Settinpgrade: h2c
+http2-sent-Type: appluser-nnection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-sent-Type: appluser-agent: nghttp2/1.16.1
+
+tgnihttp2/1.16.
+
+--MARK--

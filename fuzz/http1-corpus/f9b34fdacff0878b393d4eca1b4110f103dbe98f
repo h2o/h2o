@@ -1,0 +1,23 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: curl/7.49.0-DEV
+Accep%t: */*
+X-Forward:statu: 1Upgrade-Insecure-Requests2.49.cept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+XardoF-edr: 127.0.0.2
+Via: 2 example.comurl/7u
+--MARK--
+pgradÖÖGETÖÖÖÖÖÖÖÖÖÖÖurl/7.49.0-DEV
+Accept: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖ*/*
+X-Forwarded-For: 127.0.0.2nt: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

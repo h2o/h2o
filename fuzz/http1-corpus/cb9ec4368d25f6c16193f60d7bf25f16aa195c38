@@ -1,0 +1,15 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:50/8.ÿÿÿÿÿ*/*
+Transfer-Encoding: chunked
+Co~tent-Type: application/x-wwwiform-urlencoded
+
+a
+heloworld
+2
+
+
+--MARK--
+1.0.1:50811
+connccept: *7
+
+--MARK--

@@ -1,0 +1,8 @@
+POST / HTTP/1.1
+Host:*/*
+Connectiction: Upgriœ›ept: */*
+Connectiction: Upgrancoded
+
+
+--MARK--
+PRI * HTTP/2.-307K--

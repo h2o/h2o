@@ -28,6 +28,7 @@ enum {
     ELEMENT_TYPE_EMPTY,                         /* empty element (with suffix only) */
     ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
     ELEMENT_TYPE_BYTES_SENT,                    /* %b */
+    ELEMENT_TYPE_HEADER_BYTES_SENT,             /* %{response-header-bytes}x */
     ELEMENT_TYPE_PROTOCOL,                      /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
     ELEMENT_TYPE_LOGNAME,                       /* %l */
@@ -51,6 +52,7 @@ enum {
     ELEMENT_TYPE_HOSTCONF,                      /* %v */
     ELEMENT_TYPE_IN_HEADER_TOKEN,               /* %{data.header_token}i */
     ELEMENT_TYPE_IN_HEADER_STRING,              /* %{data.name}i */
+    ELEMENT_TYPE_IN_HEADER_UPGRADE,             /* %{upgrade}i */
     ELEMENT_TYPE_OUT_HEADER_TOKEN,              /* %{data.header_token}o */
     ELEMENT_TYPE_OUT_HEADER_STRING,             /* %{data.name}o */
     ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED, /* %{data.header_token}o */
@@ -82,6 +84,7 @@ enum {
     ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED,      /* ${proxy.ssl.session-reused}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER,              /* ${proxy.ssl.cipher}x */
     ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS,         /* ${proxy.ssl.cipher_bits}x */
+    ELEMENT_TYPE_SSL_SERVER_NAME,               /* ${ssl.server-name}x */
     NUM_ELEMENT_TYPES
 };
 
@@ -197,7 +200,9 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     token = h2o_lookup_token(name.base, name.len);
                     if (token != NULL) {
                         free(name.base);
-                        if (modifier == 'o' && token == H2O_TOKEN_SET_COOKIE) {
+                        if (modifier == 'i' && token == H2O_TOKEN_UPGRADE) {
+                            NEW_ELEMENT(ELEMENT_TYPE_IN_HEADER_UPGRADE);
+                        } else if (modifier == 'o' && token == H2O_TOKEN_SET_COOKIE) {
                             NEW_ELEMENT(ELEMENT_TYPE_OUT_HEADER_TOKEN_CONCATENATED);
                             LAST_ELEMENT()->data.header_token = token;
                         } else {
@@ -266,6 +271,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("duration", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
+                    MAP_EXT_TO_TYPE("response-header-bytes", ELEMENT_TYPE_HEADER_BYTES_SENT);
                     MAP_EXT_TO_TYPE("proxy.idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy.connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
                     MAP_EXT_TO_TYPE("proxy.request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
@@ -302,7 +308,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.cipher", ssl.cipher);
                     MAP_EXT_TO_PROTO("ssl.cipher-bits", ssl.cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.session-id", ssl.session_id);
-                    MAP_EXT_TO_PROTO("ssl.server-name", ssl.server_name);
+                    MAP_EXT_TO_TYPE("ssl.server-name", ELEMENT_TYPE_SSL_SERVER_NAME);
                     MAP_EXT_TO_PROTO("ssl.negotiated-protocol", ssl.negotiated_protocol);
                     MAP_EXT_TO_PROTO("ssl.ech.config-id", ssl.ech_config_id);
                     MAP_EXT_TO_PROTO("ssl.ech.kem", ssl.ech_kem);
@@ -592,6 +598,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->bytes_sent);
             break;
+        case ELEMENT_TYPE_HEADER_BYTES_SENT: /* %{response-header-bytes}x */
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, req->header_bytes_sent);
+            break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             if (req->version == 0)
                 goto EmitNull;
@@ -753,6 +763,12 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_IN_HEADER_STRING:
             EMIT_HEADER(&req->headers, 0, h2o_find_header_by_str, element->data.name.base, element->data.name.len);
             break;
+        case ELEMENT_TYPE_IN_HEADER_UPGRADE:
+            if (req->upgrade.base == NULL)
+                goto EmitNull;
+            RESERVE(req->upgrade.len * unsafe_factor);
+            pos = append_unsafe_string(pos, req->upgrade.base, req->upgrade.len);
+            break;
         case ELEMENT_TYPE_OUT_HEADER_TOKEN:
             EMIT_HEADER(element->original_response ? &req->res.original.headers : &req->res.headers, 0, h2o_find_header,
                         element->data.header_token);
@@ -880,6 +896,15 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_PROXY_SSL_CIPHER:
             APPEND_SAFE_STRING(pos, req->proxy_stats.conn.ssl.cipher);
             break;
+        case ELEMENT_TYPE_SSL_SERVER_NAME: {
+            const char *name =
+                req->conn->callbacks->get_ssl_server_name != NULL ? req->conn->callbacks->get_ssl_server_name(req->conn) : NULL;
+            if (name == NULL)
+                goto EmitNull;
+            size_t name_len = strlen(name);
+            RESERVE(name_len * unsafe_factor);
+            pos = append_unsafe_string(pos, name, name_len);
+        } break;
         case ELEMENT_TYPE_PROTOCOL_SPECIFIC: {
             h2o_iovec_t (*cb)(h2o_req_t *) = req->conn->callbacks->log_.callbacks[element->data.protocol_specific_callback_index];
             if (cb == NULL)

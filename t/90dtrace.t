@@ -101,6 +101,7 @@ sleep 1;
 
 run_with_curl($server, sub {
     my ($proto, $port, $cmd, $http_ver) = @_;
+    my $expected_req_index = $http_ver == 0x300 ? 0 : 1; # in case of H1 req_index starts from 1; with H2/H3 it's the stream ID
     my $get_trace = sub {
         # access
         my ($headers, $body) = run_prog("$cmd --silent --dump-header silent --dump-header /dev/stderr $proto://127.0.0.1:$port/");
@@ -119,12 +120,12 @@ run_with_curl($server, sub {
     # get trace
     my $trace = $get_trace->();
     my ($ver_major, $ver_minor) = (int($http_ver / 256), $http_ver % 256);
-    like $trace, qr{^\*{3} \d+:1 version $ver_major\.$ver_minor \*{3}$}m;
+    like $trace, qr{^\*{3} \d+:$expected_req_index version $ver_major\.$ver_minor \*{3}$}m;
     like $trace, qr{^:method: GET$}m;
     like $trace, qr{^:scheme: $proto$}m;
     like $trace, qr{^:authority: 127\.0\.0\.1:$port$}m;
     like $trace, qr{^:path: /$}m;
-    like $trace, qr{^\d+:1 status:200}m;
+    like $trace, qr{^\d+:$expected_req_index status:200}m;
     like $trace, qr{content-length: 6}m;
     like $trace, qr{content-type: text/plain}m;
     like $trace, qr{accept-ranges: bytes}m;

@@ -22,7 +22,6 @@
 		0829877026D372B70053638F /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		0829877126D372B70053638F /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
 		0829877226D372B70053638F /* recvstate.c in Sources */ = {isa = PBXBuildFile; fileRef = E920D21D1F43E05000799777 /* recvstate.c */; };
-		0829877326D372B70053638F /* fusion.c in Sources */ = {isa = PBXBuildFile; fileRef = E9B43E11246943D300824E51 /* fusion.c */; };
 		0829877426D372B70053638F /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042352244A5D7008B9745 /* defaults.c */; };
 		0829877526D372B70053638F /* streambuf.c in Sources */ = {isa = PBXBuildFile; fileRef = E9D3CCCE21D22F4300516202 /* streambuf.c */; };
 		0829877626D372B70053638F /* pembase64.c in Sources */ = {isa = PBXBuildFile; fileRef = E93E54681F663849001C50FE /* pembase64.c */; };
@@ -36,7 +35,10 @@
 		0829879026E03D4D0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0829879226E0A9DF0053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879126E0A9DF0053638F /* rate.c */; };
 		085125F828F51BA20074C124 /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
+		085AB4D726427E9C00DF5209 /* pacer.h in Headers */ = {isa = PBXBuildFile; fileRef = 085AB4D626427E9C00DF5209 /* pacer.h */; };
+		085AB4D9264283D600DF5209 /* pacer.c in Sources */ = {isa = PBXBuildFile; fileRef = 085AB4D8264283D600DF5209 /* pacer.c */; };
 		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
+		089738FB2B9FF2E1000569EB /* jumpstart.c in Sources */ = {isa = PBXBuildFile; fileRef = 089738FA2B9FF2E1000569EB /* jumpstart.c */; };
 		08B3297A29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297B29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297C29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
@@ -114,7 +116,6 @@
 		E99F8C261F4E9EBF00C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
 		E99F8C271F4E9F5D00C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C251F4E9EBF00C26B3D /* frame.c */; };
 		E99F8C291F4EAEF800C26B3D /* frame.c in Sources */ = {isa = PBXBuildFile; fileRef = E99F8C281F4EAEF800C26B3D /* frame.c */; };
-		E9B43E12246943D300824E51 /* fusion.c in Sources */ = {isa = PBXBuildFile; fileRef = E9B43E11246943D300824E51 /* fusion.c */; };
 		E9CC44111EB85E0B00DC7D3E /* khash.h in Headers */ = {isa = PBXBuildFile; fileRef = E9CC44101EB85E0B00DC7D3E /* khash.h */; };
 		E9CC441B1EC195DF00DC7D3E /* openssl.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448271EA48D0000390927 /* openssl.c */; };
 		E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */ = {isa = PBXBuildFile; fileRef = E98448281EA48D0000390927 /* picotls.c */; };
@@ -191,6 +192,9 @@
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		085125F728EFC0480074C124 /* cplusplus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = cplusplus.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		085AB4D626427E9C00DF5209 /* pacer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pacer.h; sourceTree = "<group>"; };
+		085AB4D8264283D600DF5209 /* pacer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pacer.c; sourceTree = "<group>"; };
+		089738FA2B9FF2E1000569EB /* jumpstart.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = jumpstart.c; sourceTree = "<group>"; };
 		08B3297929407096009D6766 /* hpke.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = hpke.c; sourceTree = "<group>"; };
 		E904233C24AED0410072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
 		E904234024AEFB980072C5B7 /* loss.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = loss.c; sourceTree = "<group>"; };
@@ -474,10 +478,12 @@
 				085125F728EFC0480074C124 /* cplusplus.t */,
 				E98884C221E3F23A0060F010 /* e2e.t */,
 				E99F8C281F4EAEF800C26B3D /* frame.c */,
+				089738FA2B9FF2E1000569EB /* jumpstart.c */,
 				E9736533246FD3DA0039AA49 /* local_cid.c */,
 				E904234024AEFB980072C5B7 /* loss.c */,
 				E920D22F1F49EE0B00799777 /* lossy.c */,
 				E99B75E61F5CF96900CF503E /* maxsender.c */,
+				085AB4D8264283D600DF5209 /* pacer.c */,
 				E9F6A4291F3C3B7B0083F0B2 /* ranges.c */,
 				0829879126E0A9DF0053638F /* rate.c */,
 				E9736534246FD3DA0039AA49 /* remote_cid.c */,
@@ -515,6 +521,7 @@
 				E9056C071F56965300E2B96C /* linklist.h */,
 				E93E54BA1F69B750001C50FE /* loss.h */,
 				E920D2221F4536CB00799777 /* maxsender.h */,
+				085AB4D626427E9C00DF5209 /* pacer.h */,
 				E9F6A4261F3C3B050083F0B2 /* ranges.h */,
 				0829878C26DF775B0053638F /* rate.h */,
 				E920D21B1F43DE4100799777 /* recvstate.h */,
@@ -550,6 +557,7 @@
 				E9CC44111EB85E0B00DC7D3E /* khash.h in Headers */,
 				E920D2231F4536CB00799777 /* maxsender.h in Headers */,
 				E9736526246FD3890039AA49 /* retire_cid.h in Headers */,
+				085AB4D726427E9C00DF5209 /* pacer.h in Headers */,
 				E920D2291F4951BA00799777 /* sentmap.h in Headers */,
 				E984482C1EA48D1200390927 /* picotls.h in Headers */,
 				E9F6A4271F3C3B050083F0B2 /* ranges.h in Headers */,
@@ -776,7 +784,6 @@
 				0829877126D372B70053638F /* frame.c in Sources */,
 				0829877226D372B70053638F /* recvstate.c in Sources */,
 				08B3297D29407097009D6766 /* hpke.c in Sources */,
-				0829877326D372B70053638F /* fusion.c in Sources */,
 				0829877426D372B70053638F /* defaults.c in Sources */,
 				086001CB273271E80043886F /* rate.c in Sources */,
 				0829877526D372B70053638F /* streambuf.c in Sources */,
@@ -841,7 +848,6 @@
 				082195092683498900E3EFCF /* cc-pico.c in Sources */,
 				E941428D23B0B839002D3CE0 /* frame.c in Sources */,
 				E941429123B0B86D002D3CE0 /* recvstate.c in Sources */,
-				E9B43E12246943D300824E51 /* fusion.c in Sources */,
 				E941428E23B0B845002D3CE0 /* defaults.c in Sources */,
 				E941429023B0B861002D3CE0 /* streambuf.c in Sources */,
 				0829878F26E03D4D0053638F /* rate.c in Sources */,
@@ -871,11 +877,13 @@
 				E9736532246FD3B50039AA49 /* retire_cid.c in Sources */,
 				E9736537246FD3DA0039AA49 /* remote_cid.c in Sources */,
 				E99F8C291F4EAEF800C26B3D /* frame.c in Sources */,
+				085AB4D9264283D600DF5209 /* pacer.c in Sources */,
 				E98041C722383C7A008B9745 /* cc-reno.c in Sources */,
 				0829879026E03D4D0053638F /* rate.c in Sources */,
 				E9D31DD1232DEDB400ACD5EC /* quicly-probes.d in Sources */,
 				E9736530246FD3B50039AA49 /* local_cid.c in Sources */,
 				E920D22C1F49533800799777 /* sentmap.c in Sources */,
+				089738FB2B9FF2E1000569EB /* jumpstart.c in Sources */,
 				E920D2301F49EE0B00799777 /* lossy.c in Sources */,
 				E99B75E71F5CF96900CF503E /* maxsender.c in Sources */,
 				E9F6A42F1F41375B0083F0B2 /* sendstate.c in Sources */,
@@ -915,13 +923,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
-					"QUICLY_HAVE_FUSION=1",
 				);
 				OTHER_CFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -932,13 +936,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
-					"QUICLY_HAVE_FUSION=1",
 				);
 				OTHER_CFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -946,10 +946,7 @@
 		E9804225223952FD008B9745 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -957,10 +954,7 @@
 		E9804226223952FD008B9745 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -973,7 +967,7 @@
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_MODULES = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
@@ -1009,12 +1003,13 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/opt/openssl@1.1/include",
+					/opt/homebrew/include,
 					deps/klib,
 					deps/picotls/include,
 					deps/dcc,
 					include,
 				);
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/lib;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -1037,7 +1032,7 @@
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_MODULES = NO;
 				CLANG_ENABLE_OBJC_ARC = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
@@ -1069,12 +1064,13 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
-					"/usr/local/opt/openssl@1.1/include",
+					/opt/homebrew/include,
 					deps/klib,
 					deps/picotls/include,
 					deps/dcc,
 					include,
 				);
+				LIBRARY_SEARCH_PATHS = /opt/homebrew/lib;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_CFLAGS = (
@@ -1118,13 +1114,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
-					"QUICLY_HAVE_FUSION=1",
 				);
 				OTHER_CFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -1135,13 +1127,9 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"$(inherited)",
 					"QUICLY_USE_EMBEDDED_PROBES=1",
-					"QUICLY_HAVE_FUSION=1",
 				);
 				OTHER_CFLAGS = "$(inherited)";
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -1149,10 +1137,7 @@
 		E98F4CB920E5CF1B00362F15 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -1160,10 +1145,7 @@
 		E98F4CBA20E5CF1B00362F15 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -1171,10 +1153,7 @@
 		E9CC44211EC195DF00DC7D3E /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -1182,10 +1161,7 @@
 		E9CC44221EC195DF00DC7D3E /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				OTHER_LDFLAGS = (
-					"-L/usr/local/opt/openssl@1.1/lib",
-					"-lcrypto",
-				);
+				OTHER_LDFLAGS = "-lcrypto";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

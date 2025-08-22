@@ -85,7 +85,7 @@ static void evloop_do_on_socket_export(struct st_h2o_evloop_socket_t *sock);
 #define H2O_USE_KQUEUE 1
 #elif defined(__linux)
 #define H2O_USE_EPOLL 1
-#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY)
+#if defined(SO_ZEROCOPY) && defined(SO_EE_ORIGIN_ZEROCOPY) && defined(MSG_ZEROCOPY)
 #define H2O_USE_MSG_ZEROCOPY 1
 #endif
 #else
@@ -177,6 +177,7 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
         } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
+        H2O_LOG_SOCK(writev, &sock->super, { PTLS_LOG_ELEMENT_SIGNED(ret, wret); });
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
@@ -336,6 +337,8 @@ void write_pending(struct st_h2o_evloop_socket_t *sock)
 
     /* operation completed or failed, schedule notification */
     SOCKET_PROBE(WRITE_COMPLETE, &sock->super, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl));
+    H2O_LOG_SOCK(write_complete, &sock->super,
+                 { PTLS_LOG_ELEMENT_BOOL(success, sock->super._write_buf.cnt == 0 && !has_pending_ssl_bytes(sock->super.ssl)); });
     sock->bytes_written.cur_loop = sock->super.bytes_written;
     sock->_flags |= H2O_SOCKET_FLAG_IS_WRITE_NOTIFY;
     link_to_pending(sock);
@@ -671,7 +674,7 @@ static struct st_h2o_evloop_socket_t *create_socket(h2o_evloop_t *loop, int fd, 
 }
 
 /**
- * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function isto reduce number of
+ * Sets TCP_NODELAY if the given file descriptor is likely to be a TCP socket. The intent of this function is to reduce number of
  * unnecessary system calls. Therefore, we skip setting TCP_NODELAY when it is certain that the socket is not a TCP socket,
  * otherwise call setsockopt.
  */
@@ -698,39 +701,45 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
     struct st_h2o_evloop_socket_t *listener = (struct st_h2o_evloop_socket_t *)_listener;
     int fd;
     h2o_socket_t *sock;
-
-    /* cache the remote address, if we know that we are going to use the value (in h2o_socket_ebpf_lookup_flags) */
-#if H2O_USE_EBPF_MAP
-    struct {
-        struct sockaddr_storage storage;
-        socklen_t len;
-    } _peeraddr;
-    _peeraddr.len = sizeof(_peeraddr.storage);
-    struct sockaddr_storage *peeraddr = &_peeraddr.storage;
-    socklen_t *peeraddrlen = &_peeraddr.len;
-#else
-    struct sockaddr_storage *peeraddr = NULL;
-    socklen_t *peeraddrlen = NULL;
-#endif
+    union {
+        struct sockaddr sa;
+        struct sockaddr_in sin4;
+        struct sockaddr_in6 sin6;
+    } peeraddr;
+    socklen_t peeraddrlen = sizeof(peeraddr);
 
 #if H2O_USE_ACCEPT4
-    /* the anticipation here is that a socket returned by `accept4` will inherit the TCP_NODELAY flag from the listening socket */
-    if ((fd = accept4(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
+    if ((fd = accept4(listener->fd, &peeraddr.sa, &peeraddrlen, SOCK_NONBLOCK | SOCK_CLOEXEC)) == -1)
         return NULL;
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #else
-    if ((fd = cloexec_accept(listener->fd, (struct sockaddr *)peeraddr, peeraddrlen)) == -1)
+    if ((fd = cloexec_accept(listener->fd, &peeraddr.sa, &peeraddrlen)) == -1)
         return NULL;
     fcntl(fd, F_SETFL, O_NONBLOCK);
     sock = &create_socket(listener->loop, fd, H2O_SOCKET_FLAG_IS_ACCEPTED_CONNECTION)->super;
 #endif
-    set_nodelay_if_likely_tcp(fd, (struct sockaddr *)peeraddr);
+    if (peeraddrlen <= sizeof(peeraddr)) {
+        h2o_socket_setpeername(sock, &peeraddr.sa, peeraddrlen);
+    } else {
+        peeraddr.sa.sa_family = AF_UNSPEC;
+    }
 
-    if (peeraddr != NULL && *peeraddrlen <= sizeof(*peeraddr))
-        h2o_socket_setpeername(sock, (struct sockaddr *)peeraddr, *peeraddrlen);
-    uint64_t flags = h2o_socket_ebpf_lookup_flags(listener->loop, h2o_socket_ebpf_init_key, sock);
-    if ((flags & H2O_EBPF_FLAGS_SKIP_TRACING_BIT) != 0)
-        sock->_skip_tracing = 1;
+    /* note: even on linux, the accepted socket might not inherit TCP_NODELAY from the listening socket; see
+     * https://github.com/h2o/h2o/pull/2542#issuecomment-760700859 */
+    set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
+
+    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
+    switch (peeraddr.sa.sa_family) {
+    case AF_INET: /* store as v6-mapped v4 address */
+        ptls_build_v4_mapped_v6_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
+        break;
+    case AF_INET6:
+        sock->_log_state.address = peeraddr.sin6.sin6_addr;
+        break;
+    default:
+        break;
+    }
+
     return sock;
 }
 
@@ -917,16 +926,20 @@ int h2o_evloop_run(h2o_evloop_t *loop, int32_t max_wait)
 {
     ++loop->run_count;
 
-    /* update socket states, poll, set readable flags, perform pending writes */
+    /* Update socket states, poll, set readable flags, perform pending writes. */
     if (evloop_do_proceed(loop, max_wait) != 0)
         return -1;
 
-    /* run the pending callbacks */
+    /* Run the pending callbacks. */
     run_pending(loop);
 
-    /* run the expired timers at the same time invoking pending callbacks for every timer callback. This is an locality
-     * optimization; handles things like timeout -> write -> on_write_complete for each object. */
-    while (1) {
+    /* Run the expired timers at the same time invoking pending callbacks for every timer callback. This is an locality
+     * optimization; handles things like timeout -> write -> on_write_complete for each object.
+     * Expired timers are fetched and run at most 10 times, after which `h2o_evloop_run` returns even if there is a
+     * pending immediate timer. By doing so, we guarantee that the server can make progress by polling the socket, doing
+     * I/O, as well as running other operations coded in the caller of `h2s_evloop_run`, even if there is broken code
+     * that registers an immediate timer perpetually. */
+    for (int i = 0; i < 10; ++i) {
         h2o_linklist_t expired;
         h2o_linklist_init_anchor(&expired);
         h2o_timerwheel_get_expired(loop->_timeouts, loop->_now_millisec, &expired);

@@ -1,0 +1,8 @@
+GET /index.xt HTTP/1.1
+host: 127.0.0.1
+connection: Up
+Gonnecti: * HTTP/216.1
+
+
+--MARK--
+PRI * HT.txt HTTP/

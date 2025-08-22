@@ -1,0 +1,27 @@
+POST / HTTP/1.1
+HostbAccept: */*almxpe.com/
+
+
+--MAGET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, P/1.1
+host: 127.0.0.1:51458
+x-xss-protection: Upgradepgrade, HTTPDEV
+bAccept: */*
+Referer: http://ealmxpe.com/
+
+
+--MAGET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade
+-ò-MARK--
+ttings
+upgrade: h2c
+h0.1:5
+--MARK--
+
+Rdferer: http://examplproxy-test/index.txt HTTP/1.1
+host: 127DEV
+bAccept: */*
+Referer:ings
+upg=-

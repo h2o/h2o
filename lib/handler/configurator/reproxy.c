@@ -57,7 +57,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct reproxy_configurator_t *self = (void *)_self;
 
-    if (ctx->pathconf != NULL && self->vars->enabled != 0)
+    if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) && self->vars->enabled != 0)
         h2o_reproxy_register(ctx->pathconf);
 
     --self->vars;
@@ -76,6 +76,8 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* reproxy: ON | OFF */
-    h2o_configurator_define_command(&c->super, "reproxy", H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+    h2o_configurator_define_command(&c->super, "reproxy",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_reproxy);
 }

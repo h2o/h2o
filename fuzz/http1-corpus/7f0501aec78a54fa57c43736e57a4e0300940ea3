@@ -1,0 +1,16 @@
+GET /reproxy-test HTTP/1.1
+host: 127.0.0.1:5POST / HTTP/1.1
+Host: :51273
+User-Agent: curl/7.49.0-DEAV
+Accept: */*
+Content-Length: 51459
+connection: UpgHTTP2-SettIngsgs
+upgrade: h2c
+http2-settings: AAMAAABkAAQAAP__
+acceUUUUUUUUUUUUUUUUUUUUpt: */*
+user-agent: ngh‘ttp2/1.16.1
+
+-7.0.0.1:50492
+User-Agent: c:schemurl/7
+--MARK--
+.49.dz

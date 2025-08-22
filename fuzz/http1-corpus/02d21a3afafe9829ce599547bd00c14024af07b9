@@ -1,0 +1,11 @@
+HEAD / HTTP/1.1
+Host: 127.0.0
+User-Agent: curl/7.49.0-DEV
+Accept:GET /x.txt HT91
+connection: Upgrade,, HTTP2-Settings
+upgrade: h2C
+http2-settings: AA-------------Ó-----P2-Set: nghttp2/1.16.1
+
+
+--MARK--
+PRI * H¬«¯Ð2ettingssfer:-En¿

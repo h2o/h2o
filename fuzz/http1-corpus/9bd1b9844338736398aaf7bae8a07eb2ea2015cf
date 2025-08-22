@@ -1,0 +1,14 @@
+POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*/
+Connectiction: Upgraœ›ept: */*
+--MARK--
+
+Connectiction: Upgrade, HTTP1-Settingencoded
+
+
+--POST / HTTP/1.1
+Host: 149.0-¼º©òõ¾œ›ept: */*/
+Connectiction: Upgraœ›ept: */*
+Connt: */*/
+Connectiction: Upgraœ›ept: */*
+--MARK--

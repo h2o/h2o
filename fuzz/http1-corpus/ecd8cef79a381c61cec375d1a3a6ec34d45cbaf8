@@ -1,0 +1,43 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2C
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrckesSec-Websocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon:ocket-Key: aGET /indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2- h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Setting/indGET /index.on:est/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+content-location: Upgrade, HTTP1-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /ings
+upgrade: h2c
+h0.1:514?58
+connectiupgradon: Upgrade, HTTP2-Settings
+ut-Key: aGET /inapplication/vnd.onepager.txt HTTP/1.1
+host: 127.0.0.1:51458
+content-location: Upgrade, connectiupgradon: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTTÉP2-upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp1/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

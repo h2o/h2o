@@ -1,0 +1,9 @@
+GET /index.txt HTTP/1.1
+host: 191
+proxy-authorization: Upgrication/zlib
+--MARK--
+
+
+
+--MARK--
+PRI 

@@ -30,9 +30,13 @@
 #include "h2o/url.h"
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
 {
+    h2o_mem_pool_t pool;
     h2o_url_t url;
     int ret;
-    ret = h2o_url_parse((const char *)Data, Size, &url);
+
+    h2o_mem_init_pool(&pool);
+
+    ret = h2o_url_parse(&pool, (const char *)Data, Size, &url);
     if (ret != -1) {
         size_t total = 0, i;
         assert(url.scheme != NULL);
@@ -47,5 +51,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
                 total++;
         assert(total <= Size * 2);
     }
+
+    h2o_mem_clear_pool(&pool);
     return 0;
 }

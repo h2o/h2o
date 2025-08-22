@@ -47,9 +47,18 @@ EOT
 
 <?
 $ctx->{directive}->(
-    name      => "fastcgi.spawn",
-     levels    => [ qw(path extension) ],
-     desc      => q{The directive specifies the command to start the FastCGI process manager.},
+    name    => "fastcgi.document_root",
+    levels  => [ qw(global host path extension) ],
+    default => q{none},
+    desc    => "Sets the DOCUMENT_ROOT variable to be passed to the FastCGI application.",
+)->(sub {});
+?>
+
+<?
+$ctx->{directive}->(
+    name   => "fastcgi.spawn",
+    levels => [ qw(path extension) ],
+    desc   => q{The directive specifies the command to start the FastCGI process manager.},
 )->(sub {
 ?>
 <p>

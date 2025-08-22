@@ -59,6 +59,7 @@ void quicly_sendstate_init_closed(quicly_sendstate_t *state);
 void quicly_sendstate_dispose(quicly_sendstate_t *state);
 static int quicly_sendstate_transfer_complete(quicly_sendstate_t *state);
 static int quicly_sendstate_is_open(quicly_sendstate_t *state);
+static int quicly_sendstate_is_fully_inflight(quicly_sendstate_t *state);
 int quicly_sendstate_activate(quicly_sendstate_t *state);
 int quicly_sendstate_shutdown(quicly_sendstate_t *state, uint64_t final_size);
 void quicly_sendstate_reset(quicly_sendstate_t *state);
@@ -75,6 +76,11 @@ inline int quicly_sendstate_transfer_complete(quicly_sendstate_t *state)
 inline int quicly_sendstate_is_open(quicly_sendstate_t *state)
 {
     return state->final_size == UINT64_MAX;
+}
+
+inline int quicly_sendstate_is_fully_inflight(quicly_sendstate_t *state)
+{
+    return state->size_inflight == state->final_size;
 }
 
 #ifdef __cplusplus

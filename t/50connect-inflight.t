@@ -8,7 +8,6 @@ use Scope::Guard;
 use Socket qw(IPPROTO_TCP TCP_NODELAY);
 use Time::HiRes qw(sleep);
 use Test::More;
-use Net::EmptyPort qw(empty_port);
 use t::Util;
 
 local $SIG{PIPE} = sub {};

@@ -21,8 +21,8 @@
  */
 #include "quicly/loss.h"
 
-int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
-                                  int is_closing)
+quicly_error_t quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
+                                             int is_closing)
 {
     quicly_sentmap_init_iter(&loss->sentmap, iter);
 
@@ -33,7 +33,6 @@ int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *it
      * heavy loss; in such case, 32 is more than enough, yet small enough that the memory footprint does not matter. */
     const quicly_sent_packet_t *sent;
     while ((sent = quicly_sentmap_get(iter))->sent_at <= retire_before) {
-        int ret;
         if (!is_closing && loss->sentmap.num_packets < 32)
             break;
         if (sent->cc_bytes_in_flight != 0) {
@@ -41,6 +40,7 @@ int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *it
             quicly_sentmap_skip(iter);
             continue;
         }
+        quicly_error_t ret;
         if ((ret = quicly_sentmap_update(&loss->sentmap, iter, QUICLY_SENTMAP_EVENT_EXPIRED)) != 0)
             return ret;
     }
@@ -51,8 +51,8 @@ int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *it
     return 0;
 }
 
-int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
-                            quicly_loss_on_detect_cb on_loss_detected)
+quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
+                                       quicly_loss_on_detect_cb on_loss_detected)
 {
     /* This function ensures that the value returned in loss_time is when the next application timer should be set for loss
      * detection. if no timer is required, loss_time is set to INT64_MAX. */
@@ -63,7 +63,7 @@ int quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_t max_ack_d
                                       1024;
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
-    int ret;
+    quicly_error_t ret;
 
 #define CHECK_TIME_THRESHOLD(sent) ((sent)->sent_at <= now - delay_until_lost)
 #define CHECK_PACKET_THRESHOLD(sent)                                                                                               \

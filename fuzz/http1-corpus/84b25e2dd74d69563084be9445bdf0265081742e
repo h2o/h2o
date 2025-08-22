@@ -1,0 +1,103 @@
+GET / HTTP/1.1
+host:h­st.examplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-ecnodizi:nggp
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0.1:50490
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /iOOOOOOOOOOOOOOOOOOOOOndex.txt HTTP/1.1
+host-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-ecvodizi:nggp
+
+--MARK--
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.st:h­st.examÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇÇplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+hos4: 127.now/h/1/entte HTTP/1.7
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.welÿ:ÿÿÿ curl/7.49.0-DGET /indÿÿÿ¬xt HTTP/1.1
+host: 127.0.0.1:513mplÿÿÿÿÿ curlushos.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.7
+Host: q27.0.0.1:50492
+Uding:gmplÿÿÿÿÿ curl/7.49.0
+--MARK--
+pt: */*
+accept-ecnodizi:nggp
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0.1:50490
+User-Agent: c:schemurl/7.49.0-pt: */*
+accept-ecvodizi:nggp
+
+--MARK--
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿost: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.7
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.welÿ:ÿÿÿ curl/7.49.0-DGET /index.txt HTTP/1.1
+host: 127.0.0.1:513mplÿÿÿÿÿ curlushos.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /indecnodizi:nggp
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ127.0.0.1:50490
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ÿÿÿst/.well¿know¥¥¥¥¥¥¥¥¥¥¥¥¥GET /iOOOOOOOOOOOOOOOOOOOOOndex.txt HTTP/1.1
+host-*ncoding:gmplÿÿÿÿÿ curl/7.49.0-DEV
+Accept: */*
+accept-ecvodizi:nggp
+
+--MARK--
+
+
+GET /reproxy-test/.well¿known/h1/te/te HTTP/1.1
+Host: ÿÿÿÿÿÿÿÿÿÿÿtings: AAMAAABkAAQAAP__ AAMAA

@@ -1,0 +1,13 @@
+GET /cket/ HTTP/1.1
+Connecti!n: upgrade
+de: websocket
+Sec-Web-Key: abcld 2
+
+--MARK--
+hello
+roxy-te2/1:schem
+
+
+--MARK--
+PRI *ex.tx *
+--MAARK--

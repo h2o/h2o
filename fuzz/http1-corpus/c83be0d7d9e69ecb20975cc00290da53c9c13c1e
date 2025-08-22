@@ -1,0 +1,19 @@
+GET /websocket/ HTTP/1.1
+Conn
+--MARK--
+held 1
+
+--MARK--
+h?llzo world 1
+
+--MARK--
+hello
+--MARK--
+hello world 4
+
+--MARK-- world 9
+
+--MARK--
+hello world 10
+
+--MARK/--

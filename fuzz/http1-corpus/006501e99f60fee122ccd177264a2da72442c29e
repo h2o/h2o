@@ -1,0 +1,29 @@
+GET / HTTP/1.1
+Host:/7.49.0-DEV
+bAccept:**
+--MARK--
+r: http://example.com(/
+
+
+-KT / HTTP/1.1
+Host:/7.49.0-DEV
+bAccept:**
+--MARK--
+r: http://example.com(/
+
+
+-ET / HTTP/1.1
+Host:/7.49.0-DEV
+bAccept:**
+--MARK--
+r: http://example.com(/
+
+
+-KT / HTTP/1.1
+Host:/7.49.0-DEV
+bAccept:**
+--MARK--
+r: htmple.com(/
+
+
+--M---M--

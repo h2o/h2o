@@ -1,0 +1,16 @@
+GET /reproxy-test/index.txt HTTP/1.1
+hsettings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.pgrade, HTTP2-Settings
+upgrade: h2c
+httbsock:schemTP/1.1
+Cosocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.ection: UpgdGET /index.txt HTTP/2.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP1-Setti-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.02-Setttp2/1:schem
+
+
+--MARK--
+PRI *ex.txt HTTP 

@@ -30,19 +30,6 @@
 
 provider h2o {
     /**
-     * When a new connection is accepted, h2o invokes this probe to obtain the flags to be associated to the new connection. The
-     * probe MUST write the result into the h2o_return map; see ebpf.h for details. `original_flags` contain the flags that will be
-     * associated when the probe is not attached.
-     *
-     * Do not use it for a tracing event.
-     */
-    probe _private_socket_lookup_flags(pid_t tid, uint64_t original_flags, struct st_h2o_ebpf_map_key_t *info);
-    /**
-     * Same as `_private_socket_lookup_flags`, expect that this probe is invoked when SNI is being obtained.
-     */
-    probe _private_socket_lookup_flags_sni(pid_t tid, uint64_t original_flags, const char *server_name, size_t server_name_len);
-
-    /**
      * socket write at H2O socket abstraction layer
      */
     probe socket_write(struct st_h2o_socket_t *sock, struct st_h2o_iovec_t *bufs, size_t bufcnt, void *cb);
@@ -58,6 +45,19 @@ provider h2o {
      * amount of payload being provided to the TLS layer, as well as amount of TLS records being buffered
      */
     probe socket_write_tls_record(struct st_h2o_socket_t *sock, size_t write_size, size_t bytes_buffered);
+
+    /**
+     *
+     */
+    probe io_uring_splice(struct st_h2o_io_uring_cmd_t *cmd);
+    /**
+     *
+     */
+    probe io_uring_submit(struct st_h2o_io_uring_cmd_t *cmd);
+    /**
+     *
+     */
+    probe io_uring_end(struct st_h2o_io_uring_cmd_t *cmd);
 
     /**
      * HTTP-level event, indicating that a request has been received.

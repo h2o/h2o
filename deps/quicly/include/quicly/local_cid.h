@@ -122,7 +122,7 @@ int quicly_local_cid_on_lost(quicly_local_cid_set_t *set, uint64_t sequence);
  * This makes one slot for CIDs empty. The CID generator callback is then called to fill the slot with a new CID.
  * @return 0 if the request was legal, otherwise an error code
  */
-int quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int *has_pending);
+quicly_error_t quicly_local_cid_retire(quicly_local_cid_set_t *set, uint64_t sequence, int *has_pending);
 
 /* inline definitions */
 

@@ -67,7 +67,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         byte_index = byte_index % bytes_max;
         expected_type = feeder_next_byte();
         ptls_asn1_get_expected_type_and_length(bytes, bytes_max, byte_index, expected_type, &length, &indefinite_length, &last_byte,
-                &decode_error, &ctx);
+                                               &decode_error, &ctx);
     } else if (ret == 2 || ret == 3) {
         ptls_context_t ctx = {};
         char fname[] = "/tmp/XXXXXXXX";
@@ -85,7 +85,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         ctx.key_exchanges = ptls_minicrypto_key_exchanges;
         ctx.cipher_suites = ptls_minicrypto_cipher_suites;
 
-	    if (ret == 2) {
+        if (ret == 2) {
             ptls_load_certificates(&ctx, fname);
             if (ctx.certificates.list) {
                 for (i = 0; i < ctx.certificates.count; i++) {
@@ -93,12 +93,11 @@ int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
                         free(ctx.certificates.list[i].base);
                 }
                 free(ctx.certificates.list);
-
             }
         } else {
             ptls_minicrypto_load_private_key(&ctx, fname);
         }
-out2:
+    out2:
         close(fd);
         unlink(fname);
     }

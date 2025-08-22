@@ -24,7 +24,7 @@
 
 static int on_acked_callcnt, on_acked_ackcnt;
 
-static int on_acked(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
+static quicly_error_t on_acked(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
 {
     ++on_acked_callcnt;
     if (acked)
@@ -59,7 +59,7 @@ static void test_basic(void)
             quicly_sentmap_prepare(&map, at * 5 + i, at, QUICLY_EPOCH_INITIAL);
             quicly_sentmap_allocate(&map, on_acked);
             quicly_sentmap_allocate(&map, on_acked);
-            quicly_sentmap_commit(&map, 1);
+            quicly_sentmap_commit(&map, 1, 0, 0);
         }
     }
 
@@ -115,10 +115,10 @@ static void test_late_ack(void)
     /* commit pn 1, 2 */
     quicly_sentmap_prepare(&map, 1, 0, QUICLY_EPOCH_INITIAL);
     quicly_sentmap_allocate(&map, on_acked);
-    quicly_sentmap_commit(&map, 10);
+    quicly_sentmap_commit(&map, 10, 0, 0);
     quicly_sentmap_prepare(&map, 2, 0, QUICLY_EPOCH_INITIAL);
     quicly_sentmap_allocate(&map, on_acked);
-    quicly_sentmap_commit(&map, 20);
+    quicly_sentmap_commit(&map, 20, 0, 0);
     ok(map.bytes_in_flight == 30);
 
     /* mark pn 1 as lost */
@@ -159,10 +159,10 @@ static void test_pto(void)
     /* commit pn 1, 2 */
     quicly_sentmap_prepare(&map, 1, 0, QUICLY_EPOCH_INITIAL);
     quicly_sentmap_allocate(&map, on_acked);
-    quicly_sentmap_commit(&map, 10);
+    quicly_sentmap_commit(&map, 10, 0, 0);
     quicly_sentmap_prepare(&map, 2, 0, QUICLY_EPOCH_INITIAL);
     quicly_sentmap_allocate(&map, on_acked);
-    quicly_sentmap_commit(&map, 20);
+    quicly_sentmap_commit(&map, 20, 0, 0);
     ok(map.bytes_in_flight == 30);
 
     /* mark pn 1 for PTO */

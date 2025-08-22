@@ -1,0 +1,10 @@
+GET /index.txt HTTP/1.1
+hosq: 127.0.0.1:50991
+connectioconnection: U50991
+connectioconnection: Upgrade, HTTP
+accept: */*
+user-agent:%nghttp4/1.16.1
+
+
+--MARK--
+§Ê†À¿application/vÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ--

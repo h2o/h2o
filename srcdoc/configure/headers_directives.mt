@@ -6,6 +6,7 @@ Headers directives can be used to manipulate response headers.
 </p>
 <p>
 This document describes the following configuration directives as well as <a href="configure/headers_directives.html#timing-of-application">when they are applied</a>.
+All the directives accept one header field (specified by a YAML scalar), or multiple header fields (specified by a YAML sequence).
 </p>
 
 ? $ctx->{directive_list}->()->(sub {
@@ -72,6 +73,7 @@ $ctx->{directive}->(
 Sets a header line when and only when a header with the same name does not already exist.
 EOT
 )->(sub {});
+?>
 
 <?
 $ctx->{directive}->(
@@ -82,6 +84,21 @@ $ctx->{directive}->(
 ?>
 <?= $ctx->{example}->('Removing the <code>X-Powered-By</code> header', <<'EOT')
 header.unset: "X-Powered-By"
+EOT
+?>
+? })
+
+<?
+$ctx->{directive}->(
+    name   => "header.unsetunless",
+    levels => [ qw(global host path extension) ],
+    desc   => q{Remove all headers but those listed.},
+)->(sub {
+?>
+<?= $ctx->{example}->('Remove all headers but <code>If-Match</code> and <code>If-Modified-Since</code>', <<'EOT')
+header.unsetunless:
+- "If-Match"
+- "If-Modified-Since"
 EOT
 ?>
 ? })

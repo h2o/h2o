@@ -30,7 +30,11 @@
 
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
 
+extern const char h2o_hpack_err_missing_mandatory_pseudo_header[];
+extern const char h2o_hpack_err_invalid_pseudo_header[];
 extern const char h2o_hpack_err_found_upper_case_in_header_name[];
+extern const char h2o_hpack_err_unexpected_connection_specific_header[];
+extern const char h2o_hpack_err_invalid_content_length_header[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
 
@@ -69,6 +73,7 @@ void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_
 #define H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS 2
 #define H2O_HPACK_PARSE_HEADERS_PATH_EXISTS 4
 #define H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS 8
+#define H2O_HPACK_PARSE_HEADERS_PROTOCOL_EXISTS 16
 
 /**
  * Decodes a header field. This function must indicate soft errors using error codes, setting `*err_desc` to appropciate values.
@@ -84,9 +89,10 @@ int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o
  * Request parser that uses given callback as the decoder.
  */
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
-                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_headers_t *headers,
-                            int *pseudo_header_exists_map, size_t *content_length, h2o_cache_digests_t **digests,
-                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc);
+                            const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
+                            h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
+                            const char **err_desc);
 /**
  * Response parser that uses given callback as the decoder.
  */

@@ -24,11 +24,8 @@
 #include <string.h>
 #include "picotest.h"
 
-struct test_t {
-    int num_tests;
-    int failed;
-};
-struct test_t main_tests, *cur_tests = &main_tests;
+int test_index[32] = {1};
+static int test_fail[32];
 static int test_level = 0;
 
 static void indent(void)
@@ -51,6 +48,7 @@ void note(const char *fmt, ...)
     va_end(arg);
 
     printf("\n");
+    fflush(stdout);
 }
 
 __attribute__((format (printf, 2, 3)))
@@ -59,41 +57,55 @@ void _ok(int cond, const char *fmt, ...)
     va_list arg;
 
     if (! cond)
-        cur_tests->failed = 1;
+        test_fail[test_level] = 1;
     indent();
 
-    printf("%s %d - ", cond ? "ok" : "not ok", ++cur_tests->num_tests);
+    printf("%s %d - ", cond ? "ok" : "not ok", test_index[test_level]++);
     va_start(arg, fmt);
     vprintf(fmt, arg);
     va_end(arg);
 
     printf("\n");
+    fflush(stdout);
 }
 
 int done_testing(void)
 {
     indent();
-    printf("1..%d\n", cur_tests->num_tests);
-    return cur_tests->failed;
+    printf("1..%d\n", test_index[test_level] - 1);
+    fflush(stdout);
+    return test_fail[test_level];
 }
 
-void subtest(const char *name, void (*cb)(void))
+void enter_subtest(const char *name)
 {
-    struct test_t test = {}, *parent_tests;
-
-    parent_tests = cur_tests;
-    cur_tests = &test;
     ++test_level;
 
+    test_index[test_level] = 1;
+    test_fail[test_level] = 0;
+
     note("Subtest: %s", name);
+}
 
-    cb();
-
+void exit_subtest(const char *name)
+{
     done_testing();
 
     --test_level;
-    cur_tests = parent_tests;
-    if (test.failed)
-        cur_tests->failed = 1;
-    _ok(! test.failed, "%s", name);
+    _ok(! test_fail[test_level + 1], "%s", name);
+    test_index[test_level + 1] = 0;
+    test_fail[test_level + 1] = 0;
+}
+
+int test_is_at(int index, ...)
+{
+    va_list arg;
+    va_start(arg, index);
+    size_t level;
+
+    for (level = 0; index == test_index[level] && index != 0; ++level)
+        index = va_arg(arg, int);
+
+    va_end(arg);
+    return index == test_index[level] && index == 0;
 }

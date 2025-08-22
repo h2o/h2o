@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 use Time::HiRes qw(sleep);
@@ -86,5 +86,7 @@ subtest 'streaming' => sub {
     doit(1);
 };
 
-done_testing();
+undef $upstream;
+undef $server;
 
+done_testing();

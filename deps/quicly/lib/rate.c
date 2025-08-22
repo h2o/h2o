@@ -50,11 +50,9 @@ void quicly_ratemeter_init(quicly_ratemeter_t *meter)
     };
 }
 
-void quicly_ratemeter_in_cwnd_limited(quicly_ratemeter_t *meter, uint64_t pn)
+void quicly_ratemeter_enter_cc_limited(quicly_ratemeter_t *meter, uint64_t pn)
 {
-    /* bail out if already in cwnd-limited phase */
-    if (meter->pn_cwnd_limited.start != UINT64_MAX && meter->pn_cwnd_limited.end == UINT64_MAX)
-        return;
+    assert(!quicly_ratemeter_is_cc_limited(meter));
 
     /* if the estimator was waiting for the end of the previous phase, and if a valid partial sample exists, commit it now */
     if (meter->pn_cwnd_limited.end != UINT64_MAX && meter->current.sample.elapsed != 0)
@@ -64,10 +62,11 @@ void quicly_ratemeter_in_cwnd_limited(quicly_ratemeter_t *meter, uint64_t pn)
     meter->pn_cwnd_limited = (quicly_range_t){.start = pn, .end = UINT64_MAX};
 }
 
-void quicly_ratemeter_not_cwnd_limited(quicly_ratemeter_t *meter, uint64_t pn)
+void quicly_ratemeter_exit_cc_limited(quicly_ratemeter_t *meter, uint64_t pn)
 {
-    if (meter->pn_cwnd_limited.start != UINT64_MAX && meter->pn_cwnd_limited.end == UINT64_MAX)
-        meter->pn_cwnd_limited.end = pn;
+    assert(quicly_ratemeter_is_cc_limited(meter));
+
+    meter->pn_cwnd_limited.end = pn;
 }
 
 void quicly_ratemeter_on_ack(quicly_ratemeter_t *meter, int64_t now, uint64_t bytes_acked, uint64_t pn)

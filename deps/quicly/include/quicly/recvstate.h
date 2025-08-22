@@ -56,8 +56,8 @@ static size_t quicly_recvstate_bytes_available(quicly_recvstate_t *state);
  * bytes that might have been newly received and therefore need to be written to the receive buffer (this number of bytes counts
  * backward from the end of given range).
  */
-int quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, size_t max_ranges);
-int quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at, uint64_t *bytes_missing);
+quicly_error_t quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, size_t max_ranges);
+quicly_error_t quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at, uint64_t *bytes_missing);
 
 /* inline definitions */
 

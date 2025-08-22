@@ -1,0 +1,11 @@
+GProtocol-RequestET /reprfdome.contentypjpg HTTP/1.1
+host: 127.0.0.1:51358
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMA////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////AABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1.16ÎÎ
+
+
+--MARK--
+PR-°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°°é

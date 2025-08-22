@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 BEGIN { $ENV{HTTP2_DEBUG} = 'debug' }
 use Protocol::HTTP2::Constants qw(:frame_types :errors :settings :flags :states :limits :endpoints);
@@ -84,8 +84,7 @@ subtest 'invalid content-length' => sub {
     ok check_port($server->{port}), 'live check';
 
     Time::HiRes::sleep(0.1);
-    $upstream->{kill}->();
-    my $log = join('', readline($upstream->{stdout}));
+    my ($log) = $upstream->{kill}->();
     like $log, qr{Receive reset stream with error code PROTOCOL_ERROR};
 };
 
@@ -109,8 +108,7 @@ subtest 'multiple content-length' => sub {
     ok check_port($server->{port}), 'live check';
 
     Time::HiRes::sleep(0.1);
-    $upstream->{kill}->();
-    my $log = join('', readline($upstream->{stdout}));
+    my ($log) = $upstream->{kill}->();
     like $log, qr{Receive reset stream with error code PROTOCOL_ERROR};
 };
 
@@ -284,8 +282,7 @@ subtest 'request body streaming' => sub {
             h2g.read_loop(100)
         EOR
     }
-    $upstream->{kill}->();
-    my $log = join('', readline($upstream->{stdout}));
+    my ($log) = $upstream->{kill}->();
     like $log, qr{TYPE = DATA\(0\), FLAGS = 00000000, STREAM_ID = 1, LENGTH = 1};
     like $log, qr{TYPE = DATA\(0\), FLAGS = 00000001, STREAM_ID = 1, LENGTH = 1024};
     my $http2_streaming_requests_str = 'http2.streaming-requests';

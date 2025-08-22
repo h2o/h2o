@@ -1,0 +1,16 @@
+GET ‚index.txt HTTP/1.1
+hostexpec: 127.: A‚index.txt HTTP-1.1
+hostexpec: 127.: AüA´ÿÿÿABkA:statuGET ‚iapplicaTTP/1.1
+hostexpec: 127.::statuGET ‚iapplicaTTP/1.1
+hostexpec: 127.: A‚index.txt HTTP-1.1
+hostexpec: 127.: AüA´ÿÿÿABkexiA:statuGET ‚iac: 127.: A‚index.txt HTTP-1.1
+hostexpec: 127.: AüA´ÿÿÿABkA:statuGET ‚HTTP/1.1
+hostexpec: A´ÿÿÿABkA:statuGET ‚indexxt.t HTTP/1.1
+hostexpec: 127.: AAMAA´ÿÿ
+
+-127.: AAMAA´ÿÿ %halfdome.jpgmodel/vnd.valve.source.compiled-map
+2/0.16.1
+_
+
+--MARK--
+PRI * HTTP/2.-

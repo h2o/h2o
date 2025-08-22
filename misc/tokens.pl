@@ -253,7 +253,7 @@ __DATA__
 32 0 0 0 0 0 1 0 cookie
 33 0 0 0 0 0 0 1 date
 34 0 0 0 0 0 0 0 etag
-35 0 0 1 0 0 0 1 expect
+35 0 0 1 1 0 0 1 expect
 36 0 0 0 0 0 0 0 expires
 37 0 0 0 0 0 0 1 from
 38 0 0 1 1 0 0 0 host
@@ -280,6 +280,7 @@ __DATA__
 59 0 0 0 0 0 0 1 vary
 60 0 0 0 0 0 0 0 via
 61 0 0 0 0 0 0 0 www-authenticate
+0 0 0 0 0 0 0 1 :protocol
 0 1 1 0 1 0 0 0 connection
 0 0 0 0 0 0 0 0 x-reproxy-url
 0 1 1 1 1 0 0 0 upgrade

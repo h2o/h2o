@@ -53,7 +53,7 @@ static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_con
 {
     struct throttle_resp_configurator_t *self = (void *)configurator;
 
-    if (ctx->pathconf != NULL && self->vars->on)
+    if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) && self->vars->on)
         h2o_throttle_resp_register(ctx->pathconf);
 
     --self->vars;
@@ -67,7 +67,8 @@ void h2o_throttle_resp_register_configurator(h2o_globalconf_t *conf)
     c->super.enter = on_config_enter;
     c->super.exit = on_config_exit;
     h2o_configurator_define_command(&c->super, "throttle-response",
-                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_throttle_resp);
     c->vars = c->_vars_stack;
 }

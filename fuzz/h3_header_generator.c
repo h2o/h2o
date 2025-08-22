@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
     h2o_iovec_t headers_frame = h2o_qpack_flatten_request(
         enc, &pool, 0, NULL, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(authority, strlen(authority)),
-        h2o_iovec_init(path, strlen(path)), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
+        h2o_iovec_init(path, strlen(path)), h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
     fwrite(headers_frame.base, headers_frame.len, 1, fp);
 
     h2o_qpack_destroy_encoder(enc);

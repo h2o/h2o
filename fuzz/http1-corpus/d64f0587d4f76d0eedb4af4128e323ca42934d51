@@ -1,0 +1,9 @@
+GET /v1/folder?path=%2F HTTP/1.1
+Host: ff28141acc074e5a85034232f14399c3.internal:8086
+User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/116.0
+Connection: close
+Accept: */*
+Accept-Language: en
+X-Forwarded-For: 127.0.0.1
+Accept-Encoding: gzip
+

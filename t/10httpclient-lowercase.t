@@ -2,7 +2,7 @@ use strict;
 use warnings;
 use Test::More;
 use t::Util;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 
 my $progname = "h2o-httpclient";
 my $progpath = bindir() . "/$progname";

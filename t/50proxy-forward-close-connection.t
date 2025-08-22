@@ -1,6 +1,5 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use t::Util;
 

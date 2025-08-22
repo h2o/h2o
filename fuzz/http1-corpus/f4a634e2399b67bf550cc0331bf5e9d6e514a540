@@ -1,0 +1,7 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 1270.1:514527.0.0.7.0.0.1:58
+content-location: Upgrade, HTTP2-t-Key: aGET /indGET /inchem
+
+
+--MARK--
+.txt HTTP 

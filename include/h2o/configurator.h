@@ -143,6 +143,10 @@ int h2o_configurator_apply(h2o_globalconf_t *config, yoml_t *node, int dry_run);
  */
 int h2o_configurator_apply_commands(h2o_configurator_context_t *ctx, yoml_t *node, int flags_mask, const char **ignore_commands);
 /**
+ *
+ */
+static int h2o_configurator_at_extension_level(h2o_configurator_context_t *ctx);
+/**
  * emits configuration error
  */
 void h2o_configurator_errprintf(h2o_configurator_command_t *cmd, yoml_t *node, const char *reason, ...)
@@ -192,5 +196,12 @@ void h2o_configurator_define_headers_commands(h2o_globalconf_t *global_conf, h2o
 
 void h2o_configurator__init_core(h2o_globalconf_t *conf);
 void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);
+
+/* inline definitions */
+
+inline int h2o_configurator_at_extension_level(h2o_configurator_context_t *ctx)
+{
+    return ctx->pathconf != NULL && ctx->pathconf->path.base == NULL && ctx->pathconf != &ctx->hostconf->fallback_path;
+}
 
 #endif

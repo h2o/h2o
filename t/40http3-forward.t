@@ -1,7 +1,7 @@
 use strict;
 use warnings;
 use File::Temp qw(tempdir);
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use Test::More;
 use Time::HiRes qw(time);
 use t::Util;
@@ -30,7 +30,7 @@ plan skip_all => "macOS has issues https://twitter.com/kazuho/status/12980731105
 my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
 
 # start server1 at 0.0.0.0, check that it is up
-my $server1 = spawn("0.0.0.0", 1);
+my $server1 = spawn("*", 1);
 is do {my $fh = fetch(""); local $/; join "", <$fh> }, "server=1", "server1 is up";
 
 # initiate the slow request
@@ -66,11 +66,14 @@ done_testing;
 
 sub spawn {
     my ($listen_ip, $server_id) = @_;
+    my $host_directive = "";
+    if ($listen_ip ne "*") {
+        $host_directive = "\n  host: $listen_ip";
+    }
     my $conf = {opts => [qw(-m worker)], conf => <<"EOT"};
 num-threads: 1
 listen:
-  type: quic
-  host: $listen_ip
+  type: quic$host_directive
   port: $quic_port
   ssl:
     key-file: examples/h2o/server.key
@@ -78,7 +81,7 @@ listen:
 quic-nodes:
   self: $server_id
   mapping:
-    1: "127.0.0.2:$quic_port" # server1 can be reached at 127.0.0.2 too
+    1: "[::1]:$quic_port" # server1 can be reached over ipv6 as well
     2: "127.0.0.1:$quic_port"
 ssl-session-resumption:
   mode: ticket

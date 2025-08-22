@@ -1,0 +1,13 @@
+GET masque:ÿÿÿÿÿÿÿÿ/.7/index.txt HTTP/1.1
+host:
+--MARK--
+:1
+
+
+--ET masque:ÿÿÿÿÿÿÿÿ/../index.txt HTTP/1.1
+host:
+--MARK--
+:1
+
+
+--MARK--

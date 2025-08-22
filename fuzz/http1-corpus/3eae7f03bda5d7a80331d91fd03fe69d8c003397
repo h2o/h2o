@@ -1,0 +1,28 @@
+POST / HTTP/1.1
+Host: 1-AAABk@AQAAP__
+Contente: application/x-www-foP__
+Content-Length
+--MARK--
+: 268
+Content-Typer-Ag:schemGET /webcket-Key: abcde
+Sec-Websocket-Version: 13
+
+
+--MARK--
+hello world 1
+
+--MARK--
+hello world 2
+
+--MARK--
+-128hello world 3
+
+--MARK--
+hello woorld >
+
+--MARK--
+hello world 7
+
+--MARK--
+--MAR--MARK-MARK-s
+ca--

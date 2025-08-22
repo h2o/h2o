@@ -12,7 +12,7 @@ hosts:
 EOT
 
 subtest "2 gets" => sub {
-    my $resp = send_and_receive(<<"EOT");
+    my $resp = send_and_receive($server->{port}, <<"EOT");
 GET / HTTP/1.1\r
 Host: 127.0.0.1:$server->{port}\r
 \r
@@ -25,7 +25,7 @@ EOT
 };
 
 subtest "post(content-lenth) and get" => sub {
-    my $resp = send_and_receive(<<"EOT");
+    my $resp = send_and_receive($server->{port}, <<"EOT");
 POST / HTTP/1.1\r
 Host: 127.0.0.1:$server->{port}\r
 Content-Length: 5\r
@@ -40,7 +40,7 @@ EOT
 };
 
 subtest "post(chunked) and get" => sub {
-    my $resp = send_and_receive(<<"EOT");
+    my $resp = send_and_receive($server->{port}, <<"EOT");
 POST / HTTP/1.1\r
 Host: 127.0.0.1:$server->{port}\r
 Transfer-Encoding: chunked\r
@@ -61,9 +61,9 @@ EOT
 done_testing;
 
 sub send_and_receive {
-    my $req = shift;
+    my($port, $req) = @_;
     my $sock = IO::Socket::INET->new(
-        PeerAddr => "127.0.0.1:$server->{port}",
+        PeerAddr => "127.0.0.1:$port",
         Proto    => "tcp",
     ) or die "connection failed:$!";
     syswrite($sock, $req) == length($req) or die "syswrite failed:$!";

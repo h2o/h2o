@@ -1,0 +1,87 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:5145ex.txt HTTP/1.1
+host: 127.0.0.1:51458
+connection: ost: 127.0.0.1:50991
+connecti: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMADGET /webso'ck:schemTP/2.1
+Connection: upgrcket
+Sec-Websocket-KeAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade:de: h2c
+http2-setvWebsocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:5Õÿÿÿ0991
+connection: Upgrade, HTTP2-Settings
+user-agent: nghttp2/1:sc AAMAAABkAAQ../__
+accept: */*
+user-agent: nghUpgrade, HTTP2-Sepgrade: h2c
+http2-settings: AAMAAGET /webso'ck:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+user-agent: nghttp2/1:sc AAMAAABkAAQ../__
+accept: */*
+user-agent: nghUpgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aG.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrad eH,TTP: h2c
+http2-settWebsocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:5Õÿÿÿ0991
+connection: Upgrade, HTTP2-Settingstings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrc[et
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+conneaccept-encodinction: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settingÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ0991
+connection: Upgrade, HTTP2-Settingÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿs
+userr-agent: n,http2/1:s
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+user-agent: nghttp2/1:sc AAMAAABkAAQ../__
+accept: */*
+user-agent: nghUpgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrad eH,TTP2-Settings
+upgrade: h2c
+http2-settWebsocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:5Õÿÿÿ0991
+connection: Upgrade, HTTP2-Settingstings
+upgrade: h2c
+http2-settings: AAMAAGET /websock:schemTP/1.1
+Connection: upgrc[et
+Sec-Websocket-Key: aGET.1
+Connection: upgrc[et
+Sec-Websocket-Key: aGET /indGET /index.txt HTTP/1.1
+hAAAAAAAAost: 127.0.0.1:50991
+conneaccept-encodinction: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings:ion: Upgrade, HTTP2-Settings
+upgrade: h2cchem
+
+
+--MARK--
+PRI *ex.txt HTTP 

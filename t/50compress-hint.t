@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -100,4 +100,6 @@ subtest "forcing gzip or br also works" => sub {
 };
 
 $socket->close();
+undef $server;
+
 done_testing();

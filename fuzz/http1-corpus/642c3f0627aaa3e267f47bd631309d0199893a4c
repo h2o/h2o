@@ -1,0 +1,5 @@
+GET /  HTTP/1.1
+Host: ff28141acc074e5a85034232f14399c3.internal:8086
+
+GET /NlN.6Y HTTP/1.1
+

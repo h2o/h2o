@@ -1,7 +1,6 @@
 use strict;
 use warnings;
 use IO::Socket::IP;
-use Net::EmptyPort qw(empty_port);
 use Test::More;
 use Time::HiRes qw(time);
 use Socket qw(SOCK_STREAM);

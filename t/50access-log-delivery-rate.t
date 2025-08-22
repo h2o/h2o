@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use File::Temp qw(tempdir);
 use JSON;
 use Time::HiRes qw(sleep);
@@ -51,7 +51,7 @@ sub truncate_access_log {
 sub load_logs {
     open my $fh, "<", "$tempdir/access_log" or die $!;
     my @json_logs = <$fh>;
-    diag(@json_logs) if $ENV{TEST_DEBUG};
+    debug(@json_logs);
     return map { decode_json($_) } @json_logs;
 }
 

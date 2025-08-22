@@ -1,0 +1,59 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTPT /index.on: Upgrade, HTTP1-Settin Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2c
+h0.1:51458
+connectiettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2c
+h0.1:514P2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2c
+h0.1:51458
+connectiettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /websocket/ HTTP/1.1
+Connection: upgrcket
+Sec-WebsSec-Websocket-Key:2-Settings
+upgrade: h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTT
+Sec-WebsSec-Websocket-Key: aGET /indGET /indeAAP__
+ac
+--MARK--
+ttp2-settings: AAMAAGET /eswbocket/ h2c
+h0.1:51458
+connectiupgradon: Upgrade, HTT
+Sec-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, c-WebsSec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settin Upgrade, HTTP2-SeaGET /indGET /index.on: Upgrade, HTTP2-Settin Upgrade, HTTP2-Set*ings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+accept-rangettp2-settings: AAMAAGET /indGET /index.on: Upgrade, c-WebsSec-Websocket-Key: in7.0.0.1:51458
+connectiupgradon: Upgrade, HTTPT /index.on: Upgrade, HTTP1-Settin Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+ac
+--MARK--
+ttp2-settings: AAMAon: upgrcket
+Sec-WebsSec-Websocket-Key:2-Se1/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

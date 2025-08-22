@@ -123,11 +123,14 @@ EOT
     my $doit = sub {
         my ($path, $expected) = @_;
         subtest $path => sub {
-            my $resp = `curl --silent http://127.0.0.1:$server->{port}$path`;
-            my $env = +{ map { split(':', $_, 2) } split(/\n/, $resp) };
-            for my $key (sort keys %$expected) {
-                is $env->{$key}, $expected->{$key}, $key;
-            }
+            run_with_curl($server, sub {
+                my ($proto, $port, $cmd) = @_;
+                my $resp = `$cmd --silent $proto://127.0.0.1:$port$path`;
+                my $env = +{ map { split(':', $_, 2) } split(/\n/, $resp) };
+                for my $key (sort keys %$expected) {
+                    is $env->{$key}, $expected->{$key}, $key;
+                }
+            });
         };
     };
 
@@ -144,5 +147,31 @@ EOT
 
 };
 
-done_testing;
+subtest 'pathconf' => sub {
+    eval q{use CGI; 1}
+        or plan skip_all => 'CGI.pm not found';
 
+    # spawn h2o
+    my $server = spawn_h2o(<< "EOT");
+file.index: ['printenv.cgi']
+file.custom-handler:
+  extension: .cgi
+  fastcgi.spawn: "exec \$H2O_ROOT/share/h2o/fastcgi-cgi"
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+        header.set: "path: 3"
+    header.set: "host: 2"
+header.set: "global: 1"
+EOT
+
+    run_with_curl($server, sub {
+        my ($proto, $port, $cmd) = @_;
+        my $resp = `$cmd --silent --dump-header /dev/stdout $proto://127.0.0.1:$port/hello.cgi?name=h2o`;
+        like $resp, qr{\nglobal: 1\r?\nhost: 2\r?\npath: 3\r?\n.*\r?\nHello h2o$}s;
+    });
+};
+
+done_testing;

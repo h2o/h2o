@@ -19,6 +19,9 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
+#define OPENSSL_SUPPRESS_DEPRECATED /* casper is legacy and we do not want to pay the cost of switchng away from SHA1_* */
+#endif
 #include <openssl/sha.h>
 #include "golombset.h"
 #include "h2o/string_.h"

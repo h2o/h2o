@@ -102,17 +102,17 @@ static void init_cond_rand(struct loss_cond_t *cond, unsigned nloss, unsigned nt
     cond->data.rand_.ratio.ntotal = ntotal;
 }
 
-static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sent, size_t *num_received, struct loss_cond_t *cond,
-                         int64_t latency, ptls_buffer_t *logger)
+static quicly_error_t transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sent, size_t *num_received,
+                                    struct loss_cond_t *cond, int64_t latency, ptls_buffer_t *logger)
 {
     quicly_address_t destaddr, srcaddr;
     struct iovec packets[32];
     uint8_t packetsbuf[PTLS_ELEMENTSOF(packets) * quicly_get_context(src)->transport_params.max_udp_payload_size];
-    int ret;
+    quicly_error_t ret;
 
     *num_sent = PTLS_ELEMENTSOF(packets);
     if ((ret = quicly_send(src, &destaddr, &srcaddr, packets, num_sent, packetsbuf, sizeof(packetsbuf))) != 0) {
-        fprintf(stderr, "%s: quicly_send: ret=%d\n", __FUNCTION__, ret);
+        fprintf(stderr, "%s: quicly_send: ret=%" PRId64 "\n", __FUNCTION__, ret);
         return ret;
     }
     quic_now += latency;
@@ -137,7 +137,7 @@ static int transmit_cond(quicly_conn_t *src, quicly_conn_t *dst, size_t *num_sen
                 if (pass) {
                     ret = quicly_receive(dst, NULL, &fake_address.sa, decoded + j);
                     if (!(ret == 0 || ret == QUICLY_ERROR_PACKET_IGNORED)) {
-                        fprintf(stderr, "%s: quicly_receive: i=%zu, j=%zu, ret=%d\n", __FUNCTION__, i, j, ret);
+                        fprintf(stderr, "%s: quicly_receive: i=%zu, j=%zu, ret=%" PRId64 "\n", __FUNCTION__, i, j, ret);
                         return ret;
                     }
                 }
@@ -160,7 +160,7 @@ static void test_even(void)
     quicly_loss_conf_t lossconf = QUICLY_LOSS_SPEC_CONF;
     struct loss_cond_t cond_down, cond_up;
     size_t num_sent, num_received;
-    int ret;
+    quicly_error_t ret;
 
     quic_ctx.loss = lossconf;
     init_cond_even(&cond_down);
@@ -271,7 +271,7 @@ static unsigned num_failures_in_loss_core;
 static void loss_core(void)
 {
     size_t num_sent_up, num_sent_down, num_received;
-    int ret;
+    quicly_error_t ret;
 
     quic_now = 1;
 
@@ -330,7 +330,7 @@ static void loss_core(void)
         if (quicly_get_state(client) == QUICLY_STATE_CONNECTED && quicly_connection_is_ready(client)) {
             if (client_stream == NULL) {
                 if ((ret = quicly_open_stream(client, &client_stream, 0)) != 0) {
-                    fprintf(stderr, "%s: quicly_open_stream: ret=%d\n", __FUNCTION__, ret);
+                    fprintf(stderr, "%s: quicly_open_stream: ret=%" PRId64 "\n", __FUNCTION__, ret);
                     goto Fail;
                 }
                 client_streambuf = client_stream->data;

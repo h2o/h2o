@@ -56,17 +56,17 @@ typedef struct quicly_loss_conf_t {
 #define QUICLY_LOSS_SPEC_CONF                                                                                                      \
     {                                                                                                                              \
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
-            QUICLY_DEFAULT_MIN_PTO,                     /* min_pto */                                                              \
-            QUICLY_DEFAULT_INITIAL_RTT,                 /* initial_rtt */                                                          \
-            0                                           /* number of speculative PTOs */                                           \
+        QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */                                                              \
+        QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */                                                          \
+        0                                               /* number of speculative PTOs */                                           \
     }
 
 #define QUICLY_LOSS_PERFORMANT_CONF                                                                                                \
     {                                                                                                                              \
         QUICLY_LOSS_DEFAULT_TIME_REORDERING_PERCENTILE, /* time_reordering_percentile */                                           \
-            QUICLY_DEFAULT_MIN_PTO,                     /* min_pto */                                                              \
-            QUICLY_DEFAULT_INITIAL_RTT,                 /* initial_rtt */                                                          \
-            2                                           /* number of speculative PTOs */                                           \
+        QUICLY_DEFAULT_MIN_PTO,                         /* min_pto */                                                              \
+        QUICLY_DEFAULT_INITIAL_RTT,                     /* initial_rtt */                                                          \
+        2                                               /* number of speculative PTOs */                                           \
     }
 
 /**
@@ -184,18 +184,19 @@ static void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
  *  * if restrict_sending is true, limit sending to min_packets_to_send, otherwise as limited by congestion/flow control
  * and then call quicly_loss_update_alarm and update the alarm
  */
-static int quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
-                                size_t *min_packets_to_send, int *restrict_sending, quicly_loss_on_detect_cb on_loss_detected);
+static quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
+                                           size_t *min_packets_to_send, int *restrict_sending,
+                                           quicly_loss_on_detect_cb on_loss_detected);
 /**
  *
  */
-int quicly_loss_detect_loss(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
-                            quicly_loss_on_detect_cb on_loss_detected);
+quicly_error_t quicly_loss_detect_loss(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
+                                       quicly_loss_on_detect_cb on_loss_detected);
 /**
  * initializes the sentmap iterator, evicting the entries considered too old.
  */
-int quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
-                                  int is_closing);
+quicly_error_t quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
+                                             int is_closing);
 /**
  * Returns the timeout for sentmap entries. This timeout is also used as the duration of CLOSING / DRAINING state, and therefore be
  * longer than 3PTO. At the moment, the value is 4PTO.
@@ -372,8 +373,9 @@ inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
     }
 }
 
-inline int quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
-                                size_t *min_packets_to_send, int *restrict_sending, quicly_loss_on_detect_cb on_loss_detected)
+inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
+                                           size_t *min_packets_to_send, int *restrict_sending,
+                                           quicly_loss_on_detect_cb on_loss_detected)
 {
     r->alarm_at = INT64_MAX;
     *min_packets_to_send = 1;

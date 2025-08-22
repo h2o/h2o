@@ -1,0 +1,14 @@
+GET /index.txt HTTP/1.1
+host: 
+upgrade: h1c-ÿÿÿÿÿÿÿÿÿÿÿÿÿacent: nghttp2/1.16.1
+
+
+--MARK--
+PRIGET /index.tx.txt HTTP/1.1
+host: 
+upgrade: h1c-ÿÿÿ16.1
+
+
+--MARK--
+PRIGET /index.txt 
+MARK--

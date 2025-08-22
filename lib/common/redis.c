@@ -207,7 +207,11 @@ static void on_command(redisAsyncContext *redis, void *_reply, void *privdata)
 {
     redisReply *reply = (redisReply *)_reply;
     h2o_redis_command_t *command = (h2o_redis_command_t *)privdata;
-    const char *errstr = ((struct st_redis_socket_data_t *)redis->ev.data)->errstr;
+    struct st_redis_socket_data_t *sockdata = redis->ev.data;
+    const char *errstr = NULL;
+
+    if (sockdata != NULL)
+        errstr = sockdata->errstr;
     if (errstr == NULL)
         errstr = get_error(redis);
     handle_reply(command, reply, errstr);
@@ -383,7 +387,8 @@ static void socket_cleanup(void *privdata)
 {
     struct st_redis_socket_data_t *p = (struct st_redis_socket_data_t *)privdata;
     h2o_socket_close(p->socket);
-    p->context->c.fd = -1; /* prevent hiredis from closing fd twice */
+    p->context->c.fd = -1;      /* prevent hiredis from closing fd twice */
+    p->context->ev.data = NULL; /* remove reference to `st_redis_socket_data_t` now that it is being freed */
     free(p);
 }
 

@@ -45,6 +45,14 @@ static int x25519_derive_secret(ptls_iovec_t *secret, const uint8_t *clientpriv,
         return PTLS_ERROR_NO_MEMORY;
 
     cf_curve25519_mul(secret->base, clientpriv != NULL ? clientpriv : serverpriv, clientpriv != NULL ? serverpub : clientpub);
+
+    static const uint8_t zeros[X25519_KEY_SIZE] = {0};
+    if (ptls_mem_equal(secret->base, zeros, sizeof(zeros))) {
+        free(secret->base);
+        secret->base = NULL;
+        return PTLS_ERROR_INCOMPATIBLE_KEY;
+    }
+
     secret->len = X25519_KEY_SIZE;
     return 0;
 }
@@ -111,8 +119,10 @@ static int x25519_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t
 
 Exit:
     ptls_clear_memory(priv, sizeof(priv));
-    if (pub != NULL && ret != 0)
+    if (pub != NULL && ret != 0) {
         ptls_clear_memory(pub, X25519_KEY_SIZE);
+        free(pub);
+    }
     return ret;
 }
 

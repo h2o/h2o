@@ -1,0 +1,9 @@
+GET /index.txt HTTP/1.1
+hot: 727.5.0.1:51300
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AA9999999999Æ%99999999999999999*/*
+
+
+
+--MARK--

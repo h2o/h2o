@@ -1,0 +1,12 @@
+GET /halfdome.jpg HTTP/1.1
+host:.712 
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-settings: AAMAAABkA_PQAAA_AABkA_PQAAA_
+acce't: *бо
+user-agent: nghttp2/1.16.1
+
+
+--ARK--
+PRI *
+--MARK--

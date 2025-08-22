@@ -91,10 +91,10 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     if (len != H2O_TIMESTR_RFC1123_LEN)
         return -1;
 
-        /*           1         2
-         * 01234567890123456789012345678
-         * Fri, 19 Sep 2014 05:24:04 GMT
-         */
+    /*           1         2
+     * 01234567890123456789012345678
+     * Fri, 19 Sep 2014 05:24:04 GMT
+     */
 
 #define FETCH(dst, pos, n)                                                                                                         \
     if ((dst = fetch_digits(s + pos, n)) == -1)                                                                                    \
@@ -108,7 +108,7 @@ int h2o_time_parse_rfc1123(const char *s, size_t len, struct tm *tm)
     FETCH(tm->tm_sec, 23, 2);
 #undef FETCH
 
-#define PACK3(a, b, c) (((a)&0xff) << 16 | ((b)&0xff) << 8 | ((c)&0xff))
+#define PACK3(a, b, c) (((a) & 0xff) << 16 | ((b) & 0xff) << 8 | ((c) & 0xff))
 #define MAP(c1, c2, c3, value)                                                                                                     \
     case PACK3(c1, c2, c3):                                                                                                        \
         tm->tm_mon = value;                                                                                                        \

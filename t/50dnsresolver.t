@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(empty_port wait_port);
+use Net::EmptyPort qw(wait_port);
 use Test::More;
 use t::Util;
 
@@ -31,5 +31,7 @@ subtest "dns_resp" => sub {
     like $resp, qr{^2001:db8};
     ok(($after - $before) >= 2);
 };
+
+undef $mock_dns;
 
 done_testing;

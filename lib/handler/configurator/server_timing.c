@@ -59,7 +59,7 @@ static int on_config_exit(h2o_configurator_t *_self, h2o_configurator_context_t 
 {
     struct server_timing_configurator_t *self = (void *)_self;
 
-    if (ctx->pathconf != NULL && self->vars->mode != SERVER_TIMING_MODE_OFF)
+    if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) && self->vars->mode != SERVER_TIMING_MODE_OFF)
         h2o_server_timing_register(ctx->pathconf, self->vars->mode == SERVER_TIMING_MODE_ENFORCE);
 
     --self->vars;
@@ -78,5 +78,7 @@ void h2o_server_timing_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* server_timing: ON | OFF */
-    h2o_configurator_define_command(&c->super, "server-timing", H2O_CONFIGURATOR_FLAG_ALL_LEVELS, on_config_server_timing);
+    h2o_configurator_define_command(&c->super, "server-timing",
+                                    H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH,
+                                    on_config_server_timing);
 }

@@ -1,0 +1,19 @@
+POST / HTTP/1.1
+Host0.0.1:51273
+Ust: */application/vnd.lotus-1-2-3edst: */*
+Transfer-Ecndoing: ccation/x
+Cont:™t-Type: appl02.1
+Host0.0.2:512773
+Ust: */*
+Transfer-Encoding: chunkedst: */*
+Transfer-Ecndoinsfer-Encoding: chunkeds(0.0.1:51273
+Ust: */*51273
+Ust: */*
+Transfer-Encoding: chfer-Encoding: chunkedst: */*
+Transfer-Ecndoinsfer-Encoding: chunkeds(t: */*
+Transfer-Ecndoing: ccation/}
+Cont:™t-Type: appli/model/gltf+json.0.1:51chunedst: */*
+Transfer-Ecndoing: ccatiType: appl0Tr
+
+
+--MARK--

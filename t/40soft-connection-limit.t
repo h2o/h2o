@@ -3,7 +3,7 @@ use warnings;
 use IO::Socket::INET;
 use Test::More;
 use Time::HiRes qw(sleep);
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Protocol::HTTP2::Client;
 use File::Temp qw(tempfile);
 use JSON;

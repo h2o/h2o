@@ -127,12 +127,13 @@ static void test_ack_encode(void)
     uint8_t buf[256], *end;
     const uint8_t *src;
     quicly_ack_frame_t decoded;
+    uint64_t ecn_counts[3] = {};
 
     quicly_ranges_init(&ranges);
     quicly_ranges_add(&ranges, 0x12, 0x14);
 
     /* encode */
-    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, ecn_counts, 63);
     ok(end - buf == 5);
     /* decode */
     src = buf + 1;
@@ -142,15 +143,21 @@ static void test_ack_encode(void)
     ok(decoded.num_gaps == 0);
     ok(decoded.largest_acknowledged == 0x13);
     ok(decoded.ack_block_lengths[0] == 2);
+    ok(decoded.ecn_counts[0] == 0);
+    ok(decoded.ecn_counts[1] == 0);
+    ok(decoded.ecn_counts[2] == 0);
 
     quicly_ranges_add(&ranges, 0x10, 0x11);
+    ecn_counts[0] = 12;
+    ecn_counts[1] = 34;
+    ecn_counts[2] = 56;
 
     /* encode */
-    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, 63);
-    ok(end - buf == 7);
+    end = quicly_encode_ack_frame(buf, buf + sizeof(buf), &ranges, ecn_counts, 63);
+    ok(end - buf == 10);
     /* decode */
     src = buf + 1;
-    ok(quicly_decode_ack_frame(&src, end, &decoded, 0) == 0);
+    ok(quicly_decode_ack_frame(&src, end, &decoded, 1) == 0);
     ok(src == end);
     ok(decoded.ack_delay == 63);
     ok(decoded.num_gaps == 1);
@@ -158,6 +165,9 @@ static void test_ack_encode(void)
     ok(decoded.ack_block_lengths[0] == 2);
     ok(decoded.gaps[0] == 1);
     ok(decoded.ack_block_lengths[1] == 1);
+    ok(decoded.ecn_counts[0] == 12);
+    ok(decoded.ecn_counts[1] == 34);
+    ok(decoded.ecn_counts[2] == 56);
 
     quicly_ranges_clear(&ranges);
 }

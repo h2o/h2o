@@ -1,0 +1,13 @@
+GET /reproxy-test/.well¿known/h2/state HTTP/1.1
+HostW: 120.ÿÿÿ/1.1
+HostW: 120.ÿÿ7.0.1:50492
+User-Agentr:u cl/7.40
+User-Agentr:u cl/7.49.eproxy-t.1
+Host: 120.7.0.1:50492
+User-Agentr:u cl/7.492
+User-Agentr:u cl/7.49.0-DEV
+Accept: µµµµµ0-DEV
+Accept: µµµµµµµµµµµµµµµµµµµµµµµµµµapplication/alto-error+json*/*
+
+
+--MARK--

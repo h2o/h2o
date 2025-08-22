@@ -131,7 +131,7 @@ h2o_http2_debug_state_t *h2o_http2_get_debug_state(h2o_req_t *req, int hpack_ena
                  "  \"connFlowOut\": %zd,\n"
                  "  \"streams\": {",
                  H2O_HTTP2_SETTINGS_HOST_HEADER_TABLE_SIZE, H2O_HTTP2_SETTINGS_HOST_ENABLE_PUSH,
-                 H2O_HTTP2_SETTINGS_HOST_MAX_CONCURRENT_STREAMS, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE,
+                 conn->super.ctx->globalconf->http2.max_streams, H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE,
                  H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, conn->peer_settings.header_table_size, conn->peer_settings.enable_push,
                  conn->peer_settings.max_concurrent_streams, conn->peer_settings.initial_window_size,
                  conn->peer_settings.max_frame_size, h2o_http2_window_get_avail(&conn->_input_window),

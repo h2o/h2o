@@ -178,10 +178,12 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
     if (fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) < 0)
         goto Error;
 
-    /* spawn */
-    int mapped_fds[] = {listen_fd, 0,   /* listen_fd to 0 */
-                        pipe_fds[0], 5, /* pipe_fds[0] to 5 */
-                        -1};
+    /* spawn, mapping listen_fd to fd 0, read-side of the pipe to fd 5 */
+    int mapped_fds[] = {listen_fd, 0, -1, -1, -1};
+    if (pipe_fds[0] != 5) {
+        mapped_fds[2] = pipe_fds[0];
+        mapped_fds[3] = 5;
+    }
     pid_t pid = h2o_spawnp(argv[0], argv, mapped_fds, 0);
     if (pid == -1) {
         h2o_error_printf("[lib/handler/fastcgi.c] failed to launch helper program %s:%s\n", argv[0], strerror(errno));

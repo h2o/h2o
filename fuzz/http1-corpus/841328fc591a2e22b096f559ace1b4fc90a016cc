@@ -1,0 +1,6 @@
+GET /reproxy-test/.well¿known/h2/state HTTP/1.1
+Host: 1292
+User-Agent: curl/49./*
+
+
+--MARK--

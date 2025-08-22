@@ -1,33 +1,47 @@
 ? my $ctx = $main::context;
 ? $_mt->wrapper_file("wrapper.mt", "Install")->(sub {
 
-<h3 id="binary">Installing a Binary Package</h3>
+<h3 id="release-policy">Release Policy</h3>
 
 <p>
-Thanks to others, H2O is provided as a binary package on some environments.
-Therefore you may try to at first install the software using your favorite packaging system, and then resort to installing from source as described below.
+As of April 2023, we have ceased to release versions.
+Rather, the each commit to master branch is considered stable and ready for general use except for the features marked as experimental.
+</p>
+
+<h3 id="dependencies">Dependencies</h3>
+
+<p>
+H2O requires the following softwares to be installed:
+<ul>
+<li>C/C++ compiler (GCC or Clang)
+<li>CMake
+<li>pkg-config
+<li>OpenSSL 1.0.2 or later, or a TLS stack compatible with OpenSSL<?= $ctx->{note}->("At the time of writing, H2O can be built with libressl and boringssl.") ?>
+<li>zlib
+</ul>
 </p>
 
 <p>
-At the time being, following packages are known to be actively maintained<?= $ctx->{note}->(q{Please open a new issue on <a href="https://github.com/h2o/h2o">Github</a> if you want a new package to get added.}) ?>:
-<ul>
-<li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
-<li><a href="https://formulae.brew.sh/formula/h2o">Homebrew (macOS)</a></li>
-<li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
-<li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
-</ul>
+Additional softwares may be required for using certain features.
+As an example, to build the <a href="configure/mruby_directives.html">mruby</a> handler, bison and ruby have to be installed.
 </p>
 
 <h3 id="from-source">Installing from Source</h3>
 
 <p>
-First, either download a release version from <a href="https://github.com/h2o/h2o/releases">the releases page</a>, or clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a>. When cloning, submodules should also be fetched, e.g., by running <code>git clone --recurse-submodules</code>.
+First, clone the master branch from <a href="https://github.com/h2o/h2o/">the source repository</a> as well as the submodules.
 </p>
+<?= $ctx->{code}->(<< 'EOT')
+% git clone --recurse-submodules https://github.com/h2o/h2o.git
+EOT
+?>
+
 <p>
 Then, build the obtained source using <a href="http://www.cmake.org/">CMake</a><?= $ctx->{note}->("CMake is a popular build tool that can be found as a binary package on most operating systems.") ?>.
 </p>
 
 <?= $ctx->{code}->(<< 'EOT')
+% cd h2o
 % mkdir -p build
 % cd build
 % cmake ..
@@ -93,6 +107,11 @@ This option instructs whether or not to enable <code>h2olog(1)</code>> support.
 It is turned on by default if the prerequisites are found.
 See also <a href="./configure/h2olog.html">h2olog</a> for details.
 </dl>
+<dt><code>-DOPENSSL_ROOT_DIR=/path/to/openssl</code></dt>
+<dd>
+On most platforms, OpenSSL is automatically found by the <a href="https://cmake.org/cmake/help/latest/module/FindOpenSSL.html" target=_blank>FindOpenSSL.cmake</a> module.
+This option is used when the automatic detection fails or if an alternative version of the TLS stack is to be used.
+</dd>
 <dt><code>-DCMAKE_C_FLAGS=...</code></dt>
 <dd>
 This option can be used to add or override the compile options being passed to the C compiler.
@@ -104,56 +123,17 @@ This option specifies the build type, <code>Release</code> or <code>Debug</code>
 The default is <code>Release</code>.
 </dd>
 </p>
-
-<h3>Installing from Source, using OpenSSL</h3>
-
-<p>
-Generally speaking, we believe that using LibreSSL is a better choice for running H2O, since LibreSSL not only is considered to be more secure than OpenSSL but also provides support for new ciphersuites such as <code>chacha20-poly1305</code> which is the preferred method of Google Chrome<?= $ctx->{note}->(q{ref: <a href="https://blog.cloudflare.com/do-the-chacha-better-mobile-performance-with-cryptography/">Do the ChaCha: better mobile performance with cryptography</a>}) ?>.  However, it is also true that LibreSSL is slower than OpenSSL on some benchmarks.  So if you are interested in benchmark numbers, using OpenSSL is a reasonable choice.
-</p>
+<h3 id="binary">Installing a Binary Package</h3>
 
 <p>
-The difficulty in using OpenSSL is that the HTTP/2 specification requires the use of an extension to the TLS protocol named ALPN, which has only been supported since OpenSSL 1.0.2<?= $ctx->{note}->("It is possible to build H2O using prior versions of OpenSSL, but some (if not all) web browsers are known for not using HTTP/2 when connecting to servers configured as such.") ?>.  Therefore it is highly likely that you would need to manually install or upgrade OpenSSL on your system.
+Thanks to others, H2O is provided as a binary package on some environments.
+Up-to-date versions of H2O might be found at the following locations.
+<ul>
+<li><a href="https://www.freshports.org/www/h2o">FreeBSD h2o release</a> and <a href="https://www.freshports.org/www/h2o-devel">h2o betas</a></li>
+<li><a href="https://formulae.brew.sh/formula/h2o">Homebrew (macOS)</a></li>
+<li><a href="https://github.com/tatsushid/h2o-rpm">RPM (Fedora, RHEL/CentOS, OpenSUSE)</a></li>
+<li><a href="https://hub.docker.com/r/lkwg82/h2o-http2-server/">Docker Image</a></li>
+</ul>
 </p>
-
-<p>
-Once you have installed OpenSSL 1.0.2, it is possible to build H2O that links against the library.
-CMake will search for OpenSSL by looking at the default search paths.
-</p>
-
-<?= $ctx->{code}->(<< 'EOT')
-% mkdir -p build
-% cd build
-% cmake ..
-% make
-% sudo make install
-EOT
-?>
-
-<p>
-Two ways exist to specify the directory in which CMake should search for OpenSSL.
-The preferred approach is to use the <code>PKG_CONFIG_PATH</code> environment variable.
-</p>
-
-<?= $ctx->{code}->(<< 'EOT')
-% mkdir -p build
-% cd build
-% PKG_CONFIG_PATH=/usr/local/openssl-1.0.2/lib/pkgconfig cmake ..
-% make
-% sudo make install
-EOT
-?>
-
-<p>
-In case your OpenSSL installation does not have the <code>lib/pkgconfig</code> directory, you may use <code>OPENSSL_ROOT_DIR</code> environment variable to specify the root directory of the OpenSSL being installed.  However, it is likely that CMake version 3.1.2 or above is be required when using this approach<?= $ctx->{note}->(q{ref: <a href="https://github.com/h2o/h2o/issues/277">h2o issue #277</a>, <a href="http://public.kitware.com/Bug/view.php?id=15386">CMake issue 0015386</a>}) ?>.
-</p>
-
-<?= $ctx->{code}->(<< 'EOT')
-% mkdir -p build
-% cd build
-% OPENSSL_ROOT_DIR=/usr/local/openssl-1.0.2 cmake ..
-% make
-% sudo make install
-EOT
-?>
 
 ? })

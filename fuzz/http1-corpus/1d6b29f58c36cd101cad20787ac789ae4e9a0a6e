@@ -1,0 +1,46 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connecUpgrade1:50991
+connec4ion: ¥˜ÖÖÖÖÖ508,4
+User-Agent: curl/7.49.0-DEV
+Accep%t: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-ForwardeFor: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-ForwFdear-dor: ÖÖÖÖÖÖÖÖÖÖÖÖÖ77683
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 126.0&0.2
+Via: 2 examplccept: */*ÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿÿ
+X-Forwarded-For: 127.0.0.2
+Via: 2 example.comurl/7u
+--MARK--
+pgradÖÖGETÖÖÖÖÖÖÖÖÖÖÖurl/7.49.0-DEV
+Accept: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖ*/*
+X-Forwardef-For: 127.0.0.2nt: nghttp2/4ion: Upgrade1:50991
+connec4ion: ¥˜ÖÖÖÖÖ508,4
+User-Agent: curl/7.49.0-DEV
+Accep%t: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖ: */*
+X-Forward:statu: 12.49.0-DEV
+Accept: */*
+X-Forwarded-For: ÖÖÖÖÖÖÖÖÖÖÖ*/*
+X-Fo0.2nt: nghttp2/1:schem
+
+
+--MARK--
+PRI * 

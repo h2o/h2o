@@ -1,0 +1,12 @@
+GET /index.xt HTTP/1.1
+host: 127.0.0.Ó:16941
+connection: Upgrade, HTTP2-Settings
+upgrade: h2c
+http2-sent-Type: apn/x-www-form-urlencoted
+
+0
+hello
+0
+
+
+--MARK--

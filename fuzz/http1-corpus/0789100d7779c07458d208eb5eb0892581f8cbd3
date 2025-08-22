@@ -1,0 +1,10 @@
+GET /rg HTTP/1.1
+H.0.1:5140
+eUse-r:!bytes=100-
+User-Agent: curl/7.4yte100-
+User-Agent: curl1:5140
+eUse-r:!bytes=200-
+User-Agent: curl/7.49.0/*
+
+
+--MARK--

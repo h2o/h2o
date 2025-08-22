@@ -1,0 +1,29 @@
+GET masque:ÿÿÿÿÿÿÿÿ/.7/index.txt HTTP/1.1
+host:GET /reproxy-tet HTTP/1.1
+host: 127.0.0.1:5145ex.txt HTTPUpgrade, HTP2-Sette:
+--MARK--
+:1
+
+
+--ET masque:ÿÿÿÿÿÿÿÿ/../index.txt HTTP/1.1
+host:
+--MARK--
+:1
+
+
+--MET masque:ÿÿÿÿÿ7/index.txt HTTP/1.1
+host:
+--MARK--
+:1
+
+
+--ET masque:ÿÿÿÿÿÿÿÿ/../index.txt HTTP/1.1
+host:
+--MARK--
+:A h2c
+http2RK--settWebsocket-Key: -
+aGET$HTtent:) nghttp2/1:sc AAschem
+
+
+--MARK--
+PRI *ex.txt HTTP 

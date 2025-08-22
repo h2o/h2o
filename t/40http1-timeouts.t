@@ -4,7 +4,7 @@ use IO::Socket::INET;
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use File::Temp qw(tempfile);
 
 my $upstream_port = empty_port({ host => '0.0.0.0' });

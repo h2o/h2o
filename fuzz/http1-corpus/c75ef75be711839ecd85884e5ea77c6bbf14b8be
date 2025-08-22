@@ -1,0 +1,29 @@
+POST / HTTP/1.1
+Host0.0.1:51273
+Transfer-Encoding: chunkedst: */*
+Transfer-Ecndoing: ccation/x
+Cont:™t-Type: appl0:51273
+Ust: */*
+Transfer-Eocoding: chunkedst: */*
+transfer428-Ecndoing: ccation/x
+Cont:™tÊType: applicatT2/2.1
+Host0.0.1:51273
+Ust: */*
+Transfer-Encoidng: chuïked
+Co-Tttennype: :51273
+Ust: */*
+TraEncoding: chunkedst: */*
+Transfer-Ecndoing: ccation/x
+Cont:™t-TyPe: applicatTP/2.1
+Host0.0.1:51273
+Ust: *98
+connection: Upgr*
+Transfer-Encoding: chuïkex-www-form-urlencoded
+
+a
+h
+Ust: */*
+Tr
+
+
+--MARK--

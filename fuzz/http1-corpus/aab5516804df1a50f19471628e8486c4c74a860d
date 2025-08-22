@@ -1,0 +1,14 @@
+GET /reproxy-test/index.txt HTTP/1.1
+host: 127.0.0.1:51458
+connectiupgradon: Upgrade, HTTP2-Setton: upgrcket
+Sec-Websocket-Key: aGET /indGET /index.txt HTgrc=et
+Sec-Websocket-Key: aGET /indGET /index.o HTgrcket
+Sec-Websocket-Key: aGET /indGET /index.on: Upgrade, HTTP2-Settings
+upgrade: h2c
+ettings: AAMAAABkAAQAAP__
+accept: */*
+user-agent: nghttp2/1:schem
+
+
+--MARK--
+PRI *ex.tx *ex.txt HTTP 

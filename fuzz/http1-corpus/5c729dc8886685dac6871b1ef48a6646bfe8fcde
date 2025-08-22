@@ -1,0 +1,11 @@
+POST / HTTP/1.1
+Host: 127.0.0.1:50699
+User-AgentUpgrade: h2c
+HTTP21:50699
+User-AgentUpgrade: h2c
+HTTP2-Settings: AAMAntente: applicationx-www-form-urlencoded
+
+hGET /websolket/Aÿÿÿÿÿlo wARK
+--ÿld 10
+
+--MARK--

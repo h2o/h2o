@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Net::EmptyPort qw(check_port empty_port);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
@@ -26,6 +26,7 @@ my $upstream = spawn_server(
 
 # spawn server
 my $server = spawn_h2o(<< "EOT");
+file.io_uring: OFF
 hosts:
   default:
     paths:

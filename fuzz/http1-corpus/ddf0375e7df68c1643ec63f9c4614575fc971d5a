@@ -1,0 +1,7 @@
+GET / HTTP/1.1
+Host0.0.1:50968
+Use-rent: curl/7.49.0-DEV
+Accept: */*
+
+
+--MARK--

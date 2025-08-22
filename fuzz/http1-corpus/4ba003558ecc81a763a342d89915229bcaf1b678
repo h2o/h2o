@@ -1,0 +1,44 @@
+GET /reproxy-test/ind../\ex.txt HTTP/1.1
+host: 127.0.0.1:50991
+connec4ion: Upgrade, ÷upgrad÷÷GET /eohc-headers HTor:
+X-Forwarded-For: ÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷81|
+User-Agent: cGET /echo-r-Agent: curl/7.49.0-DEV HTTP/1.1
+Host: 128.0.0.1:50804
+User-Agent: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 
+--MARK--
+128.0.0.2
+Via: 2 example(.comurl/7.49.0-DEV
+Accept: *º*
+X-Forwarded-For: ÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷÷Agent: c:schemurKeep-AliveEV
+--A6ccept:ˇˇˇs4/.welløknow•••••••••••••GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.st:h≠st.examplˇˇˇˇˇ curl/7.49.0-DEV
+Accept: */*
+accept-*ncoding:gmplˇˇˇˇˇ curl/7.49.0-DEV
+Accep
+--MARK--
+t: */*
+accept-ecnoding:gzip
+
+
+GET /reproxy-test/.welløknown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Agent: c:schemurl/7.49.0-DEV
+--A6ccept:ˇˇˇst/.welløknow•••••••••••••GET /index.txt HTTP/1.1
+host: 127.nown/h1/te/tUser-Agent: cGET /echo-r-Agent: curl/7.49.0-DEV HTTP/1.1
+Host: 128.0.0.1:nt: curl/7.49.0-DEV
+Accept: */*
+X-Forwarded-For: 
+--MARK--
+127.0.0.2
+Via: 2 example(.c-ecnoding:gzip
+
+
+application/vown/h1/te/te HTTP/1.1
+Host: 127.0.0.1:50492
+User-Age[t: c:schemurl/7.st:h≠st.examplˇˇˇˇˇ curl/7./1.1
+host: 127.nown/h1/te/te 7.0.12/state HTTP/1.1
+HostWHTTP/:
