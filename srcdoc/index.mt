@@ -40,8 +40,8 @@ Explanation of the benchmark charts can be found in the <a href="benchmarks.html
 <li><a href="configure/base_directives.html#acme">automated certificate retrieval using ACME</a>
 <li>session resumption (standalone &amp; memcached)
 <li>session tickets with automatic key rollover
+<li><a href="configure/base_directives.html#key-exchange-tls1.3">post-quantum key exchanges</a>
 <li>automatic OCSP stapling
-<li>forward secrecy
 <li><a href="configure/base_directives.html#ssl-offload">zerocopy and hardware crypto offloading</a>
 <li><a href="configure/base_directives.html#neverbleed">private key protection using privilege separation</a> with support for Intel QuickAssist Technology
 </ul>
