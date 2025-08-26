@@ -13,9 +13,13 @@ plan skip_all => "h2get not found"
 my $quic_port = empty_port({ host  => "0.0.0.0", proto => "udp" });
 my $code = shift;
 my $h2g = spawn_h2get_backend(<< "EOC"
-    if f.type == 'DATA' and f.flags & END_STREAM then
+    if f.type == 'DATA' and (f.flags & END_STREAM) == END_STREAM then
         conn.send_headers({":status" => "200", "content-length" => "0"}, f.stream_id, END_STREAM)
         conn.send_continuation({"cont" => "1"}, f.stream_id, END_HEADERS)
+    end
+    if f.type == "DATA" and f.len > 0
+        conn.send_window_update(0, f.len)
+        conn.send_window_update(f.stream_id, f.len)
     end
 EOC
 );
