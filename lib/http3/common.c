@@ -646,7 +646,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
-                     that is supposed to be handled by another node. forward it. */
+                     * that is supposed to be handled by another node. forward it. */
                     if (ttl == 0)
                         return;
                     if (ctx->forward_packets != NULL)
