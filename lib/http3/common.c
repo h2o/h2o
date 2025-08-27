@@ -658,25 +658,20 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     }
 
-    { /* receive packets to the found connection */
-        if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
-            return;
-        size_t i;
-    Receive:
-        for (i = 0; i != num_packets; ++i) {
-            if (i != accepted_packet_index) {
-                quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
-                switch (ret) {
-                case QUICLY_ERROR_STATE_EXHAUSTION:
-                case PTLS_ERROR_NO_MEMORY:
-                    fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
-                    conn->callbacks->destroy_connection(conn);
-                    return;
-                }
-                if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
-                    if (ctx->quic_stats != NULL) {
-                        ++ctx->quic_stats->packet_processed;
-                    }
+Receive: /* receive packets to the found connection */
+    for (size_t i = 0; i != num_packets; ++i) {
+        if (i != accepted_packet_index) {
+            quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            switch (ret) {
+            case QUICLY_ERROR_STATE_EXHAUSTION:
+            case PTLS_ERROR_NO_MEMORY:
+                fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
+                conn->callbacks->destroy_connection(conn);
+                return;
+            }
+            if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
+                if (ctx->quic_stats != NULL) {
+                    ++ctx->quic_stats->packet_processed;
                 }
             }
         }
