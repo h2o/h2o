@@ -637,29 +637,29 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             assert(iter != kh_end(conn->ctx->conns_accepting));
             kh_val(conn->ctx->conns_accepting, iter) = conn;
         } else {
-            /* existing connection */
+            /* likely have found a connection in `conns_accepting` */
             conn = kh_val(ctx->conns_accepting, iter);
             assert(conn != NULL);
             assert(!quicly_is_client(conn->quic));
-            if (quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
-                goto Receive;
-            uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
-            uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
-            if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
-                /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial that
-                 * is supposed to be handled by another node. forward it. */
-                if (ttl == 0)
-                    return;
-                if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
-                                         num_packets);
+            if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets)) {
+                uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
+                uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
+                if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
+                    /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
+                     that is supposed to be handled by another node. forward it. */
+                    if (ttl == 0)
+                        return;
+                    if (ctx->forward_packets != NULL)
+                        ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
+                                             num_packets);
+                }
+                /* regardless of forwarding outcome, we need to drop this packet as it is not for us */
+                return;
             }
-            /* regardless of forwarding outcome, we need to drop this packet as it is not for us */
-            return;
         }
     }
 
-Receive: /* receive packets to the found connection */
+    /* receive packets to the found connection */
     for (size_t i = 0; i != num_packets; ++i) {
         if (i != accepted_packet_index) {
             quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
