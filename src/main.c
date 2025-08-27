@@ -5065,6 +5065,10 @@ int main(int argc, char **argv)
 #if H2O_USE_IO_URING
                 printf("io_uring: YES\n");
 #endif
+                printf("key-exchanges: ");
+                for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
+                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
