@@ -7,12 +7,11 @@ use Test::More;
 use t::Util;
 use JSON;
 
-# skip unless x25519 is supported, in addition to secp256r1 which is mandatory
-plan skip_all => "x25519 not supported"
-    unless server_features()->{"key-exchanges"} =~ /\s?x25519(,|$)/;
 my $h3client = bindir() . "/h2o-httpclient";
 plan skip_all => "h2o-httpclient not found"
     unless -x $h3client;
+
+my @supported = split /,\s+/, server_features()->{"key-exchanges"};
 
 my $tempdir = tempdir(CLEANUP => 1);
 
@@ -21,8 +20,43 @@ my $quic_port = empty_port({
     proto => "udp",
 });
 
-# spawn server that only supports secp256r1
-my $server = spawn_h2o(<< "EOT");
+# test each keyex
+subtest "keyex" => sub {
+    for my $keyex (@supported) {
+        subtest $keyex => sub {
+            my $server = spawn_h2o_with_keyex($keyex);
+            doit($keyex);
+            undef $server;
+        };
+    }
+};
+
+subtest "hrr" => sub {
+    plan skip_all => "x25519 is not available"
+        unless grep { $_ eq "x25519" } @supported;
+
+    # spawn server that only supports the mandatory one
+    my $server = spawn_h2o_with_keyex("secp256r1");
+
+    # first two does not use HRR, the third one does
+    subtest "secp256r1 only" => sub {
+        doit("secp256r1");
+    };
+    subtest "secp256r1-then-secp256r1" => sub {
+        doit("secp256r1", "x25519");
+    };
+    subtest "x25519-then-secp256r1" => sub {
+        doit("x25519", "secp256r1");
+    };
+
+    undef $server;
+};
+
+done_testing;
+
+sub spawn_h2o_with_keyex {
+    my ($keyex) = @_;
+    my $server = spawn_h2o(<< "EOT");
 listen:
   type: quic
   host: 127.0.0.1
@@ -31,29 +65,16 @@ listen:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
     key-exchange-tls1.3:
-    - secp256r1
+    - $keyex
 hosts:
   default:
     paths:
       /:
         file.dir: t/assets/doc_root
 EOT
-
-wait_port({port => $quic_port, proto => 'udp'});
-
-subtest "secp256r1 only" => sub {
-    doit("secp256r1");
-};
-subtest "secp256r1-then-secp256r1" => sub {
-    doit("secp256r1", "x25519");
-};
-subtest "x25519-then-secp256r1" => sub {
-    doit("x25519", "secp256r1");
-};
-
-undef $server;
-
-done_testing;
+    wait_port({port => $quic_port, proto => 'udp'});
+    $server
+}
 
 sub doit {
     my @keyex = @_;
