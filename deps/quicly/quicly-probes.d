@@ -88,9 +88,10 @@ provider quicly {
     probe application_close_send(struct st_quicly_conn_t *conn, int64_t at, uint64_t error_code, const char *reason_phrase);
     probe application_close_receive(struct st_quicly_conn_t *conn, int64_t at, uint64_t error_code, const char *reason_phrase);
 
-    probe stream_send(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off, size_t len,
-                      int is_fin);
-    probe stream_receive(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off, size_t len);
+    probe stream_send(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off, const void *data,
+                      size_t data_len, int is_fin, int wrote_all);
+    probe stream_receive(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, uint64_t off,
+                         const void *data, size_t data_len, int is_fin);
     probe stream_acked(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t off, size_t len);
     probe stream_lost(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, uint64_t off, size_t len);
 
@@ -158,8 +159,8 @@ provider quicly {
     probe stream_on_send_emit(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, size_t off,
                               size_t capacity);
     probe stream_on_send_stop(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, int64_t err);
-    probe stream_on_receive(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, size_t off,
-                            const void *src, size_t src_len);
+    probe stream_on_receive(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, size_t buf_off,
+                            size_t apply_off, size_t apply_len);
     probe stream_on_receive_reset(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stream_t *stream, int64_t err);
 
     probe enter_cc_limited(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
