@@ -404,7 +404,7 @@ static int64_t quic_now_cb(quicly_now_t *self)
     return (int64_t)(now * 1000);
 }
 
-static void stream_destroy_cb(quicly_stream_t *stream, int err)
+static void stream_destroy_cb(quicly_stream_t *stream, quicly_error_t err)
 {
 }
 
@@ -419,7 +419,7 @@ static void stream_egress_emit_cb(quicly_stream_t *stream, size_t off, void *dst
     *wrote_all = 0;
 }
 
-static void stream_on_stop_sending_cb(quicly_stream_t *stream, int err)
+static void stream_on_stop_sending_cb(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(!"unexpected");
 }
@@ -433,12 +433,12 @@ static void stream_on_receive_cb(quicly_stream_t *stream, size_t off, const void
         quicly_stream_sync_recvbuf(stream, stream->recvstate.received.ranges[0].end - stream->recvstate.data_off);
 }
 
-static void stream_on_receive_reset_cb(quicly_stream_t *stream, int err)
+static void stream_on_receive_reset_cb(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(!"unexpected");
 }
 
-static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *stream)
+static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     static const quicly_stream_callbacks_t stream_callbacks = {stream_destroy_cb,     stream_egress_shift_cb,
                                                                stream_egress_emit_cb, stream_on_stop_sending_cb,
