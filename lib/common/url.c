@@ -61,7 +61,8 @@ static size_t handle_special_paths(const char *path, size_t off, size_t last_sla
 
 /* Perform path normalization and URL decoding in one pass.
  * See h2o_req_t for the purpose of @norm_indexes. */
-static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t src_len, size_t *query_at, size_t **norm_indexes)
+static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t src_len, size_t *query_at, size_t **norm_indexes,
+                                int *null_char_found)
 {
     char *dst;
     size_t src_off = 0, dst_off = 0, last_slash, rewind;
@@ -109,6 +110,8 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
         }
         dst[dst_off] = decoded;
         (*norm_indexes)[dst_off] = src_off;
+        if (decoded == '\0')
+            *null_char_found = 1;
         dst_off++;
     }
     rewind = handle_special_paths(dst, dst_off, last_slash);
@@ -117,12 +120,14 @@ static h2o_iovec_t rebuild_path(h2o_mem_pool_t *pool, const char *src, size_t sr
     return h2o_iovec_init(dst, dst_off);
 }
 
-h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes)
+h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_t len, size_t *query_at, size_t **norm_indexes,
+                                   int *null_char_found)
 {
     h2o_iovec_t ret;
 
     *query_at = SIZE_MAX;
     *norm_indexes = NULL;
+    *null_char_found = 0;
 
     if (len == 0) {
         ret = h2o_iovec_init("/", 1);
@@ -135,7 +140,7 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
         goto Rewrite;
 
     for (; p + 1 < end; ++p) {
-        if ((p[0] == '/' && p[1] == '.') || p[0] == '%') {
+        if ((p[0] == '/' && p[1] == '.') || p[0] == '%' || p[0] == '\0') {
             /* detect false positives as well */
             goto Rewrite;
         } else if (p[0] == '?') {
@@ -156,7 +161,7 @@ Return:
     return ret;
 
 Rewrite:
-    ret = rebuild_path(pool, path, len, query_at, norm_indexes);
+    ret = rebuild_path(pool, path, len, query_at, norm_indexes, null_char_found);
     if (ret.len == 0)
         goto RewriteError;
     if (ret.base[0] != '/')
