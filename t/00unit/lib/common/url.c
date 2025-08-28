@@ -419,6 +419,28 @@ static void test_normalize_path(void)
     ok(!has_null_char);
     has_null_char = 1;
 
+    input = h2o_iovec_init(H2O_STRLIT("/%00a"));
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
+    ok(b.len == 3);
+    ok(memcmp(b.base, H2O_STRLIT("/\0a")) == 0);
+    ok(q == SIZE_MAX);
+    ok(norm_indexes != NULL);
+    ok(norm_indexes[0] == 1);
+    ok(norm_indexes[1] == 4);
+    norm_indexes = NULL;
+    ok(has_null_char);
+
+    input = h2o_iovec_init(H2O_STRLIT("%00x"));
+    b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
+    ok(b.len == 3);
+    ok(memcmp(b.base, H2O_STRLIT("/\0x")) == 0);
+    ok(q == SIZE_MAX);
+    ok(norm_indexes != NULL);
+    ok(norm_indexes[0] == 0);
+    ok(norm_indexes[1] == 3);
+    norm_indexes = NULL;
+    ok(has_null_char);
+
     h2o_mem_clear_pool(&pool);
 }
 
