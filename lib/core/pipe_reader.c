@@ -13,7 +13,8 @@ void h2o_pipe_reader_init(h2o_pipe_reader_t *pipe_reader)
     *pipe_reader = (h2o_pipe_reader_t){
         .fds =
             {
-                -1, -1,
+                -1,
+                -1,
             },
         .inflight = 0,
         .body_bytes_read = 0,
@@ -46,6 +47,27 @@ int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *pipe_reader)
     return h2o_pipe_reader_new(ctx, pipe_reader) ? pipe_reader->fds[1] : -1;
 }
 
+int h2o_empty_pipe(int fd)
+{
+    ssize_t ret;
+    char buf[1024];
+
+drain_more:
+    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
+        ;
+    if (ret == 0) {
+        return 0;
+    } else if (ret == -1) {
+        if (errno == EAGAIN)
+            return 1;
+        return 0;
+    } else if (ret == sizeof(buf)) {
+        goto drain_more;
+    }
+
+    return 1;
+}
+
 void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *pipe_reader)
 {
     assert(pipe_reader->fds[0] != -1);
@@ -71,27 +93,6 @@ int h2o_pipe_reader_is_empty(h2o_pipe_reader_t *pipe_reader)
 void h2o_pipe_reader_update(h2o_pipe_reader_t *pipe_reader, size_t read_body_bytes)
 {
     pipe_reader->body_bytes_read = read_body_bytes;
-}
-
-int h2o_empty_pipe(int fd)
-{
-    ssize_t ret;
-    char buf[1024];
-
-drain_more:
-    while ((ret = read(fd, buf, sizeof(buf))) == -1 && errno == EINTR)
-        ;
-    if (ret == 0) {
-        return 0;
-    } else if (ret == -1) {
-        if (errno == EAGAIN)
-            return 1;
-        return 0;
-    } else if (ret == sizeof(buf)) {
-        goto drain_more;
-    }
-
-    return 1;
 }
 
 static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)

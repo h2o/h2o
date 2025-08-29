@@ -15,8 +15,6 @@ typedef struct st_h2o_pipe_reader_t {
     size_t body_bytes_read, body_bytes_sent;
 } h2o_pipe_reader_t;
 
-int h2o_empty_pipe(int fd);
-
 void h2o_pipe_reader_send(struct st_h2o_req_t *req, h2o_pipe_reader_t *pipe_reader, enum h2o_send_state send_state);
 
 void h2o_pipe_reader_init(h2o_pipe_reader_t *pipe_reader);
