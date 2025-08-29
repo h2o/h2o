@@ -321,7 +321,7 @@ static void do_close(struct rp_generator_t *self)
         client->cancel(client);
     }
     h2o_timer_unlink(&self->send_headers_timeout);
-    if (h2o_pipe_reader_is_initialized(&self->pipe_reader)) {
+    if (h2o_pipe_reader_in_use(&self->pipe_reader)) {
         h2o_pipe_reader_dispose(self->src_req->conn->ctx, &self->pipe_reader);
     }
 }
@@ -387,12 +387,12 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     if (self->sending.inflight) {
         h2o_doublebuffer_consume(&self->sending);
     } else {
-        assert(h2o_pipe_reader_is_initialized(&self->pipe_reader));
+        assert(h2o_pipe_reader_in_use(&self->pipe_reader));
         assert(self->pipe_reader.inflight);
         self->pipe_reader.inflight = 0;
     }
 
-    if (h2o_pipe_reader_is_initialized(&self->pipe_reader) && self->sending.buf->size == 0) {
+    if (h2o_pipe_reader_in_use(&self->pipe_reader) && self->sending.buf->size == 0) {
         do_send_from_pipe(self);
     } else {
         do_send(self);
@@ -637,7 +637,7 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
             args->pipe_reader->fd = self->pipe_reader.fds[1];
             args->pipe_reader->on_body_piped = on_body_piped;
         } else {
-            assert(!h2o_pipe_reader_is_initialized(&self->pipe_reader)); /* check the field remains marked as unused */
+            assert(!h2o_pipe_reader_in_use(&self->pipe_reader)); /* check the field remains marked as unused */
             h2o_req_log_error(req, "lib/core/proxy.c", "failed to allocate zero-copy pipe; falling back to read/write");
         }
     }

@@ -129,7 +129,7 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         self->file.ref = NULL;
     }
 #if H2O_USE_IO_URING
-    if (h2o_pipe_reader_is_initialized(&self->pipe_reader)) {
+    if (h2o_pipe_reader_in_use(&self->pipe_reader)) {
         if (self->src_req != NULL) {
             h2o_pipe_reader_dispose(self->src_req->conn->ctx, &self->pipe_reader);
         } else {
@@ -260,7 +260,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
     /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
 #if H2O_USE_IO_URING
-    if (h2o_pipe_reader_is_initialized(&self->pipe_reader)) {
+    if (h2o_pipe_reader_in_use(&self->pipe_reader)) {
         h2o_mem_addref_shared(self);
         h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_reader.fds[1], -1,
                             bytes_to_send, 0, do_proceed_on_splice_complete, self);

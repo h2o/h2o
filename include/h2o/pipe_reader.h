@@ -29,7 +29,7 @@ int h2o_pipe_reader_is_empty(h2o_pipe_reader_t *pipe_reader);
 
 void h2o_pipe_reader_update(h2o_pipe_reader_t *pipe_reader, size_t read_body_bytes);
 
-static inline bool h2o_pipe_reader_is_initialized(h2o_pipe_reader_t *pipe_reader)
+static inline int h2o_pipe_reader_in_use(h2o_pipe_reader_t *pipe_reader)
 {
     return pipe_reader->fds[0] != -1;
 }
