@@ -149,7 +149,9 @@ h2o_iovec_t h2o_url_normalize_path(h2o_mem_pool_t *pool, const char *path, size_
         }
     }
     for (; p < end; ++p) {
-        if (p[0] == '?') {
+        if (p[0] == '\0') {
+            goto Rewrite;
+        } else if (p[0] == '?') {
             *query_at = p - path;
             goto Return;
         }
