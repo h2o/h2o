@@ -28,7 +28,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/httpclient.h"
-#include "h2o/pipe_utils.h"
+#include "h2o/pipe_reader.h"
 
 struct rp_generator_t {
     h2o_generator_t super;

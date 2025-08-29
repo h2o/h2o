@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 #include "h2o.h"
-#include "h2o/pipe_utils.h"
+#include "h2o/pipe_reader.h"
 #if H2O_USE_IO_URING
 #include "h2o/io_uring.h"
 #endif

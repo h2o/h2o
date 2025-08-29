@@ -1,4 +1,4 @@
-#include "h2o/pipe_utils.h"
+#include "h2o/pipe_reader.h"
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
