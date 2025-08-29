@@ -471,7 +471,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     size_t target = SIZE_MAX;
     h2o_linklist_t *sockets = NULL;
 
-    if (pool->timeout == 0)
+    if (pool->timeout == 0 && !h2o_socketpool_is_global(pool))
         goto SkipLookup;
 
     /* fetch an entry and return it */
