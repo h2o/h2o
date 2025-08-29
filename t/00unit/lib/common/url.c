@@ -30,7 +30,7 @@ static void test_normalize_path(void)
 
     size_t q;
     size_t *norm_indexes = NULL;
-    int has_null_char = 1;
+    int has_null_char = 123; /* start with a value never set by the function */
     h2o_iovec_t input;
     h2o_iovec_t b;
 
@@ -41,7 +41,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("a"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -53,7 +53,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[1] == 1);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("aa"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -66,7 +66,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[2] == 2);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -75,7 +75,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -86,7 +86,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 1);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/./"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -97,7 +97,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 1);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/.."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -108,7 +108,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 1);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/../"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -119,7 +119,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 1);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -128,7 +128,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -137,7 +137,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/../def"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -151,7 +151,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 11);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/../../def"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -165,7 +165,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 14);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/./def"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -183,7 +183,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[7] == 10);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/././def"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -201,7 +201,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[7] == 12);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/ghi/../.."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -216,7 +216,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[4] == 5);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/./."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -234,7 +234,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[7] == 8);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/ghi/../."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -252,7 +252,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[7] == 8);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/./.."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -267,7 +267,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[4] == 5);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/.."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -282,7 +282,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[4] == 5);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc/def/."));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -299,7 +299,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[6] == 7);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc?xx"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -320,7 +320,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 11);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/a%62c"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -334,7 +334,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 6);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/a%6"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -348,7 +348,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 4);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/a%6?"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -362,7 +362,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[3] == 4);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/%25"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -374,7 +374,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[1] == 4);
     norm_indexes = NULL;
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc//"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -383,7 +383,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/abc//d"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -392,7 +392,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("//"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -401,7 +401,7 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("//abc"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -410,14 +410,14 @@ static void test_normalize_path(void)
     ok(q == SIZE_MAX);
     ok(norm_indexes == NULL);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("?abc"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
     ok(b.len == 1);
     ok(memcmp(b.base, H2O_STRLIT("/")) == 0);
     ok(!has_null_char);
-    has_null_char = 1;
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("/%00a"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -428,7 +428,8 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 1);
     ok(norm_indexes[1] == 4);
     norm_indexes = NULL;
-    ok(has_null_char);
+    ok(has_null_char && has_null_char != 123);
+    has_null_char = 123;
 
     input = h2o_iovec_init(H2O_STRLIT("%00x"));
     b = h2o_url_normalize_path(&pool, input.base, input.len, &q, &norm_indexes, &has_null_char);
@@ -439,7 +440,7 @@ static void test_normalize_path(void)
     ok(norm_indexes[0] == 0);
     ok(norm_indexes[1] == 3);
     norm_indexes = NULL;
-    ok(has_null_char);
+    ok(has_null_char && has_null_char != 123);
 
     h2o_mem_clear_pool(&pool);
 }
