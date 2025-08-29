@@ -17,8 +17,8 @@ void h2o_pipe_reader_init(h2o_pipe_reader_t *reader)
                 -1,
             },
         .inflight = 0,
-        .body_bytes_read = 0,
-        .body_bytes_sent = 0,
+        .bytes_read = 0,
+        .bytes_sent = 0,
     };
 }
 
@@ -87,12 +87,12 @@ void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
 
 int h2o_pipe_reader_is_empty(h2o_pipe_reader_t *reader)
 {
-    return reader->body_bytes_read == reader->body_bytes_sent;
+    return reader->bytes_read == reader->bytes_sent;
 }
 
-void h2o_pipe_reader_update(h2o_pipe_reader_t *reader, size_t read_body_bytes)
+void h2o_pipe_reader_update(h2o_pipe_reader_t *reader, size_t read_bytes)
 {
-    reader->body_bytes_read = read_body_bytes;
+    reader->bytes_read = read_bytes;
 }
 
 static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
@@ -140,12 +140,12 @@ void h2o_pipe_reader_send(h2o_req_t *req, h2o_pipe_reader_t *reader, h2o_send_st
 {
     static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
     h2o_sendvec_t vec = {.callbacks = &callbacks};
-    if ((vec.len = reader->body_bytes_read - reader->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
+    if ((vec.len = reader->bytes_read - reader->bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
         vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
     vec.cb_arg[0] = (uint64_t)reader;
     vec.cb_arg[1] = 0; /* unused */
 
-    reader->body_bytes_sent += vec.len;
+    reader->bytes_sent += vec.len;
     reader->inflight = 1;
     h2o_sendvec(req, &vec, 1, send_state);
 }

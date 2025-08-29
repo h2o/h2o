@@ -357,7 +357,7 @@ static void do_send(struct rp_generator_t *self)
         ststate = H2O_SEND_STATE_ERROR;
 
     if (veccnt != 0)
-        self->pipe_reader.body_bytes_sent += vecs[0].len;
+        self->pipe_reader.bytes_sent += vecs[0].len;
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
