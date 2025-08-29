@@ -325,11 +325,17 @@ void h2o_http2_conn_unregister_stream(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (stream->blocked_by_server)
         h2o_http2_stream_set_blocked_by_server(conn, stream, 0);
 
-    /* Decrement reset_budget if the stream was reset by peer, otherwise increment. By doing so, we penalize connections that
-     * generate resets for >50% of requests. */
-    if (stream->reset_by_peer) {
+    /* Decrement reset_budget if the stream was reset by peer or by peer's invalid action, otherwise increment. By doing so, we
+     * penalize connections that generate resets for >50% of requests. */
+    if (stream->reset_by_peer || stream->reset_by_peer_action) {
         if (conn->dos_mitigation.reset_budget > 0)
             --conn->dos_mitigation.reset_budget;
+
+        /* setup process delay if we've just ran out of reset budget */
+        if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
+            !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
+            h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay, &conn->dos_mitigation.process_delay);
+
     } else {
         if (conn->dos_mitigation.reset_budget < conn->super.ctx->globalconf->http2.max_concurrent_requests_per_connection)
             ++conn->dos_mitigation.reset_budget;
@@ -718,6 +724,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     return 0;
 
 SendRSTStream:
+    stream->reset_by_peer_action = 1;
     stream_send_error(conn, stream->stream_id, ret);
     h2o_http2_stream_reset(conn, stream);
     return 0;
@@ -985,6 +992,7 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     }
     if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
           stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
+        stream->reset_by_peer_action = 1;
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
         return 0;
@@ -1178,8 +1186,10 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
     if ((ret = h2o_http2_decode_window_update_payload(&payload, frame, err_desc, &err_is_stream_level)) != 0) {
         if (err_is_stream_level) {
             h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
-            if (stream != NULL)
+            if (stream != NULL) {
+                stream->reset_by_peer_action = 1;
                 h2o_http2_stream_reset(conn, stream);
+            }
             stream_send_error(conn, frame->stream_id, ret);
             return 0;
         } else {
@@ -1196,6 +1206,7 @@ static int handle_window_update_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t 
         h2o_http2_stream_t *stream = h2o_http2_conn_get_stream(conn, frame->stream_id);
         if (stream != NULL) {
             if (update_stream_output_window(stream, payload.window_size_increment) != 0) {
+                stream->reset_by_peer_action = 1;
                 h2o_http2_stream_reset(conn, stream);
                 stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_FLOW_CONTROL);
                 return 0;
@@ -1260,11 +1271,6 @@ static int handle_rst_stream_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fr
     /* reset the stream */
     stream->reset_by_peer = 1;
     h2o_http2_stream_reset(conn, stream);
-
-    /* setup process delay if we've just ran out of reset budget */
-    if (conn->dos_mitigation.reset_budget == 0 && conn->super.ctx->globalconf->http2.dos_delay != 0 &&
-        !h2o_timer_is_linked(&conn->dos_mitigation.process_delay))
-        h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http2.dos_delay, &conn->dos_mitigation.process_delay);
 
     /* TODO log */
 

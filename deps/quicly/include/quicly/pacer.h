@@ -138,7 +138,10 @@ inline void quicly_pacer_consume_window(quicly_pacer_t *pacer, size_t delta)
 
 inline uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, uint32_t rtt)
 {
-    return (cwnd * multiplier + rtt - 1) / rtt;
+    uint64_t ret = ((uint64_t)cwnd * multiplier + rtt - 1) / rtt;
+    if (ret > UINT32_MAX)
+        ret = UINT32_MAX;
+    return ret;
 }
 
 #ifdef __cplusplus

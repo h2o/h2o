@@ -706,6 +706,7 @@
 		0829879326E1F3530053638F /* rate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80resume-context.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		082BAC4D2E5F2EE300881E91 /* 40http3-hrr.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-hrr.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -2270,6 +2271,7 @@
 				E90BB43B24F38937006507EA /* 40http3-concurrency.t */,
 				E90BB43C24F4834D006507EA /* 40http3-forward.t */,
 				E9D49A5025FB561A00F4A80D /* 40http3-forward-initial.t */,
+				082BAC4D2E5F2EE300881E91 /* 40http3-hrr.t */,
 				0810E6AA286DACB600333FA4 /* 40http3-invalid-token.t */,
 				08B2EBF62DA09FD000715398 /* 40http3-io-batch10.t */,
 				085BDAE72B1DB4C2002851EA /* 40http3-priority.t */,
@@ -4020,6 +4022,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
@@ -4166,6 +4169,7 @@
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"H2O_USE_MRUBY=1",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);
@@ -4302,6 +4306,7 @@
 					"DEBUG=1",
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"H2O_ROOT=/mydev/h2o",
 					"$(inherited)",
 					"kh_inline=\"inline __unused\"",
@@ -4366,6 +4371,7 @@
 					"H2O_USE_MRUBY=1",
 					"H2O_USE_LIBUV=0",
 					"H2O_ROOT=/mydev/h2o",
+					"H2O_LOCALSTATEDIR=/mydev/h2o/var/h2o",
 					"kh_inline=\"inline __unused\"",
 					"$(inherited)",
 				);

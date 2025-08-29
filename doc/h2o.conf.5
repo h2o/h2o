@@ -19,18 +19,16 @@ The minimal configuration file looks like as follows.
 .PP
 .nf
 .RS
-listen:
-  port: 80
-
 hosts:
   "myhost.example.com":
-    listen: &listen_ssl
-      port: 443
-      ssl:
-        certificate-file: /path/to/certificate-file
-        key-file: /path/to/key-file
     listen:
-      <<: *listen_ssl
+      port: 80
+    listen:
+      port: 443
+      ssl: {}
+    listen:
+    　port: 443
+      ssl: {}
       type: quic
     paths:
       /:
@@ -41,6 +39,10 @@ access-log: /path/to/the/access-log
 error-log: /path/to/the/error-log
 pid-file: /path/to/the/pid-file
 
+acme:
+  email: admin@myhost.example.com
+  accept-tos: YES
+
 .RE
 .fi
 .PP
@@ -48,14 +50,15 @@ pid-file: /path/to/the/pid-file
 
 The configuration instructs the server to:
 
-listen on TCP port 80 for all hosts
-for myhost.example.com, listen on TCP port 443 using given TLS certificate and key pair
-listen on UDP port 443 (QUIC), reusing the previous setting named as listen_ssl
+serve contents under the hostname: myhost.example.com
+for HTTP, listen on TCP port 80
+for HTTPS, listen on TCP port 443 and UDP port 443
 serve files under /path/to/the/public-files
-under the privileges of nobody
+run under the privileges of nobody
 emit access logs to file: /path/to/the/access-log
 emit error logs to /path/to/the/error-log
 store the process id of the server in /path/to/the/pid-file
+use ACME to fetch the TLS certificates automatically (note: lego must be installed for this to work).
 
 
 
@@ -573,38 +576,77 @@ hosts:
 
 SSL Attribute
 
-The ssl attribute must be defined as a mapping, and recognizes the following attributes.
+The ssl attribute must be defined as a mapping.
 
 
-certificate-file:
+The identity of the TLS listener is specified in one of the following ways:
 
-Path of the SSL certificate file (mandatory).
-This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+by specifying the certificate-file and key-file attributes directly under ssl,
+by specifying a sequence of certificate- and key-file pairs inside identity, or
+if neither of the above is used, the identity is obtained using ACME; see acme.
+
+
+
+The certificate-file attribute specifies the path of a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, RFC 7250 handshake will be used.
 
-key-file:
-Path of the SSL private key file (mandatory).
-identity:
-List of certificate / key pairs.
-This attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
+
+The key-file attribute specifies the path of a PEM file that contains the corresponding private key.
+
+
+The identity attribute can be used in place of certificate-file and key-file to specify more than one pair of certificates and keys.
 When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
 The last pair acts as the fallback.
 .PP
 .BR Example:\ 
-Using RSA and ECDSA certificates
+Using both RSA and ECDSA certificates
 .PP
 .nf
 .RS
 ssl:
   identity:
-  - key-file: /path/to/rsa.key
-    certificate-file: /path/to/rsa.crt
-  - key-file: /path/to/ecdsa.key
-    certificate-file: /path/to/ecdsa.crt
+  - certificate-file: /path/to/ecdsa.crt   # prefer ECDSA if client supports both
+    key-file: /path/to/ecdsa.key
+  - certificate-file: /path/to/rsa.crt.    # use RSA if ECDSA is not supported
+    key-file: /path/to/rsa.key
 
 .RE
 .fi
 .PP
+
+
+
+In addition, the ssl mapping recognizes the following attributes.
+
+
+client-ca-file:
+
+path to a file of Certificate Authority (CA) certificates used to verify client certificates.
+If set, H2O will request a client certificate from connecting clients and validate it against these CAs.
+Connections lacking a valid client certificate (either not provided or not signed by one of the given CAs) will be rejected.
+This enables mutual TLS (mTLS) authentication.
+
+cipher-suite:
+list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list
+cipher-suite-tls1.3:
+list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the IANA TLS Cipher Suite Registry; e.g., TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256.
+cipher-preference:
+
+side of the list that should be used for selecting the cipher-suite; should be either of: client, server.
+Default is client.
+
+dh-file:
+
+path of a PEM file containing the Diffie-Hellman parameters to be used.
+Use of the file is recommended for servers using Diffie-Hellman key agreement.
+(optional)
+
+key-exchange-tls1.3:
+list of TLS 1.3 key exchange algorithms to use; the list must be a YAML sequence of algorithms. x25519 and secp256r1 are supported and enabled by default. In addition, secp384r1, secp521r1, and x25519mlkem768 might be available if they are supported by libcrypto.
+max-tickets:
+
+maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
+Default is 4.
 
 minimum-version:
 
@@ -625,37 +667,23 @@ max-version:
 
 synonym of maximum-version.
 
-cipher-suite:
-list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)
-cipher-suite-tls1.3:
-list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the IANA TLS Cipher Suite Registry; e.g., TLS_AES_128_GCM_SHA256, TLS_CHACHA20_POLY1305_SHA256.
-cipher-preference:
-
-side of the list that should be used for selecting the cipher-suite; should be either of: client, server.
-Default is client.
-
-dh-file:
-
-path of a PEM file containing the Diffie-Hellman parameters to be used.
-Use of the file is recommended for servers using Diffie-Hellman key agreement.
-(optional)
-
-key-exchange-tls1.3:
-list of TLS 1.3 key exchange algorithms to use; the list must be a YAML sequence of algorithms. x25519 and secp256r1 are supported and enabled by default. In addition, secp384r1, secp521r1, and x25519mlkem768 might be available if they are supported by libcrypto.
-ocsp-update-interval:
-
-interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
-Default is 14400 (4 hours).
-
 ocsp-max-failures:
 
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 
-max-tickets:
+ocsp-update-interval:
 
-maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
-Default is 4.
+interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
+Default is 14400 (4 hours).
+
+neverbleed:
+
+unless set to OFF, H2O isolates SSL private key operations to a different process by using Neverbleed.
+Default is ON.
+
+
+ssl-session-resumption directive is provided for tuning parameters related to session resumption and session tickets.
 
 ech:
 
@@ -699,14 +727,6 @@ Then, after waiting for the expiry of caches containing the stale configuration,
 This may take long depending on the TTL of the HTTPS / SVC DNS resource record advertising the configuration.
 
 The ech attribute must be set only in the first ssl attribute that binds to a particular address.
-
-neverbleed:
-
-unless set to OFF, H2O isolates SSL private key operations to a different process by using Neverbleed.
-Default is ON.
-
-
-ssl-session-resumption directive is provided for tuning parameters related to session resumption and session tickets.
 
 The CC Attribute
 
@@ -784,6 +804,60 @@ listen:
 .RE
 .fi
 .PP
+
+
+.RE
+.RE
+
+.SS acme
+Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).
+
+.PP
+
+
+Unless a custom loader program is specified, h2o obtains certificates from Let's Encrypt using the popular ACME client: Lego.
+On most distributions, Lego should be available as pre-build packages.
+
+This directive takes two mandatory and one optional parameters.
+
+email (mandatory)
+The email address to be registered to the ACME service provider.
+accept-tos (mandatory)
+Must be set to YES to accept the terms of service of the ACME service provider.
+loader (optional)
+The program to be launched for issuing and renewing the certificates.
+If omitted, H2O_ROOT/share/h2o/acme/lego-loader is used.
+
+
+
+The below example shows a configuration that relies on ACME for serving https://example.org.
+.PP
+.BR Example:\ 
+Simple h2o.conf using ACME
+.PP
+.nf
+.RS
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl: {}               # omission on an identity indicates the use of ACME
+    paths:
+      ...
+
+.RE
+.fi
+.PP
+
+
+
+The certificates and keys being issued or generated are stored under the $prefix/var/h2o/acme directory.
+Output of the lego command (including errors) are emitted to the error log of h2o.
 
 
 .RE
