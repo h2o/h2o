@@ -24,7 +24,7 @@
 
 static int on_acked_callcnt, on_acked_ackcnt;
 
-static int on_acked(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
+static quicly_error_t on_acked(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent)
 {
     ++on_acked_callcnt;
     if (acked)

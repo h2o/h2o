@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -549,6 +550,55 @@ void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *bufs, size_t bufcnt, h2o_send_st
 {
     assert(bufcnt == 0 || (bufs[0].callbacks->read_ == &h2o_sendvec_read_raw || bufcnt == 1));
     do_sendvec(req, bufs, bufcnt, state);
+}
+
+static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
+{
+    int fd = vec->cb_arg[0];
+
+    while (len != 0) {
+        ssize_t ret;
+        while ((ret = read(fd, dst, len)) == -1 && errno == EINTR)
+            ;
+        if (ret <= 0) {
+            assert(errno != EAGAIN);
+            return 0;
+        }
+        dst += ret;
+        len -= ret;
+        vec->len -= ret;
+    }
+
+    return 1;
+}
+
+#ifdef __linux__
+static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
+{
+    int fd = vec->cb_arg[0];
+
+    ssize_t bytes_sent;
+    while ((bytes_sent = splice(fd, NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
+        ;
+    if (bytes_sent == -1 && errno == EAGAIN)
+        return 0;
+    if (bytes_sent <= 0)
+        return SIZE_MAX;
+
+    vec->len -= bytes_sent;
+
+    return bytes_sent;
+}
+#else
+#define from_pipe_send NULL
+#endif
+
+void h2o_send_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
+    h2o_sendvec_t vec = {.callbacks = &callbacks, .len = len, .cb_arg[0] = pipefd};
+
+    h2o_sendvec(req, &vec, 1, send_state);
 }
 
 h2o_req_prefilter_t *h2o_add_prefilter(h2o_req_t *req, size_t alignment, size_t sz)

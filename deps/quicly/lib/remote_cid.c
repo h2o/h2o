@@ -46,8 +46,8 @@ void quicly_remote_cid_init_set(quicly_remote_cid_set_t *set, ptls_iovec_t *init
     set->_largest_sequence_expected = PTLS_ELEMENTSOF(set->cids) - 1;
 }
 
-static int do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
-                       const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN])
+static quicly_error_t do_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
+                                  const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN])
 {
     int was_stored = 0;
 
@@ -123,12 +123,13 @@ static size_t unregister_prior_to(quicly_remote_cid_set_t *set, uint64_t seq_unr
     return num_unregistered;
 }
 
-int quicly_remote_cid_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
-                               const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN], uint64_t retire_prior_to,
-                               uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT], size_t *num_unregistered_seqs)
+quicly_error_t quicly_remote_cid_register(quicly_remote_cid_set_t *set, uint64_t sequence, const uint8_t *cid, size_t cid_len,
+                                          const uint8_t srt[QUICLY_STATELESS_RESET_TOKEN_LEN], uint64_t retire_prior_to,
+                                          uint64_t unregistered_seqs[QUICLY_LOCAL_ACTIVE_CONNECTION_ID_LIMIT],
+                                          size_t *num_unregistered_seqs)
 {
     quicly_remote_cid_set_t backup = *set; /* preserve current state so that it can be restored to notify protocol violation */
-    int ret;
+    quicly_error_t ret;
 
     assert(sequence >= retire_prior_to);
 

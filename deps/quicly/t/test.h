@@ -29,8 +29,8 @@
 typedef struct st_test_streambuf_t {
     quicly_streambuf_t super;
     struct {
-        int stop_sending;
-        int reset_stream;
+        quicly_error_t stop_sending;
+        quicly_error_t reset_stream;
     } error_received;
     int is_detached;
 } test_streambuf_t;

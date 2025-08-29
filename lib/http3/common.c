@@ -206,7 +206,7 @@ static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *
     return (const h2o_http3_conn_callbacks_t *)conn->super.callbacks;
 }
 
-static void ingress_unistream_on_destroy(quicly_stream_t *qs, int err)
+static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->recvbuf);
@@ -240,7 +240,7 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     }
 }
 
-static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, int err)
+static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 {
     h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
@@ -293,7 +293,7 @@ static void control_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_ht
 
     do {
         h2o_http3_read_frame_t frame;
-        int ret;
+        quicly_error_t ret;
         const char *err_desc = NULL;
 
         if ((ret = h2o_http3_read_frame(&frame, quicly_is_client(conn->super.quic), H2O_HTTP3_STREAM_TYPE_CONTROL,
@@ -356,7 +356,7 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     return stream->handle_input(conn, stream, src, src_end, is_eos);
 }
 
-static void egress_unistream_on_destroy(quicly_stream_t *qs, int err)
+static void egress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_egress_unistream_t *stream = qs->data;
     h2o_buffer_dispose(&stream->sendbuf);
@@ -382,7 +382,7 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
     memcpy(dst, stream->sendbuf->bytes + off, *len);
 }
 
-static void egress_unistream_on_send_stop(quicly_stream_t *qs, int err)
+static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
@@ -412,10 +412,11 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
     }
 }
 
-static int open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream, h2o_iovec_t initial_bytes)
+static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream,
+                                            h2o_iovec_t initial_bytes)
 {
     quicly_stream_t *qs;
-    int ret;
+    quicly_error_t ret;
 
     if ((ret = quicly_open_stream(conn->super.quic, &qs, 1)) != 0)
         return ret;
@@ -542,7 +543,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
             /* CID-based matching on Initial and 0-RTT packets should only be applied for clients */
-            if (!quicly_is_client(conn->quic) && packets[0].cid.dest.might_be_client_generated)
+            if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
                 conn = NULL;
         } else if (!packets[0].cid.dest.might_be_client_generated) {
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
@@ -609,23 +610,24 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             }
             /* try to accept any of the Initial packets being received */
             size_t i;
-            for (i = 0; i != num_packets; ++i)
-                if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
-                    if ((conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL) {
-                        /* non-null generally means success, except for H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED */
-                        if (conn == &h2o_quic_accept_conn_decryption_failed) {
-                            /* failed to decrypt Initial packet <=> it could belong to a connection on a different node; forward it
-                             * to the destination being claimed by the DCID */
-                            uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
-                            uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                            if (ctx->forward_packets != NULL && ttl > 0 &&
-                                (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
-                                ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
-                                                     num_packets);
-                            return;
-                        }
-                        break;
+            for (i = 0; i != num_packets; ++i) {
+                if ((packets[i].octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL &&
+                    (conn = ctx->acceptor(ctx, destaddr, srcaddr, packets + i)) != NULL) {
+                    /* non-null generally means success, except for H2O_QUIC_ACCEPT_CONN_DECRYPTION_FAILED */
+                    if (conn == &h2o_quic_accept_conn_decryption_failed) {
+                        /* failed to decrypt Initial packet <=> it could belong to a connection on a different node; forward it to
+                         * the destination being claimed by the DCID */
+                        uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
+                        uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
+                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                            (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
+                            ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
+                                                 num_packets);
+                        return;
                     }
+                    break;
+                }
+            }
             if (conn == NULL)
                 return;
             accepted_packet_index = i;
@@ -635,47 +637,42 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
             assert(iter != kh_end(conn->ctx->conns_accepting));
             kh_val(conn->ctx->conns_accepting, iter) = conn;
         } else {
-            /* existing connection */
+            /* likely have found a connection in `conns_accepting` */
             conn = kh_val(ctx->conns_accepting, iter);
             assert(conn != NULL);
             assert(!quicly_is_client(conn->quic));
-            if (quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
-                goto Receive;
-            uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
-            uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
-            if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
-                /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial that
-                 * is supposed to be handled by another node. forward it. */
-                if (ttl == 0)
-                    return;
-                if (ctx->forward_packets != NULL)
-                    ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
-                                         num_packets);
+            if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets)) {
+                uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
+                uint32_t offending_thread_id = packets[0].cid.dest.plaintext.thread_id;
+                if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
+                    /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
+                     * that is supposed to be handled by another node. forward it. */
+                    if (ttl == 0)
+                        return;
+                    if (ctx->forward_packets != NULL)
+                        ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
+                                             num_packets);
+                }
+                /* regardless of forwarding outcome, we need to drop this packet as it is not for us */
+                return;
             }
-            /* regardless of forwarding outcome, we need to drop this packet as it is not for us */
-            return;
         }
     }
 
-    { /* receive packets to the found connection */
-        if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
-            return;
-        size_t i;
-    Receive:
-        for (i = 0; i != num_packets; ++i) {
-            if (i != accepted_packet_index) {
-                int ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
-                switch (ret) {
-                case QUICLY_ERROR_STATE_EXHAUSTION:
-                case PTLS_ERROR_NO_MEMORY:
-                    fprintf(stderr, "%s: `quicly_receive()` returned ret:%d\n", __func__, ret);
-                    conn->callbacks->destroy_connection(conn);
-                    return;
-                }
-                if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
-                    if (ctx->quic_stats != NULL) {
-                        ++ctx->quic_stats->packet_processed;
-                    }
+    /* receive packets to the found connection */
+    for (size_t i = 0; i != num_packets; ++i) {
+        if (i != accepted_packet_index) {
+            quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            switch (ret) {
+            case QUICLY_ERROR_STATE_EXHAUSTION:
+            case PTLS_ERROR_NO_MEMORY:
+                fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
+                conn->callbacks->destroy_connection(conn);
+                return;
+            }
+            if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
+                if (ctx->quic_stats != NULL) {
+                    ++ctx->quic_stats->packet_processed;
                 }
             }
         }
@@ -1050,7 +1047,7 @@ void h2o_quic_set_forwarding_context(h2o_quic_ctx_t *ctx, uint32_t accept_thread
     ctx->preprocess_packet = preprocess_cb;
 }
 
-void h2o_quic_close_connection(h2o_quic_conn_t *conn, int err, const char *reason_phrase)
+void h2o_quic_close_connection(h2o_quic_conn_t *conn, quicly_error_t err, const char *reason_phrase)
 {
     switch (quicly_get_state(conn->quic)) {
     case QUICLY_STATE_FIRSTFLIGHT: /* FIXME why is this separate? */
@@ -1172,9 +1169,9 @@ Exit:
     h2o_fatal("unreachable");
 }
 
-int h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
+quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
 {
-    int ret;
+    quicly_error_t ret;
 
     h2o_quic_setup(&conn->super, quic);
     conn->state = H2O_HTTP3_CONN_STATE_OPEN;
@@ -1209,14 +1206,14 @@ Exit:
     return 0;
 }
 
-int h2o_quic_send(h2o_quic_conn_t *conn)
+quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec datagrams[10];
     size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
     uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
 
-    int ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
+    quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     switch (ret) {
     case 0:
         if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
@@ -1229,7 +1226,7 @@ int h2o_quic_send(h2o_quic_conn_t *conn)
         conn->callbacks->destroy_connection(conn);
         return 0;
     default:
-        h2o_fatal("quicly_send returned %d", ret);
+        h2o_fatal("quicly_send returned %" PRId64, ret);
     }
 
     h2o_quic_schedule_timer(conn);

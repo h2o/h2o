@@ -1340,7 +1340,7 @@ static int generate_stateless_reset_token(quicly_cid_encryptor_t *self, void *to
 
 quicly_cid_encryptor_t quic_cid_encryptor = {encrypt_cid, decrypt_cid, generate_stateless_reset_token};
 
-int quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc)
+quicly_error_t quic_decrypt_address_token(quicly_address_token_plaintext_t *pt, ptls_iovec_t input, const char **err_desc)
 {
     struct st_quic_keyset_t *keyset;
 
@@ -1358,8 +1358,8 @@ ptls_aead_context_t *quic_get_address_token_encryptor(uint8_t *prefix)
     return keyset->address_token.enc;
 }
 
-static int generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn, ptls_buffer_t *buf,
-                                     quicly_address_token_plaintext_t *token)
+static quicly_error_t generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn, ptls_buffer_t *buf,
+                                                quicly_address_token_plaintext_t *token)
 {
     uint8_t prefix;
     ptls_aead_context_t *aead = quic_get_address_token_encryptor(&prefix);

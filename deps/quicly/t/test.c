@@ -86,10 +86,10 @@
     "Vw6RN5S/14SQnMYWr7E=\n"                                                                                                       \
     "-----END CERTIFICATE-----\n"
 
-static void on_destroy(quicly_stream_t *stream, int err);
-static void on_egress_stop(quicly_stream_t *stream, int err);
+static void on_destroy(quicly_stream_t *stream, quicly_error_t err);
+static void on_egress_stop(quicly_stream_t *stream, quicly_error_t err);
 static void on_ingress_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
-static void on_ingress_reset(quicly_stream_t *stream, int err);
+static void on_ingress_reset(quicly_stream_t *stream, quicly_error_t err);
 
 quicly_address_t fake_address;
 int64_t quic_now = 1;
@@ -97,6 +97,60 @@ quicly_context_t quic_ctx;
 quicly_stream_callbacks_t stream_callbacks = {
     on_destroy, quicly_streambuf_egress_shift, quicly_streambuf_egress_emit, on_egress_stop, on_ingress_receive, on_ingress_reset};
 size_t on_destroy_callcnt;
+
+static void test_error_codes(void)
+{
+    quicly_error_t a;
+
+    a = QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0);
+    ok(QUICLY_ERROR_IS_QUIC(a));
+    ok(QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+    ok(QUICLY_ERROR_GET_ERROR_CODE(a) == 0);
+
+    a = QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x3fffffffffffffff);
+    ok(QUICLY_ERROR_IS_QUIC(a));
+    ok(QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+    ok(QUICLY_ERROR_GET_ERROR_CODE(a) == 0x3fffffffffffffff);
+
+    a = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0);
+    ok(QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+    ok(QUICLY_ERROR_GET_ERROR_CODE(a) == 0);
+
+    a = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0x3fffffffffffffff);
+    ok(QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+    ok(QUICLY_ERROR_GET_ERROR_CODE(a) == 0x3fffffffffffffff);
+
+    a = 0;
+    ok(!QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+
+    a = PTLS_ALERT_UNKNOWN_CA; /* arbitrary alert */
+    ok(!QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+
+    a = 0x2ffff; /* max outside QUIC errors */
+    ok(!QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+
+    a = (int64_t)0x8000000000030000; /* min outside QUIC errors */
+    ok(!QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+
+    a = QUICLY_ERROR_PACKET_IGNORED; /* arbrary internal error */
+    ok(!QUICLY_ERROR_IS_QUIC(a));
+    ok(!QUICLY_ERROR_IS_QUIC_TRANSPORT(a));
+    ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
+}
 
 static void test_adjust_stream_frame_layout(void)
 {
@@ -169,14 +223,14 @@ static int64_t get_now_cb(quicly_now_t *self)
 
 static quicly_now_t get_now = {get_now_cb};
 
-void on_destroy(quicly_stream_t *stream, int err)
+void on_destroy(quicly_stream_t *stream, quicly_error_t err)
 {
     test_streambuf_t *sbuf = stream->data;
     sbuf->is_detached = 1;
     ++on_destroy_callcnt;
 }
 
-void on_egress_stop(quicly_stream_t *stream, int err)
+void on_egress_stop(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_streambuf_t *sbuf = stream->data;
@@ -188,7 +242,7 @@ void on_ingress_receive(quicly_stream_t *stream, size_t off, const void *src, si
     quicly_streambuf_ingress_receive(stream, off, src, len);
 }
 
-void on_ingress_reset(quicly_stream_t *stream, int err)
+void on_ingress_reset(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
     test_streambuf_t *sbuf = stream->data;
@@ -202,7 +256,7 @@ const quicly_cid_plaintext_t *new_master_id(void)
     return &master;
 }
 
-static int on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
+static quicly_error_t on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     test_streambuf_t *sbuf;
     int ret;
@@ -393,7 +447,7 @@ size_t transmit(quicly_conn_t *src, quicly_conn_t *dst)
     uint8_t datagramsbuf[PTLS_ELEMENTSOF(datagrams) * quicly_get_context(src)->transport_params.max_udp_payload_size];
     size_t num_datagrams, i;
     quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(datagrams) * 2];
-    int ret;
+    quicly_error_t ret;
 
     num_datagrams = PTLS_ELEMENTSOF(datagrams);
     ret = quicly_send(src, &destaddr, &srcaddr, datagrams, &num_datagrams, datagramsbuf, sizeof(datagramsbuf));
@@ -633,7 +687,7 @@ static void test_nondecryptable_initial(void)
     struct iovec packet = {.iov_base = packetbuf, .iov_len = sizeof(packetbuf)};
     size_t num_decoded;
     quicly_decoded_packet_t decoded;
-    int ret;
+    quicly_error_t ret;
 
     /* create an Initial packet, with its payload all set to zero */
     memcpy(packetbuf, header, sizeof(header));
@@ -653,7 +707,7 @@ static void test_nondecryptable_initial(void)
 static void test_set_cc(void)
 {
     quicly_conn_t *conn;
-    int ret;
+    quicly_error_t ret;
 
     ret = quicly_connect(&conn, &quic_ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL,
                          NULL, NULL);
@@ -751,7 +805,7 @@ static void do_test_migration_during_handshake(int second_flight_from_orig_addre
     uint8_t buf[quic_ctx.transport_params.max_udp_payload_size * 10];
     quicly_decoded_packet_t packets[40];
     size_t num_datagrams, num_packets;
-    int ret;
+    quicly_error_t ret;
 
     /* client send first flight */
     ret = quicly_connect(&client, &quic_ctx, "example.com", (void *)&serveraddr, NULL, new_master_id(), ptls_iovec_init(NULL, 0),
@@ -872,6 +926,7 @@ int main(int argc, char **argv)
 
     quicly_amend_ptls_context(quic_ctx.tls);
 
+    subtest("error-codes", test_error_codes);
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);

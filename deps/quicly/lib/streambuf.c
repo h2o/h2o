@@ -24,7 +24,7 @@
 #include <string.h>
 #include "quicly/streambuf.h"
 
-static void convert_error(quicly_stream_t *stream, int err)
+static void convert_error(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(err != 0);
     if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
@@ -84,7 +84,7 @@ void quicly_sendbuf_shift(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t 
 void quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t off, void *dst, size_t *len, int *wrote_all)
 {
     size_t vec_index, capacity = *len;
-    int ret;
+    quicly_error_t ret;
 
     off += sb->off_in_first_vec;
     for (vec_index = 0; capacity != 0 && vec_index < sb->vecs.size; ++vec_index) {
@@ -118,7 +118,7 @@ void quicly_sendbuf_emit(quicly_stream_t *stream, quicly_sendbuf_t *sb, size_t o
     }
 }
 
-static int flatten_raw(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
+static quicly_error_t flatten_raw(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
 {
     memcpy(dst, (uint8_t *)vec->cbdata + off, len);
     return 0;
@@ -226,7 +226,7 @@ int quicly_streambuf_create(quicly_stream_t *stream, size_t sz)
     return 0;
 }
 
-void quicly_streambuf_destroy(quicly_stream_t *stream, int err)
+void quicly_streambuf_destroy(quicly_stream_t *stream, quicly_error_t err)
 {
     quicly_streambuf_t *sbuf = stream->data;
 

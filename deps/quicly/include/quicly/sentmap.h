@@ -97,7 +97,8 @@ typedef enum en_quicly_sentmap_event_t {
  * @param acked   true if acked, false if the information has to be scheduled for retransmission
  * @param data    data
  */
-typedef int (*quicly_sent_acked_cb)(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *data);
+typedef quicly_error_t (*quicly_sent_acked_cb)(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked,
+                                               quicly_sent_t *data);
 
 struct st_quicly_sent_ack_additional_t {
     uint8_t gap;
@@ -256,7 +257,7 @@ static int quicly_sentmap_is_open(quicly_sentmap_t *map);
 /**
  * prepares a write
  */
-int quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch);
+quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch);
 /**
  * commits a write
  */
@@ -281,10 +282,11 @@ void quicly_sentmap_skip(quicly_sentmap_iter_t *iter);
 /**
  * updates the state of the packet being pointed to by the iterator, _and advances to the next packet_
  */
-int quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event);
+quicly_error_t quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_t *iter, quicly_sentmap_event_t event);
 
 struct st_quicly_sent_block_t *quicly_sentmap__new_block(quicly_sentmap_t *map);
-int quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked, quicly_sent_t *sent);
+quicly_error_t quicly_sentmap__type_packet(quicly_sentmap_t *map, const quicly_sent_packet_t *packet, int acked,
+                                           quicly_sent_t *sent);
 
 /* inline definitions */
 

@@ -45,7 +45,7 @@
 
 #define DEFAULT_IO_TIMEOUT 5000
 
-static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
+static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
 static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
 static void add_header(h2o_iovec_t name, h2o_iovec_t value);
@@ -78,11 +78,7 @@ static h2o_socket_t *udp_sock = NULL;
 static const char *upgrade_token = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
-static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
-#if PTLS_OPENSSL_HAVE_X25519
-    &ptls_openssl_x25519,
-#endif
-    &ptls_openssl_secp256r1, NULL};
+static const ptls_key_exchange_algorithm_t *h3_key_exchanges[128];
 static h2o_http3client_ctx_t h3ctx = {
     .tls =
         {
@@ -231,7 +227,7 @@ static int load_http3_session_cb(h2o_httpclient_ctx_t *ctx, struct sockaddr *ser
     return 1;
 }
 
-static int save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
+static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token)
 {
     save_session(quicly_get_tls(conn), NULL, NULL, &token);
     return 0;
@@ -698,6 +694,8 @@ static void usage(const char *progname)
             "               (default: %" PRIu64 ")\n"
             " --io-timeout <milliseconds>\n"
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
+            " --http3-key-exchange <name>\n"
+            "               overrides the TLS/1.3 key exchanges to be used\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
@@ -818,6 +816,7 @@ int main(int argc, char **argv)
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
+        OPT_HTTP3_KEY_EXCHANGE,
         OPT_UPGRADE,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -826,6 +825,7 @@ int main(int argc, char **argv)
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+                                {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
@@ -1007,6 +1007,19 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case OPT_HTTP3_KEY_EXCHANGE: {
+            ptls_key_exchange_algorithm_t **named, **slot;
+            for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                if (strcasecmp((*named)->name, optarg) == 0)
+                    break;
+            if (*named == NULL) {
+                fprintf(stderr, "unknown key exchange: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+            for (slot = h3_key_exchanges; *slot != NULL; ++slot)
+                ;
+            *slot = *named;
+        } break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
             break;
@@ -1026,6 +1039,14 @@ int main(int argc, char **argv)
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
+    }
+
+    if (h3_key_exchanges[0] == NULL) {
+        size_t i = 0;
+#if PTLS_OPENSSL_HAVE_X25519
+        h3_key_exchanges[i++] = &ptls_openssl_x25519;
+#endif
+        h3_key_exchanges[i++] = &ptls_openssl_secp256r1;
     }
 
     int is_connect = 0;
