@@ -23,6 +23,9 @@
 		0829879626E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
 		0829879726E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
 		0829879826E1F3710053638F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829879526E1F3700053638F /* rate.c */; };
+		082BAC502E654C6A00881E91 /* pipe_reader.h in Headers */ = {isa = PBXBuildFile; fileRef = 082BAC4F2E654C6A00881E91 /* pipe_reader.h */; };
+		082BAC522E654C8D00881E91 /* pipe_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = 082BAC512E654C8D00881E91 /* pipe_reader.c */; };
+		082BAC532E654C8D00881E91 /* pipe_reader.c in Sources */ = {isa = PBXBuildFile; fileRef = 082BAC512E654C8D00881E91 /* pipe_reader.c */; };
 		084FC7C11D54B90D00E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C01D54B90D00E89F66 /* http2_debug_state.c */; };
 		084FC7C51D54BB9200E89F66 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 084FC7C31D54BB9200E89F66 /* http2_debug_state.c */; };
 		08790DDA1D80153600A04BC1 /* net.c in Sources */ = {isa = PBXBuildFile; fileRef = 08790DD91D80153600A04BC1 /* net.c */; };
@@ -707,6 +710,8 @@
 		0829879526E1F3700053638F /* rate.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		082B0FF52AAAE83A0091B1D5 /* 80resume-context.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "80resume-context.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		082BAC4D2E5F2EE300881E91 /* 40http3-hrr.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = "40http3-hrr.t"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
+		082BAC4F2E654C6A00881E91 /* pipe_reader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipe_reader.h; sourceTree = "<group>"; };
+		082BAC512E654C8D00881E91 /* pipe_reader.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipe_reader.c; sourceTree = "<group>"; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -1650,6 +1655,7 @@
 				107923B919A3217300C52AD6 /* context.c */,
 				107923B019A3217300C52AD6 /* headers.c */,
 				10835E001C9A6C2400197E59 /* logconf.c */,
+				082BAC512E654C8D00881E91 /* pipe_reader.c */,
 				10AA2EBB1A9EEDF8004322AC /* proxy.c */,
 				107923BC19A3217300C52AD6 /* request.c */,
 				107923C019A3217300C52AD6 /* util.c */,
@@ -2030,6 +2036,7 @@
 				10AA2EA91A8DDC57004322AC /* multithread.h */,
 				10B38A711B8D34BB007DC191 /* mruby_.h */,
 				1058F6EC1D7CC81E00FFFFA3 /* openssl_backport.h */,
+				082BAC4F2E654C6A00881E91 /* pipe_reader.h */,
 				E901C43C213FAE0300D17C93 /* qpack.h */,
 				1047A9FE1D0E6D5900CC4BCE /* rand.h */,
 				08790DE11D8275C100A04BC1 /* redis.h */,
@@ -3019,6 +3026,7 @@
 				10F4180119C2D31600B6E31A /* yoml.h in Headers */,
 				1065E6EE19B7BA5A00686E72 /* websocket.h in Headers */,
 				0812AB231D7FCFEB00004F23 /* hiredis.h in Headers */,
+				082BAC502E654C6A00881E91 /* pipe_reader.h in Headers */,
 				1079245419A32C0800C52AD6 /* token_table.h in Headers */,
 				E980423A22463044008B9745 /* defaults.h in Headers */,
 				1065E70D19BF6D4600686E72 /* uv-binding.h in Headers */,
@@ -3433,6 +3441,7 @@
 				10A3D4081B50DAB700327CF9 /* close.c in Sources */,
 				08CEA9D226701D7600B4BB6B /* rand.c in Sources */,
 				105534EF1A440FC800627ECB /* config.c in Sources */,
+				082BAC532E654C8D00881E91 /* pipe_reader.c in Sources */,
 				10E299581A67E68500701AA6 /* scheduler.c in Sources */,
 				082195102685262B00E3EFCF /* cc-pico.c in Sources */,
 				107923D319A3217300C52AD6 /* util.c in Sources */,
@@ -3716,6 +3725,7 @@
 				E9708B5D1E52C80F0029E0A5 /* compress.c in Sources */,
 				E9DF012A24E4CDF60002EEC7 /* cc-cubic.c in Sources */,
 				10FFEE0A1BB23A8C0087AD75 /* neverbleed.c in Sources */,
+				082BAC522E654C8D00881E91 /* pipe_reader.c in Sources */,
 				E9708B811E52C84A0029E0A5 /* http2_debug_state.c in Sources */,
 				E9708B7A1E52C83D0029E0A5 /* redirect.c in Sources */,
 				E9316EEB24417EAA00C9C127 /* huffman.c in Sources */,
