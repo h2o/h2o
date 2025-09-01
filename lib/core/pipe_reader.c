@@ -5,7 +5,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-
+#include "cloexec.h"
 #include "h2o.h"
 
 void h2o_pipe_reader_init(h2o_pipe_reader_t *reader)
@@ -34,7 +34,7 @@ int h2o_pipe_reader_new(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
 #ifdef __linux__
     return pipe2(reader->fds, O_NONBLOCK | O_CLOEXEC) == 0;
 #else
-    if (cloexec_pipe(fds) != 0)
+    if (cloexec_pipe(reader->fds) != 0)
         return 0;
     fcntl(reader->fds[0], F_SETFL, O_NONBLOCK);
     fcntl(reader->fds[1], F_SETFL, O_NONBLOCK);
