@@ -129,17 +129,8 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         self->file.ref = NULL;
     }
 #if H2O_USE_IO_URING
-    if (h2o_pipe_reader_in_use(&self->pipe_reader)) {
-        if (self->src_req != NULL) {
-            h2o_pipe_reader_dispose(self->src_req->conn->ctx, &self->pipe_reader);
-        } else {
-            /* TODO return pipe upon abrupt close too? maybe that's not need */
-            close(self->pipe_reader.fds[0]);
-            close(self->pipe_reader.fds[1]);
-        }
-        self->pipe_reader.fds[0] = -1;
-        self->pipe_reader.fds[1] = -1;
-    }
+    h2o_pipe_reader_dispose(self->src_req->conn->ctx, &self->pipe_reader,
+                            self->src_req != NULL /* TODO reuse pipe upon abrupt close too? maybe that's not needed */);
 #endif
 }
 

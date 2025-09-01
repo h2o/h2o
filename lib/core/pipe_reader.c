@@ -63,12 +63,12 @@ drain_more:
     return 1;
 }
 
-void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
+void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader, int may_reuse)
 {
-    assert(reader->fds[0] != -1);
-    assert(reader->fds[1] != -1);
+    if (reader->fds[0] == -1)
+        return;
 
-    if (ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && h2o_empty_pipe(reader->fds[0])) {
+    if (may_reuse && ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && h2o_empty_pipe(reader->fds[0])) {
         int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
         dst[0] = reader->fds[0];
         dst[1] = reader->fds[1];

@@ -37,7 +37,7 @@ int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader);
 /**
  * disposes of the pipe reader
  */
-void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader);
+void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader, int may_reuse);
 /**
  * if there is any data to be sent
  */
