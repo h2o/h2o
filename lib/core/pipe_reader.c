@@ -22,7 +22,7 @@ void h2o_pipe_reader_init(h2o_pipe_reader_t *reader)
     };
 }
 
-int h2o_pipe_reader_new(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
+int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
 {
     if (ctx->spare_pipes.count > 0) {
         int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
@@ -40,11 +40,6 @@ int h2o_pipe_reader_new(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
     fcntl(reader->fds[1], F_SETFL, O_NONBLOCK);
     return 1;
 #endif
-}
-
-int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
-{
-    return h2o_pipe_reader_new(ctx, reader) ? reader->fds[1] : -1;
 }
 
 int h2o_empty_pipe(int fd)

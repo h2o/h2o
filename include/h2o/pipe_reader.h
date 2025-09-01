@@ -31,11 +31,7 @@ void h2o_pipe_reader_send(h2o_req_t *req, h2o_pipe_reader_t *reader, h2o_send_st
  */
 void h2o_pipe_reader_init(h2o_pipe_reader_t *reader);
 /**
- *
- */
-int h2o_pipe_reader_new(h2o_context_t *ctx, h2o_pipe_reader_t *reader);
-/**
- *
+ * starts a pipe reader and returns a boolean indicating success
  */
 int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader);
 /**

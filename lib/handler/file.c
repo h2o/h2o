@@ -399,7 +399,7 @@ Opened:
     h2o_pipe_reader_init(&self->pipe_reader);
     h2o_pipe_reader_update(&self->pipe_reader, self->bytesleft);
     int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
-    if (try_async_splice && h2o_pipe_reader_new(req->conn->ctx, &self->pipe_reader)) {
+    if (try_async_splice && h2o_pipe_reader_start(req->conn->ctx, &self->pipe_reader)) {
         self->super.stop = do_stop_async_splice;
         self->src_req = req;
     } else {
