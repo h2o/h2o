@@ -1410,6 +1410,10 @@ struct st_h2o_req_t {
      * When the protocol handler returns a successful response, filters are skipped.
      */
     unsigned char is_tunnel_req : 1;
+    /**
+     * if path_normalized contains a NULL character
+     */
+    unsigned path_normalized_has_null_char : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*

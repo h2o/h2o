@@ -150,8 +150,10 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
     req->method = req->input.method;
     req->authority = req->input.authority;
     req->path = req->input.path;
-    req->path_normalized =
-        h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at, &req->norm_indexes);
+    int has_null_char;
+    req->path_normalized = h2o_url_normalize_path(&req->pool, req->input.path.base, req->input.path.len, &req->query_at,
+                                                  &req->norm_indexes, &has_null_char);
+    req->path_normalized_has_null_char = has_null_char;
     req->input.query_at = req->query_at; /* we can do this since input.path == path */
 
     return hostconf;
@@ -428,7 +430,10 @@ void h2o_reprocess_request(h2o_req_t *req, h2o_iovec_t method, const h2o_url_sch
     req->scheme = scheme;
     req->authority = authority;
     req->path = path;
-    req->path_normalized = h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
+    int has_null_char;
+    req->path_normalized =
+        h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes, &has_null_char);
+    req->path_normalized_has_null_char = has_null_char;
     req->authority_wildcard_match = h2o_iovec_init(NULL, 0);
     req->overrides = overrides;
     req->res_is_delegated |= is_delegated;

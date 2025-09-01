@@ -871,6 +871,10 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     struct st_h2o_sendfile_generator_t *generator = NULL;
     int is_dir;
 
+    /* path including a NULL character never matches a file system (because NULL cannot be used on the file system) */
+    if (req->path_normalized_has_null_char)
+        return -1;
+
     if (req->path_normalized.len < self->conf_path.len) {
         h2o_iovec_t dest = h2o_uri_escape(&req->pool, self->conf_path.base, self->conf_path.len, "/");
         if (req->query_at != SIZE_MAX)

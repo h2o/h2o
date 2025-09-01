@@ -471,6 +471,12 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     size_t target = SIZE_MAX;
     h2o_linklist_t *sockets = NULL;
 
+    /* As an optimization, avoid trying to reuse (and obtaining lock for the purpose) when the pool is not going to retain sockets.
+     * The optimization is limited to non-global socket pools, as the rest of the logic depends on a valid entry within
+     * `pool->targets` to be targeted, that a global pool allocates dynamically. */
+    if (pool->timeout == 0 && !h2o_socketpool_is_global(pool))
+        goto SkipLookup;
+
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
     check_pool_expired_locked(pool, loop);
@@ -534,7 +540,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
 
-    /* FIXME repsect `capacity` */
+SkipLookup:
+    /* FIXME respect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
 
     /* prepare request object */

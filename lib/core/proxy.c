@@ -737,8 +737,10 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
             append.len -= 1;
         }
         req->path = h2o_concat(&req->pool, origin->path, append);
+        int has_null_char;
         req->path_normalized =
-            h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes);
+            h2o_url_normalize_path(&req->pool, req->path.base, req->path.len, &req->query_at, &req->norm_indexes, &has_null_char);
+        req->path_normalized_has_null_char = has_null_char;
     }
 
     reprocess_if_too_early = h2o_conn_is_early_data(req->conn);
