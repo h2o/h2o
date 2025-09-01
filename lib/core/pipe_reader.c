@@ -42,7 +42,7 @@ int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
 #endif
 }
 
-int h2o_empty_pipe(int fd)
+static int empty_pipe(int fd)
 {
     ssize_t ret;
     char buf[1024];
@@ -68,7 +68,7 @@ void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader, int 
     if (reader->fds[0] == -1)
         return;
 
-    if (may_reuse && ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && h2o_empty_pipe(reader->fds[0])) {
+    if (may_reuse && ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(reader->fds[0])) {
         int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
         dst[0] = reader->fds[0];
         dst[1] = reader->fds[1];
