@@ -73,7 +73,7 @@ struct st_h2o_sendfile_generator_t {
      * back pointer to the request which is necessary for splicing async; becomes NULL when the generator is stopped
      */
     h2o_req_t *src_req;
-    h2o_pipe_reader_t pipe_reader;
+    h2o_pipe_sender_t pipe_sender;
 #endif
 };
 
@@ -129,7 +129,7 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         self->file.ref = NULL;
     }
 #if H2O_USE_IO_URING
-    h2o_pipe_reader_dispose(self->src_req->conn->ctx, &self->pipe_reader,
+    h2o_pipe_sender_dispose(self->src_req->conn->ctx, &self->pipe_sender,
                             self->src_req != NULL /* TODO reuse pipe upon abrupt close too? maybe that's not needed */);
 #endif
 }
@@ -168,7 +168,7 @@ static void do_proceed_on_splice_complete(h2o_io_uring_cmd_t *cmd)
     self->file.off += cmd->result;
     self->bytesleft -= cmd->result;
 
-    h2o_pipe_reader_send(self->src_req, &self->pipe_reader,
+    h2o_pipe_sender_send(self->src_req, &self->pipe_sender,
                          self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
 
@@ -251,9 +251,9 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
     /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
 #if H2O_USE_IO_URING
-    if (h2o_pipe_reader_in_use(&self->pipe_reader)) {
+    if (h2o_pipe_sender_in_use(&self->pipe_sender)) {
         h2o_mem_addref_shared(self);
-        h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_reader.fds[1], -1,
+        h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
                             bytes_to_send, 0, do_proceed_on_splice_complete, self);
         return;
     }
@@ -387,17 +387,17 @@ Opened:
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
-    h2o_pipe_reader_init(&self->pipe_reader);
-    h2o_pipe_reader_update(&self->pipe_reader, self->bytesleft);
+    h2o_pipe_sender_init(&self->pipe_sender);
+    h2o_pipe_sender_update(&self->pipe_sender, self->bytesleft);
     int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
-    if (try_async_splice && h2o_pipe_reader_start(req->conn->ctx, &self->pipe_reader)) {
+    if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
         self->super.stop = do_stop_async_splice;
         self->src_req = req;
     } else {
         if (try_async_splice)
             h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
-        self->pipe_reader.fds[0] = -1;
-        self->pipe_reader.fds[1] = -1;
+        self->pipe_sender.fds[0] = -1;
+        self->pipe_sender.fds[1] = -1;
     }
 #endif
 
