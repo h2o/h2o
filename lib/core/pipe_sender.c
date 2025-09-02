@@ -1,4 +1,4 @@
-#include "h2o/pipe_reader.h"
+#include "h2o/pipe_sender.h"
 
 #include <fcntl.h>
 #include <sys/ioctl.h>
@@ -8,9 +8,9 @@
 #include "cloexec.h"
 #include "h2o.h"
 
-void h2o_pipe_reader_init(h2o_pipe_reader_t *reader)
+void h2o_pipe_sender_init(h2o_pipe_sender_t *sender)
 {
-    *reader = (h2o_pipe_reader_t){
+    *sender = (h2o_pipe_sender_t){
         .fds =
             {
                 -1,
@@ -22,22 +22,22 @@ void h2o_pipe_reader_init(h2o_pipe_reader_t *reader)
     };
 }
 
-int h2o_pipe_reader_start(h2o_context_t *ctx, h2o_pipe_reader_t *reader)
+int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender)
 {
     if (ctx->spare_pipes.count > 0) {
         int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
-        reader->fds[0] = src[0];
-        reader->fds[1] = src[1];
+        sender->fds[0] = src[0];
+        sender->fds[1] = src[1];
         return 1;
     }
 
 #ifdef __linux__
-    return pipe2(reader->fds, O_NONBLOCK | O_CLOEXEC) == 0;
+    return pipe2(sender->fds, O_NONBLOCK | O_CLOEXEC) == 0;
 #else
-    if (cloexec_pipe(reader->fds) != 0)
+    if (cloexec_pipe(sender->fds) != 0)
         return 0;
-    fcntl(reader->fds[0], F_SETFL, O_NONBLOCK);
-    fcntl(reader->fds[1], F_SETFL, O_NONBLOCK);
+    fcntl(sender->fds[0], F_SETFL, O_NONBLOCK);
+    fcntl(sender->fds[1], F_SETFL, O_NONBLOCK);
     return 1;
 #endif
 }
@@ -63,40 +63,40 @@ drain_more:
     return 1;
 }
 
-void h2o_pipe_reader_dispose(h2o_context_t *ctx, h2o_pipe_reader_t *reader, int may_reuse)
+void h2o_pipe_sender_dispose(h2o_context_t *ctx, h2o_pipe_sender_t *sender, int may_reuse)
 {
-    if (reader->fds[0] == -1)
+    if (sender->fds[0] == -1)
         return;
 
-    if (may_reuse && ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(reader->fds[0])) {
+    if (may_reuse && ctx->spare_pipes.count < ctx->globalconf->max_spare_pipes && empty_pipe(sender->fds[0])) {
         int *dst = ctx->spare_pipes.pipes[ctx->spare_pipes.count++];
-        dst[0] = reader->fds[0];
-        dst[1] = reader->fds[1];
+        dst[0] = sender->fds[0];
+        dst[1] = sender->fds[1];
     } else {
-        close(reader->fds[0]);
-        close(reader->fds[1]);
+        close(sender->fds[0]);
+        close(sender->fds[1]);
     }
 
-    reader->fds[0] = -1;
+    sender->fds[0] = -1;
 }
 
-int h2o_pipe_reader_is_empty(h2o_pipe_reader_t *reader)
+int h2o_pipe_sender_is_empty(h2o_pipe_sender_t *sender)
 {
-    return reader->bytes_read == reader->bytes_sent;
+    return sender->bytes_read == sender->bytes_sent;
 }
 
-void h2o_pipe_reader_update(h2o_pipe_reader_t *reader, size_t read_bytes)
+void h2o_pipe_sender_update(h2o_pipe_sender_t *sender, size_t read_bytes)
 {
-    reader->bytes_read = read_bytes;
+    sender->bytes_read = read_bytes;
 }
 
 static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
 {
-    h2o_pipe_reader_t *reader = (void *)vec->cb_arg[0];
+    h2o_pipe_sender_t *sender = (void *)vec->cb_arg[0];
 
     while (len != 0) {
         ssize_t ret;
-        while ((ret = read(reader->fds[0], dst, len)) == -1 && errno == EINTR)
+        while ((ret = read(sender->fds[0], dst, len)) == -1 && errno == EINTR)
             ;
         if (ret <= 0) {
             assert(errno != EAGAIN);
@@ -113,10 +113,10 @@ static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
 static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
 {
 #ifdef __linux__
-    h2o_pipe_reader_t *reader = (void *)vec->cb_arg[0];
+    h2o_pipe_sender_t *sender = (void *)vec->cb_arg[0];
 
     ssize_t bytes_sent;
-    while ((bytes_sent = splice(reader->fds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
+    while ((bytes_sent = splice(sender->fds[0], NULL, sockfd, NULL, len, SPLICE_F_NONBLOCK)) == -1 && errno == EINTR)
         ;
     if (bytes_sent == -1 && errno == EAGAIN)
         return 0;
@@ -131,16 +131,16 @@ static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
 #endif
 }
 
-void h2o_pipe_reader_send(h2o_req_t *req, h2o_pipe_reader_t *reader, h2o_send_state_t send_state)
+void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, h2o_send_state_t send_state)
 {
     static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
     h2o_sendvec_t vec = {.callbacks = &callbacks};
-    if ((vec.len = reader->bytes_read - reader->bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
+    if ((vec.len = sender->bytes_read - sender->bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
         vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
-    vec.cb_arg[0] = (uint64_t)reader;
+    vec.cb_arg[0] = (uint64_t)sender;
     vec.cb_arg[1] = 0; /* unused */
 
-    reader->bytes_sent += vec.len;
-    reader->inflight = 1;
+    sender->bytes_sent += vec.len;
+    sender->inflight = 1;
     h2o_sendvec(req, &vec, 1, send_state);
 }
