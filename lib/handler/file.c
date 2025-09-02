@@ -167,6 +167,7 @@ static void do_proceed_on_splice_complete(h2o_io_uring_cmd_t *cmd)
     self->file.off += cmd->result;
     self->bytesleft -= cmd->result;
 
+    h2o_pipe_sender_update(&self->pipe_sender, self->pipe_sender.bytes_read + cmd->result);
     h2o_pipe_sender_send(self->src_req, &self->pipe_sender,
                          self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
@@ -387,7 +388,6 @@ Opened:
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
     h2o_pipe_sender_init(&self->pipe_sender);
-    h2o_pipe_sender_update(&self->pipe_sender, self->bytesleft);
     int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
     if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
         self->super.stop = do_stop_async_splice;
