@@ -321,7 +321,7 @@ static void do_close(struct rp_generator_t *self)
         client->cancel(client);
     }
     h2o_timer_unlink(&self->send_headers_timeout);
-    h2o_pipe_sender_dispose(self->src_req->conn->ctx, &self->pipe_sender, 1);
+    h2o_pipe_sender_dispose(&self->pipe_sender, self->src_req->conn->ctx);
 }
 
 static void do_stop(h2o_generator_t *generator, h2o_req_t *req)

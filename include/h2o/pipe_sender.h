@@ -37,7 +37,7 @@ int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender);
 /**
  * disposes of the pipe sender
  */
-void h2o_pipe_sender_dispose(h2o_context_t *ctx, h2o_pipe_sender_t *sender, int may_reuse);
+void h2o_pipe_sender_dispose(h2o_pipe_sender_t *sender, h2o_context_t *ctx);
 /**
  * if there is any data to be sent
  */

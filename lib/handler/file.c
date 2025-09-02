@@ -129,8 +129,7 @@ static void close_file(struct st_h2o_sendfile_generator_t *self)
         self->file.ref = NULL;
     }
 #if H2O_USE_IO_URING
-    h2o_pipe_sender_dispose(self->src_req->conn->ctx, &self->pipe_sender,
-                            self->src_req != NULL /* TODO reuse pipe upon abrupt close too? maybe that's not needed */);
+    h2o_pipe_sender_dispose(&self->pipe_sender, self->src_req != NULL ? self->src_req->conn->ctx : NULL);
 #endif
 }
 
