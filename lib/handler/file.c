@@ -387,11 +387,11 @@ Opened:
     self->send_etag = (flags & H2O_FILE_FLAG_NO_ETAG) == 0;
     self->gunzip = gunzip;
 #if H2O_USE_IO_URING
+    self->src_req = req;
     h2o_pipe_sender_init(&self->pipe_sender);
     int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
     if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
         self->super.stop = do_stop_async_splice;
-        self->src_req = req;
     } else {
         if (try_async_splice)
             h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
