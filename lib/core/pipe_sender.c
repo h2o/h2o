@@ -22,26 +22,6 @@ void h2o_pipe_sender_init(h2o_pipe_sender_t *sender)
     };
 }
 
-int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender)
-{
-    if (ctx->spare_pipes.count > 0) {
-        int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
-        sender->fds[0] = src[0];
-        sender->fds[1] = src[1];
-        return 1;
-    }
-
-#ifdef __linux__
-    return pipe2(sender->fds, O_NONBLOCK | O_CLOEXEC) == 0;
-#else
-    if (cloexec_pipe(sender->fds) != 0)
-        return 0;
-    fcntl(sender->fds[0], F_SETFL, O_NONBLOCK);
-    fcntl(sender->fds[1], F_SETFL, O_NONBLOCK);
-    return 1;
-#endif
-}
-
 static int empty_pipe(int fd)
 {
     ssize_t ret;
@@ -83,6 +63,26 @@ void h2o_pipe_sender_dispose(h2o_pipe_sender_t *sender, h2o_context_t *ctx)
 int h2o_pipe_sender_is_empty(h2o_pipe_sender_t *sender)
 {
     return sender->bytes_read == sender->bytes_sent;
+}
+
+int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender)
+{
+    if (ctx->spare_pipes.count > 0) {
+        int *src = ctx->spare_pipes.pipes[--ctx->spare_pipes.count];
+        sender->fds[0] = src[0];
+        sender->fds[1] = src[1];
+        return 1;
+    }
+
+#ifdef __linux__
+    return pipe2(sender->fds, O_NONBLOCK | O_CLOEXEC) == 0;
+#else
+    if (cloexec_pipe(sender->fds) != 0)
+        return 0;
+    fcntl(sender->fds[0], F_SETFL, O_NONBLOCK);
+    fcntl(sender->fds[1], F_SETFL, O_NONBLOCK);
+    return 1;
+#endif
 }
 
 void h2o_pipe_sender_update(h2o_pipe_sender_t *sender, size_t read_bytes)

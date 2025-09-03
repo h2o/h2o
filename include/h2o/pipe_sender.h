@@ -23,33 +23,33 @@ typedef struct st_h2o_pipe_sender_t {
 } h2o_pipe_sender_t;
 
 /**
- * wrapper function of `h2o_sendvec` that submits the contents of the pipe
- */
-void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, h2o_send_state_t send_state);
-/**
  * initialized the pipe sender
  */
 void h2o_pipe_sender_init(h2o_pipe_sender_t *sender);
-/**
- * starts a pipe sender and returns a boolean indicating success
- */
-int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender);
 /**
  * disposes of the pipe sender
  */
 void h2o_pipe_sender_dispose(h2o_pipe_sender_t *sender, h2o_context_t *ctx);
 /**
+ * if the pipe has been allocated
+ */
+static int h2o_pipe_sender_in_use(h2o_pipe_sender_t *sender);
+/**
  * if there is any data to be sent
  */
 int h2o_pipe_sender_is_empty(h2o_pipe_sender_t *sender);
+/**
+ * starts a pipe sender and returns a boolean indicating success
+ */
+int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender);
 /**
  * notifies the pipe sender that new data has become available
  */
 void h2o_pipe_sender_update(h2o_pipe_sender_t *sender, size_t read_bytes);
 /**
- * if the pipe has been allocated
+ * wrapper function of `h2o_sendvec` that submits the contents of the pipe
  */
-static int h2o_pipe_sender_in_use(h2o_pipe_sender_t *sender);
+void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, h2o_send_state_t send_state);
 
 /* inline definitions */
 
