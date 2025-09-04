@@ -13,11 +13,12 @@ typedef struct st_h2o_pipe_sender_t {
      */
     int inflight;
     /**
-     * cumulative bytes being read to the pipe
+     * cumulative bytes being read
      */
     size_t bytes_read;
     /**
-     * cumulative bytes being passed to `h2o_sendvec`
+     * cumulative bytes being sent; when `h2o_pipe_sender_send` is called, `bytes_read - bytes_sent` is the amount of data assumed
+     * to be in the pipe
      */
     size_t bytes_sent;
 } h2o_pipe_sender_t;
