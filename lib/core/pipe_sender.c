@@ -8,20 +8,6 @@
 #include "cloexec.h"
 #include "h2o.h"
 
-void h2o_pipe_sender_init(h2o_pipe_sender_t *sender)
-{
-    *sender = (h2o_pipe_sender_t){
-        .fds =
-            {
-                -1,
-                -1,
-            },
-        .inflight = 0,
-        .bytes_read = 0,
-        .bytes_sent = 0,
-    };
-}
-
 static int empty_pipe(int fd)
 {
     ssize_t ret;
@@ -60,11 +46,6 @@ void h2o_pipe_sender_dispose(h2o_pipe_sender_t *sender, h2o_context_t *ctx)
     sender->fds[0] = -1;
 }
 
-int h2o_pipe_sender_is_empty(h2o_pipe_sender_t *sender)
-{
-    return sender->bytes_read == sender->bytes_sent;
-}
-
 int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender)
 {
     if (ctx->spare_pipes.count > 0) {
@@ -83,11 +64,6 @@ int h2o_pipe_sender_start(h2o_context_t *ctx, h2o_pipe_sender_t *sender)
     fcntl(sender->fds[1], F_SETFL, O_NONBLOCK);
     return 1;
 #endif
-}
-
-void h2o_pipe_sender_update(h2o_pipe_sender_t *sender, size_t read_bytes)
-{
-    sender->bytes_read = read_bytes;
 }
 
 static int from_pipe_read(h2o_sendvec_t *vec, void *dst, size_t len)
