@@ -392,11 +392,8 @@ Opened:
     int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
     if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
         self->super.stop = do_stop_async_splice;
-    } else {
-        if (try_async_splice)
-            h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
-        self->pipe_sender.fds[0] = -1;
-        self->pipe_sender.fds[1] = -1;
+    } else if (try_async_splice) {
+        h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
     }
 #endif
 
