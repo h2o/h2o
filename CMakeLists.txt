@@ -418,6 +418,7 @@ SET(LIB_SOURCE_FILES
     lib/core/context.c
     lib/core/headers.c
     lib/core/logconf.c
+    lib/core/pipe_sender.c
     lib/core/proxy.c
     lib/core/request.c
     lib/core/util.c

@@ -28,6 +28,7 @@
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/httpclient.h"
+#include "h2o/pipe_sender.h"
 
 struct rp_generator_t {
     h2o_generator_t super;
@@ -40,14 +41,10 @@ struct rp_generator_t {
     h2o_buffer_t *last_content_before_send;
     h2o_doublebuffer_t sending;
     h2o_timer_t send_headers_timeout;
-    size_t body_bytes_read, body_bytes_sent;
-    struct {
-        int fds[2]; /* fd[0] set to -1 unless used */
-    } pipe_reader;
+    h2o_pipe_sender_t pipe_sender;
     unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
-    unsigned pipe_inflight : 1;
     int *generator_disposed;
 };
 
@@ -324,10 +321,7 @@ static void do_close(struct rp_generator_t *self)
         client->cancel(client);
     }
     h2o_timer_unlink(&self->send_headers_timeout);
-    if (self->pipe_reader.fds[0] != -1) {
-        h2o_context_return_spare_pipe(self->src_req->conn->ctx, self->pipe_reader.fds);
-        self->pipe_reader.fds[0] = -1;
-    }
+    h2o_pipe_sender_dispose(&self->pipe_sender, self->src_req->conn->ctx);
 }
 
 static void do_stop(h2o_generator_t *generator, h2o_req_t *req)
@@ -361,7 +355,7 @@ static void do_send(struct rp_generator_t *self)
         ststate = H2O_SEND_STATE_ERROR;
 
     if (veccnt != 0)
-        self->body_bytes_sent += vecs[0].len;
+        self->pipe_sender.bytes_sent += vecs[0].len;
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
@@ -371,7 +365,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
                                   : self->res_done     ? H2O_SEND_STATE_FINAL
                                                        : H2O_SEND_STATE_IN_PROGRESS;
 
-    if (self->body_bytes_read == self->body_bytes_sent) {
+    if (h2o_pipe_sender_is_empty(&self->pipe_sender)) {
         if (h2o_send_state_is_in_progress(send_state)) {
             /* resume reading only when we know that the pipe (to which we read) has become empty */
             self->client->update_window(self->client);
@@ -381,13 +375,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-    size_t len;
-    if ((len = self->body_bytes_read - self->body_bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
-        len = H2O_PULL_SENDVEC_MAX_SIZE;
-
-    self->body_bytes_sent += len;
-    self->pipe_inflight = 1;
-    h2o_send_from_pipe(self->src_req, self->pipe_reader.fds[0], len, send_state);
+    h2o_pipe_sender_send(self->src_req, &self->pipe_sender, send_state);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
@@ -397,12 +385,12 @@ static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)
     if (self->sending.inflight) {
         h2o_doublebuffer_consume(&self->sending);
     } else {
-        assert(self->pipe_reader.fds[0] != -1);
-        assert(self->pipe_inflight);
-        self->pipe_inflight = 0;
+        assert(h2o_pipe_sender_in_use(&self->pipe_sender));
+        assert(self->pipe_sender.inflight);
+        self->pipe_sender.inflight = 0;
     }
 
-    if (self->pipe_reader.fds[0] != -1 && self->sending.buf->size == 0) {
+    if (h2o_pipe_sender_in_use(&self->pipe_sender) && self->sending.buf->size == 0) {
         do_send_from_pipe(self);
     } else {
         do_send(self);
@@ -447,7 +435,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
     int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
-    self->body_bytes_read = client->bytes_read.body;
+    h2o_pipe_sender_update(&self->pipe_sender, client->bytes_read.body);
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
@@ -472,7 +460,7 @@ static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_heade
 {
     struct rp_generator_t *self = client->data;
 
-    self->body_bytes_read = client->bytes_read.body;
+    h2o_pipe_sender_update(&self->pipe_sender, client->bytes_read.body);
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
@@ -482,7 +470,7 @@ static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_heade
 
     if (errstr != NULL)
         on_body_on_close(self, errstr);
-    if (!self->sending.inflight && !self->pipe_inflight)
+    if (!self->sending.inflight && !self->pipe_sender.inflight)
         do_send_from_pipe(self);
 
     return 0;
@@ -643,11 +631,10 @@ static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errs
 
     /* switch to using pipe reader, if the opportunity is provided */
     if (args->pipe_reader != NULL) {
-        if (h2o_context_new_pipe(req->conn->ctx, self->pipe_reader.fds)) {
-            args->pipe_reader->fd = self->pipe_reader.fds[1];
+        if (h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
+            args->pipe_reader->fd = self->pipe_sender.fds[1];
             args->pipe_reader->on_body_piped = on_body_piped;
         } else {
-            assert(self->pipe_reader.fds[0] == -1); /* check the field remains marked as unused */
             h2o_req_log_error(req, "lib/core/proxy.c", "failed to allocate zero-copy pipe; falling back to read/write");
         }
     }
@@ -829,12 +816,9 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     h2o_doublebuffer_init(&self->sending, &h2o_socket_buffer_prototype);
     memset(&req->proxy_stats, 0, sizeof(req->proxy_stats));
     h2o_timer_init(&self->send_headers_timeout, on_send_headers_timeout);
-    self->body_bytes_read = 0;
-    self->body_bytes_sent = 0;
-    self->pipe_reader.fds[0] = -1;
-    self->pipe_inflight = 0;
     self->req_done = 0;
     self->res_done = 0;
+    h2o_pipe_sender_init(&self->pipe_sender);
 
     return self;
 }
