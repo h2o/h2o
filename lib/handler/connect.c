@@ -148,7 +148,7 @@ static void add_proxy_status_header(struct st_connect_handler_t *handler, h2o_re
         return;
 
     h2o_mem_pool_t *pool = &req->pool;
-    h2o_iovec_t parts[9] = {
+    h2o_iovec_t parts[10] = {
         get_proxy_status_identity(req),
     };
     size_t nparts = 1;
@@ -165,8 +165,9 @@ static void add_proxy_status_header(struct st_connect_handler_t *handler, h2o_re
         parts[nparts++] = h2o_encode_sf_string(pool, details, SIZE_MAX);
     }
     if (dest_addr_str.base != NULL) {
-        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop="));
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("; next-hop=\""));
         parts[nparts++] = dest_addr_str;
+        parts[nparts++] = h2o_iovec_init(H2O_STRLIT("\""));
     }
     assert(nparts <= sizeof(parts) / sizeof(parts[0]));
     h2o_iovec_t hval = h2o_concat_list(pool, parts, nparts);
