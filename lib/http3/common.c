@@ -542,9 +542,9 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         khiter_t iter = kh_get_h2o_quic_idmap(ctx->conns_by_id, packets[0].cid.dest.plaintext.master_id);
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
-            /* CID-based matching on Initial and 0-RTT packets should only be applied for clients */
+            /* drop long header packets with different 4-tuple than the original, or if the incoming packet might be the first-
+             * flight from the client, advance to state lookup using `cons_accepting` */
             if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets)) {
-                /* 4-tuple changed during the handshake, drop packet */
                 if (!packets[0].cid.dest.might_be_client_generated)
                     return;
                 conn = NULL;
