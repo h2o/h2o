@@ -543,8 +543,12 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (iter != kh_end(ctx->conns_by_id)) {
             conn = kh_val(ctx->conns_by_id, iter);
             /* CID-based matching on Initial and 0-RTT packets should only be applied for clients */
-            if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets))
+            if (!quicly_is_destination(conn->quic, &destaddr->sa, &srcaddr->sa, packets)) {
+                /* 4-tuple changed during the handshake, drop packet */
+                if (!packets[0].cid.dest.might_be_client_generated)
+                    return;
                 conn = NULL;
+            }
         } else if (!packets[0].cid.dest.might_be_client_generated) {
             /* send stateless reset when we could not find a matching connection for a 1 RTT packet */
             if (packets[0].octets.len >= QUICLY_STATELESS_RESET_PACKET_MIN_LEN) {
