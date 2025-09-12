@@ -42,6 +42,9 @@
 #include "yrmcds.h"
 #include "picotls.h"
 #include "picotls/openssl.h"
+#if H2O_USE_FUSION
+#include "picotls/fusion.h"
+#endif
 #include "quicly.h"
 #include "quicly/defaults.h"
 #include "h2o/file.h"
@@ -1225,9 +1228,19 @@ static void init_quic_keyset(struct st_quic_keyset_t *keyset, uint8_t name, ptls
         master_secret = ptls_iovec_init(master_digestbuf, PTLS_SHA256_DIGEST_SIZE);
     }
 
+    ptls_cipher_algorithm_t *cid_cipher;
+    if (quic_is_clustered) {
+        cid_cipher = &ptls_openssl_aes128ecb;
+    } else {
+        cid_cipher = &ptls_openssl_quiclb;
+#if H2O_USE_FUSION
+        if (ptls_fusion_is_supported_by_cpu())
+            cid_cipher = &ptls_fusion_quiclb;
+#endif
+    }
+
     keyset->name = name;
-    keyset->cid = quicly_new_default_cid_encryptor(quic_is_clustered ? &ptls_openssl_aes128ecb : &ptls_openssl_bfecb,
-                                                   &ptls_openssl_aes128ecb, &ptls_openssl_sha256, master_secret);
+    keyset->cid = quicly_new_default_cid_encryptor(cid_cipher, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, master_secret);
     assert(keyset->cid != NULL);
     ret = ptls_hkdf_expand_label(&ptls_openssl_sha256, keybuf, PTLS_SHA256_DIGEST_SIZE, master_secret, "address-token",
                                  ptls_iovec_init(NULL, 0), "");
