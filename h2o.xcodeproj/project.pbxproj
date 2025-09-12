@@ -713,6 +713,7 @@
 		082BAC4E2E605B3600881E91 /* 80issues3483.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 80issues3483.t; sourceTree = "<group>"; };
 		082BAC4F2E654C6A00881E91 /* pipe_sender.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pipe_sender.h; sourceTree = "<group>"; };
 		082BAC512E654C8D00881E91 /* pipe_sender.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pipe_sender.c; sourceTree = "<group>"; };
+		082BAC542E73F1D400881E91 /* quiclb-impl.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "quiclb-impl.h"; sourceTree = "<group>"; };
 		082E148C2692F51000603AED /* driver.cc */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = driver.cc; sourceTree = "<group>"; };
 		082E1B402692F52100603AED /* driver_common.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = driver_common.h; sourceTree = "<group>"; };
 		082E1B412692F52100603AED /* quicly_mock.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = quicly_mock.h; sourceTree = "<group>"; };
@@ -2763,6 +2764,7 @@
 				E9708AD91E499E040029E0A5 /* openssl.c */,
 				E93BB58D25DE3987009C24D8 /* pembase64.c */,
 				E9708ADA1E499E040029E0A5 /* picotls.c */,
+				082BAC542E73F1D400881E91 /* quiclb-impl.h */,
 			);
 			path = lib;
 			sourceTree = "<group>";
