@@ -33,10 +33,6 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/ssl.h>
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/provider.h>
-#define LOAD_OPENSSL_PROVIDER 1
-#endif
 #include "h2o/hiredis_.h"
 #include "yoml-parser.h"
 #include "yrmcds.h"
@@ -1189,12 +1185,6 @@ void init_openssl(void)
     OpenSSL_add_all_algorithms();
 #if H2O_CAN_OSSL_ASYNC
     ERR_load_ASYNC_strings();
-#endif
-
-    /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
-#if LOAD_OPENSSL_PROVIDER
-    OSSL_PROVIDER_load(NULL, "legacy");
-    OSSL_PROVIDER_load(NULL, "default");
 #endif
 
     cache_init_defaults();
