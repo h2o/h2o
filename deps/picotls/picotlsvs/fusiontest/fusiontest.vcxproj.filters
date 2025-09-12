@@ -21,5 +21,8 @@
     <ClCompile Include="..\..\deps\picotest\picotest.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\t\quiclb.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

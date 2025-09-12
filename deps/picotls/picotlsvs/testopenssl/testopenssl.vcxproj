@@ -155,6 +155,7 @@
     <ClCompile Include="..\..\t\hpke.c" />
     <ClCompile Include="..\..\t\openssl.c" />
     <ClCompile Include="..\..\t\picotls.c" />
+    <ClCompile Include="..\..\t\quiclb.c" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\deps\cifra\src\testnorx.katdata.inc" />

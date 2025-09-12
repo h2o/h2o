@@ -27,6 +27,7 @@
 #include "picotls/minicrypto.h"
 #include "../deps/picotest/picotest.h"
 #include "../lib/fusion.c"
+#include "test.h"
 
 static const char *tostr(const void *_p, size_t len)
 {
@@ -561,6 +562,7 @@ int main(int argc, char **argv)
 
     subtest("loadn128", test_loadn128);
     subtest("ecb", test_ecb);
+    subtest("quiclb", test_quiclb, &ptls_fusion_quiclb);
     subtest("gfmul128", test_gfmul);
     subtest("gcm-basic", gcm_basic);
     subtest("gcm-capacity", gcm_capacity);

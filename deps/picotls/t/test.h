@@ -111,4 +111,6 @@ void test_picotls(void);
 
 void test_hpke(ptls_hpke_kem_t **all_kems, ptls_hpke_cipher_suite_t **all_ciphers);
 
+void test_quiclb(ptls_cipher_algorithm_t *algo);
+
 #endif
