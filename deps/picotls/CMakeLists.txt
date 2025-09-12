@@ -58,7 +58,8 @@ SET(CORE_FILES
     lib/pembase64.c)
 SET(CORE_TEST_FILES
     t/hpke.c
-    t/picotls.c)
+    t/picotls.c
+    t/quiclb.c)
 IF (WITH_DTRACE)
     SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DPICOTLS_USE_DTRACE=1")
     DEFINE_DTRACE_DEPENDENCIES(${PROJECT_SOURCE_DIR}/picotls-probes.d picotls)
@@ -184,7 +185,8 @@ IF (WITH_FUSION)
     ADD_EXECUTABLE(test-fusion.t
         deps/picotest/picotest.c
         lib/picotls.c
-        t/fusion.c)
+        t/fusion.c
+        t/quiclb.c)
     TARGET_LINK_LIBRARIES(test-fusion.t picotls-minicrypto)
     SET_TARGET_PROPERTIES(test-fusion.t PROPERTIES COMPILE_FLAGS "-mavx2 -maes -mpclmul -mvaes -mvpclmulqdq")
     IF (WITH_DTRACE)
