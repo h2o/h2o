@@ -32,10 +32,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <openssl/opensslv.h>
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/provider.h>
-#define LOAD_OPENSSL_PROVIDER 1
-#endif
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
@@ -758,12 +754,6 @@ int main(int argc, char **argv)
     SSL_load_error_strings();
     SSL_library_init();
     OpenSSL_add_all_algorithms();
-
-    /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
-#if LOAD_OPENSSL_PROVIDER
-    OSSL_PROVIDER_load(NULL, "legacy");
-    OSSL_PROVIDER_load(NULL, "default");
-#endif
 
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
