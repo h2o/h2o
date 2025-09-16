@@ -398,6 +398,9 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         }
         stream->state = new_state;
         stream->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+        if (h2o_timeval_is_null(&stream->req.timestamps.response_start_at)) {
+            stream->req.timestamps.response_start_at = stream->req.timestamps.response_end_at;
+        }
         --stream->_num_streams_slot->open;
         stream->_num_streams_slot = NULL;
         if (stream->blocked_by_server)

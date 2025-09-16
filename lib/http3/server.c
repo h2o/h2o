@@ -1991,8 +1991,12 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 goto Exit;
             ++stream->scheduler.call_cnt;
             if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
-                h2o_timeval_is_null(&stream->req.timestamps.response_end_at))
+                h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
                 stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
+                if (h2o_timeval_is_null(&stream->req.timestamps.response_start_at)) {
+                    stream->req.timestamps.response_start_at = stream->req.timestamps.response_end_at;
+                }
+            }
             /* 4. invoke h2o_proceed_request synchronously, so that we could obtain additional data for the current (i.e. highest)
              *    stream. */
             if (stream->proceed_while_sending) {
