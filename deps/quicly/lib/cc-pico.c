@@ -93,7 +93,7 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     /* Update CWND, reducing stash relative to the amount we've adjusted the CWND */
     uint32_t count = cc->state.pico.stash / bytes_per_mtu_increase;
-    cc->cwnd += count * max_udp_payload_size;
+    cc->cwnd = quicly_u32_add_saturating(cc->cwnd, count * max_udp_payload_size);
     cc->state.pico.stash -= count * bytes_per_mtu_increase;
 
     if (cc->cwnd_maximum < cc->cwnd)
