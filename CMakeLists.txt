@@ -383,7 +383,6 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/rate.c
     deps/quicly/lib/recvstate.c
     deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
