@@ -77,7 +77,7 @@ static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t 
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
-        cc->cwnd += bytes;
+        cc->cwnd = quicly_u32_add_saturating(cc->cwnd, bytes);
         if (cc->cwnd_maximum < cc->cwnd)
             cc->cwnd_maximum = cc->cwnd;
         return;
@@ -102,7 +102,7 @@ static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t 
          * cwnd could thus shrink without this check (but only after fast convergence). */
         if (w_cubic_target > cc->cwnd)
             /* (W_cubic(t+RTT) - cwnd)/cwnd * MSS = (W_cubic(t+RTT)/cwnd - 1) * MSS */
-            cc->cwnd += ((w_cubic_target / cc->cwnd) - 1) * max_udp_payload_size;
+            cc->cwnd = quicly_u32_add_saturating(cc->cwnd, ((w_cubic_target / cc->cwnd) - 1) * max_udp_payload_size);
     }
 
     if (cc->cwnd_maximum < cc->cwnd)

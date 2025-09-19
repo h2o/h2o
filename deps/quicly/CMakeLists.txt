@@ -59,7 +59,6 @@ SET(QUICLY_LIBRARY_FILES
     lib/rate.c
     lib/recvstate.c
     lib/remote_cid.c
-    lib/retire_cid.c
     lib/sendstate.c
     lib/sentmap.c
     lib/streambuf.c
@@ -77,7 +76,6 @@ SET(UNITTEST_SOURCE_FILES
     t/ranges.c
     t/rate.c
     t/remote_cid.c
-    t/retire_cid.c
     t/sentmap.c
     t/simple.c
     t/stream-concurrency.c
