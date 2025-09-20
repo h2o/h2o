@@ -38,9 +38,6 @@
 #include <unistd.h>
 #include <picotls.h>
 #include <openssl/err.h>
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/provider.h>
-#endif
 #if QUICLY_HAVE_FUSION
 #include "picotls/fusion.h"
 #endif
@@ -1459,11 +1456,6 @@ int main(int argc, char **argv)
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-    /* Explicitly load the legacy provider in addition to default, as we test Blowfish in one of the tests. */
-    (void)OSSL_PROVIDER_load(NULL, "legacy");
-    (void)OSSL_PROVIDER_load(NULL, "default");
-#endif
 
     reqs = malloc(sizeof(*reqs));
     memset(reqs, 0, sizeof(*reqs));
@@ -1843,8 +1835,12 @@ int main(int argc, char **argv)
             tlsctx.random_bytes(random_key, sizeof(random_key) - 1);
             cid_key = random_key;
         }
-        ctx.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
-                                                             ptls_iovec_init(cid_key, strlen(cid_key)));
+        ctx.cid_encryptor = quicly_new_default_cid_encryptor(
+#if QUICLY_HAVE_FUSION
+            ptls_fusion_is_supported_by_cpu() ? &ptls_fusion_quiclb :
+#endif
+                                              &ptls_openssl_quiclb,
+            &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, strlen(cid_key)));
     }
     if (argc != 2) {
         fprintf(stderr, "missing host and port\n");
