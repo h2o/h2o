@@ -867,6 +867,9 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         } else {
             /* success */
             conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+            if (h2o_timeval_is_null(&conn->req.timestamps.response_start_at)) {
+                conn->req.timestamps.response_start_at = conn->req.timestamps.response_end_at;
+            }
         }
     }
 
