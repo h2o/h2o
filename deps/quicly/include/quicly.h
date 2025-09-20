@@ -452,8 +452,8 @@ struct st_quicly_conn_streamgroup_state_t {
 };
 
 /**
- * Aggregatable counters that do not need to be gathered upon the invocation of `quicly_get_stats`. We use typedef to define the
- * same fields in the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
+ * These fields that exist within QUICLY_STATS_PREBUILT_FIELDS as the first elements are the stat counters that can be aggregated to
+ * calclucate total amongst multiple connections.
  */
 #define QUICLY_STATS_PREBUILT_COUNTERS                                                                                             \
     struct {                                                                                                                       \
@@ -556,6 +556,15 @@ struct st_quicly_conn_streamgroup_state_t {
          */                                                                                                                        \
         uint64_t stream_data_resent;                                                                                               \
     } num_bytes;                                                                                                                   \
+    /**                                                                                                                            \
+     * Total number of each frame being sent / received.                                                                           \
+     */                                                                                                                            \
+    struct {                                                                                                                       \
+        uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
+            max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
+            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
+            ack_frequency;                                                                                                         \
+    } num_frames_received, num_frames_sent;                                                                                        \
     struct {                                                                                                                       \
         /**                                                                                                                        \
          * number of alternate paths created                                                                                       \
@@ -591,15 +600,6 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t ecn_failed;                                                                                                       \
     } num_paths;                                                                                                                   \
     /**                                                                                                                            \
-     * Total number of each frame being sent / received.                                                                           \
-     */                                                                                                                            \
-    struct {                                                                                                                       \
-        uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
-            max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
-            retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency;                                                                                                         \
-    } num_frames_sent, num_frames_received;                                                                                        \
-    /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
      */                                                                                                                            \
     uint64_t num_ptos;                                                                                                             \
@@ -610,7 +610,18 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
      */                                                                                                                            \
-    uint64_t num_initial_handshake_exceeded;                                                                                       \
+    uint64_t num_initial_handshake_exceeded
+
+/**
+ * Stats that do not need to be gathered upon the invocation of `quicly_get_stats`. This macro is used to define the same fields in
+ * the same order for quicly_stats_t and `struct st_quicly_conn_public_t::stats`.
+ */
+#define QUICLY_STATS_PREBUILT_FIELDS                                                                                               \
+    QUICLY_STATS_PREBUILT_COUNTERS;                                                                                                \
+    /**                                                                                                                            \
+     * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.                                       \
+     */                                                                                                                            \
+    uint64_t handshake_confirmed_msec;                                                                                             \
     /**                                                                                                                            \
      * jumpstart parameters and the CWND being adopted (see also quicly_cc_t::cwnd_exiting_jumpstart)                              \
      */                                                                                                                            \
@@ -642,7 +653,7 @@ typedef struct st_quicly_stats_t {
     /**
      * The pre-built fields. This MUST be the first member of `quicly_stats_t` so that we can use `memcpy`.
      */
-    QUICLY_STATS_PREBUILT_COUNTERS;
+    QUICLY_STATS_PREBUILT_FIELDS;
     /**
      * RTT stats.
      */
@@ -663,11 +674,132 @@ typedef struct st_quicly_stats_t {
      * largest number of packets contained in the sentmap
      */
     size_t num_sentmap_packets_largest;
-    /**
-     * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
-     */
-    uint64_t handshake_confirmed_msec;
 } quicly_stats_t;
+
+/* clang-format off */
+
+#define QUICLY_STATS_FOREACH_NUM_PACKETS(apply)                                                                                    \
+    apply(num_packets.received, "num-packets.received")                                                                            \
+    apply(num_packets.decryption_failed, "num-packets.decryption-failed")                                                          \
+    apply(num_packets.sent, "num-packets.sent")                                                                                    \
+    apply(num_packets.lost, "num-packets.lost")                                                                                    \
+    apply(num_packets.lost_time_threshold, "num-packets.lost-time-threshold")                                                      \
+    apply(num_packets.ack_received, "num-packets.ack-received")                                                                    \
+    apply(num_packets.late_acked, "num-packets.late-acked")                                                                        \
+    apply(num_packets.initial_received, "num-packets.initial-received")                                                            \
+    apply(num_packets.zero_rtt_received, "num-packets.zero-rtt-received")                                                          \
+    apply(num_packets.handshake_received, "num-packets.handshake-received")                                                        \
+    apply(num_packets.initial_sent, "num-packets.initial-sent")                                                                    \
+    apply(num_packets.zero_rtt_sent, "num-packets.zero-rtt-sent")                                                                  \
+    apply(num_packets.handshake_sent, "num-packets.handshake-sent")                                                                \
+    apply(num_packets.received_out_of_order, "num-packets.received-out-of-order")                                                  \
+    apply(num_packets.received_ecn_counts[0], "num-packets.received-ecn-ect0")                                                     \
+    apply(num_packets.received_ecn_counts[1], "num-packets.received-ecn-ect1")                                                     \
+    apply(num_packets.received_ecn_counts[2], "num-packets.received-ecn-ce")                                                       \
+    apply(num_packets.acked_ecn_counts[0], "num-packets.acked-ecn-ect0")                                                           \
+    apply(num_packets.acked_ecn_counts[1], "num-packets.acked-ecn-ect1")                                                           \
+    apply(num_packets.acked_ecn_counts[2], "num-packets.acked-ecn-ce")                                                             \
+    apply(num_packets.sent_promoted_paths, "num-packets.sent-promoted-paths")                                                      \
+    apply(num_packets.ack_received_promoted_paths, "num-packets.ack-received-promoted-paths")
+
+#define QUICLY_STATS_FOREACH_NUM_BYTES(apply)                                                                                      \
+    apply(num_bytes.received, "num-bytes.received")                                                                                \
+    apply(num_bytes.sent, "num-bytes.sent")                                                                                        \
+    apply(num_bytes.lost, "num-bytes.lost")                                                                                        \
+    apply(num_bytes.ack_received, "num-bytes.ack-received")                                                                        \
+    apply(num_bytes.stream_data_sent, "num-bytes.stream-data-sent")                                                                \
+    apply(num_bytes.stream_data_resent, "num-bytes.stream-data-resent")
+
+#define QUICLY_STATS__DO_FOREACH_NUM_FRAMES(name, dir, apply)                                                                      \
+    apply(num_frames_##dir.name, "num-frames-" PTLS_TO_STR(dir) "." PTLS_TO_STR(name))
+
+#define QUICLY_STATS_FOREACH_NUM_FRAMES(dir, apply)                                                                                \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(padding, dir, apply)                                                                       \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ping, dir, apply)                                                                          \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack, dir, apply)                                                                           \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(reset_stream, dir, apply)                                                                  \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(stop_sending, dir, apply)                                                                  \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(crypto, dir, apply)                                                                        \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(new_token, dir, apply)                                                                     \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(stream, dir, apply)                                                                        \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(max_data, dir, apply)                                                                      \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(max_stream_data, dir, apply)                                                               \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(max_streams_bidi, dir, apply)                                                              \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(max_streams_uni, dir, apply)                                                               \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(data_blocked, dir, apply)                                                                  \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(stream_data_blocked, dir, apply)                                                           \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(streams_blocked, dir, apply)                                                               \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(new_connection_id, dir, apply)                                                             \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(retire_connection_id, dir, apply)                                                          \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(path_challenge, dir, apply)                                                                \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(path_response, dir, apply)                                                                 \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(transport_close, dir, apply)                                                               \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(application_close, dir, apply)                                                             \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(handshake_done, dir, apply)                                                                \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(datagram, dir, apply)                                                                      \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack_frequency, dir, apply)
+
+#define QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)                                                                             \
+        apply(num_paths.created, "num-paths.created")                                                                                  \
+        apply(num_paths.validated, "num-paths.validated")                                                                              \
+        apply(num_paths.validation_failed, "num-paths.validation-failed")                                                              \
+        apply(num_paths.migration_elicited, "num-paths.migration-elicited")                                                            \
+        apply(num_paths.promoted, "num-paths.promoted")                                                                                \
+        apply(num_paths.closed_no_dcid, "num-paths.closed-no-dcid")                                                                    \
+        apply(num_paths.ecn_validated, "num-paths.ecn-validated")                                                                      \
+        apply(num_paths.ecn_failed, "num-paths.ecn-failed")                                                                            \
+        apply(num_ptos, "num-ptos")                                                                                                    \
+        apply(num_handshake_timeouts, "num-handshake-timeouts")                                                                        \
+        apply(num_initial_handshake_exceeded, "num-initial-handshake-exceeded")
+
+/**
+ * Macro for iterating QUICLY_STATS_PREBUILT_COUNTERS.
+ */
+#define QUICLY_STATS_FOREACH_COUNTERS(apply)                                                                                       \
+    QUICLY_STATS_FOREACH_NUM_PACKETS(apply)                                                                                        \
+    QUICLY_STATS_FOREACH_NUM_BYTES(apply)                                                                                          \
+    QUICLY_STATS_FOREACH_NUM_FRAMES(received, apply)                                                                               \
+    QUICLY_STATS_FOREACH_NUM_FRAMES(sent, apply)                                                                                   \
+    QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)
+
+/**
+ * Macro for iterating the fields of `quicly_stats_t` other than QUICLY_STATS_PREBUILT_COUNTERS.
+ */
+#define QUICLY_STATS_FOREACH_NON_COUNTERS(apply)                                                                                   \
+    apply(handshake_confirmed_msec, "handshake-confirmed-msec")                                                                    \
+    apply(jumpstart.prev_rate, "jumpstart.prev-rate")                                                                              \
+    apply(jumpstart.prev_rtt, "jumpstart.prev-rtt")                                                                                \
+    apply(jumpstart.new_rtt, "jumpstart.new-rtt")                                                                                 \
+    apply(jumpstart.cwnd, "jumpstart.cwnd")                                                                                        \
+    apply(token_sent.at, "token-sent.at")                                                                                          \
+    apply(token_sent.rate, "token-sent.rate")                                                                                      \
+    apply(token_sent.rtt, "token-sent.rtt")                                                                                        \
+    apply(rtt.minimum, "rtt.minimum")                                                                                              \
+    apply(rtt.smoothed, "rtt.smoothed")                                                                                            \
+    apply(rtt.variance, "rtt.variance")                                                                                            \
+    apply(rtt.latest, "rtt.latest")                                                                                                \
+    apply(loss_thresholds.use_packet_based, "loss-thresholds.use-packet-based")                                                    \
+    apply(loss_thresholds.time_based_percentile, "loss-thresholds.time-based-percentile")                                          \
+    apply(cc.cwnd, "cc.cwnd")                                                                                                      \
+    apply(cc.ssthresh, "cc.ssthresh")                                                                                              \
+    apply(cc.cwnd_initial, "cc.cwnd-initial")                                                                                      \
+    apply(cc.cwnd_exiting_slow_start, "cc.cwnd-exiting-slow-start")                                                                \
+    apply(cc.exit_slow_start_at, "cc.exit-slow-start-at")                                                                          \
+    apply(cc.cwnd_exiting_jumpstart, "cc.cwnd-exiting-jumpstart")                                                                  \
+    apply(cc.cwnd_minimum, "cc.cwnd-minimum")                                                                                      \
+    apply(cc.cwnd_maximum, "cc.cwnd-maximum")                                                                                      \
+    apply(cc.num_loss_episodes, "cc.num-loss-episodes")                                                                            \
+    apply(cc.num_ecn_loss_episodes, "cc.num-ecn-loss-episodes")                                                                    \
+    apply(delivery_rate.latest, "delivery-rate.latest")                                                                            \
+    apply(delivery_rate.smoothed, "delivery-rate.smoothed")                                                                        \
+    apply(delivery_rate.stdev, "delivery-rate.stdev")                                                                              \
+    apply(num_sentmap_packets_largest, "num-sentmap-packets-largest")
+
+#define QUICLY_STATS_FOREACH(apply)                                                                                                \
+    QUICLY_STATS_FOREACH_COUNTERS(apply)                                                                                           \
+    QUICLY_STATS_FOREACH_NON_COUNTERS(apply)
+
+/* clang-format on */
 
 /**
  * The state of the default stream scheduler.
@@ -723,11 +855,7 @@ struct _st_quicly_conn_public_t {
     quicly_cid_t original_dcid;
     struct st_quicly_default_scheduler_state_t _default_scheduler;
     struct {
-        QUICLY_STATS_PREBUILT_COUNTERS;
-        /**
-         * Time took until handshake is confirmed. UINT64_MAX if handshake is not confirmed yet.
-         */
-        uint64_t handshake_confirmed_msec;
+        QUICLY_STATS_PREBUILT_FIELDS;
     } stats;
     uint32_t version;
     void *data;

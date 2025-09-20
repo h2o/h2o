@@ -739,45 +739,14 @@ static h2o_iovec_t log_stream_id(h2o_req_t *_req)
 
 static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 {
-#define PUSH_FIELD(name, type, field)                                                                                              \
+#define PUSH_FIELD(field, name)                                                                                                    \
     do {                                                                                                                           \
-        len += snprintf(buf + len, bufsize - len, name "=" type ",", stats.field);                                                 \
+        len += snprintf(buf + len, bufsize - len, name "=%" PRIu64 ",", (uint64_t)stats.field);                                    \
         if (len + 1 > bufsize) {                                                                                                   \
             bufsize = bufsize * 3 / 2;                                                                                             \
             goto Redo;                                                                                                             \
         }                                                                                                                          \
-    } while (0)
-#define PUSH_U64(name, field) PUSH_FIELD(name, "%" PRIu64, field)
-#define PUSH_U32(name, field) PUSH_FIELD(name, "%" PRIu32, field)
-#define PUSH_SIZE_T(name, field) PUSH_FIELD(name, "%zu", field)
-
-#define DO_PUSH_NUM_FRAMES(name, dir) PUSH_U64(H2O_TO_STR(name) "-" H2O_TO_STR(dir), num_frames_##dir.name)
-#define PUSH_NUM_FRAMES(dir)                                                                                                       \
-    do {                                                                                                                           \
-        DO_PUSH_NUM_FRAMES(padding, dir);                                                                                          \
-        DO_PUSH_NUM_FRAMES(ping, dir);                                                                                             \
-        DO_PUSH_NUM_FRAMES(ack, dir);                                                                                              \
-        DO_PUSH_NUM_FRAMES(reset_stream, dir);                                                                                     \
-        DO_PUSH_NUM_FRAMES(stop_sending, dir);                                                                                     \
-        DO_PUSH_NUM_FRAMES(crypto, dir);                                                                                           \
-        DO_PUSH_NUM_FRAMES(new_token, dir);                                                                                        \
-        DO_PUSH_NUM_FRAMES(stream, dir);                                                                                           \
-        DO_PUSH_NUM_FRAMES(max_data, dir);                                                                                         \
-        DO_PUSH_NUM_FRAMES(max_stream_data, dir);                                                                                  \
-        DO_PUSH_NUM_FRAMES(max_streams_bidi, dir);                                                                                 \
-        DO_PUSH_NUM_FRAMES(max_streams_uni, dir);                                                                                  \
-        DO_PUSH_NUM_FRAMES(data_blocked, dir);                                                                                     \
-        DO_PUSH_NUM_FRAMES(stream_data_blocked, dir);                                                                              \
-        DO_PUSH_NUM_FRAMES(streams_blocked, dir);                                                                                  \
-        DO_PUSH_NUM_FRAMES(new_connection_id, dir);                                                                                \
-        DO_PUSH_NUM_FRAMES(retire_connection_id, dir);                                                                             \
-        DO_PUSH_NUM_FRAMES(path_challenge, dir);                                                                                   \
-        DO_PUSH_NUM_FRAMES(path_response, dir);                                                                                    \
-        DO_PUSH_NUM_FRAMES(transport_close, dir);                                                                                  \
-        DO_PUSH_NUM_FRAMES(application_close, dir);                                                                                \
-        DO_PUSH_NUM_FRAMES(handshake_done, dir);                                                                                   \
-        DO_PUSH_NUM_FRAMES(ack_frequency, dir);                                                                                    \
-    } while (0)
+    } while (0);
 
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
     quicly_stats_t stats;
@@ -793,70 +762,11 @@ Redo:
     buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
     len = 0;
 
-    PUSH_U64("packets-received", num_packets.received);
-    PUSH_U64("packets-received-ecn-ect0", num_packets.received_ecn_counts[0]);
-    PUSH_U64("packets-received-ecn-ect1", num_packets.received_ecn_counts[1]);
-    PUSH_U64("packets-received-ecn-ce", num_packets.received_ecn_counts[2]);
-    PUSH_U64("packets-decryption-failed", num_packets.decryption_failed);
-    PUSH_U64("packets-sent", num_packets.sent);
-    PUSH_U64("packets-lost", num_packets.lost);
-    PUSH_U64("packets-lost-time-threshold", num_packets.lost_time_threshold);
-    PUSH_U64("packets-ack-received", num_packets.ack_received);
-    PUSH_U64("packets-acked-ecn-ect0", num_packets.acked_ecn_counts[0]);
-    PUSH_U64("packets-acked-ecn-ect1", num_packets.acked_ecn_counts[1]);
-    PUSH_U64("packets-acked-ecn-ce", num_packets.acked_ecn_counts[2]);
-    PUSH_U64("late-acked", num_packets.late_acked);
-    PUSH_U64("initial-received", num_packets.initial_received);
-    PUSH_U64("zero-rtt-received", num_packets.zero_rtt_received);
-    PUSH_U64("handshake-received", num_packets.handshake_received);
-    PUSH_U64("initial-sent", num_packets.initial_sent);
-    PUSH_U64("zero-rtt-sent", num_packets.zero_rtt_sent);
-    PUSH_U64("handshake-sent", num_packets.handshake_sent);
-    PUSH_U64("packets-received-out-of-order", num_packets.received_out_of_order);
-    PUSH_U64("bytes-received", num_bytes.received);
-    PUSH_U64("bytes-sent", num_bytes.sent);
-    PUSH_U64("bytes-lost", num_bytes.lost);
-    PUSH_U64("bytes-ack-received", num_bytes.ack_received);
-    PUSH_U64("bytes-stream-data-sent", num_bytes.stream_data_sent);
-    PUSH_U64("bytes-stream-data-resent", num_bytes.stream_data_resent);
-    PUSH_U64("paths-ecn-validated", num_paths.ecn_validated);
-    PUSH_U64("paths-ecn-failed", num_paths.ecn_failed);
-    PUSH_U32("rtt-minimum", rtt.minimum);
-    PUSH_U32("rtt-smoothed", rtt.smoothed);
-    PUSH_U32("rtt-variance", rtt.variance);
-    PUSH_U32("rtt-latest", rtt.latest);
-    PUSH_U32("cwnd", cc.cwnd);
-    PUSH_U32("ssthresh", cc.ssthresh);
-    PUSH_U32("cwnd-initial", cc.cwnd_initial);
-    PUSH_U32("cwnd-exiting-slow-start", cc.cwnd_exiting_slow_start);
-    PUSH_U64("exit-slow-start-at", cc.exit_slow_start_at);
-    PUSH_U32("cwnd-minimum", cc.cwnd_minimum);
-    PUSH_U32("cwnd-maximum", cc.cwnd_maximum);
-    PUSH_U64("jumpstart-prev-rate", jumpstart.prev_rate);
-    PUSH_U32("jumpstart-pret-rtt", jumpstart.prev_rtt);
-    PUSH_U32("jumpstart-cwnd", jumpstart.cwnd);
-    PUSH_U32("jumpstart-exit-cwnd", cc.cwnd_exiting_jumpstart);
-    PUSH_U32("num-loss-episodes", cc.num_loss_episodes);
-    PUSH_U32("num-ecn-loss-episodes", cc.num_ecn_loss_episodes);
-    PUSH_U64("num-ptos", num_ptos);
-    PUSH_U64("delivery-rate-latest", delivery_rate.latest);
-    PUSH_U64("delivery-rate-smoothed", delivery_rate.smoothed);
-    PUSH_U64("delivery-rate-stdev", delivery_rate.stdev);
-    PUSH_U64("token-sent-at", token_sent.at);
-    PUSH_U64("token-sent-rate", token_sent.rate);
-    PUSH_U32("token-sent-rtt", token_sent.rtt);
-    PUSH_NUM_FRAMES(received);
-    PUSH_NUM_FRAMES(sent);
-    PUSH_SIZE_T("num-sentmap-packets-largest", num_sentmap_packets_largest);
+    QUICLY_STATS_FOREACH(PUSH_FIELD);
 
     return h2o_iovec_init(buf, len - 1);
 
 #undef PUSH_FIELD
-#undef PUSH_U64
-#undef PUSH_U32
-#undef PUSH_SIZE_T
-#undef DO_PUSH_NUM_FRAMES
-#undef PUSH_NUM_FRAMES
 }
 
 static h2o_iovec_t log_quic_version(h2o_req_t *_req)
@@ -2129,7 +2039,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;
-        H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
+        QUICLY_STATS_FOREACH_COUNTERS(ACC);
 #undef ACC
         if (conn->super.ctx->quic_stats.num_sentmap_packets_largest < stats.num_sentmap_packets_largest)
             conn->super.ctx->quic_stats.num_sentmap_packets_largest = stats.num_sentmap_packets_largest;

@@ -1026,6 +1026,56 @@ static void test_migration_during_handshake(void)
     subtest("migrate-before-3nd", do_test_migration_during_handshake, 1);
 }
 
+static size_t test_stats_foreach_next_off;
+
+static void test_stats_foreach_field(size_t off, size_t size)
+{
+    ok(test_stats_foreach_next_off == off);
+
+    /* Due to alignment, padding might exist between two fields when their types are different. The `gaps` list calls out the ones
+     * that "might" have such padding on some architectures. */
+    static const size_t gaps[] = {
+#define GAP(after, before) offsetof(quicly_stats_t, after), offsetof(quicly_stats_t, before)
+        GAP(jumpstart.cwnd, token_sent.at),
+        GAP(token_sent.rtt, rtt.minimum),
+        GAP(loss_thresholds.use_packet_based, loss_thresholds.time_based_percentile),
+        GAP(loss_thresholds.time_based_percentile, cc.cwnd),
+        GAP(cc.ssthresh, cc.cwnd_initial),
+        GAP(cc.num_ecn_loss_episodes, delivery_rate.latest),
+#undef GAP
+        SIZE_MAX};
+    for (size_t i = 0; gaps[i] != SIZE_MAX; i += 2) {
+        if (test_stats_foreach_next_off == gaps[i]) {
+            test_stats_foreach_next_off = gaps[i + 1];
+            return;
+        }
+    }
+
+    /* otherwise, it is right after the current field */
+    test_stats_foreach_next_off += size;
+}
+
+static void test_stats_foreach(void)
+{
+#define CHECK(fld, name)                                                                                                           \
+    subtest(name, test_stats_foreach_field, offsetof(quicly_stats_t, fld), sizeof(((quicly_stats_t *)NULL)->fld));
+
+    /* check QUICLY_STATS_FOREACH touches all fields, in the correct order */
+    test_stats_foreach_next_off = 0;
+    QUICLY_STATS_FOREACH(CHECK);
+    ok(test_stats_foreach_next_off == sizeof(quicly_stats_t));
+
+    /* check QUICLY_STATS_FOREACH_COUNTERS only check the counters */
+    struct counters_only {
+        QUICLY_STATS_PREBUILT_COUNTERS;
+    };
+    test_stats_foreach_next_off = 0;
+    QUICLY_STATS_FOREACH_COUNTERS(CHECK);
+    ok(test_stats_foreach_next_off == sizeof(struct counters_only));
+
+#undef CHECK
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -1100,6 +1150,8 @@ int main(int argc, char **argv)
 
     subtest("state-exhaustion", test_state_exhaustion);
     subtest("migration-during-handshake", test_migration_during_handshake);
+
+    subtest("stats-foreach", test_stats_foreach);
 
     return done_testing();
 }
