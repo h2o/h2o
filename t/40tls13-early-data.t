@@ -34,12 +34,22 @@ EOT
     };
     run_tests(sub {
         my ($server, $path) = @_;
-        my $resp = $fetch->($server, $path, 1);
-        like $resp, qr{^HTTP/[^ ]* 200 .*\r\n\r\ncount:1$}s;
-        $resp = $fetch->($server, $path, 1);
-        like $resp, qr{^HTTP/[^ ]* 425 .*\r\n\r\ncount:2$}s;
-        $resp = $fetch->($server, $path, 2);
-        like $resp, qr{^HTTP/[^ ]* 425 .*\r\n\r\ncount:3HTTP/[^ ]* 200 .*\r\n\r\ncount:4$}s;
+        # to reduce timing sensitivity, warm up the server before starting actual tests
+        $fetch->($server, $path, 1);
+        unlink "$tempdir/session";
+        # run actual tests
+        subtest "initial" => sub {
+            my $resp = $fetch->($server, $path, 1);
+            like $resp, qr{^HTTP/[^ ]* 200 .*\r\n\r\ncount:2$}s;
+        };
+        subtest "0-rtt only" => sub {
+            my $resp = $fetch->($server, $path, 1);
+            like $resp, qr{^HTTP/[^ ]* 425 .*\r\n\r\ncount:3$}s;
+        };
+        subtest "0- and 1-rtt" => sub {
+            my $resp = $fetch->($server, $path, 2);
+            like $resp, qr{^HTTP/[^ ]* 425 .*\r\n\r\ncount:4HTTP/[^ ]* 200 .*\r\n\r\ncount:5$}s;
+        };
     });
 };
 
@@ -73,11 +83,19 @@ subtest "http/2" => sub {
     };
     run_tests(sub {
         my ($server, $path) = @_;
-        my $resp = $fetch->($server, $path);
-        # HEADERS for stream zero starting with :status:200 followed by DATA frame carrying the expected content
-        like $resp, qr{\x01\x04\x00\x00\x00\x01\x88.*\x00[\x00\x01]\x00\x00\x00\x01count:1}is;
-        $resp = $fetch->($server, $path);
-        like $resp, qr{\x01\x04\x00\x00\x00\x01\x88.*\x00[\x00\x01]\x00\x00\x00\x01count:3}is;
+        # to reduce timing sensitivity, warm up the server before starting actual tests
+        $fetch->($server, $path);
+        unlink "$tempdir/session";
+        # run acutal tests: HEADERS for stream zero starting with :status:200 followed by DATA frame carrying the expected
+        # content
+        subtest "initial" => sub {
+            my $resp = $fetch->($server, $path);
+            like $resp, qr{\x01\x04\x00\x00\x00\x01\x88.*\x00[\x00\x01]\x00\x00\x00\x01count:2}is;
+        };
+        subtest "0-rtt (h2o replays by itself)" => sub {
+            my $resp = $fetch->($server, $path);
+            like $resp, qr{\x01\x04\x00\x00\x00\x01\x88.*\x00[\x00\x01]\x00\x00\x00\x01count:4}is;
+        };
     });
 };
 
