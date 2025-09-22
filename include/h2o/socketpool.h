@@ -105,6 +105,7 @@ typedef struct st_h2o_socketpool_t {
         h2o_timer_t timeout;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
+    int address_family; /* specifies required address family used for the connection. AF_UNSPEC if none (default) */
 
     /**
      * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
@@ -200,6 +201,10 @@ void h2o_socketpool_detach(h2o_socketpool_t *pool, h2o_socket_t *sock);
  * determines if a socket belongs to the socket pool
  */
 static int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock);
+/**
+ * sets the address family to be used when connecting to targets
+ */
+static void h2o_socketpool_set_address_family(h2o_socketpool_t *pool, int address_family);
 
 /* inline defs */
 
@@ -216,6 +221,11 @@ inline void h2o_socketpool_set_timeout(h2o_socketpool_t *pool, uint64_t msec)
 inline int h2o_socketpool_is_owned_socket(h2o_socketpool_t *pool, h2o_socket_t *sock)
 {
     return sock->on_close.data == pool;
+}
+
+inline void h2o_socketpool_set_address_family(h2o_socketpool_t *pool, int address_family)
+{
+    pool->address_family = address_family;
 }
 
 int h2o_socketpool_can_keepalive(h2o_socketpool_t *pool);
