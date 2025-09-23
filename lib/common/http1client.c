@@ -264,9 +264,13 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
         return;
     }
 
+    size_t bytes_to_splice = client->_body_decoder.content_length.bytesleft < H2O_PULL_SENDVEC_MAX_SIZE
+                                 ? client->_body_decoder.content_length.bytesleft
+                                 : H2O_PULL_SENDVEC_MAX_SIZE;
+
     ssize_t bytes_read;
-    while ((bytes_read = splice(h2o_socket_get_fd(client->sock), NULL, client->pipe_reader.fd, NULL,
-                                client->_body_decoder.content_length.bytesleft, SPLICE_F_NONBLOCK)) == -1 &&
+    while ((bytes_read = splice(h2o_socket_get_fd(client->sock), NULL, client->pipe_reader.fd, NULL, bytes_to_splice,
+                                SPLICE_F_NONBLOCK)) == -1 &&
            errno == EINTR)
         ;
     if (bytes_read == -1 && errno == EAGAIN) {

@@ -126,12 +126,11 @@ static size_t from_pipe_send(h2o_sendvec_t *vec, int sockfd, size_t len)
 #endif
 }
 
-void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, h2o_send_state_t send_state)
+void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, size_t len, h2o_send_state_t send_state)
 {
     static const h2o_sendvec_callbacks_t callbacks = {.read_ = from_pipe_read, .send_ = from_pipe_send};
-    h2o_sendvec_t vec = {.callbacks = &callbacks};
-    if ((vec.len = sender->bytes_read - sender->bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE)
-        vec.len = H2O_PULL_SENDVEC_MAX_SIZE;
+    assert(len <= H2O_PULL_SENDVEC_MAX_SIZE);
+    h2o_sendvec_t vec = {.callbacks = &callbacks, .len = len};
     vec.cb_arg[0] = (uint64_t)sender;
     vec.cb_arg[1] = 0; /* unused */
 

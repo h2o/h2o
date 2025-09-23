@@ -375,7 +375,13 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-    h2o_pipe_sender_send(self->src_req, &self->pipe_sender, send_state);
+   size_t len;
+    if ((len = self->pipe_sender.bytes_read - self->pipe_sender.bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
+        if (send_state == H2O_SEND_STATE_FINAL)
+            send_state = H2O_SEND_STATE_IN_PROGRESS;
+        len = H2O_PULL_SENDVEC_MAX_SIZE;
+    }
+    h2o_pipe_sender_send(self->src_req, &self->pipe_sender, len, send_state);
 }
 
 static void do_proceed(h2o_generator_t *generator, h2o_req_t *req)

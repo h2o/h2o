@@ -71,7 +71,7 @@ static void h2o_pipe_sender_update(h2o_pipe_sender_t *sender, size_t read_bytes)
 /**
  * wrapper function of `h2o_sendvec` that submits the contents of the pipe
  */
-void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, h2o_send_state_t send_state);
+void h2o_pipe_sender_send(h2o_req_t *req, h2o_pipe_sender_t *sender, size_t len, h2o_send_state_t send_state);
 
 /* inline definitions */
 
