@@ -105,6 +105,10 @@ typedef struct st_h2o_socketpool_t {
         h2o_timer_t timeout;
     } _interval_cb;
     SSL_CTX *_ssl_ctx;
+    /**
+     * specifies required address family used for the connection. AF_UNSPEC if none (default).
+     */
+    int address_family;
 
     /**
      * variables shared between threads. Unless otherwise noted, the mutex should be acquired before accessing them.
