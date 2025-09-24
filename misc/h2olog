@@ -49,7 +49,7 @@ if ($http_mode) {
     push @query, map { "trace=h2o:$_" } qw(receive_request receive_request_header send_response send_response_header);
     push @query, "application-data=1"; # otherwise header names / values are hidden
 } else {
-    die "-s is available only when -h is used\n" if @allowed_response_headers;
+    die "-s is available only when -H is used\n" if @allowed_response_headers;
 }
 
 if (defined $write_file) {
