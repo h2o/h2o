@@ -145,6 +145,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **target
         pool->targets.entries[pool->targets.size] = targets[pool->targets.size];
 
     pool->balancer = balancer;
+    pool->address_family = AF_UNSPEC;
 }
 
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
