@@ -3163,16 +3163,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max;
+                        **pacing, **respect_app_limited, **scaled_slow_start, **jumpstart_default, **jumpstart_max,
+                        **scaled_slow_start_ratio, **non_resume_jumpstart_ratio, **resume_jumpstart_ratio;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                             "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
-                            "jumpstart-max:s",
+                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,scaled-slow-start:s,"
+                            "jumpstart-default:s,jumpstart-max:s,slow-start-ratio:s,non-resume-jumpstart-ratio:s,"
+                            "resume-jumpstart-ratio:s",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
                             &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &jumpstart_default, &jumpstart_max) != 0)
+                            &respect_app_limited, &scaled_slow_start, &jumpstart_default, &jumpstart_max, &scaled_slow_start_ratio,
+                            &non_resume_jumpstart_ratio, &resume_jumpstart_ratio) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3243,6 +3246,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         listener->quic.ctx->respect_app_limited = (unsigned)on;
                     }
+                    if (scaled_slow_start != NULL) {
+                        double v;
+                        if (h2o_configurator_scanf(cmd, *scaled_slow_start, "%lf", &v) != 0)
+                            return -1;
+                        if (!(1 <= v && v <= 10)) {
+                            h2o_configurator_errprintf(cmd, *scaled_slow_start,
+                                                       "slow start scale must be a number between 1 and 10");
+                            return -1;
+                        }
+                        listener->quic.ctx->scaled_slow_start = (v * 512 + 1) / 2;
+                    }
                     if (jumpstart_default != NULL &&
                         h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
                                                &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
@@ -3250,6 +3264,15 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32,
                                                                         &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
                         return -1;
+#define APPLY_RATIO(node, fld)                                                                                                     \
+    do {                                                                                                                           \
+        if (node != NULL && h2o_configurator_scanf(cmd, *node, "%" SCNu8, &listener->quic.ctx->enable_ratio.fld) != 0)             \
+            return -1;                                                                                                             \
+    } while (0)
+                    APPLY_RATIO(scaled_slow_start_ratio, scaled_slow_start);
+                    APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
+                    APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
+#undef APPLY_RATIO
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
