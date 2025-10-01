@@ -832,6 +832,27 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
     return 1;
 }
 
+static void collect_quic_performance_metrics(struct st_h2o_http3_server_stream_t *stream)
+{
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+
+    /* If the request is the first request, log method, content-length, and ttlb so that the performance of HTTP/3 can be evaluated.
+     * Note, to compare the performance of connections using different CC parameters, only the numbers from connections that served
+     * requests capable of fulfilling the CWND regardless of CC behavior (i.e, pre-built local objects) can be used. To extract such
+     * connections, properties other than method and content-length might be needed. */
+    H2O_LOG_CONN(h3s_stream0_ttlb, &conn->super, {
+        if (stream->quic->stream_id == 0) {
+            PTLS_LOG_ELEMENT_UNSAFESTR(method, stream->req.method.base, stream->req.method.len);
+            PTLS_LOG_ELEMENT_UNSIGNED(content_length, stream->req.res.content_length);
+            struct timeval now = h2o_gettimeofday(conn->super.ctx->loop);
+            int64_t ttlb = (h2o_timeval_subtract(&stream->req.timestamps.request_begin_at, &now) + 500) / 1000;
+            if (ttlb < 0)
+                ttlb = 0;
+            PTLS_LOG_ELEMENT_SIGNED(ttlb, ttlb);
+        }
+    });
+}
+
 static void on_send_shift(quicly_stream_t *qs, size_t delta)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
@@ -875,6 +896,7 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
                     stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) ||
                    stream->proceed_requested);
         } else {
+            collect_quic_performance_metrics(stream);
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
