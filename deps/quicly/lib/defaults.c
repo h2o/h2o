@@ -55,6 +55,8 @@ const quicly_context_t quicly_spec_context = {NULL,                             
                                               DEFAULT_MAX_PATH_VALIDATION_FAILURES,
                                               0, /* default_jumpstart_cwnd_bytes */
                                               0, /* max_jumpstart_cwnd_bytes */
+                                              0, /* non_resume_jumpstart_ratio */
+                                              0, /* resume_jumpstart_ratio */
                                               0, /* enlarge_client_hello */
                                               1, /* enable_ecn */
                                               0, /* use_pacing */
@@ -92,6 +94,8 @@ const quicly_context_t quicly_performant_context = {NULL,                       
                                                     DEFAULT_MAX_PATH_VALIDATION_FAILURES,
                                                     0, /* default_jumpstart_cwnd_bytes */
                                                     0, /* max_jumpstart_cwnd_bytes */
+                                                    0, /* non_resume_jumpstart_ratio */
+                                                    0, /* resume_jumpstart_ratio */
                                                     0, /* enlarge_client_hello */
                                                     1, /* enable_ecn */
                                                     0, /* use_pacing */

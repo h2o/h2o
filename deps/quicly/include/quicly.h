@@ -354,6 +354,10 @@ struct st_quicly_context_t {
      */
     uint32_t max_jumpstart_cwnd_packets;
     /**
+     * Ratios to use jumpstart (255 is 100%)
+     */
+    uint8_t non_resume_jumpstart_ratio, resume_jumpstart_ratio;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
