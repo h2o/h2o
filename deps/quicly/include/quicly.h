@@ -155,7 +155,7 @@ QUICLY_CALLBACK_TYPE(quicly_error_t, generate_resumption_token, quicly_conn_t *c
  * called to initialize a congestion controller for a new connection.
  * should in turn call one of the quicly_cc_*_init functions from cc.h with customized parameters.
  */
-QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
+QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now, uint16_t slow_start_increase);
 /**
  * reference counting.
  * delta must be either 1 or -1.
@@ -344,6 +344,11 @@ struct st_quicly_context_t {
      */
     uint64_t max_path_validation_failures;
     /**
+     * If set to non-zero, CWND is be increased by `scaled_slow_start / 256` bytes for each byte acked. If set to zero, CWND
+     * increase is 1 byte per byte acked.
+     */
+    uint32_t scaled_slow_start;
+    /**
      * Jumpstart CWND to be used when there is no previous information. If set to zero, slow start is used. Note jumpstart is
      * possible only when the use_pacing flag is set.
      */
@@ -353,6 +358,16 @@ struct st_quicly_context_t {
      * set to zero, slow start is used.
      */
     uint32_t max_jumpstart_cwnd_packets;
+    /**
+     * Probabilities for enabling features when they are configured, multiplied by 255. 0 means never, 255 (default) means always.
+     */
+    struct {
+        uint8_t scaled_slow_start;
+        struct {
+            uint8_t non_resume;
+            uint8_t resume;
+        } jumpstart;
+    } enable_ratio;
     /**
      * expand client hello so that it does not fit into one datagram
      */

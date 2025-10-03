@@ -82,7 +82,7 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     /* Calculate the amount of bytes required to be acked for incrementing CWND by one MTU. */
     uint32_t bytes_per_mtu_increase;
     if (cc->cwnd < cc->ssthresh) {
-        bytes_per_mtu_increase = max_udp_payload_size;
+        bytes_per_mtu_increase = max_udp_payload_size * 256 / cc->slow_start_increase;
     } else {
         bytes_per_mtu_increase = cc->state.pico.bytes_per_mtu_increase;
     }
@@ -149,11 +149,12 @@ static void pico_init_pico_state(quicly_cc_t *cc, uint32_t stash)
     cc->state.pico.bytes_per_mtu_increase = cc->cwnd * QUICLY_RENO_BETA; /* use Reno, for simplicity */
 }
 
-static void pico_reset(quicly_cc_t *cc, uint32_t initcwnd)
+static void pico_reset(quicly_cc_t *cc, uint32_t initcwnd, uint16_t slow_start_increase)
 {
     *cc = (quicly_cc_t){
         .type = &quicly_cc_type_pico,
         .cwnd = initcwnd,
+        .slow_start_increase = slow_start_increase,
         .cwnd_initial = initcwnd,
         .cwnd_maximum = initcwnd,
         .cwnd_minimum = UINT32_MAX,
@@ -179,7 +180,7 @@ static int pico_on_switch(quicly_cc_t *cc)
             cc->type = &quicly_cc_type_pico;
             pico_init_pico_state(cc, 0);
         } else {
-            pico_reset(cc, cc->cwnd_initial);
+            pico_reset(cc, cc->cwnd_initial, cc->slow_start_increase);
         }
         return 1;
     }
@@ -187,9 +188,9 @@ static int pico_on_switch(quicly_cc_t *cc)
     return 0;
 }
 
-static void pico_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+static void pico_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now, uint16_t slow_start_increase)
 {
-    pico_reset(cc, initcwnd);
+    pico_reset(cc, initcwnd, slow_start_increase);
 }
 
 quicly_cc_type_t quicly_cc_type_pico = {"pico",         &quicly_cc_pico_init,          pico_on_acked,
