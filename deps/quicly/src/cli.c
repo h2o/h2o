@@ -1236,6 +1236,9 @@ static void usage(const char *cmd)
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
+           "  --slow-start-increase <increase>\n"
+           "                            during slow start, increase to CWND for each byte\n"
+           "                            acked\n"
            "  -u size                   initial size of UDP datagram payload\n"
            "  -U size                   maximum size of UDP datagram payload\n"
            "  -V                        verify peer using the default certificates\n"
@@ -1483,6 +1486,7 @@ int main(int argc, char **argv)
                                              {"ech-configs", required_argument, NULL, 0},
                                              {"disable-ecn", no_argument, NULL, 0},
                                              {"disregard-app-limited", no_argument, NULL, 0},
+                                             {"slow-start-increase", required_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
                                              {"calc-initial-secret", required_argument, NULL, 0},
@@ -1498,9 +1502,17 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "ech-configs") == 0) {
                 ech_setup_configs(optarg);
             } else if (strcmp(longopts[opt_index].name, "disable-ecn") == 0) {
-                ctx.enable_ecn = 0;
+                ctx.enable_ratio.ecn = 0;
             } else if (strcmp(longopts[opt_index].name, "disregard-app-limited") == 0) {
-                ctx.respect_app_limited = 0;
+                ctx.enable_ratio.respect_app_limited = 0;
+            } else if (strcmp(longopts[opt_index].name, "slow-start-increase") == 0) {
+                double increase;
+                if (sscanf(optarg, "%lf", &increase) == 0 || !(1 <= increase && increase <= 10)) {
+                    fprintf(stderr, "failed to parse slow start ratio; the value must be a small number no less than 1:%s\n",
+                            optarg);
+                    exit(1);
+                }
+                ctx.slow_start_increase = (uint16_t)((increase * 512 + 1) / 2);
             } else if (strcmp(longopts[opt_index].name, "jumpstart-default") == 0) {
                 if (sscanf(optarg, "%" SCNu32, &ctx.default_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse default jumpstart size: %s\n", optarg);
@@ -1562,7 +1574,7 @@ int main(int argc, char **argv)
             /* pacing */
             if ((token = strsep(&buf, ":")) != NULL) {
                 if (strcmp(token, "p") == 0) {
-                    ctx.use_pacing = 1;
+                    ctx.enable_ratio.pacing = 255;
                 } else {
                     fprintf(stderr, "invalid pacing value: %s\n", token);
                     exit(1);
