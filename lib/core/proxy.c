@@ -42,6 +42,10 @@ struct rp_generator_t {
     h2o_doublebuffer_t sending;
     h2o_timer_t send_headers_timeout;
     h2o_pipe_sender_t pipe_sender;
+    /**
+     * number of bytes read from body; this value is a copy of `client->bytes_read.body` but persists after `client` is discarded
+     */
+    size_t body_bytes_read;
     unsigned had_body_error : 1; /* set if an error happened while fetching the body so that we can propagate the error */
     unsigned req_done : 1;
     unsigned res_done : 1;
@@ -354,8 +358,12 @@ static void do_send(struct rp_generator_t *self)
     if (self->had_body_error)
         ststate = H2O_SEND_STATE_ERROR;
 
-    if (veccnt != 0)
+    /* Even when the piped sender is used, body bytes that were read together with the HTTP response headers are sent using the
+     * buffer. As the amount of bytes available in the piped sender is calculated as `body_bytes_read - pipe_sender.bytes_sent`,
+     * adjust `h2o_pipe_sender_t::bytes_sent` here so that the field would reflect the number of body bytes being sent. */
+    if (veccnt != 0 && h2o_pipe_sender_in_use(&self->pipe_sender))
         self->pipe_sender.bytes_sent += vecs[0].len;
+
     h2o_send(self->src_req, vecs, veccnt, ststate);
 }
 
@@ -365,7 +373,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
                                   : self->res_done     ? H2O_SEND_STATE_FINAL
                                                        : H2O_SEND_STATE_IN_PROGRESS;
 
-    if (h2o_pipe_sender_is_empty(&self->pipe_sender)) {
+    if (self->body_bytes_read == self->pipe_sender.bytes_sent) {
         if (h2o_send_state_is_in_progress(send_state)) {
             /* resume reading only when we know that the pipe (to which we read) has become empty */
             self->client->update_window(self->client);
@@ -376,7 +384,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
     }
 
    size_t len;
-    if ((len = self->pipe_sender.bytes_read - self->pipe_sender.bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
+    if ((len = self->body_bytes_read - self->pipe_sender.bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
         if (send_state == H2O_SEND_STATE_FINAL)
             send_state = H2O_SEND_STATE_IN_PROGRESS;
         len = H2O_PULL_SENDVEC_MAX_SIZE;
@@ -441,7 +449,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
     int generator_disposed = 0;
     struct rp_generator_t *self = client->data;
 
-    h2o_pipe_sender_update(&self->pipe_sender, client->bytes_read.body);
+    self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
@@ -466,7 +474,7 @@ static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_heade
 {
     struct rp_generator_t *self = client->data;
 
-    h2o_pipe_sender_update(&self->pipe_sender, client->bytes_read.body);
+    self->body_bytes_read = client->bytes_read.body;
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
@@ -825,6 +833,7 @@ static struct rp_generator_t *proxy_send_prepare(h2o_req_t *req)
     self->req_done = 0;
     self->res_done = 0;
     h2o_pipe_sender_init(&self->pipe_sender);
+    self->body_bytes_read = 0;
 
     return self;
 }

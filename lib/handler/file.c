@@ -167,7 +167,6 @@ static void do_proceed_on_splice_complete(h2o_io_uring_cmd_t *cmd)
     self->file.off += cmd->result;
     self->bytesleft -= cmd->result;
 
-    h2o_pipe_sender_update(&self->pipe_sender, self->pipe_sender.bytes_read + cmd->result);
     h2o_send_state_t send_state = self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL;
 
     h2o_pipe_sender_send(self->src_req, &self->pipe_sender, cmd->result, send_state);
