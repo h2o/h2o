@@ -166,6 +166,9 @@ provider quicly {
     probe enter_cc_limited(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
     probe exit_cc_limited(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
 
+    probe enter_jumpstart(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, uint32_t rtt, uint32_t cwnd,
+                          uint32_t jumpstart_cwnd);
+
     probe debug_message(struct st_quicly_conn_t *conn, const char *function, int line, const char *message);
 
     probe conn_stats(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stats_t *stats, size_t size);

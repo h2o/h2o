@@ -77,7 +77,7 @@ static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t 
 
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
-        cc->cwnd = quicly_u32_add_saturating(cc->cwnd, bytes);
+        cc->cwnd = quicly_u32_add_saturating(cc->cwnd, (uint32_t)((uint64_t)bytes * cc->slow_start_increase / 256));
         if (cc->cwnd_maximum < cc->cwnd)
             cc->cwnd_maximum = cc->cwnd;
         return;
@@ -172,11 +172,12 @@ static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.cubic.last_sent_time = now;
 }
 
-static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
+static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd, uint16_t slow_start_increase)
 {
     memset(cc, 0, sizeof(quicly_cc_t));
     cc->type = &quicly_cc_type_cubic;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
+    cc->slow_start_increase = slow_start_increase;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
     cc->exit_slow_start_at = INT64_MAX;
 
@@ -193,7 +194,7 @@ static int cubic_on_switch(quicly_cc_t *cc)
         if (cc->cwnd_exiting_slow_start == 0) {
             cc->type = &quicly_cc_type_cubic;
         } else {
-            cubic_reset(cc, cc->cwnd_initial);
+            cubic_reset(cc, cc->cwnd_initial, cc->slow_start_increase);
         }
         return 1;
     }
@@ -201,9 +202,9 @@ static int cubic_on_switch(quicly_cc_t *cc)
     return 0;
 }
 
-static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now, uint16_t slow_start_add_ratio)
 {
-    cubic_reset(cc, initcwnd);
+    cubic_reset(cc, initcwnd, slow_start_add_ratio);
 }
 
 quicly_cc_type_t quicly_cc_type_cubic = {"cubic",         &quicly_cc_cubic_init,          cubic_on_acked,

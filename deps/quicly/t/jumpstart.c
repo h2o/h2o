@@ -37,7 +37,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
     uint32_t packets_acked = 0, packets_inflight = 0;
     size_t ackcnt = 0;
 
-    init->cb(init, &cc, 10 * mtu, now);
+    init->cb(init, &cc, 10 * mtu, now, QUICLY_STANDARD_SLOW_START_INCREASE);
     ok(cc.cwnd == 10 * mtu);
     ok(cc.num_loss_episodes == 0);
 

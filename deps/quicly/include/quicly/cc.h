@@ -39,6 +39,7 @@ extern "C" {
 
 #define QUICLY_MIN_CWND 2
 #define QUICLY_RENO_BETA 0.7
+#define QUICLY_STANDARD_SLOW_START_INCREASE 256 /* +1x */
 
 /**
  * Holds pointers to concrete congestion control implementation functions.
@@ -62,6 +63,10 @@ typedef struct st_quicly_cc_t {
      * Packet number indicating end of recovery period, if in recovery.
      */
     uint64_t recovery_end;
+    /**
+     * Bytes to add to CWND for each byte being acked, multiplied by 256 (default is QUICLY_STANDARD_SLOW_START_INCREASE)
+     */
+    uint16_t slow_start_increase;
     /**
      * If the most recent loss episode was signalled by ECN only (i.e., no packet loss).
      */
