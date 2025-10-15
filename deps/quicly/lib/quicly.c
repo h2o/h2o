@@ -1932,8 +1932,9 @@ static quicly_error_t promote_path(quicly_conn_t *conn, size_t path_index)
     /* reset CC (FIXME flush sentmap and reset loss recovery) */
     conn->egress.cc.type->cc_init->cb(
         conn->egress.cc.type->cc_init, &conn->egress.cc,
-        quicly_cc_calc_initial_cwnd(conn->super.ctx->initcwnd_packets, conn->egress.max_udp_payload_size), conn->stash.now,
-        conn->super.stats.num_scaled_slow_start != 0 ? conn->super.ctx->slow_start_increase : QUICLY_STANDARD_SLOW_START_INCREASE);
+        quicly_cc_calc_initial_cwnd(conn->super.ctx->initcwnd_packets, conn->egress.max_udp_payload_size), conn->stash.now);
+    if (conn->super.stats.num_rapid_start != 0 && conn->egress.cc.type->enable_rapid_start != NULL)
+        conn->egress.cc.type->enable_rapid_start(&conn->egress.cc, conn->stash.now);
 
     /* set jumpstart target */
     calc_resume_sendrate(conn, &conn->super.stats.jumpstart.prev_rate, &conn->super.stats.jumpstart.prev_rtt);
@@ -2643,12 +2644,12 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     conn->egress.ack_frequency.update_at = INT64_MAX;
     conn->egress.send_ack_at = INT64_MAX;
     conn->egress.send_probe_at = INT64_MAX;
-    conn->super.stats.num_scaled_slow_start =
-        conn->super.ctx->slow_start_increase != 0 &&
-        enable_with_ratio255(conn->super.ctx->enable_ratio.scaled_slow_start, conn->super.ctx->tls->random_bytes);
-    conn->super.ctx->init_cc->cb(conn->super.ctx->init_cc, &conn->egress.cc, initcwnd, conn->stash.now,
-                                 conn->super.stats.num_scaled_slow_start != 0 ? conn->super.ctx->slow_start_increase
-                                                                              : QUICLY_STANDARD_SLOW_START_INCREASE);
+    conn->super.ctx->init_cc->cb(conn->super.ctx->init_cc, &conn->egress.cc, initcwnd, conn->stash.now);
+    if (conn->egress.cc.type->enable_rapid_start != NULL &&
+        enable_with_ratio255(conn->super.ctx->enable_ratio.rapid_start, conn->super.ctx->tls->random_bytes)) {
+        conn->egress.cc.type->enable_rapid_start(&conn->egress.cc, conn->stash.now);
+        conn->super.stats.num_rapid_start = 1;
+    }
     if (pacer != NULL) {
         conn->egress.pacer = pacer;
         quicly_pacer_reset(conn->egress.pacer);
@@ -3436,15 +3437,25 @@ static quicly_error_t on_ack_retire_connection_id(quicly_sentmap_t *map, const q
 
 static uint32_t calc_pacer_send_rate(quicly_conn_t *conn)
 {
-    /* The multiplier uses a hard-coded value of 2x in both the slow start and the congestion avoidance phases. This differs from
-     * Linux, which uses 1.25x for the latter. The rationale behind this choice is that 1.25x is not sufficiently aggressive
-     * immediately after a loss event. Following a loss event, the congestion window (CWND) is halved (i.e., beta), but the RTT
-     * remains high for one RTT and SRTT can remain high even loger, since it is a moving average adjusted with each ACK received.
-     * Consequently, if the multiplier is set to 1.25x, the calculated send rate could drop to as low as 1.25 * 1/2 = 0.625. By
-     * using a 2x multiplier, the send rate is guaranteed to become no less than that immediately before the loss event, which would
-     * have been the link throughput. */
-    return quicly_pacer_calc_send_rate(quicly_cc_in_jumpstart(&conn->egress.cc) ? 1 : 2, conn->egress.cc.cwnd,
-                                       conn->egress.loss.rtt.smoothed);
+    uint32_t multiplier;
+
+    if (conn->egress.cc.num_loss_episodes == 0) {
+        if (quicly_cc_in_jumpstart(&conn->egress.cc)) {
+            multiplier = 1;
+        } else {
+            multiplier = quicly_cc_rapid_start_use_3x(&conn->egress.cc.rapid_start, &conn->egress.loss.rtt) ? 3 : 2;
+        }
+    } else {
+        /* We use of 2x during congestion avoidance, which is different from Linux using 1.25x. The rationale behind this choice is
+         * that 1.25x is not sufficiently aggressive immediately after a loss event. Following a loss event, the congestion window
+         * (CWND) is halved (i.e., beta), but the RTT remains high for one RTT and SRTT can remain high even loger, since it is a
+         * moving average adjusted with each ACK received. Consequently, if the multiplier is set to 1.25x, the calculated send rate
+         * could drop to as low as 1.25 * 1/2 = 0.625. By using a 2x multiplier, the send rate is guaranteed to become no less than
+         * that immediately before the loss event, which would have been the link throughput. */
+        multiplier = 2;
+    }
+
+    return quicly_pacer_calc_send_rate(multiplier, conn->egress.cc.cwnd, conn->egress.loss.rtt.smoothed);
 }
 
 static int should_send_datagram_frame(quicly_conn_t *conn)

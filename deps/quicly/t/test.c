@@ -1174,6 +1174,7 @@ int main(int argc, char **argv)
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
+    subtest("cc", test_cc);
 
     subtest("state-exhaustion", test_state_exhaustion);
     subtest("migration-during-handshake", test_migration_during_handshake);
