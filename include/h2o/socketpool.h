@@ -57,6 +57,10 @@ typedef struct st_h2o_socketpool_target_t {
      */
     h2o_url_t url;
     /**
+     * the server name (SNI), NUL-terminated
+     */
+    h2o_iovec_t server_name;
+    /**
      * target type (extracted from url)
      */
     h2o_socketpool_target_type_t type;
@@ -157,7 +161,8 @@ int h2o_socketpool_is_global(h2o_socketpool_t *pool);
 /**
  * create a target. If lb_target_conf is NULL, a default target conf would be created.
  */
-h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf);
+h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_socketpool_target_conf_t *lb_target_conf,
+                                                      h2o_iovec_t *server_name_override);
 /**
  * destroy a target
  */
