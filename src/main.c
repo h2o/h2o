@@ -3180,7 +3180,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
                         **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
-                        **resume_jumpstart_ratio, **rapid_start_ratio;
+                        **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
@@ -3190,7 +3190,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
                             &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
                             &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
-                            &resume_jumpstart_ratio, &rapid_start_ratio) != 0)
+                            &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3257,7 +3257,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     } while (0)
                     APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
                     APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
-                    APPLY_RATIO(rapid_start_ratio, rapid_start);
+                    APPLY_RATIO(rapid_start, rapid_start);
                     APPLY_RATIO(ecn, ecn);
                     APPLY_RATIO(pacing, pacing);
                     APPLY_RATIO(respect_app_limited, respect_app_limited);
