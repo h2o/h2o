@@ -3179,19 +3179,18 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **slow_start_increase, **jumpstart_default, **jumpstart_max,
-                        **scaled_slow_start_ratio, **non_resume_jumpstart_ratio, **resume_jumpstart_ratio;
+                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
+                        **resume_jumpstart_ratio, **rapid_start_ratio;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                             "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,slow-start-increase:s,"
-                            "jumpstart-default:s,jumpstart-max:s,slow-start-ratio:s,non-resume-jumpstart-ratio:s,"
-                            "resume-jumpstart-ratio:s",
+                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
+                            "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
                             &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &slow_start_increase, &jumpstart_default, &jumpstart_max, &scaled_slow_start_ratio,
-                            &non_resume_jumpstart_ratio, &resume_jumpstart_ratio) != 0)
+                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
+                            &resume_jumpstart_ratio, &rapid_start_ratio) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3244,17 +3243,6 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
                     }
-                    if (slow_start_increase != NULL) {
-                        double v;
-                        if (h2o_configurator_scanf(cmd, *slow_start_increase, "%lf", &v) != 0)
-                            return -1;
-                        if (!(1 <= v && v <= 10)) {
-                            h2o_configurator_errprintf(cmd, *slow_start_increase,
-                                                       "slow start increase must be a number between 1 and 10");
-                            return -1;
-                        }
-                        listener->quic.ctx->slow_start_increase = (v * 512 + 1) / 2;
-                    }
                     if (jumpstart_default != NULL &&
                         h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
                                                &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
@@ -3267,9 +3255,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         if (node != NULL && parse_quic_enable_ratio(cmd, *node, &listener->quic.ctx->enable_ratio.fld) != 0)                       \
             return -1;                                                                                                             \
     } while (0)
-                    APPLY_RATIO(scaled_slow_start_ratio, scaled_slow_start);
                     APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
                     APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
+                    APPLY_RATIO(rapid_start_ratio, rapid_start);
                     APPLY_RATIO(ecn, ecn);
                     APPLY_RATIO(pacing, pacing);
                     APPLY_RATIO(respect_app_limited, respect_app_limited);
