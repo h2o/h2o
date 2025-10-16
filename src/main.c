@@ -2962,6 +2962,22 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
+static int parse_quic_enable_ratio(h2o_configurator_command_t *cmd, yoml_t *node, uint8_t *ratio)
+{
+    assert(node->type == YOML_TYPE_SCALAR);
+
+    if (strcasecmp(node->data.scalar, "ON") == 0) {
+        *ratio = 255;
+    } else if (strcasecmp(node->data.scalar, "OFF") == 0) {
+        *ratio = 0;
+    } else if (sscanf(node->data.scalar, "%" SCNu8, ratio) != 1) {
+        h2o_configurator_errprintf(cmd, node, "argument must be `ON`, `OFF`, or an integer between 0 (never) and 255 (always)");
+        return -1;
+    }
+
+    return 0;
+}
+
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     const char *hostname = NULL, *servname, *type = "tcp";
@@ -3163,16 +3179,18 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
                         **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max;
+                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
+                        **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
                             "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
-                            "jumpstart-max:s",
+                            "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
                             &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &jumpstart_default, &jumpstart_max) != 0)
+                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
+                            &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3225,24 +3243,6 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
                     }
-                    if (ecn != NULL) {
-                        ssize_t on = h2o_configurator_get_one_of(cmd, *ecn, "OFF,ON");
-                        if (on == -1)
-                            return -1;
-                        listener->quic.ctx->enable_ecn = !!on;
-                    }
-                    if (pacing != NULL) {
-                        ssize_t on = h2o_configurator_get_one_of(cmd, *pacing, "OFF,ON");
-                        if (on == -1)
-                            return -1;
-                        listener->quic.ctx->use_pacing = (unsigned)on;
-                    }
-                    if (respect_app_limited != NULL) {
-                        ssize_t on = h2o_configurator_get_one_of(cmd, *respect_app_limited, "OFF,ON");
-                        if (on == -1)
-                            return -1;
-                        listener->quic.ctx->respect_app_limited = (unsigned)on;
-                    }
                     if (jumpstart_default != NULL &&
                         h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
                                                &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
@@ -3250,6 +3250,18 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32,
                                                                         &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
                         return -1;
+#define APPLY_RATIO(node, fld)                                                                                                     \
+    do {                                                                                                                           \
+        if (node != NULL && parse_quic_enable_ratio(cmd, *node, &listener->quic.ctx->enable_ratio.fld) != 0)                       \
+            return -1;                                                                                                             \
+    } while (0)
+                    APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
+                    APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
+                    APPLY_RATIO(rapid_start, rapid_start);
+                    APPLY_RATIO(ecn, ecn);
+                    APPLY_RATIO(pacing, pacing);
+                    APPLY_RATIO(respect_app_limited, respect_app_limited);
+#undef APPLY_RATIO
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);

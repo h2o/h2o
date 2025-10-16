@@ -34,78 +34,82 @@
 #define DEFAULT_MAX_PATH_VALIDATION_FAILURES 100
 
 /* profile that employs IETF specified values */
-const quicly_context_t quicly_spec_context = {NULL,                                                 /* tls */
-                                              DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,          /* client_initial_size */
-                                              QUICLY_LOSS_SPEC_CONF,                                /* loss */
-                                              {{1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-                                               16 * 1024 * 1024,                                    /* max_data */
-                                               30 * 1000,                                           /* idle_timeout (30 seconds) */
-                                               100, /* max_concurrent_streams_bidi */
-                                               0,   /* max_concurrent_streams_uni */
-                                               DEFAULT_MAX_UDP_PAYLOAD_SIZE},
-                                              DEFAULT_MAX_PACKETS_PER_KEY,
-                                              DEFAULT_MAX_CRYPTO_BYTES,
-                                              DEFAULT_INITCWND_PACKETS,
-                                              QUICLY_PROTOCOL_VERSION_1,
-                                              DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                              0, /* ack_frequency */
-                                              DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
-                                              DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
-                                              DEFAULT_MAX_PROBE_PACKETS,
-                                              DEFAULT_MAX_PATH_VALIDATION_FAILURES,
-                                              0, /* default_jumpstart_cwnd_bytes */
-                                              0, /* max_jumpstart_cwnd_bytes */
-                                              0, /* enlarge_client_hello */
-                                              1, /* enable_ecn */
-                                              0, /* use_pacing */
-                                              1, /* cc_recognize_app_limited */
-                                              NULL,
-                                              NULL, /* on_stream_open */
-                                              &quicly_default_stream_scheduler,
-                                              NULL, /* receive_datagram_frame */
-                                              NULL, /* on_conn_close */
-                                              &quicly_default_now,
-                                              NULL,
-                                              NULL,
-                                              &quicly_default_crypto_engine,
-                                              &quicly_default_init_cc};
+const quicly_context_t quicly_spec_context = {
+    .initial_egress_max_udp_payload_size = DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,
+    .loss = QUICLY_LOSS_SPEC_CONF,
+    .transport_params =
+        {
+            .max_stream_data.bidi_local = 1 * 1024 * 1024,
+            .max_stream_data.bidi_remote = 11 * 1024 * 1024,
+            .max_stream_data.uni = 1 * 1024 * 1024,
+            .max_data = 16 * 1024 * 1024,
+            .max_idle_timeout = 30 * 1000,
+            .max_streams_bidi = 100,
+            .max_streams_uni = 0,
+            .max_udp_payload_size = DEFAULT_MAX_UDP_PAYLOAD_SIZE,
+        },
+    .max_packets_per_key = DEFAULT_MAX_PACKETS_PER_KEY,
+    .max_crypto_bytes = DEFAULT_MAX_CRYPTO_BYTES,
+    .initcwnd_packets = DEFAULT_INITCWND_PACKETS,
+    .initial_version = QUICLY_PROTOCOL_VERSION_1,
+    .pre_validation_amplification_limit = DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
+    .handshake_timeout_rtt_multiplier = DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
+    .max_initial_handshake_packets = DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+    .max_probe_packets = DEFAULT_MAX_PROBE_PACKETS,
+    .max_path_validation_failures = DEFAULT_MAX_PATH_VALIDATION_FAILURES,
+    .enable_ratio =
+        {
+            .jumpstart.non_resume = 255,
+            .jumpstart.resume = 255,
+            .rapid_start = 0, /* off by default */
+            .ecn = 255,
+            .pacing = 0, /* off by default */
+            .respect_app_limited = 255,
+        },
+    .stream_scheduler = &quicly_default_stream_scheduler,
+    .now = &quicly_default_now,
+    .crypto_engine = &quicly_default_crypto_engine,
+    .init_cc = &quicly_default_init_cc,
+};
 
 /* profile with a focus on reducing latency for the HTTP use case */
-const quicly_context_t quicly_performant_context = {NULL,                                                 /* tls */
-                                                    DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,          /* client_initial_size */
-                                                    QUICLY_LOSS_PERFORMANT_CONF,                          /* loss */
-                                                    {{1 * 1024 * 1024, 1 * 1024 * 1024, 1 * 1024 * 1024}, /* max_stream_data */
-                                                     16 * 1024 * 1024,                                    /* max_data */
-                                                     30 * 1000, /* idle_timeout (30 seconds) */
-                                                     100,       /* max_concurrent_streams_bidi */
-                                                     0,         /* max_concurrent_streams_uni */
-                                                     DEFAULT_MAX_UDP_PAYLOAD_SIZE},
-                                                    DEFAULT_MAX_PACKETS_PER_KEY,
-                                                    DEFAULT_MAX_CRYPTO_BYTES,
-                                                    DEFAULT_INITCWND_PACKETS,
-                                                    QUICLY_PROTOCOL_VERSION_1,
-                                                    DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
-                                                    0, /* ack_frequency */
-                                                    DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
-                                                    DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
-                                                    DEFAULT_MAX_PROBE_PACKETS,
-                                                    DEFAULT_MAX_PATH_VALIDATION_FAILURES,
-                                                    0, /* default_jumpstart_cwnd_bytes */
-                                                    0, /* max_jumpstart_cwnd_bytes */
-                                                    0, /* enlarge_client_hello */
-                                                    1, /* enable_ecn */
-                                                    0, /* use_pacing */
-                                                    1, /* cc_recognize_app_limited */
-                                                    NULL,
-                                                    NULL, /* on_stream_open */
-                                                    &quicly_default_stream_scheduler,
-                                                    NULL, /* receive_datagram_frame */
-                                                    NULL, /* on_conn_close */
-                                                    &quicly_default_now,
-                                                    NULL,
-                                                    NULL,
-                                                    &quicly_default_crypto_engine,
-                                                    &quicly_default_init_cc};
+const quicly_context_t quicly_performant_context = {
+    .initial_egress_max_udp_payload_size = DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,
+    .loss = QUICLY_LOSS_PERFORMANT_CONF,
+    .transport_params =
+        {
+            .max_stream_data.bidi_local = 1 * 1024 * 1024,
+            .max_stream_data.bidi_remote = 11 * 1024 * 1024,
+            .max_stream_data.uni = 1 * 1024 * 1024,
+            .max_data = 16 * 1024 * 1024,
+            .max_idle_timeout = 30 * 1000,
+            .max_streams_bidi = 100,
+            .max_streams_uni = 0,
+            .max_udp_payload_size = DEFAULT_MAX_UDP_PAYLOAD_SIZE,
+        },
+    .max_packets_per_key = DEFAULT_MAX_PACKETS_PER_KEY,
+    .max_crypto_bytes = DEFAULT_MAX_CRYPTO_BYTES,
+    .initcwnd_packets = DEFAULT_INITCWND_PACKETS,
+    .initial_version = QUICLY_PROTOCOL_VERSION_1,
+    .pre_validation_amplification_limit = DEFAULT_PRE_VALIDATION_AMPLIFICATION_LIMIT,
+    .handshake_timeout_rtt_multiplier = DEFAULT_HANDSHAKE_TIMEOUT_RTT_MULTIPLIER,
+    .max_initial_handshake_packets = DEFAULT_MAX_INITIAL_HANDSHAKE_PACKETS,
+    .max_probe_packets = DEFAULT_MAX_PROBE_PACKETS,
+    .max_path_validation_failures = DEFAULT_MAX_PATH_VALIDATION_FAILURES,
+    .enable_ratio =
+        {
+            .jumpstart.non_resume = 255,
+            .jumpstart.resume = 255,
+            .rapid_start = 0, /* off by default */
+            .ecn = 255,
+            .pacing = 0, /* off by default */
+            .respect_app_limited = 255,
+        },
+    .stream_scheduler = &quicly_default_stream_scheduler,
+    .now = &quicly_default_now,
+    .crypto_engine = &quicly_default_crypto_engine,
+    .init_cc = &quicly_default_init_cc,
+};
 
 /**
  * The context of the default CID encryptor.  All the contexts being used here are ECB ciphers and therefore stateless - they can be

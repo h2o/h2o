@@ -45,6 +45,21 @@ extern "C" {
  */
 typedef const struct st_quicly_cc_type_t quicly_cc_type_t;
 
+/**
+ * state used by rapid start
+ */
+struct st_quicly_cc_rapid_start_t {
+    /**
+     * Until when the newest sample (i.e., `rtt_samples[0]`) is to be updated. 0 if rapid start is disabled.
+     */
+    int64_t newest_rtt_sample_until;
+    /**
+     * Records the RTT floor for most recent periods of 4, where the duration the period is defined as `floor(rtt.minimum / 4)`.
+     * [0] holds the newest entry, [3] holds the oldest one.
+     */
+    uint32_t rtt_samples[4];
+};
+
 typedef struct st_quicly_cc_t {
     /**
      * Congestion controller type.
@@ -136,6 +151,10 @@ typedef struct st_quicly_cc_t {
         uint32_t bytes_acked;
     } jumpstart;
     /**
+     * rapid start
+     */
+    struct st_quicly_cc_rapid_start_t rapid_start;
+    /**
      * Initial congestion window.
      */
     uint32_t cwnd_initial;
@@ -203,9 +222,13 @@ struct st_quicly_cc_type_t {
      */
     int (*cc_switch)(quicly_cc_t *cc);
     /**
-     *
+     * [optional] called by quicly to enter jumpstart.
      */
     void (*cc_jumpstart)(quicly_cc_t *cc, uint32_t cwnd, uint64_t next_pn);
+    /**
+     * [optional] turns on rapid start
+     */
+    void (*enable_rapid_start)(quicly_cc_t *cc, int64_t now);
 };
 
 /**
@@ -238,10 +261,34 @@ static void quicly_cc__update_ecn_episodes(quicly_cc_t *cc, uint32_t lost_bytes,
 
 static void quicly_cc_jumpstart_reset(quicly_cc_t *cc);
 static int quicly_cc_in_jumpstart(quicly_cc_t *cc);
+static int quicly_cc_is_jumpstart_ack(quicly_cc_t *cc, uint64_t pn);
 static void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint64_t next_pn);
 static void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint32_t bytes, uint64_t largest_acked,
                                          uint32_t inflight, uint64_t next_pn);
 static void quicly_cc_jumpstart_on_first_loss(quicly_cc_t *cc, uint64_t lost_pn);
+
+/**
+ * Initializes the heuristics needed to determine if slow start needs to be acclerated (i.e., 3x).
+ */
+static void quicly_cc_init_rapid_start(struct st_quicly_cc_rapid_start_t *rs, int64_t now);
+/**
+ * If rapid start is used on the connection.
+ */
+static int quicly_cc_rapid_start_is_enabled(struct st_quicly_cc_rapid_start_t *rs);
+/**
+ * Updates heuristics needed to determine if slow start needs to be acclerated (i.e., 3x). Must not be called once the connection
+ * enters the recovery period.
+ */
+static void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt, int64_t now);
+/**
+ * Reads RTT variables from `loss`, updates the heuristics (iff now != 0), and returns if the Slow Start should be accelerated.
+ */
+static int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt);
+/**
+ * During the first recovery period, updates CWND. Must only be called during the first recovery period.
+ */
+static void quicly_cc_rapid_start_on_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t bytes_lost, uint32_t *cwnd,
+                                          uint32_t cwnd_exiting_slow_start);
 
 /* inline definitions */
 
@@ -272,6 +319,11 @@ inline int quicly_cc_in_jumpstart(quicly_cc_t *cc)
     return cc->jumpstart.enter_pn < UINT64_MAX && cc->jumpstart.exit_pn == UINT64_MAX;
 }
 
+inline int quicly_cc_is_jumpstart_ack(quicly_cc_t *cc, uint64_t pn)
+{
+    return cc->jumpstart.enter_pn <= pn && pn < cc->jumpstart.exit_pn;
+}
+
 inline void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint64_t next_pn)
 {
     assert(cc->cwnd < jump_cwnd);
@@ -286,7 +338,7 @@ inline void quicly_cc_jumpstart_enter(quicly_cc_t *cc, uint32_t jump_cwnd, uint6
 inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint32_t bytes, uint64_t largest_acked,
                                          uint32_t inflight, uint64_t next_pn)
 {
-    int is_jumpstart_ack = cc->jumpstart.enter_pn <= largest_acked && largest_acked < cc->jumpstart.exit_pn;
+    int is_jumpstart_ack = quicly_cc_is_jumpstart_ack(cc, largest_acked);
 
     /* remember the amount of bytes acked for the packets sent in jumpstart */
     if (is_jumpstart_ack)
@@ -321,6 +373,76 @@ inline void quicly_cc_jumpstart_on_first_loss(quicly_cc_t *cc, uint64_t lost_pn)
         if (cc->jumpstart.exit_pn == UINT64_MAX)
             cc->jumpstart.exit_pn = lost_pn;
     }
+}
+
+inline void quicly_cc_init_rapid_start(struct st_quicly_cc_rapid_start_t *rs, int64_t now)
+{
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(rs->rtt_samples); ++i)
+        rs->rtt_samples[i] = UINT32_MAX;
+    rs->newest_rtt_sample_until = now + 1; /* 1 is added to guarantee that `newest_slot_until` will be zero (i.e., disabled) */
+}
+
+inline int quicly_cc_rapid_start_is_enabled(struct st_quicly_cc_rapid_start_t *rs)
+{
+    return rs->newest_rtt_sample_until != 0;
+}
+
+inline void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt, int64_t now)
+{
+    /* bail out unless enabled */
+    if (rs->newest_rtt_sample_until == 0)
+        return;
+
+    /* fast path: if the newest slot covers `now`, update the slot and return */
+    if (now < rs->newest_rtt_sample_until) {
+        if (rs->rtt_samples[0] > rtt->latest)
+            rs->rtt_samples[0] = rtt->latest;
+        return;
+    }
+
+    /* slow path: determine the distance to move in the unit of slots */
+    int64_t sample_duration = rtt->minimum / PTLS_ELEMENTSOF(rs->rtt_samples);
+    size_t distance = (now - rs->newest_rtt_sample_until) / sample_duration + 1;
+
+    /* move */
+    for (size_t dst = PTLS_ELEMENTSOF(rs->rtt_samples) - 1; dst != 0; --dst)
+        rs->rtt_samples[dst] = dst >= distance ? rs->rtt_samples[dst - distance] : UINT32_MAX;
+
+    /* fill the newest slot */
+    rs->rtt_samples[0] = rtt->latest;
+    rs->newest_rtt_sample_until += sample_duration * distance;
+    assert(rs->newest_rtt_sample_until - sample_duration <= now && now < rs->newest_rtt_sample_until);
+}
+
+inline int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt)
+{
+    if (rs->newest_rtt_sample_until == 0)
+        return 0;
+
+    /* If the latest RTT is below max(min_rtt + 4ms, min_rtt * 1.1), adopt a higher increase rate (i.e., 3x per RTT) than the
+     * ordinary Slow Start (2x per RTT). The thresholds are chosen so that they do not overlap with HyStart++, which reduces the
+     * increase rate to 1.25x. */
+    uint32_t threshold = rtt->minimum + 4;
+    if (threshold < rtt->minimum * 35 / 32)
+        threshold = rtt->minimum * 35 / 32;
+
+    uint32_t floor = UINT32_MAX;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(rs->rtt_samples); ++i)
+        if (floor > rs->rtt_samples[i])
+            floor = rs->rtt_samples[i];
+
+    return floor <= threshold;
+}
+
+inline void quicly_cc_rapid_start_on_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t bytes_lost, uint32_t *cwnd,
+                                          uint32_t cwnd_exiting_slow_start)
+{
+    if (rs->newest_rtt_sample_until == 0)
+        return;
+
+    *cwnd -= QUICLY_RENO_BETA * bytes_lost;
+    if (*cwnd < 1 / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start)
+        *cwnd = 1 / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start;
 }
 
 #ifdef __cplusplus

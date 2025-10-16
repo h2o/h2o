@@ -1234,6 +1234,7 @@ static void usage(const char *cmd)
            "                            multiple times)\n"
            "  -R                        require Retry (server only)\n"
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
+           "  --rapid-start             turns on rapid start\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
            "  -u size                   initial size of UDP datagram payload\n"
@@ -1485,6 +1486,7 @@ int main(int argc, char **argv)
                                              {"disregard-app-limited", no_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
+                                             {"rapid-start", no_argument, NULL, 0},
                                              {"calc-initial-secret", required_argument, NULL, 0},
                                              {"decrypt-packet", required_argument, NULL, 0},
                                              {"encrypt-packet", required_argument, NULL, 0},
@@ -1498,9 +1500,9 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "ech-configs") == 0) {
                 ech_setup_configs(optarg);
             } else if (strcmp(longopts[opt_index].name, "disable-ecn") == 0) {
-                ctx.enable_ecn = 0;
+                ctx.enable_ratio.ecn = 0;
             } else if (strcmp(longopts[opt_index].name, "disregard-app-limited") == 0) {
-                ctx.respect_app_limited = 0;
+                ctx.enable_ratio.respect_app_limited = 0;
             } else if (strcmp(longopts[opt_index].name, "jumpstart-default") == 0) {
                 if (sscanf(optarg, "%" SCNu32, &ctx.default_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse default jumpstart size: %s\n", optarg);
@@ -1511,6 +1513,8 @@ int main(int argc, char **argv)
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
                     exit(1);
                 }
+            } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {
+                ctx.enable_ratio.rapid_start = 255;
             } else if (strcmp(longopts[opt_index].name, "calc-initial-secret") == 0) {
                 return cmd_calc_initial_secret(optarg);
             } else if (strcmp(longopts[opt_index].name, "decrypt-packet") == 0) {
@@ -1562,7 +1566,7 @@ int main(int argc, char **argv)
             /* pacing */
             if ((token = strsep(&buf, ":")) != NULL) {
                 if (strcmp(token, "p") == 0) {
-                    ctx.use_pacing = 1;
+                    ctx.enable_ratio.pacing = 255;
                 } else {
                     fprintf(stderr, "invalid pacing value: %s\n", token);
                     exit(1);

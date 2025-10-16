@@ -166,7 +166,7 @@ def handle_max_stream_data_receive(event):
     return {
         "frame_type": "max_stream_data",
         "stream_id": event["stream-id"],
-        "maximum": event["maximum"]
+        "maximum": event["max-stream-data"]
     }
 
 def handle_max_stream_data_send(event):
@@ -267,7 +267,8 @@ def handle_stream_send(event):
 def handle_stream_on_send_stop(event):
     return {
         "frame_type": "stop_sending",
-        "stream_id": event["stream-id"]
+        "stream_id": event["stream-id"],
+        "error_code": event["err"]
     }
 
 def handle_streams_blocked_receive(event):

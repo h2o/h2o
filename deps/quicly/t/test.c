@@ -155,6 +155,32 @@ static void test_error_codes(void)
     ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
 }
 
+static uint16_t test_enable_with_ratio255_random_value;
+
+static void test_enable_with_ratio255_get_random(void *p, size_t len)
+{
+    assert(len == sizeof(test_enable_with_ratio255_random_value));
+    memcpy(p, &test_enable_with_ratio255_random_value, sizeof(test_enable_with_ratio255_random_value));
+}
+
+static void test_enable_with_ratio255(void)
+{
+    test_enable_with_ratio255_random_value = 0;
+    ok(!enable_with_ratio255(0, test_enable_with_ratio255_get_random));
+    ok(enable_with_ratio255(255, test_enable_with_ratio255_get_random));
+
+    test_enable_with_ratio255_random_value = 255;
+    ok(!enable_with_ratio255(0, test_enable_with_ratio255_get_random));
+    ok(enable_with_ratio255(255, test_enable_with_ratio255_get_random));
+
+    size_t num_enabled = 0;
+    for (test_enable_with_ratio255_random_value = 0; test_enable_with_ratio255_random_value < 0xffff;
+         ++test_enable_with_ratio255_random_value)
+        if (enable_with_ratio255(63, test_enable_with_ratio255_get_random))
+            ++num_enabled;
+    ok(num_enabled == 63 * (65535 / 255));
+}
+
 static void test_adjust_stream_frame_layout(void)
 {
 #define TEST(_is_crypto, _capacity, check)                                                                                         \
@@ -1124,6 +1150,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(quic_ctx.tls);
 
     subtest("error-codes", test_error_codes);
+    subtest("enable_with_ratio255", test_enable_with_ratio255);
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);
@@ -1147,6 +1174,7 @@ int main(int argc, char **argv)
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
+    subtest("cc", test_cc);
 
     subtest("state-exhaustion", test_state_exhaustion);
     subtest("migration-during-handshake", test_migration_during_handshake);

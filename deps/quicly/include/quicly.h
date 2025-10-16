@@ -354,21 +354,34 @@ struct st_quicly_context_t {
      */
     uint32_t max_jumpstart_cwnd_packets;
     /**
+     * Probabilities for enabling jumpstart when they are configured, multiplied by 255. 0 means never, 255 (default) means always.
+     */
+    struct {
+        struct {
+            uint8_t non_resume;
+            uint8_t resume;
+        } jumpstart;
+        /**
+         * if rapid cstart should be used
+         */
+        uint8_t rapid_start;
+        /**
+         * whether to use ECN on the send side; ECN is always on on the receive side
+         */
+        uint8_t ecn;
+        /**
+         * if pacing should be used
+         */
+        uint8_t pacing;
+        /**
+         * if CC should take app-limited into consideration
+         */
+        uint8_t respect_app_limited;
+    } enable_ratio;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
-    /**
-     * whether to use ECN on the send side; ECN is always on on the receive side
-     */
-    unsigned enable_ecn : 1;
-    /**
-     * if pacing should be used
-     */
-    unsigned use_pacing : 1;
-    /**
-     * if CC should take app-limited into consideration
-     */
-    unsigned respect_app_limited : 1;
     /**
      *
      */
@@ -610,7 +623,23 @@ struct st_quicly_conn_streamgroup_state_t {
     /**                                                                                                                            \
      * Total number of events where `initial_handshake_sent` exceeds limit.                                                        \
      */                                                                                                                            \
-    uint64_t num_initial_handshake_exceeded
+    uint64_t num_initial_handshake_exceeded;                                                                                       \
+    /**                                                                                                                            \
+     * Number of connections for which jumpstart is or could have been used.                                                       \
+     */                                                                                                                            \
+    uint64_t num_jumpstart_applicable;                                                                                             \
+    /**                                                                                                                            \
+     * Number of connections that used rapid start.                                                                                \
+     */                                                                                                                            \
+    uint64_t num_rapid_start;                                                                                                      \
+    /**                                                                                                                            \
+     * Total number of connections that were paced.                                                                                \
+     */                                                                                                                            \
+    uint64_t num_paced;                                                                                                            \
+    /**                                                                                                                            \
+     * Total number of connections where app-limited state was respected by CC.                                                    \
+     */                                                                                                                            \
+    uint64_t num_respected_app_limited
 
 /**
  * Stats that do not need to be gathered upon the invocation of `quicly_get_stats`. This macro is used to define the same fields in
@@ -740,17 +769,21 @@ typedef struct st_quicly_stats_t {
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack_frequency, dir, apply)
 
 #define QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)                                                                             \
-        apply(num_paths.created, "num-paths.created")                                                                                  \
-        apply(num_paths.validated, "num-paths.validated")                                                                              \
-        apply(num_paths.validation_failed, "num-paths.validation-failed")                                                              \
-        apply(num_paths.migration_elicited, "num-paths.migration-elicited")                                                            \
-        apply(num_paths.promoted, "num-paths.promoted")                                                                                \
-        apply(num_paths.closed_no_dcid, "num-paths.closed-no-dcid")                                                                    \
-        apply(num_paths.ecn_validated, "num-paths.ecn-validated")                                                                      \
-        apply(num_paths.ecn_failed, "num-paths.ecn-failed")                                                                            \
-        apply(num_ptos, "num-ptos")                                                                                                    \
-        apply(num_handshake_timeouts, "num-handshake-timeouts")                                                                        \
-        apply(num_initial_handshake_exceeded, "num-initial-handshake-exceeded")
+    apply(num_paths.created, "num-paths.created")                                                                                  \
+    apply(num_paths.validated, "num-paths.validated")                                                                              \
+    apply(num_paths.validation_failed, "num-paths.validation-failed")                                                              \
+    apply(num_paths.migration_elicited, "num-paths.migration-elicited")                                                            \
+    apply(num_paths.promoted, "num-paths.promoted")                                                                                \
+    apply(num_paths.closed_no_dcid, "num-paths.closed-no-dcid")                                                                    \
+    apply(num_paths.ecn_validated, "num-paths.ecn-validated")                                                                      \
+    apply(num_paths.ecn_failed, "num-paths.ecn-failed")                                                                            \
+    apply(num_ptos, "num-ptos")                                                                                                    \
+    apply(num_handshake_timeouts, "num-handshake-timeouts")                                                                        \
+    apply(num_initial_handshake_exceeded, "num-initial-handshake-exceeded")                                                        \
+    apply(num_jumpstart_applicable, "num-jumpstart-applicable")                                                                    \
+    apply(num_rapid_start, "num-rapid-start")                                                                                      \
+    apply(num_paced, "num-paced")                                                                                                  \
+    apply(num_respected_app_limited, "num-respected-app-limited")
 
 /**
  * Macro for iterating QUICLY_STATS_PREBUILT_COUNTERS.
@@ -769,7 +802,7 @@ typedef struct st_quicly_stats_t {
     apply(handshake_confirmed_msec, "handshake-confirmed-msec")                                                                    \
     apply(jumpstart.prev_rate, "jumpstart.prev-rate")                                                                              \
     apply(jumpstart.prev_rtt, "jumpstart.prev-rtt")                                                                                \
-    apply(jumpstart.new_rtt, "jumpstart.new-rtt")                                                                                 \
+    apply(jumpstart.new_rtt, "jumpstart.new-rtt")                                                                                  \
     apply(jumpstart.cwnd, "jumpstart.cwnd")                                                                                        \
     apply(token_sent.at, "token-sent.at")                                                                                          \
     apply(token_sent.rate, "token-sent.rate")                                                                                      \
