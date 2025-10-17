@@ -441,8 +441,8 @@ inline void quicly_cc_rapid_start_on_lost(struct st_quicly_cc_rapid_start_t *rs,
         return;
 
     *cwnd -= QUICLY_RENO_BETA * bytes_lost;
-    if (*cwnd < 1 / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start)
-        *cwnd = 1 / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start;
+    if (*cwnd < 1. / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start)
+        *cwnd = 1. / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start;
 }
 
 #ifdef __cplusplus
