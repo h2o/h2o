@@ -176,6 +176,7 @@ INCLUDE_DIRECTORIES(
     include
     deps/cloexec
     deps/brotli/c/include
+    deps/zstd/lib
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -192,6 +193,8 @@ INCLUDE_DIRECTORIES(
     deps/yaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
+
+ADD_DEFINITIONS(-DZSTD_DISABLE_ASM)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -249,24 +252,6 @@ IF (PKG_CONFIG_FOUND)
         LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
     ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
-
-IF (PKG_CONFIG_FOUND)
-    PKG_CHECK_MODULES(ZSTD libzstd)
-ENDIF (PKG_CONFIG_FOUND)
-IF (NOT ZSTD_FOUND)
-    FIND_PACKAGE(ZSTD)
-ENDIF (NOT ZSTD_FOUND)
-IF (NOT ZSTD_FOUND)
-    MESSAGE(FATAL_ERROR "libzstd is required but was not found")
-ENDIF ()
-IF (DEFINED ZSTD_INCLUDE_DIRS)
-    INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIRS})
-ELSEIF (DEFINED ZSTD_INCLUDE_DIR)
-    INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIR})
-ENDIF ()
-IF (DEFINED ZSTD_LIBRARY_DIRS)
-    LINK_DIRECTORIES(${ZSTD_LIBRARY_DIRS})
-ENDIF ()
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)
@@ -358,7 +343,36 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/c/enc/utf8_util.c
     lib/handler/compress/brotli.c)
 
+SET(ZSTD_SOURCE_FILES
+    deps/zstd/lib/common/debug.c
+    deps/zstd/lib/common/entropy_common.c
+    deps/zstd/lib/common/error_private.c
+    deps/zstd/lib/common/fse_decompress.c
+    deps/zstd/lib/common/pool.c
+    deps/zstd/lib/common/threading.c
+    deps/zstd/lib/common/xxhash.c
+    deps/zstd/lib/common/zstd_common.c
+    deps/zstd/lib/compress/fse_compress.c
+    deps/zstd/lib/compress/hist.c
+    deps/zstd/lib/compress/huf_compress.c
+    deps/zstd/lib/compress/zstd_compress.c
+    deps/zstd/lib/compress/zstd_compress_literals.c
+    deps/zstd/lib/compress/zstd_compress_sequences.c
+    deps/zstd/lib/compress/zstd_compress_superblock.c
+    deps/zstd/lib/compress/zstd_double_fast.c
+    deps/zstd/lib/compress/zstd_fast.c
+    deps/zstd/lib/compress/zstd_lazy.c
+    deps/zstd/lib/compress/zstd_ldm.c
+    deps/zstd/lib/compress/zstdmt_compress.c
+    deps/zstd/lib/compress/zstd_opt.c
+    deps/zstd/lib/compress/zstd_preSplit.c
+    deps/zstd/lib/decompress/huf_decompress.c
+    deps/zstd/lib/decompress/zstd_ddict.c
+    deps/zstd/lib/decompress/zstd_decompress_block.c
+    deps/zstd/lib/decompress/zstd_decompress.c)
+
 SET(LIB_SOURCE_FILES
+    ${ZSTD_SOURCE_FILES}
     deps/cloexec/cloexec.c
     deps/hiredis/async.c
     deps/hiredis/hiredis.c
@@ -624,12 +638,6 @@ SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
-IF (DEFINED ZSTD_LIBRARIES)
-    LIST(INSERT EXTRA_LIBS 0 ${ZSTD_LIBRARIES})
-ELSEIF (DEFINED ZSTD_LIBRARY)
-    LIST(INSERT EXTRA_LIBS 0 ${ZSTD_LIBRARY})
-ENDIF ()
-
 IF (WSLAY_FOUND)
     ADD_LIBRARY(libh2o lib/websocket.c ${LIB_SOURCE_FILES})
     ADD_LIBRARY(libh2o-evloop lib/websocket.c ${LIB_SOURCE_FILES})
