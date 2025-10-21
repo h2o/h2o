@@ -117,14 +117,17 @@ static void on_setup_ostream(h2o_filter_t *_self, h2o_req_t *req, h2o_ostream_t 
     if (content_encoding_header_index != -1)
         goto Next;
 
-/* open the compressor (TODO add support for zstd) */
+/* open the compressor */
 #if H2O_USE_BROTLI
     if (self->args.brotli.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_BROTLI) != 0) {
         compressor =
             h2o_compress_brotli_open(&req->pool, self->args.brotli.quality, req->res.content_length, req->preferred_chunk_size);
     } else
 #endif
-        if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
+    if (self->args.zstd.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_ZSTD) != 0) {
+        compressor = h2o_compress_zstd_open(&req->pool, self->args.zstd.quality, req->res.content_length,
+                                            req->preferred_chunk_size);
+    } else if (self->args.gzip.quality != -1 && (compressible_types & H2O_COMPRESSIBLE_GZIP) != 0) {
         compressor = h2o_compress_gzip_open(&req->pool, self->args.gzip.quality);
     } else {
         /* let proxies know that we looked at accept-encoding when deciding not to compress */
