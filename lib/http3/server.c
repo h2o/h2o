@@ -2109,10 +2109,9 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
     struct st_h2o_http3_server_stream_t *stream = kh_val(conn->datagram_flows, iter);
     assert(stream->req.forward_datagram.write_ != NULL);
 
-    if (stream->req.forward_datagram.write_ == NULL) {
-        // Drop this datagram if req.forward_datagram.write_ has been reset
+    /* drop this datagram if req.forward_datagram.write_ has been reset */
+    if (stream->req.forward_datagram.write_ == NULL)
         return;
-    }
 
     /* forward */
     stream->req.forward_datagram.write_(&stream->req, &payload, 1);
