@@ -1124,6 +1124,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
         /* tidy up the request streaming */
         stream->req.write_req.cb = NULL;
         stream->req.write_req.ctx = NULL;
+        stream->req.forward_datagram.write_ = NULL;
         stream->req.proceed_req = NULL;
         stream->req_streaming = 0;
         if (!stream->req.is_tunnel_req)
@@ -2049,6 +2050,10 @@ static void datagram_frame_receive_cb(quicly_receive_datagram_frame_t *self, qui
         return;
     struct st_h2o_http3_server_stream_t *stream = kh_val(conn->datagram_flows, iter);
     assert(stream->req.forward_datagram.write_ != NULL);
+
+    /* drop this datagram if req.forward_datagram.write_ has been reset */
+    if (stream->req.forward_datagram.write_ == NULL)
+        return;
 
     /* forward */
     stream->req.forward_datagram.write_(&stream->req, &payload, 1);
