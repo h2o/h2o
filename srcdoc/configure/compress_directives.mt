@@ -31,23 +31,27 @@ EOT
 )->(sub {
 ?>
 <p>
-If the argument is <code>ON</code>, both <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a> and <a href="https://tools.ietf.org/html/rfc1952">gzip</a> compression are enabled.
+If the argument is <code>ON</code>, <a href="https://datatracker.ietf.org/doc/draft-alakuijala-brotli/">brotli</a>, <a href="https://www.rfc-editor.org/rfc/rfc8878.html">zstd</a>, and <a href="https://tools.ietf.org/html/rfc1952">gzip</a> compression are enabled.
 If the argument is <code>OFF</code>, on-the-fly compression is disabled.
 If the argument is a sequence, the elements are the list of compression algorithms to be enabled.
-If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms.
+If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms (gzip: 1&ndash;9, br: 0&ndash;11, zstd: 1&ndash;22). When omitted, the default qualities are 1 for gzip, 1 for brotli, and 3 for zstd.
 </p>
 <p>
-When both brotli and gzip are enabled and if the client supports both, H2O is hard-coded to prefer brotli.
+When multiple algorithms are enabled and the client supports several, H2O prefers brotli, then zstd, then gzip.
 </p>
 <?= $ctx->{example}->('Enabling on-the-fly compression', <<'EOT')
 # enable all algorithms
 compress: ON
 
 # enable by name
-compress: [ gzip, br ]
+compress: [ gzip, br, zstd ]
 
 # enable gzip only
 compress: [ gzip ]
+
+# tune zstd quality
+compress:
+  zstd: 7
 EOT
 ?>
 ? })
