@@ -40,6 +40,10 @@ extern "C" {
 #define QUICLY_MIN_CWND 2
 #define QUICLY_RENO_BETA 0.7
 
+#define QUICLY_RAPID_START_K (11. / 18)
+#define QUICLY_RAPID_START_ACK_FACTOR (QUICLY_RAPID_START_K * (1 - QUICLY_RENO_BETA))
+#define QUICLY_RAPID_START_LOSS_FACTOR (QUICLY_RENO_BETA + QUICLY_RAPID_START_ACK_FACTOR)
+
 /**
  * Holds pointers to concrete congestion control implementation functions.
  */
@@ -50,14 +54,21 @@ typedef const struct st_quicly_cc_type_t quicly_cc_type_t;
  */
 struct st_quicly_cc_rapid_start_t {
     /**
-     * Until when the newest sample (i.e., `rtt_samples[0]`) is to be updated. 0 if rapid start is disabled.
+     * Until when the newest sample (i.e., `rtt_samples[0]`) is to be updated. 0 if rapid start is disabled. Once loss is observed,
+     * this field is set to -1 and `cwnd_floor` is sed.
      */
     int64_t newest_rtt_sample_until;
-    /**
-     * Records the RTT floor for most recent periods of 4, where the duration the period is defined as `floor(rtt.minimum / 4)`.
-     * [0] holds the newest entry, [3] holds the oldest one.
-     */
-    uint32_t rtt_samples[4];
+    union {
+        /**
+         * Records the RTT floor for most recent periods of 4, where the duration the period is defined as `floor(rtt.minimum / 4)`.
+         * [0] holds the newest entry, [3] holds the oldest one.
+         */
+        uint32_t rtt_samples[4];
+        /**
+         * Retains the lower limit CWND can be reduced during the first recovery phase.
+         */
+        uint32_t cwnd_floor;
+    };
 };
 
 typedef struct st_quicly_cc_t {
@@ -159,7 +170,7 @@ typedef struct st_quicly_cc_t {
      */
     uint32_t cwnd_initial;
     /**
-     * Congestion window at the end of slow start.
+     * Congestion window at the end of slow start. (Equals 0 if still in slow start.)
      */
     uint32_t cwnd_exiting_slow_start;
     /**
@@ -218,7 +229,7 @@ struct st_quicly_cc_type_t {
      */
     void (*cc_on_sent)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
     /**
-     * Switches the underlying algorithm of `cc` to that of `cc_switch`, returning a boolean if the operation was successful.
+     * Switches the underlying algorithm of `cc` to that of `cc_switch`, returning a boolean whether the operation was successful.
      */
     int (*cc_switch)(quicly_cc_t *cc);
     /**
@@ -285,10 +296,14 @@ static void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *
  */
 static int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt);
 /**
+ *
+ */
+static void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t cwnd_floor);
+/**
  * During the first recovery period, updates CWND. Must only be called during the first recovery period.
  */
-static void quicly_cc_rapid_start_on_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t bytes_lost, uint32_t *cwnd,
-                                          uint32_t cwnd_exiting_slow_start);
+static void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t bytes_acked,
+                                              uint32_t bytes_lost);
 
 /* inline definitions */
 
@@ -348,8 +363,8 @@ inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint3
         /* Propotional Rate Reduction: if a loss is observed due to jumpstart, CWND is adjusted so that it would become bytes that
          * passed through to the client during the jumpstart phase of exactly 1 RTT, when the last ACK for the jumpstart phase is
          * received */
-        if (is_jumpstart_ack && cc->cwnd < cc->jumpstart.bytes_acked)
-            cc->cwnd = cc->jumpstart.bytes_acked;
+        if (is_jumpstart_ack && cc->cwnd < cc->jumpstart.bytes_acked * QUICLY_RENO_BETA)
+            cc->cwnd = cc->jumpstart.bytes_acked * QUICLY_RENO_BETA;
         return;
     }
 
@@ -390,8 +405,14 @@ inline int quicly_cc_rapid_start_is_enabled(struct st_quicly_cc_rapid_start_t *r
 inline void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt, int64_t now)
 {
     /* bail out unless enabled */
-    if (rs->newest_rtt_sample_until == 0)
+    if (rs->newest_rtt_sample_until <= 0)
         return;
+
+    /* when the delay is tiny (minrtt < 4ms) benefits are small, so disable rapid start to guard `sample_duration` becoming zero */
+    if (rtt->minimum < PTLS_ELEMENTSOF(rs->rtt_samples)) {
+        rs->newest_rtt_sample_until  = 0;
+        return;
+    }
 
     /* fast path: if the newest slot covers `now`, update the slot and return */
     if (now < rs->newest_rtt_sample_until) {
@@ -416,7 +437,7 @@ inline void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *
 
 inline int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt)
 {
-    if (rs->newest_rtt_sample_until == 0)
+    if (rs->newest_rtt_sample_until <= 0)
         return 0;
 
     /* If the latest RTT is below max(min_rtt + 4ms, min_rtt * 1.1), adopt a higher increase rate (i.e., 3x per RTT) than the
@@ -434,15 +455,34 @@ inline int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, c
     return floor <= threshold;
 }
 
-inline void quicly_cc_rapid_start_on_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t bytes_lost, uint32_t *cwnd,
-                                          uint32_t cwnd_exiting_slow_start)
+inline void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t cwnd_floor)
 {
     if (rs->newest_rtt_sample_until == 0)
         return;
 
-    *cwnd -= QUICLY_RENO_BETA * bytes_lost;
-    if (*cwnd < 1. / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start)
-        *cwnd = 1. / 3 * QUICLY_RENO_BETA * cwnd_exiting_slow_start;
+    assert(rs->newest_rtt_sample_until > 0);
+    rs->newest_rtt_sample_until = -1;
+
+    rs->cwnd_floor = *cwnd * (1. / 3) * QUICLY_RENO_BETA;
+    if (rs->cwnd_floor < cwnd_floor)
+        rs->cwnd_floor = cwnd_floor;
+
+    *cwnd *= QUICLY_RAPID_START_LOSS_FACTOR;
+    if (*cwnd < rs->cwnd_floor)
+        *cwnd = rs->cwnd_floor;
+}
+
+inline void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t bytes_acked,
+                                              uint32_t bytes_lost)
+{
+    if (rs->newest_rtt_sample_until == 0)
+        return;
+
+    assert(rs->newest_rtt_sample_until == -1);
+
+    *cwnd -= QUICLY_RAPID_START_ACK_FACTOR * bytes_acked + QUICLY_RAPID_START_LOSS_FACTOR * bytes_lost;
+    if (*cwnd < rs->cwnd_floor)
+        *cwnd = rs->cwnd_floor;
 }
 
 #ifdef __cplusplus

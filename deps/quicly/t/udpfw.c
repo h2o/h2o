@@ -181,7 +181,8 @@ static void dequeue(struct queue_t *q, int up, int64_t now)
         sendto(listen_fd, q->ring.elements[q->ring.head].data, q->ring.elements[q->ring.head].len, 0,
                (void *)&q->ring.elements[q->ring.head].conn->down_addr.ss, q->ring.elements[q->ring.head].conn->down_addr.len);
     }
-    fprintf(stderr, "%" PRId64 ":%zu:%c:forward\n", now, q->ring.elements[q->ring.head].conn->cid, up ? 'u' : 'd');
+    fprintf(stderr, "%" PRId64 ":%zu:%c:forward:%zu\n", now, q->ring.elements[q->ring.head].conn->cid, up ? 'u' : 'd',
+            q->ring.elements[q->ring.head].len);
     q->ring.head = (q->ring.head + 1) % q->ring.depth;
     if (q->ring.head == q->ring.tail) // empty queue
         return;
