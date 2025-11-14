@@ -39,6 +39,8 @@
  */
 #define CHECK_EXPIRATION_MIN_INTERVAL 1000
 
+#define POOL_MAX_RETRY_CNT_DEFAULT 1
+
 struct pool_entry_t {
     h2o_socket_export_t sockinfo;
     size_t target;
@@ -196,10 +198,11 @@ h2o_socketpool_target_t *h2o_socketpool_create_target(h2o_url_t *origin, h2o_soc
         break;
     }
     target->_shared.leased_count = 0;
-    if (lb_target_conf != NULL)
-        target->conf.weight_m1 = lb_target_conf->weight_m1;
-    else {
+    if (lb_target_conf != NULL) {
+        target->conf = *lb_target_conf;
+    } else {
         target->conf.weight_m1 = 0;
+        target->conf.sequential_addrinfo = 0;
     }
 
     h2o_linklist_init_anchor(&target->_shared.sockets);
@@ -424,6 +427,7 @@ static void start_connect(h2o_socketpool_connect_request_t *req, struct sockaddr
 static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errstr, struct addrinfo *res, void *_req)
 {
     h2o_socketpool_connect_request_t *req = _req;
+    struct addrinfo *selected;
 
     assert(getaddr_req == req->getaddr_req);
     req->getaddr_req = NULL;
@@ -438,8 +442,13 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         call_connect_cb(req, errstr);
         return;
     }
-
-    struct addrinfo *selected = h2o_hostinfo_select_one(res);
+    if (req->pool->targets.entries[req->selected_target]->conf.sequential_addrinfo) {
+        size_t max_retry_count = is_global_pool(req->pool) ? POOL_MAX_RETRY_CNT_DEFAULT : req->pool->targets.size;
+        size_t addrinfo_sel = max_retry_count - req->remaining_try_count - 1;
+        selected = h2o_hostinfo_select_one(res, &addrinfo_sel); /* sequential */
+    } else {
+        selected = h2o_hostinfo_select_one(res, NULL); /* random */
+    }
     start_connect(req, selected->ai_addr, selected->ai_addrlen);
 }
 
@@ -561,7 +570,7 @@ SkipLookup:
         memset(req->lb.tried, 0, sizeof(req->lb.tried[0]) * pool->targets.size);
         req->remaining_try_count = pool->targets.size;
     } else {
-        req->remaining_try_count = 1;
+        req->remaining_try_count = POOL_MAX_RETRY_CNT_DEFAULT;
     }
     try_connect(req);
 }
