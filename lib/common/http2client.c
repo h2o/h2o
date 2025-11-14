@@ -1303,6 +1303,24 @@ static void emit_writereq(h2o_timer_t *entry)
     do_emit_writereq(conn);
 }
 
+static int close_conn(h2o_httpclient__h2_conn_t *_conn)
+{
+    struct st_h2o_http2client_conn_t *conn = (void *)_conn;
+    enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(NULL, 0));
+    request_write(conn);
+    return close_connection(conn);
+}
+
+void h2o_httpclient__h2_close_conns(h2o_linklist_t *conns)
+{
+    h2o_linklist_t *conn = conns->next;
+    while (conn != conns) {
+        h2o_httpclient__h2_conn_t *tmp = H2O_STRUCT_FROM_MEMBER(h2o_httpclient__h2_conn_t, link, conn);
+        conn = conn->next;
+        close_conn(tmp);
+    }
+}
+
 static struct st_h2o_http2client_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_socket_t *sock, h2o_url_t *origin_url,
                                                            h2o_httpclient_connection_pool_t *connpool)
 {

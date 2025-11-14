@@ -1110,6 +1110,12 @@ int main(int argc, char **argv)
             h2o_evloop_run(ctx.loop, INT32_MAX);
         }
     }
+    if (ctx.protocol_selector.ratio.http2 > 0) {
+        h2o_httpclient__h2_close_conns(&connpool->http2.conns);
+        while(!h2o_linklist_is_empty(&connpool->http2.conns)) {
+            h2o_evloop_run(ctx.loop, INT32_MAX);
+        }
+    }
 #endif
 
     if (req.connect_to != NULL)
