@@ -1002,7 +1002,7 @@
 		10A3D3FA1B4FAAF500327CF9 /* strerror.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = strerror.c; sourceTree = "<group>"; };
 		10A3D3FE1B4FAAF500327CF9 /* yrmcds.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = yrmcds.h; sourceTree = "<group>"; };
 		10A3D40E1B584BEC00327CF9 /* standalone.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = standalone.h; sourceTree = "<group>"; };
-		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; };
+		10A60DE91B0D87FE006E38EC /* annotate-backtrace-symbols */ = {isa = PBXFileReference; lastKnownFileType = text; path = "annotate-backtrace-symbols"; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		10AA2E931A80A592004322AC /* time_.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = time_.h; sourceTree = "<group>"; };
 		10AA2E951A80A612004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
 		10AA2E981A81F68A004322AC /* time.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = time.c; sourceTree = "<group>"; };
