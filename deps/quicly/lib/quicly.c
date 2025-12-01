@@ -70,7 +70,7 @@
  */
 #define QUICLY_MAX_TOKEN_LEN 512
 /**
- * sends ACK bundled with PING, when number of gaps in the ack queue reaches or exceeds this threshold. This value should be much
+ * Sends ACK bundled with PING, when number of gaps in the ack queue reaches or exceeds this threshold. This value should be much
  * smaller than QUICLY_MAX_RANGES.
  */
 #define QUICLY_NUM_ACK_BLOCKS_TO_INDUCE_ACKACK 8
@@ -363,7 +363,7 @@ struct st_quicly_conn_t {
         quicly_cc_t cc;
         /**
          * Next PN to be used when the path is initialized or promoted. As loss recovery / CC is reset upon path promotion, ACKs for
-         * for packets with PN below this property are ignored.
+         * packets with PN below this property are ignored.
          */
         uint64_t pn_path_start;
         /**
@@ -1821,7 +1821,7 @@ static void stringify_address(char *buf, struct sockaddr *sa)
         port = ntohs(((struct sockaddr_in *)sa)->sin_port);
         break;
     default:
-        assert("unexpected addres family");
+        assert("unexpected address family");
         break;
     }
 
@@ -1917,7 +1917,7 @@ static quicly_error_t promote_path(quicly_conn_t *conn, size_t path_index)
     QUICLY_PROBE(PROMOTE_PATH, conn, conn->stash.now, path_index);
     QUICLY_LOG_CONN(promote_path, conn, { PTLS_LOG_ELEMENT_UNSIGNED(path_index, path_index); });
 
-    { /* mark all packets as lost, as it is unlikely that packets sent on the old path wound be acknowledged */
+    { /* mark all packets as lost, as it is unlikely that packets sent on the old path would be acknowledged */
         quicly_sentmap_iter_t iter;
         if ((ret = quicly_loss_init_sentmap_iter(&conn->egress.loss, &iter, conn->stash.now,
                                                  conn->super.remote.transport_params.max_ack_delay, 0)) != 0)
@@ -2895,17 +2895,17 @@ static int server_collected_extensions(ptls_t *tls, ptls_handshake_properties_t 
     /* setup ack frequency */
     ack_frequency_set_next_update_at(conn);
 
-    /* update UDP max payload size to:
-     * max(current, min(max_the_remote_sent, remote.tp.max_udp_payload_size, local.tp.max_udp_payload_size)) */
+    /* update UDP max payload size, as described in the doc-comment of
+    `quicly_context_t::initial_egress_max_udp_payload_size` */
     assert(conn->initial != NULL);
     if (conn->egress.max_udp_payload_size < conn->initial->largest_ingress_udp_payload_size) {
         uint16_t size = conn->initial->largest_ingress_udp_payload_size;
-        if (size > conn->super.remote.transport_params.max_udp_payload_size)
-            size = conn->super.remote.transport_params.max_udp_payload_size;
         if (size > conn->super.ctx->transport_params.max_udp_payload_size)
             size = conn->super.ctx->transport_params.max_udp_payload_size;
         conn->egress.max_udp_payload_size = size;
     }
+    if (conn->egress.max_udp_payload_size > conn->super.remote.transport_params.max_udp_payload_size)
+        conn->egress.max_udp_payload_size = conn->super.remote.transport_params.max_udp_payload_size;
 
     /* set transport_parameters extension to be sent in EE */
     assert(properties->additional_extensions == NULL);
@@ -5657,7 +5657,7 @@ quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_a
 
     lock_now(conn, 0);
 
-    /* bail out if there's nothing is scheduled to be sent */
+    /* bail out if there's nothing scheduled to be sent */
     if (conn->stash.now < quicly_get_first_timeout(conn)) {
         ret = 0;
         goto Exit;
