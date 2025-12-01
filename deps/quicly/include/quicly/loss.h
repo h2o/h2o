@@ -257,7 +257,7 @@ inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, u
                          .thresholds = {.use_packet_based = 1, .time_based_percentile = 1024 / 8 /* start from 1/8 RTT */},
                          .pto_count = 0,
                          .time_of_last_packet_sent = 0,
-                         .largest_acked_packet_plus1 = {0},
+                         .largest_acked_packet_plus1 = {.per_epoch = {0}, .all_ = 0},
                          .total_bytes_sent = 0,
                          .loss_time = INT64_MAX,
                          .alarm_at = INT64_MAX};
