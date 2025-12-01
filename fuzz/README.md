@@ -1,6 +1,6 @@
 # Fuzzing
 
-This directory contains code and test data for fuzz testing h2o with LLVM's [LibFuzzer](http://libfuzzer.info). 
+This directory contains code and test data for fuzz testing h2o with LLVM's [LibFuzzer](https://llvm.org/docs/LibFuzzer.html). 
 
 ## Building the test drivers
 
@@ -9,7 +9,7 @@ To build the fuzz test drivers, pass `-DBUILD_FUZZER=ON` to `cmake`. This this w
 
 ## Test corpus information
 
-The test corpuses included in this were initially created by first patching h2o with the included `fuzz/gather-data.patch` and then running the unit tests. The corpuses were then broadened via fuzzing with this fuzzer and minimized. See the [LibFuzzer docs](http://llvm.org/docs/LibFuzzer.html) for more information on how minimization works.
+The test corpuses included in this were initially created by first patching h2o with the included `fuzz/gather-data.patch` and then running the unit tests. The corpuses were then broadened via fuzzing with this fuzzer and minimized. See the [LibFuzzer docs](https://llvm.org/docs/LibFuzzer.html) for more information on how minimization works.
 
 ## Submitting new seed files
 
