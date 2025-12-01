@@ -529,6 +529,41 @@ subtest "slow-start" => sub {
     };
 };
 
+subtest "trasport-parameters" => sub {
+    my $guard = spawn_server();
+
+    subtest "max-udp-payload-size" => sub {
+        my $do_test = sub {
+            my $max_payload_size = shift;
+            my $expected_max_payload_size = shift;
+            # we use the forwarder just to print the size of the packets
+            my $udpfw_guard = spawn_process(
+                ["sh", "-c", "exec $udpfw -b 100 -i 1 -p 0 -B 100 -I 1 -l $udpfw_port 127.0.0.1 $port > $tempdir/udpfw.events 2>&1"],
+                $udpfw_port,
+            );
+            my $resp = `$cli -e $tempdir/events -U $max_payload_size -p /12 127.0.0.1 $udpfw_port 2> /dev/null`;
+            is $resp, "hello world\n";
+            $udpfw_guard = undef;
+            open(my $fh, '<', "$tempdir/udpfw.events") or die "failed to open file: $!";
+            my $server_packets = 0;
+            while (my $line = <$fh>) {
+                if ($line =~ /^[^:]+:[^:]+:d:forward:(\d+)/) {
+                    $server_packets++;
+                    if ($server_packets == 1) {
+                        is $1, $expected_max_payload_size, 'First packet size is equal to expected max payload size';
+                    } else {
+                        cmp_ok $1, '<=', $expected_max_payload_size, 'Packet size is lower or equal to expected max payload size';
+                    }
+                }
+            }
+            cmp_ok $server_packets, '>', 0, "We have seen packets from the server";
+        };
+        $do_test->(1252, 1252);
+        $do_test->(1200, 1200);
+        $do_test->(1300, 1280);
+    };
+};
+
 done_testing;
 
 sub spawn_server {

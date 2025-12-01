@@ -38,6 +38,7 @@
 		085AB4D9264283D600DF5209 /* pacer.c in Sources */ = {isa = PBXBuildFile; fileRef = 085AB4D8264283D600DF5209 /* pacer.c */; };
 		086001CB273271E80043886F /* rate.c in Sources */ = {isa = PBXBuildFile; fileRef = 0829878D26E03D4D0053638F /* rate.c */; };
 		0869056E2E9B3D8E00AE2A41 /* cc.c in Sources */ = {isa = PBXBuildFile; fileRef = 0869056D2E9B3D8E00AE2A41 /* cc.c */; };
+		088527042EB5507900F95D4C /* quicly-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95EBCCD227EC13F0022C32D /* quicly-probes.d */; };
 		089738FB2B9FF2E1000569EB /* jumpstart.c in Sources */ = {isa = PBXBuildFile; fileRef = 089738FA2B9FF2E1000569EB /* jumpstart.c */; };
 		08B3297A29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
 		08B3297B29407097009D6766 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08B3297929407096009D6766 /* hpke.c */; };
@@ -186,6 +187,7 @@
 		0829878C26DF775B0053638F /* rate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = rate.h; sourceTree = "<group>"; };
 		0829878D26E03D4D0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
 		0829879126E0A9DF0053638F /* rate.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = rate.c; sourceTree = "<group>"; };
+		083944A02EC2F45100ACE544 /* simulator-gnuplot.pl */ = {isa = PBXFileReference; lastKnownFileType = text.script.perl; path = "simulator-gnuplot.pl"; sourceTree = "<group>"; };
 		085125F728EFC0480074C124 /* cplusplus.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = cplusplus.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
 		085AB4D626427E9C00DF5209 /* pacer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pacer.h; sourceTree = "<group>"; };
 		085AB4D8264283D600DF5209 /* pacer.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = pacer.c; sourceTree = "<group>"; };
@@ -482,11 +484,12 @@
 				E9736534246FD3DA0039AA49 /* remote_cid.c */,
 				E920D22D1F4981E500799777 /* sentmap.c */,
 				E920D2241F49412900799777 /* simple.c */,
+				0829878226D37E370053638F /* simulator.c */,
+				083944A02EC2F45100ACE544 /* simulator-gnuplot.pl */,
 				E99B75E81F5D259400CF503E /* stream-concurrency.c */,
 				E9F6A4281F3C3B3F0083F0B2 /* test.h */,
 				E9CC44241EC1962700DC7D3E /* test.c */,
 				E98F4CBC20E5CF3A00362F15 /* udpfw.c */,
-				0829878226D37E370053638F /* simulator.c */,
 			);
 			path = t;
 			sourceTree = "<group>";
@@ -762,6 +765,7 @@
 			files = (
 				0829876726D372B70053638F /* cc-cubic.c in Sources */,
 				0829876926D372B70053638F /* picotls-probes.d in Sources */,
+				088527042EB5507900F95D4C /* quicly-probes.d in Sources */,
 				0829876A26D372B70053638F /* ranges.c in Sources */,
 				0829876B26D372B70053638F /* cc-reno.c in Sources */,
 				0829876C26D372B70053638F /* local_cid.c in Sources */,

@@ -73,7 +73,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
     }
 
     ok(!quicly_cc_in_jumpstart(&cc));
-    ok(cc.cwnd == final_cwnd * mtu);
+    ok(cc.cwnd == final_cwnd);
 }
 
 static void do_test_jumpstart(quicly_init_cc_t *init)
@@ -87,7 +87,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_ACKED, 1200, 20}, /* receive acks for all packets send in jumpstart */
                 {TEST_JUMPSTART_ACTION_END},
             },
-            40);
+            40 * 1200);
 
     /* if a packet is lost in the reconnaisance phase, jumpstart is not entered */
     subtest("loss-inreconnaisance", test_jumpstart_pattern, init,
@@ -97,7 +97,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_ACKED, 1100, 1}, /* 2nd packet acked */
                 {TEST_JUMPSTART_ACTION_END},
             },
-            5);
+            5 * 1200);
 
     /* if 25% of packets sent in the unvalidated phase are lost, final CWND is 75% the jumpstart cwnd */
     subtest("proportional rate reduction", test_jumpstart_pattern, init,
@@ -111,7 +111,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_LOST, 1200, 3},
                 {TEST_JUMPSTART_ACTION_END},
             },
-            15);
+            15 * 1200 * QUICLY_RENO_BETA);
 
     /* regardless of how much we lose, we never go down below 1/2 IW */
     subtest("lower bound", test_jumpstart_pattern, init,
@@ -125,7 +125,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_LOST, 1200, 8},
                 {TEST_JUMPSTART_ACTION_END},
             },
-            5);
+            5 * 1200);
 
     /* When receiving ACK early in the reconnaisance phase before sending entire batch, CWND doubles per each RT from bytes_inflight
      * (of 10 packets, in the test case below). */
@@ -139,7 +139,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_ACKED, 1200, 8}, /* receive acks for all packets send in jumpstart */
                 {TEST_JUMPSTART_ACTION_END},
             },
-            20);
+            20 * 1200);
 }
 
 void test_jumpstart(void)
