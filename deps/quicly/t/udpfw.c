@@ -68,6 +68,9 @@ struct queue_t {
     uint64_t num_dropped;
     uint16_t num_drops;
     uint16_t drops[MAXDROPS];
+    uint64_t num_reordered;
+    uint16_t num_reorders;
+    uint16_t reorders[64];
 } up = {{16}, 0, 10, 0, 0, 0, 0}, down = {{16}, 0, 10, 0, 0, 0, 0};
 
 static int listen_fd = -1;
@@ -90,6 +93,10 @@ static void usage(const char *cmd, int exit_status)
            "  -l <port>       port number to which the command binds\n"
            "  -d <packetnum>  packet number in connection to drop upstream\n"
            "  -D <packetnum>  packet number in connection to drop downstream\n"
+           "  -r <packetnum>  packet number in connection to be ordered before other packets\n"
+           "                  being queued upstream\n"
+           "  -R <packetnum>  packet number in connection to be ordered before other packets\n"
+           "                  being queued downstream\n"
            "  -h              prints this help\n"
            "\n",
            cmd);
@@ -101,6 +108,16 @@ static int64_t gettime(void)
     struct timeval tv;
     gettimeofday(&tv, NULL);
     return (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
+}
+
+static void swap_memory(void *_x, void *_y, size_t len)
+{
+    uint8_t *x = _x, *y = _y;
+    for (size_t i = 0; i < len; ++i) {
+        uint8_t tmp = x[i];
+        x[i] = y[i];
+        y[i] = tmp;
+    }
 }
 
 static int new_socket(int sin_family)
@@ -209,6 +226,7 @@ static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
 
     assert(conn != NULL);
     uint64_t packet_num = downstream ? ++(conn->packet_num_down) : ++(conn->packet_num_up);
+
     /* check if packet should be dropped */
     if (q->num_drops > 0 && packet_num >= q->drops[0] && packet_num <= q->drops[q->num_drops - 1]) {
         int i = 0;
@@ -239,7 +257,30 @@ static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
         q->congested_until = now + q->delay_usec + q->interval_usec;
     q->ring.tail = next_tail;
     ++q->num_forwarded;
-    fprintf(stderr, "queue\n");
+
+    /* if the added packet is the one to be reordered, swap the payload with the previous one */
+    int reordered = 0;
+    if (q->num_reorders > 0 && packet_num >= q->reorders[0] && packet_num <= q->reorders[q->num_reorders - 1]) {
+        for (size_t i = 0; i < q->num_reorders; i++) {
+            //fprintf(stderr, "%s:%d:\n", __FUNCTION__, __LINE__);
+            if (packet_num == q->reorders[i]) {
+                size_t added = (q->ring.tail - 1 + q->ring.depth) % q->ring.depth;
+                //fprintf(stderr, "%s:%d:added=%zu,head=%zu\n", __FUNCTION__, __LINE__, added, q->ring.head);
+                if (q->ring.head != added) {
+                    size_t prev = (added - 1 + q->ring.depth) % q->ring.depth;
+                    swap_memory(&q->ring.elements[added].data, &q->ring.elements[prev].data,
+                                sizeof(q->ring.elements[0].data));
+                    swap_memory(&q->ring.elements[added].len, &q->ring.elements[prev].len,
+                                sizeof(q->ring.elements[0].len));
+                    ++q->num_reordered;
+                    reordered = 1;
+                }
+                break;
+            }
+        }
+    }
+
+    fprintf(stderr, "%s\n", reordered ? "reorder" : "queue");
     return 1;
 }
 
@@ -249,10 +290,12 @@ static void on_signal(int signo)
             "up:\n"
             "  forwarded: %" PRIu64 "\n"
             "  dropped: %" PRIu64 "\n"
+            "  reordered: %" PRIu64 "\n"
             "down:\n"
             "  forwarded: %" PRIu64 "\n"
-            "  dropped: %" PRIu64 "\n",
-            up.num_forwarded, up.num_dropped, down.num_forwarded, down.num_dropped);
+            "  dropped: %" PRIu64 "\n"
+            "  reordered: %" PRIu64 "\n",
+            up.num_forwarded, up.num_dropped, up.num_reordered, down.num_forwarded, down.num_dropped, down.num_reordered);
     if (signo == SIGINT)
         _exit(0);
 }
@@ -264,7 +307,7 @@ int main(int argc, char **argv)
     signal(SIGINT, on_signal);
     signal(SIGHUP, on_signal);
 
-    while ((ch = getopt(argc, argv, "b:B:i:I:p:P:l:d:D:h")) != -1) {
+    while ((ch = getopt(argc, argv, "b:B:i:I:p:P:l:d:D:r:R:h")) != -1) {
         switch (ch) {
         case 'b': /* size of the upstream buffer */
             if (sscanf(optarg, "%zu", &up.ring.depth) != 1 || up.ring.depth == 0) {
@@ -318,7 +361,7 @@ int main(int argc, char **argv)
                 exit(1);
             }
         } break;
-        case 'd': { /* packet to drop upstream*/
+        case 'd': { /* packet to drop upstream */
             uint16_t pnum;
             if (up.num_drops >= MAXDROPS)
                 break;
@@ -337,6 +380,26 @@ int main(int argc, char **argv)
                 exit(1);
             }
             down.drops[down.num_drops++] = pnum;
+        } break;
+        case 'r': { /* packet to reorder upstream */
+            uint16_t pnum;
+            if (up.num_reorders >= sizeof(up.reorders) / sizeof(up.reorders[0]))
+                break;
+            if (sscanf(optarg, "%" SCNu16, &pnum) != 1) {
+                fprintf(stderr, "argument to `-r` must be an unsigned number\n");
+                exit(1);
+            }
+            up.reorders[up.num_reorders++] = pnum;
+        } break;
+        case 'R': { /* packet to reorder downstream */
+            uint16_t pnum;
+            if (down.num_reorders >= sizeof(down.reorders) / sizeof(down.reorders[0]))
+                break;
+            if (sscanf(optarg, "%" SCNu16, &pnum) != 1) {
+                fprintf(stderr, "argument to `-R` must be an unsigned number\n");
+                exit(1);
+            }
+            down.reorders[down.num_reorders++] = pnum;
         } break;
         case 'h':
             usage(argv[0], 0);
