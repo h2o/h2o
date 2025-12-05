@@ -4620,7 +4620,7 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
         if (off + len == stream->sendstate.final_size) {
             assert(!quicly_sendstate_is_open(&stream->sendstate));
             is_fin = 1;
-            for (; s->dst == QUICLY_FRAME_TYPE_PADDING; ++s->dst)
+            for (; *s->dst == QUICLY_FRAME_TYPE_PADDING; ++s->dst)
                 ;
             assert((*s->dst & ~QUICLY_FRAME_TYPE_STREAM_BITS) == QUICLY_FRAME_TYPE_STREAM_BASE);
             *s->dst |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
