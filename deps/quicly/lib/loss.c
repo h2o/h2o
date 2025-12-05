@@ -78,7 +78,7 @@ quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_
     /* Mark packets as lost if they are smaller than the largest_acked and outside either time-threshold or packet-threshold
      * windows. Once marked as lost, cc_bytes_in_flight becomes zero. */
     while ((sent = quicly_sentmap_get(&iter))->packet_number != UINT64_MAX) {
-        int64_t largest_acked_signed = loss->largest_acked_packet_plus1[sent->ack_epoch] - 1;
+        int64_t largest_acked_signed = loss->largest_acked_packet_plus1.per_epoch[sent->ack_epoch] - 1;
         if ((int64_t)sent->packet_number < largest_acked_signed && (CHECK_TIME_THRESHOLD(sent) || CHECK_PACKET_THRESHOLD(sent))) {
             if (sent->cc_bytes_in_flight != 0) {
                 on_loss_detected(loss, sent, !CHECK_PACKET_THRESHOLD(sent));
@@ -106,7 +106,7 @@ quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_
     }
 
     /* schedule time-threshold alarm if there is a packet outstanding that is smaller than largest_acked */
-    while (sent->sent_at != INT64_MAX && sent->packet_number + 1 < loss->largest_acked_packet_plus1[sent->ack_epoch]) {
+    while (sent->sent_at != INT64_MAX && sent->packet_number + 1 < loss->largest_acked_packet_plus1.per_epoch[sent->ack_epoch]) {
         if (sent->cc_bytes_in_flight != 0) {
             assert(now < sent->sent_at + delay_until_lost);
             loss->loss_time = sent->sent_at + delay_until_lost;

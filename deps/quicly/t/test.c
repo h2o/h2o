@@ -155,6 +155,42 @@ static void test_error_codes(void)
     ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
 }
 
+static void test_adjust_crypto_frame_layout(void)
+{
+#define TEST(_capacity, check)                                                                                                     \
+    do {                                                                                                                           \
+        uint8_t buf[] = {0x06, 0x04, 'h', 'e', 'l', 'l', 'o', 0, 0, 0};                                                            \
+        uint8_t *dst = buf + 2, *const dst_end = buf + _capacity;                                                                  \
+        size_t len = 5;                                                                                                            \
+        int wrote_all = 1;                                                                                                         \
+        dst = adjust_crypto_frame_layout(dst, dst_end, &len, &wrote_all);                                                          \
+        do {                                                                                                                       \
+            check                                                                                                                  \
+        } while (0);                                                                                                               \
+    } while (0);
+
+    /* test CRYPTO frames that fit and don't when length is inserted */
+    TEST(10, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
+    });
+    TEST(18, {
+        ok(dst == buf + 8);
+        ok(len == 5);
+        ok(wrote_all);
+        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
+    });
+    TEST(7, {
+        ok(dst == buf + 7);
+        ok(len == 4);
+        ok(!wrote_all);
+        ok(memcmp(buf, "\x06\x04\x04hell", 7) == 0);
+    });
+#undef TEST
+}
+
 static uint16_t test_enable_with_ratio255_random_value;
 
 static void test_enable_with_ratio255_get_random(void *p, size_t len)
@@ -181,65 +217,110 @@ static void test_enable_with_ratio255(void)
     ok(num_enabled == 63 * (65535 / 255));
 }
 
-static void test_adjust_stream_frame_layout(void)
+static void test_adjust_last_stream_frame(void)
 {
-#define TEST(_is_crypto, _capacity, check)                                                                                         \
+#define TEST(space_left, check)                                                                                                    \
     do {                                                                                                                           \
-        uint8_t buf[] = {0xff, 0x04, 'h', 'e', 'l', 'l', 'o', 0, 0, 0};                                                            \
-        uint8_t *dst = buf + 2, *const dst_end = buf + _capacity, *frame_at = buf;                                                 \
-        size_t len = 5;                                                                                                            \
-        int wrote_all = 1;                                                                                                         \
-        buf[0] = _is_crypto ? 0x06 : 0x08;                                                                                         \
-        adjust_stream_frame_layout(&dst, dst_end, &len, &wrote_all, &frame_at);                                                    \
+        uint8_t buf[] = {0x08, 0x04, 'h', 'e', 'l', 'l', 'o', 0, 0, 0};                                                            \
+        size_t increase = adjust_last_stream_frame(buf, 2, 5, space_left, 1);                                                      \
         do {                                                                                                                       \
             check                                                                                                                  \
         } while (0);                                                                                                               \
-    } while (0);
-
-    /* test CRYPTO frames that fit and don't when length is inserted */
-    TEST(1, 10, {
-        ok(dst == buf + 8);
-        ok(len == 5);
-        ok(wrote_all);
-        ok(frame_at == buf);
-        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
-    });
-    TEST(1, 8, {
-        ok(dst == buf + 8);
-        ok(len == 5);
-        ok(wrote_all);
-        ok(frame_at == buf);
-        ok(memcmp(buf, "\x06\x04\x05hello", 8) == 0);
-    });
-    TEST(1, 7, {
-        ok(dst == buf + 7);
-        ok(len == 4);
-        ok(!wrote_all);
-        ok(frame_at == buf);
-        ok(memcmp(buf, "\x06\x04\x04hell", 7) == 0);
-    });
+    } while (0)
 
     /* test STREAM frames */
-    TEST(0, 9, {
-        ok(dst == buf + 8);
-        ok(len == 5);
-        ok(wrote_all);
-        ok(frame_at == buf);
-        ok(memcmp(buf, "\x0a\x04\x05hello", 8) == 0);
-    });
-    TEST(0, 8, {
-        ok(dst == buf + 8);
-        ok(len == 5);
-        ok(wrote_all);
-        ok(frame_at == buf + 1);
-        ok(memcmp(buf, "\x00\x08\x04hello", 8) == 0);
-    });
-    TEST(0, 7, {
-        ok(dst == buf + 7);
-        ok(len == 5);
-        ok(wrote_all);
-        ok(frame_at == buf);
+    TEST(0, {
+        ok(increase == 0);
         ok(memcmp(buf, "\x08\x04hello", 7) == 0);
+    });
+    TEST(1, {
+        ok(increase == 1);
+        ok(memcmp(buf, "\x00\x08\x04hello", 7) == 0);
+    });
+    TEST(2, {
+        ok(increase == 1);
+        ok(memcmp(buf, "\x0a\x04\x05hello", 7) == 0);
+    });
+
+#undef TEST
+}
+
+static void test_scatter_stream_payload(void)
+{
+    quicly_cid_t dcid = {.cid = {'C', 'I', 'D'}, .len = 3};
+    ptls_aead_context_t aead = {.algo = &ptls_openssl_aes128gcm};
+    struct st_quicly_cipher_context_t cipher = {.aead = &aead};
+
+#define TEST(_len, datagram_size, extra_datagrams, check)                                                                          \
+    do {                                                                                                                           \
+        uint8_t buf[] = "\x08\x04"                                                                                                 \
+                        "Alice was beginning to get very tired of sitting by her sister on the bank, and of having nothing to "    \
+                        "do: once or twice she had peeped into the book her sister was reading, but it had no pictures or "        \
+                        "conversations in it";                                                                                     \
+        quicly_send_context_t s = {                                                                                                \
+            .dcid = &dcid,                                                                                                         \
+            .current.cipher = &cipher,                                                                                             \
+            .dst = buf,                                                                                                            \
+            .dst_end = buf + 8,                                                                                                    \
+        };                                                                                                                         \
+        size_t len = (_len);                                                                                                       \
+        int wrote_all = 1;                                                                                                         \
+        uint16_t scattered_payload_lengths[11];                                                                                    \
+        memset(scattered_payload_lengths, 0x55, sizeof(scattered_payload_lengths));                                                \
+        uint8_t *end_of_last_frame = scatter_stream_payload(&s, datagram_size, 4, 0, buf + 2, &len, &wrote_all,                    \
+                                                            scattered_payload_lengths, (extra_datagrams));                         \
+        do {                                                                                                                       \
+            check                                                                                                                  \
+        } while (0);                                                                                                               \
+    } while (0)
+
+    TEST(34 /* 6 (current) + 13 * 2 + 2 */, 38 /* 16 bytes frame space per datagram */, 2, {
+        ok(len == 32);
+        ok(wrote_all == 0);
+        ok(scattered_payload_lengths[0] == 13);
+        ok(scattered_payload_lengths[1] == 13);
+        ok(scattered_payload_lengths[2] == 0);
+        ok(memcmp(buf,
+                  "\x08\x04"
+                  "Alice ",
+                  8) == 0);
+        size_t payload_gap = aead.algo->tag_size + 1 + dcid.len + QUICLY_SEND_PN_SIZE;
+        ok(memcmp(buf + 8 + payload_gap,
+                  "\x0c\x04\x06"
+                  "was beginning",
+                  16) == 0);
+        ok(memcmp(buf + 24 + payload_gap * 2,
+                  "\x0c\x04\x13"
+                  " to get very ",
+                  16) == 0);
+        ok(buf + 24 + payload_gap * 2 + 16 == end_of_last_frame);
+    });
+
+    TEST(34 /* 6 (current) + 13 * 2 + 2 */, 38 /* 16 bytes frame space per datagram */, 3, {
+        ok(len == 34);
+        ok(wrote_all == 1);
+        ok(scattered_payload_lengths[0] == 13);
+        ok(scattered_payload_lengths[1] == 13);
+        ok(scattered_payload_lengths[2] == 2);
+        ok(scattered_payload_lengths[3] == 0);
+        ok(memcmp(buf,
+                  "\x08\x04"
+                  "Alice ",
+                  8) == 0);
+        size_t payload_gap = aead.algo->tag_size + 1 + dcid.len + QUICLY_SEND_PN_SIZE;
+        ok(memcmp(buf + 8 + payload_gap,
+                  "\x0c\x04\x06"
+                  "was beginning",
+                  16) == 0);
+        ok(memcmp(buf + 24 + payload_gap * 2,
+                  "\x0c\x04\x13"
+                  " to get very ",
+                  16) == 0);
+        ok(memcmp(buf + 40 + payload_gap * 3,
+                  "\x0e\x04\x20\x02"
+                  "ti",
+                  6) == 0);
+        ok(buf + 40 + payload_gap * 3 + 6 == end_of_last_frame);
     });
 
 #undef TEST
@@ -1161,7 +1242,9 @@ int main(int argc, char **argv)
     subtest("pacer", test_pacer);
     subtest("sentmap", test_sentmap);
     subtest("loss", test_loss);
-    subtest("adjust-stream-frame-layout", test_adjust_stream_frame_layout);
+    subtest("adjust-crypto-frame-layout", test_adjust_crypto_frame_layout);
+    subtest("adjust-last-stream-frame", test_adjust_last_stream_frame);
+    subtest("scatter-stream-payload", test_scatter_stream_payload);
     subtest("test-vector", test_vector);
     subtest("test-retry-aead", test_retry_aead);
     subtest("transport-parameters", test_transport_parameters);
