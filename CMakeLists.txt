@@ -250,9 +250,31 @@ IF (ZLIB_FOUND)
     LINK_DIRECTORIES(${ZLIB_LIBRARY_DIRS})
 ENDIF (ZLIB_FOUND)
 
+# Try to find system libyaml first
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(LIBYAML yaml-0.1)
+    IF (LIBYAML_FOUND)
+        INCLUDE_DIRECTORIES(${LIBYAML_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${LIBYAML_LIBRARY_DIRS})
+        MESSAGE(STATUS "Using system libyaml")
+    ENDIF (LIBYAML_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+IF (NOT LIBYAML_FOUND)
+    FIND_PACKAGE(LibYAML)
+    IF (LIBYAML_FOUND)
+        INCLUDE_DIRECTORIES(${LIBYAML_INCLUDE_DIR})
+        MESSAGE(STATUS "Using system libyaml (found via FindLibYAML)")
+    ENDIF (LIBYAML_FOUND)
+ENDIF (NOT LIBYAML_FOUND)
+IF (NOT LIBYAML_FOUND)
+    MESSAGE(STATUS "Using vendored libyaml")
+ENDIF (NOT LIBYAML_FOUND)
+
+# Try to find system brotli first
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
     PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
+<<<<<<< HEAD
 ENDIF (PKG_CONFIG_FOUND)
 IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
     SET(WITH_BROTLI_DEFAULT "ON")
@@ -288,6 +310,33 @@ IF (WITH_ZSTD)
     LINK_DIRECTORIES(${ZSTD_LIBRARY_DIRS})
     LIST(APPEND EXTRA_LIBS ${ZSTD_LIBRARIES})
 ENDIF (WITH_ZSTD)
+=======
+    IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+        SET(BROTLI_FOUND TRUE)
+        INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
+        MESSAGE(STATUS "Using system brotli")
+    ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+IF (NOT BROTLI_FOUND)
+    MESSAGE(STATUS "Using vendored brotli")
+ENDIF (NOT BROTLI_FOUND)
+# Brotli is always available (either system or vendored)
+SET(BROTLI_AVAILABLE TRUE)
+
+# Try to find system hiredis first
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(HIREDIS hiredis)
+    IF (HIREDIS_FOUND)
+        INCLUDE_DIRECTORIES(${HIREDIS_INCLUDE_DIRS})
+        LINK_DIRECTORIES(${HIREDIS_LIBRARY_DIRS})
+        MESSAGE(STATUS "Using system hiredis")
+    ENDIF (HIREDIS_FOUND)
+ENDIF (PKG_CONFIG_FOUND)
+IF (NOT HIREDIS_FOUND)
+    MESSAGE(STATUS "Using vendored hiredis")
+ENDIF (NOT HIREDIS_FOUND)
+>>>>>>> 0ddf3543c (Prefer system packages over vendored dependencies with automatic fallback (#2))
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)
@@ -344,24 +393,69 @@ SET(CMAKE_CXX_FLAGS_DEBUG  "-O0")
 SET(CMAKE_CXX_FLAGS_RELEASE  "-O2")
 
 
-SET(LIBYAML_SOURCE_FILES
-    deps/yaml/src/api.c
-    deps/yaml/src/dumper.c
-    deps/yaml/src/emitter.c
-    deps/yaml/src/loader.c
-    deps/yaml/src/parser.c
-    deps/yaml/src/reader.c
-    deps/yaml/src/scanner.c
-    deps/yaml/src/writer.c)
+# Conditionally include vendored libyaml sources if system package not found
+IF (NOT LIBYAML_FOUND)
+    SET(LIBYAML_SOURCE_FILES
+        deps/yaml/src/api.c
+        deps/yaml/src/dumper.c
+        deps/yaml/src/emitter.c
+        deps/yaml/src/loader.c
+        deps/yaml/src/parser.c
+        deps/yaml/src/reader.c
+        deps/yaml/src/scanner.c
+        deps/yaml/src/writer.c)
+ELSE ()
+    SET(LIBYAML_SOURCE_FILES "")
+ENDIF ()
+
+# Conditionally include vendored brotli sources if system package not found
+IF (NOT BROTLI_FOUND)
+    SET(BROTLI_SOURCE_FILES
+        deps/brotli/c/common/dictionary.c
+        deps/brotli/c/dec/bit_reader.c
+        deps/brotli/c/dec/decode.c
+        deps/brotli/c/dec/huffman.c
+        deps/brotli/c/dec/state.c
+        deps/brotli/c/enc/backward_references.c
+        deps/brotli/c/enc/backward_references_hq.c
+        deps/brotli/c/enc/bit_cost.c
+        deps/brotli/c/enc/block_splitter.c
+        deps/brotli/c/enc/brotli_bit_stream.c
+        deps/brotli/c/enc/cluster.c
+        deps/brotli/c/enc/compress_fragment.c
+        deps/brotli/c/enc/compress_fragment_two_pass.c
+        deps/brotli/c/enc/dictionary_hash.c
+        deps/brotli/c/enc/encode.c
+        deps/brotli/c/enc/entropy_encode.c
+        deps/brotli/c/enc/histogram.c
+        deps/brotli/c/enc/literal_cost.c
+        deps/brotli/c/enc/memory.c
+        deps/brotli/c/enc/metablock.c
+        deps/brotli/c/enc/static_dict.c
+        deps/brotli/c/enc/utf8_util.c
+        lib/handler/compress/brotli.c)
+ELSE ()
+    # When using system brotli, we still need the h2o brotli handler
+    SET(BROTLI_SOURCE_FILES
+        lib/handler/compress/brotli.c)
+ENDIF ()
+
+# Conditionally include vendored hiredis sources if system package not found
+IF (NOT HIREDIS_FOUND)
+    SET(HIREDIS_SOURCE_FILES
+        deps/hiredis/async.c
+        deps/hiredis/hiredis.c
+        deps/hiredis/net.c
+        deps/hiredis/read.c
+        deps/hiredis/sds.c
+        deps/hiredis/alloc.c)
+ELSE ()
+    SET(HIREDIS_SOURCE_FILES "")
+ENDIF ()
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
-    deps/hiredis/async.c
-    deps/hiredis/hiredis.c
-    deps/hiredis/net.c
-    deps/hiredis/read.c
-    deps/hiredis/sds.c
-    deps/hiredis/alloc.c
+    ${HIREDIS_SOURCE_FILES}
     deps/libgkc/gkc.c
     deps/libyrmcds/close.c
     deps/libyrmcds/connect.c
@@ -625,6 +719,16 @@ SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
+
+# Add system package libraries when found
+IF (LIBYAML_FOUND)
+    LIST(APPEND EXTRA_LIBS ${LIBYAML_LIBRARIES})
+ENDIF (LIBYAML_FOUND)
+
+IF (HIREDIS_FOUND)
+    LIST(APPEND EXTRA_LIBS ${HIREDIS_LIBRARIES})
+ENDIF (HIREDIS_FOUND)
+
 IF (WSLAY_FOUND)
     ADD_LIBRARY(libh2o lib/websocket.c ${LIB_SOURCE_FILES})
     ADD_LIBRARY(libh2o-evloop lib/websocket.c ${LIB_SOURCE_FILES})
@@ -744,12 +848,14 @@ SET_TARGET_PROPERTIES(examples-websocket-evloop PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket-evloop libh2o-evloop ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
-IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
+
+IF (LIBUV_FOUND AND BROTLI_AVAILABLE AND NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
 ELSE ()
     SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF ()
-IF (NOT WITHOUT_LIBS)
+
+IF (BROTLI_AVAILABLE AND NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
     INSTALL(TARGETS h2o-httpclient DESTINATION ${CMAKE_INSTALL_BINDIR})
 ELSE ()
@@ -818,6 +924,9 @@ ADD_EXECUTABLE(h2o ${STANDALONE_SOURCE_FILES})
 SET_TARGET_PROPERTIES(h2o PROPERTIES COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS}")
 TARGET_INCLUDE_DIRECTORIES(h2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(h2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
+IF (BROTLI_FOUND)
+    TARGET_LINK_LIBRARIES(h2o ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+ENDIF ()
 IF (WITH_MRUBY)
     TARGET_INCLUDE_DIRECTORIES(h2o BEFORE PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include ${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby-input-stream/src)
     # note: the paths need to be determined before libmruby.flags.mak is generated
@@ -878,7 +987,11 @@ SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
+<<<<<<< HEAD
 IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND WITH_BROTLI)
+=======
+IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND BROTLI_AVAILABLE)
+>>>>>>> 0ddf3543c (Prefer system packages over vendored dependencies with automatic fallback (#2))
     ExternalProject_Add(build-theft
                         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
                         BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
@@ -915,8 +1028,12 @@ ADD_CUSTOM_TARGET(checkdepends
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
-IF (LIBUV_FOUND)
-    ADD_DEPENDENCIES(checkdepends lib-examples)
+
+IF (BROTLI_AVAILABLE)
+    IF (LIBUV_FOUND)
+        ADD_DEPENDENCIES(checkdepends lib-examples)
+    ENDIF ()
+    ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 ENDIF ()
 ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 
