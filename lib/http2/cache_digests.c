@@ -30,6 +30,11 @@
 #include "h2o/string_.h"
 #include "h2o/cache_digests.h"
 
+/* Code below uses SHA256_* which are deprecated by OpenSSL 3.0. */
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 struct st_h2o_cache_digests_frame_t {
     H2O_VECTOR(uint64_t) keys;
     unsigned capacity_bits;
