@@ -1875,7 +1875,8 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             return -1;
         }
 #else
-        h2o_configurator_errprintf(cmd, *parsed->key_file.node, "neverbleed support is not compiled in (build with -DWITH_NEVERBLEED=ON)\n");
+        h2o_configurator_errprintf(cmd, *parsed->key_file.node,
+                                   "neverbleed support is not compiled in (build with -DWITH_NEVERBLEED=ON)\n");
         return -1;
 #endif
     } else {
@@ -3196,8 +3197,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             if (listener_is_new == 0 && listener->fds.entries[0] != -1) {
                 int listener_protocol, expected_protocol = strcmp(type, "mptcp") == 0 ? IPPROTO_MPTCP : IPPROTO_TCP;
                 socklen_t listener_protocol_len = sizeof(listener_protocol);
-                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol,
-                               &listener_protocol_len) != 0) {
+                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol, &listener_protocol_len) !=
+                    0) {
                     h2o_configurator_errprintf(cmd, node, "failed to obtain listener socket protocol:%s", strerror(errno));
                     freeaddrinfo(res);
                     return -1;
@@ -3520,6 +3521,34 @@ static int capabilities_drop(void)
 #endif
     return 1;
 }
+
+#ifdef HAVE_PLEDGE
+static void apply_pledge(void)
+{
+    char buf[128];
+
+    /* Apply pledge(2) restrictions to reduce attack surface.
+     *
+     * Promise explanations:
+     * - stdio: Basic I/O, event loop (kevent/kqueue), socketpair
+     * - rpath: Read configuration files, certificates, document roots
+     * - wpath: Write to log files
+     * - cpath: Create temporary files via mkstemp() for large request bodies
+     * - inet:  Network operations for HTTP/HTTPS server
+     * - dns:   DNS resolution for upstream proxy connections
+     * - unix:  Unix domain sockets for QUIC forwarding
+     * - proc:  Fork processes - required by OCSP updater threads
+     * - exec:  Execute external programs - required by OCSP updater to spawn fetch scripts
+     *
+     * Note: OCSP updater threads continue running after pledge is applied and periodically
+     * fork/exec to fetch certificate status updates (see get_ocsp_response function).
+     */
+    if (pledge("stdio rpath wpath cpath inet dns unix proc exec", NULL) != 0)
+        h2o_fatal("pledge failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+
+    fprintf(stderr, "[INFO] pledge restrictions applied: stdio rpath wpath cpath inet dns unix proc exec\n");
+}
+#endif
 
 static int on_config_pid_file(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -5190,8 +5219,13 @@ int main(int argc, char **argv)
 #if H2O_USE_IO_URING
                 printf("io_uring: YES\n");
 #endif
+
 #if H2O_WITH_MPTCP
                 printf("mptcp: YES\n");
+#endif
+
+#if HAVE_PLEDGE
+                printf("pledge: YES\n");
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
@@ -5543,6 +5577,11 @@ int main(int argc, char **argv)
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
     }
+
+#ifdef HAVE_PLEDGE
+    /* Apply pledge security restrictions after initialization is complete. */
+    apply_pledge();
+#endif
 
     /* this thread becomes the first thread */
     run_loop((void *)0);

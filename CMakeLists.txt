@@ -91,6 +91,20 @@ IF (LIBC_HAS_BACKTRACE)
     ENDIF ()
 ENDIF ()
 
+# Check for pledge (OpenBSD security feature)
+CMAKE_PUSH_CHECK_STATE()
+CHECK_C_SOURCE_COMPILES("
+#include <unistd.h>
+int main(void) {
+    pledge(\"stdio\", NULL);
+    return 0;
+}" HAVE_PLEDGE)
+CMAKE_POP_CHECK_STATE()
+
+IF (HAVE_PLEDGE)
+    ADD_DEFINITIONS("-DHAVE_PLEDGE")
+ENDIF ()
+
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
 
