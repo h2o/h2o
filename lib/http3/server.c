@@ -246,6 +246,10 @@ struct st_h2o_http3_server_stream_t {
      */
     uint8_t req_streaming : 1;
     /**
+     * if the random_read callback is available
+     */
+    uint8_t has_random_read : 1;
+    /**
      * buffer to hold the request body (or a chunk of, if in streaming mode), or CONNECT payload
      */
     h2o_buffer_t *req_body;
@@ -915,70 +919,81 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
     }
 }
 
-static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *len, int *wrote_all)
+static size_t send_emit_scattered(quicly_stream_t *qs, size_t sendbuf_off, const ptls_iovec_t *dstvecs, size_t num_dstvecs,
+                                  int *wrote_all)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
     assert(H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_BEFORE_BLOCK <= stream->state &&
            stream->state <= H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY);
 
-    uint8_t *dst = _dst, *dst_end = dst + *len;
-    size_t vec_index = 0;
+    size_t off_within_first_dstvec = 0, srcvec_index = 0, bytes_written = 0;
 
-    /* find the start position identified by vec_index and off */
-    off += stream->sendbuf.off_within_first_vec;
-    while (off != 0) {
-        assert(vec_index < stream->sendbuf.vecs.size);
-        if (off < stream->sendbuf.vecs.entries[vec_index].vec.len)
+    /* find the start position identified by srcvec_index and srcoff */
+    size_t off_within_srcvec = stream->sendbuf.off_within_first_vec + sendbuf_off;
+    while (off_within_srcvec != 0) {
+        assert(srcvec_index < stream->sendbuf.vecs.size);
+        if (off_within_srcvec < stream->sendbuf.vecs.entries[srcvec_index].vec.len)
             break;
-        off -= stream->sendbuf.vecs.entries[vec_index].vec.len;
-        ++vec_index;
+        off_within_srcvec -= stream->sendbuf.vecs.entries[srcvec_index].vec.len;
+        ++srcvec_index;
     }
-    assert(vec_index < stream->sendbuf.vecs.size);
+    assert(srcvec_index < stream->sendbuf.vecs.size);
+
+    *wrote_all = 0;
 
     /* write */
-    *wrote_all = 0;
     do {
-        struct st_h2o_http3_server_sendvec_t *this_vec = stream->sendbuf.vecs.entries + vec_index;
-        size_t sz = this_vec->vec.len - off;
-        if (dst_end - dst < sz)
-            sz = dst_end - dst;
-        /* read payload from vector (or if it a lazy-read vector without support for random-read, serialize the payload) */
-        if (this_vec->vec.callbacks->random_read != NULL) {
-            if (!this_vec->vec.callbacks->random_read(&this_vec->vec, dst, sz, off))
+        struct st_h2o_http3_server_sendvec_t *srcvec = &stream->sendbuf.vecs.entries[srcvec_index];
+        size_t copysize;
+
+        /* call one of the read callbacks and update dst refs accordingly */
+        if (srcvec->vec.callbacks->random_read != NULL) {
+            /* read using the random read callback */
+            if ((copysize = srcvec->vec.callbacks->random_read(&srcvec->vec, off_within_srcvec, &dstvecs, &num_dstvecs,
+                                                               &off_within_first_dstvec)) == 0)
                 goto Error;
         } else {
-            /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
-            if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-                size_t newlen = this_vec->vec.len;
+            /* convert vector into raw form, the first time it's being sent */
+            if (srcvec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
+                size_t newlen = srcvec->vec.len;
                 void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
                                                                    : h2o_mem_alloc(newlen);
-                if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
+                if (!srcvec->vec.callbacks->read_(&srcvec->vec, newbuf, newlen)) {
                     free(newbuf);
                     goto Error;
                 }
-                this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+                srcvec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
             }
             /* copy payload */
-            memcpy(dst, this_vec->vec.raw + off, sz);
+            copysize = srcvec->vec.len - off_within_srcvec;
+            if (copysize > dstvecs->len - off_within_first_dstvec)
+                copysize = dstvecs->len - off_within_first_dstvec;
+            memcpy(dstvecs->base + off_within_first_dstvec, srcvec->vec.raw + off_within_srcvec, copysize);
+            off_within_first_dstvec += copysize;
+            if (off_within_first_dstvec == dstvecs->len) {
+                ++dstvecs;
+                --num_dstvecs;
+                off_within_first_dstvec = 0;
+            }
         }
-        /* adjust offsets */
-        if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
-            stream->req.bytes_sent = this_vec->entity_offset + off + sz;
-        dst += sz;
-        off += sz;
-        /* when reaching the end of the current vector, update vec_index, wrote_all */
-        if (off == this_vec->vec.len) {
-            off = 0;
-            ++vec_index;
-            if (vec_index == stream->sendbuf.vecs.size) {
+        off_within_srcvec += copysize;
+        bytes_written += copysize;
+
+        /* adjust bytes_sent */
+        if (srcvec->entity_offset != UINT64_MAX && stream->req.bytes_sent < srcvec->entity_offset + off_within_srcvec)
+            stream->req.bytes_sent = srcvec->entity_offset + off_within_srcvec;
+
+        /* when reaching the end of the current vector, update src refs; break if we have written everything, setting wrote_all */
+        if (off_within_srcvec == srcvec->vec.len) {
+            off_within_srcvec = 0;
+            ++srcvec_index;
+            if (srcvec_index == stream->sendbuf.vecs.size) {
                 *wrote_all = 1;
                 break;
             }
         }
-    } while (dst != dst_end);
-
-    *len = dst - (uint8_t *)_dst;
+    } while (num_dstvecs > 0);
 
     /* retain the payload of response body before calling `h2o_proceed_request`, as the generator might discard the buffer */
     if (stream->state == H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY && *wrote_all &&
@@ -989,11 +1004,18 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         stream->proceed_while_sending = 1;
     }
 
-    return;
+    return bytes_written;
+
 Error:
-    *len = 0;
     *wrote_all = 1;
     shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0, 0);
+    return 0;
+}
+
+static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len, int *wrote_all)
+{
+    ptls_iovec_t vec = ptls_iovec_init(dst, *len);
+    *len = send_emit_scattered(qs, off, &vec, 1, wrote_all);
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -1679,6 +1701,9 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     for (size_t i = 0; i != bufcnt; ++i) {
         if (bufs[i].len == 0)
             continue;
+        /* if one vectors support random_read, it is likely that others will; therefore, use scattered I/O */
+        if (bufs[i].callbacks->random_read != NULL)
+            stream->has_random_read = 1;
         /* copy one body vector */
         payload_size += bufs[i].len;
         stream->sendbuf.vecs.entries[dst_slot++] = (struct st_h2o_http3_server_sendvec_t){
@@ -1937,8 +1962,15 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 continue;
             }
             /* 3. send */
-            if ((ret = quicly_send_stream(stream->quic, s)) != 0)
-                goto Exit;
+            if (stream->has_random_read) {
+                size_t bytes_available =
+                    stream->sendbuf.final_size - stream->sendbuf.off_within_first_vec - stream->quic->sendstate.acked.ranges[0].end;
+                if ((ret = quicly_send_stream_scattered(stream->quic, s, send_emit_scattered, bytes_available)) != 0)
+                    goto Exit;
+            } else {
+                if ((ret = quicly_send_stream(stream->quic, s)) != 0)
+                    goto Exit;
+            }
             ++stream->scheduler.call_cnt;
             if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
                 h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {

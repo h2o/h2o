@@ -32,6 +32,7 @@
 #endif
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/uio.h>
 #include <time.h>
 #include <unistd.h>
 #include "h2o.h"
@@ -195,23 +196,68 @@ static int do_sequential_read(h2o_sendvec_t *src, void *dst, size_t len)
     return 1;
 }
 
-static int do_random_read(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
-{
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    uint64_t file_off = src->cb_arg[1] + chunk_off;
-    ssize_t rret;
+static size_t do_random_read_from_fd(int fd, uint64_t file_off, const size_t maxlen, const ptls_iovec_t **dstvecs,
+                                     size_t *num_dstvecs, size_t *off_within_first_dstvec)
 
-    while (len != 0) {
-        while ((rret = pread(self->file.ref->fd, dst, len, file_off)) == -1 && errno == EINTR)
+{
+    /* build iovecs */
+    assert(*num_dstvecs != 0);
+    struct iovec *iovecs = alloca(sizeof(*iovecs) * *num_dstvecs);
+    size_t num_iovecs, remain_len = maxlen;
+    for (num_iovecs = 0; num_iovecs < *num_dstvecs && remain_len > 0; ++num_iovecs) {
+        iovecs[num_iovecs] = (struct iovec){.iov_base = (*dstvecs)[num_iovecs].base, .iov_len = (*dstvecs)[num_iovecs].len};
+        if (num_iovecs == 0) {
+            iovecs[0].iov_base += *off_within_first_dstvec;
+            iovecs[0].iov_len -= *off_within_first_dstvec;
+        }
+        if (iovecs[num_iovecs].iov_len >= remain_len)
+            iovecs[num_iovecs].iov_len = remain_len;
+        remain_len -= iovecs[num_iovecs].iov_len;
+    }
+
+    /* read while we run out of destination vectors */
+    size_t bytes_read = 0;
+    do {
+        ssize_t rret;
+        while ((rret = preadv(fd, iovecs, num_iovecs, file_off)) == -1 && errno == EINTR)
             ;
         if (rret <= 0)
             return 0;
         file_off += rret;
-        dst = (char *)dst + rret;
-        len -= rret;
-    }
+        bytes_read += rret;
 
-    return 1;
+        /* adjust refs to destination */
+        while (num_iovecs != 0 && rret >= iovecs->iov_len) {
+            rret -= iovecs->iov_len;
+            ++iovecs;
+            --num_iovecs;
+            ++*dstvecs;
+            --*num_dstvecs;
+            *off_within_first_dstvec = 0;
+        }
+        if (rret != 0) {
+            iovecs->iov_base += rret;
+            iovecs->iov_len -= rret;
+            *off_within_first_dstvec += rret;
+        }
+    } while (num_iovecs != 0);
+
+    return bytes_read;
+}
+
+static size_t do_random_read(h2o_sendvec_t *src, size_t srcoff, const ptls_iovec_t **dstvecs, size_t *num_dstvecs,
+                             size_t *off_within_first_dstvec)
+{
+    assert(srcoff < src->len);
+
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_off = src->cb_arg[1] + srcoff;
+
+    size_t bytes_read =
+        do_random_read_from_fd(self->file.ref->fd, file_off, src->len - srcoff, dstvecs, num_dstvecs, off_within_first_dstvec);
+
+    assert(srcoff + bytes_read <= src->len);
+    return bytes_read;
 }
 
 #if defined(__linux__)

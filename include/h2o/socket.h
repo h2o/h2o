@@ -156,7 +156,8 @@ typedef struct st_h2o_sendvec_callbacks_t {
      * than until when the proceed callback is called. This rule allows the HTTP/3 server to invoke the proceed callback before
      * receiving acknowledgements for all data being sent.
      */
-    int (*random_read)(h2o_sendvec_t *vec, void *dst, size_t len, size_t off);
+    size_t (*random_read)(h2o_sendvec_t *vec, size_t vec_off, const ptls_iovec_t **dst_vecs, size_t *num_dstvecs,
+                          size_t *off_within_first_dstvec);
 } h2o_sendvec_callbacks_t;
 
 /**
