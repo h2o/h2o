@@ -1300,6 +1300,19 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s);
  */
 quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s);
 /**
+ * This function is same as `quicly_send_stream`, but can be used when the overhead of providing the stream payload can be minimized
+ * by using scattered I/O.
+ * @param emit_scattered        the emit callback to be called instead of the standard `on_send_emit` callback; the callback returns
+ *                              the number of bytes that it has actually written
+ * @param available_bytes_hint  bytes that might be available in the send buffer, starting from
+ *                              `stream->sendstate.acked.ranges[0].end`; `quicly_send_stream_scattered` prepares vectors only as
+ *                              much as required to send what has been hinted
+ */
+quicly_error_t quicly_send_stream_scattered(quicly_stream_t *stream, quicly_send_context_t *s,
+                                            size_t (*emit_scattered)(quicly_stream_t *stream, size_t off, const ptls_iovec_t *vecs,
+                                                                     size_t num_vecs, int *wrote_all),
+                                            size_t available_bytes_hint);
+/**
  * Builds a Version Negotiation packet. The generated packet might include a greasing version.
  * * @param versions  zero-terminated list of versions to advertise; use `quicly_supported_versions` for sending the list of
  *                    protocol versions supported by quicly

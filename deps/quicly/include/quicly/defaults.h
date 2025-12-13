@@ -57,6 +57,14 @@ extern quicly_now_t quicly_default_now;
  */
 extern quicly_crypto_engine_t quicly_default_crypto_engine;
 
+int quicly_default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, int conn_is_saturated);
+quicly_error_t quicly_default_stream_scheduler_do_send_with(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
+                                                            quicly_send_context_t *s,
+                                                            quicly_error_t (*do_send)(quicly_stream_t *, quicly_send_context_t *));
+quicly_error_t quicly_default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
+                                                       quicly_send_context_t *s);
+void quicly_default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream);
+
 #define quicly_default_cc quicly_cc_type_reno
 #define quicly_default_init_cc quicly_cc_reno_init
 

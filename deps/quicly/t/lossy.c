@@ -59,16 +59,14 @@ static void init_cond_even(struct loss_cond_t *cond)
     *cond = (struct loss_cond_t){cond_even_};
 }
 
+static ptls_cipher_context_t *cond_rand_cipher_ctx = NULL;
+
 static int cond_rand_(struct loss_cond_t *cond)
 {
-    static ptls_cipher_context_t *c;
-
     if (cond->data.rand_.bits_avail == 0) {
-        if (c == NULL) {
-            /* use different seed for each invocation */
+        if (cond_rand_cipher_ctx == NULL) {
             static uint64_t key[2];
-            c = ptls_cipher_new(&ptls_openssl_aes128ctr, 1, &key);
-            ++key[0];
+            cond_rand_cipher_ctx = ptls_cipher_new(&ptls_openssl_aes128ctr, 1, &key);
         }
         /* initialize next `ntotal` bits, of which `nloss` bits are set */
         cond->data.rand_.bits = 0;
@@ -78,7 +76,7 @@ static int cond_rand_(struct loss_cond_t *cond)
             uint64_t mask;
             do {
                 uint32_t v;
-                ptls_cipher_encrypt(c, &v, "01234567", 4);
+                ptls_cipher_encrypt(cond_rand_cipher_ctx, &v, "01234567", 4);
                 mask = (uint64_t)1 << (v % cond->data.rand_.ratio.ntotal);
             } while ((cond->data.rand_.bits & mask) != 0);
             /* set the chosen bit */
@@ -536,6 +534,11 @@ static void test_bidirectional(void)
 
 void test_lossy(void)
 {
+    if (cond_rand_cipher_ctx != NULL) {
+        ptls_cipher_free(cond_rand_cipher_ctx);
+        cond_rand_cipher_ctx = NULL;
+    }
+
     uint64_t handshake_timeout_backup = quic_ctx.handshake_timeout_rtt_multiplier;
     /* loss tests tend to incur gigantic (and artificial) latencies, which easily trigger handshake timeout.
      * for this test, we totally disable handshake timeout so we can focus on the loss test */

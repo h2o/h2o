@@ -4304,6 +4304,97 @@ int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s)
     return s->num_datagrams < s->max_datagrams;
 }
 
+/**
+ * builds stream frame headers and setups the offset / scattered iovec arrays, and returns the size of the arrays
+ */
+static size_t prepare_scattered_emit(quicly_send_context_t *s, const uint16_t datagram_size, quicly_stream_id_t stream_id,
+                                     uint64_t off, size_t *len, ptls_iovec_t *vecs)
+{
+    size_t num_vecs = 1, max_vecs = 10;
+
+    if (max_vecs > s->max_datagrams - s->num_datagrams)
+        max_vecs = s->max_datagrams - s->num_datagrams;
+    if (max_vecs > (s->send_window + datagram_size - 1) / datagram_size)
+        max_vecs = (s->send_window + datagram_size - 1) / datagram_size;
+
+    const uint16_t packet_header_size = 1 + s->dcid->len + QUICLY_SEND_PN_SIZE;
+    const uint64_t max_off = off + *len;
+    const size_t tag_size = s->current.cipher->aead->algo->tag_size;
+
+    off += vecs[0].len;
+
+    /* build more frames (in the payload buffer in which additional datagrams will be allocated) */
+    uint8_t *datagram_at = s->dst_end + tag_size;
+    assert(datagram_at == s->payload_buf.datagram + datagram_size);
+    for (; num_vecs < max_vecs && off < max_off && s->payload_buf.end - datagram_at >= datagram_size;
+         ++num_vecs, datagram_at += datagram_size) {
+        uint8_t *frame_at = datagram_at + packet_header_size, *p = frame_at;
+        *p++ = QUICLY_FRAME_TYPE_STREAM_BASE | QUICLY_FRAME_TYPE_STREAM_BIT_OFF;
+        p = quicly_encodev(p, stream_id);
+        p = quicly_encodev(p, off);
+        vecs[num_vecs] = ptls_iovec_init(p, datagram_at + datagram_size - tag_size - p);
+        off += vecs[num_vecs].len;
+    }
+
+    /* adjust the size of the last vector, to avoid overflow of flow control */
+    if (off > max_off) {
+        size_t overflow = off - max_off;
+        assert(vecs[num_vecs - 1].len > overflow);
+        vecs[num_vecs - 1].len -= overflow;
+        off -= overflow;
+    }
+
+    *len = off - (max_off - *len);
+    return num_vecs;
+}
+
+/**
+ * Assuming `dst` points to where the Length field of a CRYPTO frame should be inserted, inserts the field, changing `*len` and
+ * `*wrote_all` if necessary. Returns the end of the CRYPTO frame being adjusted.
+ */
+static uint8_t *adjust_crypto_frame_layout(uint8_t *dst, uint8_t *const dst_end, size_t *len, int *wrote_all)
+{
+    size_t space_left = (dst_end - dst) - *len, len_of_len = quicly_encodev_capacity(*len);
+
+    if (space_left < len_of_len) {
+        *len = dst_end - dst - len_of_len;
+        *wrote_all = 0;
+    }
+
+    /* insert length before payload of `*len` bytes */
+    memmove(dst + len_of_len, dst, *len);
+    dst = quicly_encodev(dst, *len);
+    dst += *len;
+
+    return dst;
+}
+
+/**
+ * Assuming that `header` and `header_len` point to a STREAM frame without a Length field, either inserts a Length field or prepends
+ * a PADDING frame if necessary. Returns the size increase of the header.
+ */
+static size_t adjust_last_stream_frame(uint8_t *header, size_t header_len, uint16_t payload_size, size_t space_left)
+{
+    if (space_left == 0)
+        return 0;
+
+    size_t len_len = quicly_encodev_capacity(payload_size);
+
+    if (space_left <= len_len) {
+        /* prepend PADDING, as there is not enough space to insert the length field */
+        memmove(header + header_len + space_left, header + header_len, payload_size);
+        memmove(header + space_left, header, header_len);
+        memset(header, QUICLY_FRAME_TYPE_PADDING, space_left);
+        return space_left;
+    }
+
+    /* add the Length field */
+    memmove(header + header_len + len_len, header + header_len, payload_size);
+    header[0] |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
+    quicly_encodev(header + header_len, payload_size);
+    return len_len;
+}
+
 static void commit_stream_frame(quicly_stream_t *stream, quicly_sent_t *sent, uint64_t off, const uint8_t *data, size_t len,
                                 int wrote_all, int is_fin)
 {
@@ -4353,145 +4444,26 @@ static quicly_error_t update_stream_sendstate(quicly_stream_t *stream, uint64_t 
     return ret;
 }
 
-/**
- * Assuming `dst` points to where the Length field of a CRYPTO frame should be inserted, inserts the field, changing `*len` and
- * `*wrote_all` if necessary. Returns the end of the CRYPTO frame being adjusted.
- */
-static uint8_t *adjust_crypto_frame_layout(uint8_t *dst, uint8_t *const dst_end, size_t *len, int *wrote_all)
-{
-    size_t space_left = (dst_end - dst) - *len, len_of_len = quicly_encodev_capacity(*len);
-
-    if (space_left < len_of_len) {
-        *len = dst_end - dst - len_of_len;
-        *wrote_all = 0;
-    }
-
-    /* insert length before payload of `*len` bytes */
-    memmove(dst + len_of_len, dst, *len);
-    dst = quicly_encodev(dst, *len);
-    dst += *len;
-
-    return dst;
-}
-
-/**
- * Assuming that `header` and `header_len` point to a STREAM frame without a Length field, either inserts a Length field or prepends
- * a PADDING frame if necessary. Returns the size increase of the header.
- */
-static size_t adjust_last_stream_frame(uint8_t *header, size_t header_len, uint16_t payload_size, size_t space_left,
-                                       int move_payload)
-{
-    if (space_left == 0)
-        return 0;
-
-    size_t len_len = quicly_encodev_capacity(payload_size);
-
-    if (space_left <= len_len) {
-        /* prepend PADDING, as there is not enough space to insert the length field */
-        if (move_payload)
-            memmove(header + header_len + space_left, header + header_len, payload_size);
-        memmove(header + space_left, header, header_len);
-        memset(header, QUICLY_FRAME_TYPE_PADDING, space_left);
-        return space_left;
-    }
-
-    /* add the Length field */
-    if (move_payload)
-        memmove(header + header_len + len_len, header + header_len, payload_size);
-    header[0] |= QUICLY_FRAME_TYPE_STREAM_BIT_LEN;
-    quicly_encodev(header + header_len, payload_size);
-    return len_len;
-}
-
-/**
- * Adjusts the STREAM frame layout. If given payload expands beyond the end of the current datagram, scatters the payload to the
- * correct locations assuming that more datagrams would be built adjacently. STREAM headers are prepended to the scattered payload.
- * Returns the end of the last stream frame.
- */
-static uint8_t *scatter_stream_payload(quicly_send_context_t *s, uint16_t datagram_size, quicly_stream_id_t stream_id,
-                                       uint64_t stream_start, uint8_t *payload_start, size_t *len, int *wrote_all,
-                                       uint16_t *scattered_payload_lengths, size_t extra_datagrams)
-{
-    /* fast path when no expansion is required; adjust the layout and return */
-    if (*len <= s->dst_end - payload_start) {
-        size_t space_left = s->dst_end - (payload_start + *len);
-        size_t add_space = adjust_last_stream_frame(s->dst, payload_start - s->dst, *len, space_left, 1);
-        payload_start += add_space;
-        scattered_payload_lengths[0] = 0;
-        return payload_start + *len;
-    }
-
-    struct {
-        uint8_t len;
-        uint8_t bytes[1 + 8 + 8 + 2];
-    } frame_headers[extra_datagrams];
-    uint64_t stream_offset = stream_start + (s->dst_end - payload_start), stream_end = stream_start + *len;
-    size_t num_scattered, datagram_prefix_len = 1 /* header byte */ + s->dcid->len + QUICLY_SEND_PN_SIZE,
-                          datagram_capacity = datagram_size - datagram_prefix_len - s->current.cipher->aead->algo->tag_size;
-
-    /* build frame headers for the extra datagrams, calculating their offsets */
-    for (num_scattered = 0; num_scattered < extra_datagrams && stream_offset < stream_end; ++num_scattered) {
-        uint8_t *hp = frame_headers[num_scattered].bytes;
-        *hp++ = QUICLY_FRAME_TYPE_STREAM_BASE | QUICLY_FRAME_TYPE_STREAM_BIT_OFF;
-        hp = quicly_encodev(hp, stream_id);
-        hp = quicly_encodev(hp, stream_offset);
-        frame_headers[num_scattered].len = hp - frame_headers[num_scattered].bytes;
-        scattered_payload_lengths[num_scattered] = datagram_capacity - frame_headers[num_scattered].len;
-        if (scattered_payload_lengths[num_scattered] > stream_end - stream_offset)
-            scattered_payload_lengths[num_scattered] = stream_end - stream_offset;
-        stream_offset += scattered_payload_lengths[num_scattered];
-    }
-    scattered_payload_lengths[num_scattered] = 0;
-
-    { /* adjust the encoding of the last frame */
-        size_t space_left =
-            datagram_capacity - (frame_headers[num_scattered - 1].len + scattered_payload_lengths[num_scattered - 1]);
-        frame_headers[num_scattered - 1].len +=
-            adjust_last_stream_frame(frame_headers[num_scattered - 1].bytes, frame_headers[num_scattered - 1].len,
-                                     scattered_payload_lengths[num_scattered - 1], space_left, 0);
-    }
-
-    /* adjust out parameters, move stream payload, and write frame headers for the expanded datagrams */
-    if (stream_offset - stream_start < *len) {
-        *wrote_all = 0;
-        *len = stream_offset - stream_start;
-    }
-
-    uint8_t *extra_packets_from = s->dst_end + s->current.cipher->aead->algo->tag_size;
-
-    /* move stream payload and write headers */
-    for (size_t i = num_scattered - 1; i != SIZE_MAX; --i) {
-        stream_offset -= scattered_payload_lengths[i];
-        memmove(extra_packets_from + datagram_size * i + datagram_prefix_len + frame_headers[i].len,
-                payload_start + stream_offset - stream_start, scattered_payload_lengths[i]);
-        memcpy(extra_packets_from + datagram_size * i + datagram_prefix_len, frame_headers[i].bytes, frame_headers[i].len);
-    }
-
-    return extra_packets_from + datagram_size * (num_scattered - 1) + datagram_prefix_len + frame_headers[num_scattered - 1].len +
-           scattered_payload_lengths[num_scattered - 1];
-}
-
-quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
+quicly_error_t quicly_send_stream_scattered(quicly_stream_t *stream, quicly_send_context_t *s,
+                                            size_t (*emit_scattered)(quicly_stream_t *, size_t, const ptls_iovec_t *, size_t,
+                                                                     int *),
+                                            size_t available_bytes_hint)
 {
     uint64_t off = stream->sendstate.pending.ranges[0].start;
     quicly_sent_t *sent;
-    uint8_t *dst; /* this pointer points to the current write position within the frame being built, while `s->dst` points to the
-                   * beginning of the frame. */
-    size_t len, extra_datagrams = 0;
+    ptls_iovec_t payload_vecs[10];
+    size_t num_vecs, len = available_bytes_hint;
     int wrote_all, is_fin;
-    uint16_t scattered_payload_lengths[10];
     quicly_error_t ret;
 
-    /* write frame type, stream_id and offset, calculate capacity (and store that in `len`) */
+    /* write frame type, stream_id and offset, cap `len` to the flow control limit */
     if (stream->stream_id < 0) {
         if ((ret = allocate_ack_eliciting_frame(stream->conn, s,
                                                 1 + quicly_encodev_capacity(off) + 2 /* type + offset + len + 1-byte payload */,
                                                 &sent, on_ack_stream)) != 0)
             return ret;
-        dst = s->dst;
-        *dst++ = QUICLY_FRAME_TYPE_CRYPTO;
-        dst = quicly_encodev(dst, off);
-        len = s->dst_end - dst;
+        s->dst[0] = QUICLY_FRAME_TYPE_CRYPTO;
+        payload_vecs[0].base = quicly_encodev(s->dst + 1, off);
     } else {
         uint8_t header[18], *hp = header + 1;
         hp = quicly_encodev(hp, stream->stream_id);
@@ -4519,25 +4491,13 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
         }
         if ((ret = allocate_ack_eliciting_frame(stream->conn, s, hp - header + 1, &sent, on_ack_stream)) != 0)
             return ret;
-        dst = s->dst;
-        memcpy(dst, header, hp - header);
-        dst += hp - header;
-        len = s->dst_end - dst;
-        /* if sending in 1-RTT, generate stream payload past the end of current datagram and move them to build datagrams */
-        if (get_epoch(s->current.first_byte) == QUICLY_EPOCH_1RTT) {
-            size_t max_udp_payload_size = stream->conn->egress.max_udp_payload_size;
-            extra_datagrams = (s->payload_buf.end - (s->dst_end + s->target.cipher->aead->algo->tag_size)) / max_udp_payload_size;
-            if (extra_datagrams > s->max_datagrams - s->num_datagrams - 1)
-                extra_datagrams = s->max_datagrams - s->num_datagrams - 1;
-            if (extra_datagrams > PTLS_ELEMENTSOF(scattered_payload_lengths) - 1)
-                extra_datagrams = PTLS_ELEMENTSOF(scattered_payload_lengths) - 1;
-            len += (max_udp_payload_size - (1 + s->dcid->len + QUICLY_SEND_PN_SIZE + 2)) * extra_datagrams;
-        }
+        memcpy(s->dst, header, hp - header);
+        payload_vecs[0].base = s->dst + (hp - header);
         /* cap by max_stream_data */
-        if (off + len > stream->_send_aux.max_stream_data)
+        if (len > stream->_send_aux.max_stream_data - off)
             len = stream->_send_aux.max_stream_data - off;
         /* cap by max_data */
-        if (off + len > stream->sendstate.size_inflight) {
+        if (len > stream->sendstate.size_inflight - off) {
             uint64_t new_bytes = off + len - stream->sendstate.size_inflight;
             if (new_bytes > stream->conn->egress.max_data.permitted - stream->conn->egress.max_data.sent) {
                 size_t max_stream_data =
@@ -4557,18 +4517,32 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
             len = range_capacity;
     }
 
-    /* Write payload, adjusting len to actual size. Note that `on_send_emit` might fail (e.g., when underlying pread(2) fails), in
-     * which case the application will either close the connection immediately or reset the stream. If that happens, we return
-     * immediately without updating state. */
-    assert(len != 0);
+    payload_vecs[0].len = s->dst_end - payload_vecs[0].base;
+
+    if (emit_scattered != NULL && stream->stream_id >= 0 && get_epoch(s->current.first_byte) == QUICLY_EPOCH_1RTT) {
+        /* build (potentially) multiple STREAM frames spanning across multiple 1-RTT packets at once! */
+        num_vecs = prepare_scattered_emit(s, stream->conn->egress.max_udp_payload_size, stream->stream_id, off, &len, payload_vecs);
+    } else {
+        /* build CYPTO / STREAM frame within the current datagram */
+        if (len > payload_vecs[0].len)
+            len = payload_vecs[0].len;
+        emit_scattered = NULL;
+    }
+
+    /* call the emit callback */
     size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end);
+    assert(len != 0);
     QUICLY_PROBE(STREAM_ON_SEND_EMIT, stream->conn, stream->conn->stash.now, stream, emit_off, len);
     QUICLY_LOG_CONN(stream_on_send_emit, stream->conn, {
         PTLS_LOG_ELEMENT_SIGNED(stream_id, stream->stream_id);
         PTLS_LOG_ELEMENT_UNSIGNED(off, off);
         PTLS_LOG_ELEMENT_UNSIGNED(capacity, len);
     });
-    stream->callbacks->on_send_emit(stream, emit_off, dst, &len, &wrote_all);
+    if (emit_scattered != NULL) {
+        len = emit_scattered(stream, emit_off, payload_vecs, num_vecs, &wrote_all);
+    } else {
+        stream->callbacks->on_send_emit(stream, emit_off, payload_vecs[0].base, &len, &wrote_all);
+    }
     if (stream->conn->super.state >= QUICLY_STATE_CLOSING) {
         return QUICLY_ERROR_IS_CLOSING;
     } else if (stream->_send_aux.reset_stream.sender_state != QUICLY_SENDER_STATE_NONE) {
@@ -4576,61 +4550,40 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
     }
     assert(len != 0);
 
-    /* Adjust the frame layout and commit. */
+    /* adjust the frame layout and commit */
     if (stream->stream_id < 0) {
         /* CRYPTO frame */
-        s->dst = adjust_crypto_frame_layout(dst, s->dst_end, &len, &wrote_all);
+        s->dst = adjust_crypto_frame_layout(payload_vecs[0].base, s->dst_end, &len, &wrote_all);
         commit_stream_frame(stream, sent, off, s->dst - len, len, wrote_all, 0);
         is_fin = 0;
     } else {
-        /* STREAM frame; if the generated payload extends beyond the end of the current datagram,
-         * 1. Scatter the output to the payload position of the following datagrams for which the packet headers are yet to be
-         *    generated, as well as having the STREAM frame headers generated.
-         * 2. Repeatedly commit the packets until we reach the last one, which might not be full-sized. */
-        size_t capacity_of_first_packet = s->dst_end - dst;
-        dst = scatter_stream_payload(s, stream->conn->egress.max_udp_payload_size, stream->stream_id, off, dst, &len, &wrote_all,
-                                     scattered_payload_lengths, extra_datagrams);
-        uint64_t off_of_packet = off;
-        if (scattered_payload_lengths[0] > 0) {
+        /* STREAM frame */
+        uint64_t frame_off = off;
+        size_t vec_index = 0;
+        for (; payload_vecs[vec_index].len < off + len - frame_off; ++vec_index) {
+            assert(payload_vecs[vec_index].base + payload_vecs[vec_index].len == s->dst_end);
+            commit_stream_frame(stream, sent, frame_off, payload_vecs[vec_index].base, payload_vecs[vec_index].len, 0, 0);
+            frame_off += payload_vecs[vec_index].len;
             s->dst = s->dst_end;
-            commit_stream_frame(stream, sent, off_of_packet, s->dst - capacity_of_first_packet, capacity_of_first_packet, 0, 0);
-            off_of_packet += capacity_of_first_packet;
-            for (size_t i = 0; scattered_payload_lengths[i + 1] != 0; ++i) {
-                if ((ret = allocate_ack_eliciting_frame(stream->conn, s, 1, &sent, on_ack_stream)) != 0) {
-                    len = off_of_packet - off;
-                    wrote_all = 0;
-                    is_fin = 0;
-                    goto UpdateStreamState;
-                }
-                assert(s->dst == s->dst_payload_from && "scatter does not expect other frames");
-                s->dst = s->dst_end;
-                commit_stream_frame(stream, sent, off_of_packet, s->dst - scattered_payload_lengths[i],
-                                    scattered_payload_lengths[i], 0, 0);
-                off_of_packet += scattered_payload_lengths[i];
-            }
             if ((ret = allocate_ack_eliciting_frame(stream->conn, s, 1, &sent, on_ack_stream)) != 0) {
-                len = off_of_packet - off;
+                len = frame_off - off;
                 wrote_all = 0;
                 is_fin = 0;
                 goto UpdateStreamState;
             }
-            assert(s->dst == s->dst_payload_from && "scatter does not expect other frames");
         }
-        /* determine if the last STREAM frame incorporates FIN, set flags as necessary */
         if (off + len == stream->sendstate.final_size) {
             assert(!quicly_sendstate_is_open(&stream->sendstate));
             is_fin = 1;
-            for (; *s->dst == QUICLY_FRAME_TYPE_PADDING; ++s->dst)
-                ;
-            assert((*s->dst & ~QUICLY_FRAME_TYPE_STREAM_BITS) == QUICLY_FRAME_TYPE_STREAM_BASE);
             *s->dst |= QUICLY_FRAME_TYPE_STREAM_BIT_FIN;
         } else {
             is_fin = 0;
         }
-        /* commit the last STREAM frame (without committing the packet, as there could be space left) */
-        s->dst = dst;
-        size_t data_len = (off + len) - off_of_packet;
-        commit_stream_frame(stream, sent, off_of_packet, s->dst - data_len, data_len, wrote_all, is_fin);
+        size_t last_frame_payload_size = off + len - frame_off;
+        size_t bytes_added = adjust_last_stream_frame(s->dst, payload_vecs[vec_index].base - s->dst, off + len - frame_off,
+                                                      s->dst_end - (payload_vecs[vec_index].base + last_frame_payload_size));
+        s->dst = payload_vecs[vec_index].base + last_frame_payload_size + bytes_added;
+        commit_stream_frame(stream, sent, frame_off, s->dst - last_frame_payload_size, last_frame_payload_size, wrote_all, is_fin);
     }
 
 UpdateStreamState:
@@ -4638,6 +4591,11 @@ UpdateStreamState:
     update_stream_sendstate(stream, off, len, is_fin, wrote_all);
 
     return ret;
+}
+
+quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t *s)
+{
+    return quicly_send_stream_scattered(stream, s, NULL, SIZE_MAX);
 }
 
 static inline quicly_error_t init_acks_iter(quicly_conn_t *conn, quicly_sentmap_iter_t *iter)

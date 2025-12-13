@@ -272,7 +272,7 @@ void quicly_free_default_cid_encryptor(quicly_cid_encryptor_t *_self)
 /**
  * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
  */
-static int default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, int conn_is_saturated)
+int quicly_default_stream_scheduler_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn, int conn_is_saturated)
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
 
@@ -313,8 +313,9 @@ static void link_stream(struct st_quicly_default_scheduler_state_t *sched, quicl
 /**
  * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
  */
-static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
-                                                       quicly_send_context_t *s)
+quicly_error_t quicly_default_stream_scheduler_do_send_with(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
+                                                            quicly_send_context_t *s,
+                                                            quicly_error_t (*do_send)(quicly_stream_t *, quicly_send_context_t *))
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)conn)->_default_scheduler;
     int conn_is_blocked = quicly_is_blocked(conn);
@@ -334,7 +335,7 @@ static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t
             continue;
         }
         /* send! */
-        if ((ret = quicly_send_stream(stream, s)) != 0) {
+        if ((ret = do_send(stream, s)) != 0) {
             /* FIXME Stop quicly_send_stream emitting SENDBUF_FULL (happens when CWND is congested). Otherwise, we need to make
              * adjustments to the scheduler after popping a stream */
             if (ret == QUICLY_ERROR_SENDBUF_FULL) {
@@ -352,10 +353,16 @@ static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t
     return ret;
 }
 
+quicly_error_t quicly_default_stream_scheduler_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *conn,
+                                                       quicly_send_context_t *s)
+{
+    return quicly_default_stream_scheduler_do_send_with(self, conn, s, quicly_send_stream);
+}
+
 /**
  * See doc-comment of `st_quicly_default_scheduler_state_t` to understand the logic.
  */
-static void default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
+void quicly_default_stream_scheduler_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *stream)
 {
     struct st_quicly_default_scheduler_state_t *sched = &((struct _st_quicly_conn_public_t *)stream->conn)->_default_scheduler;
 
@@ -369,8 +376,11 @@ static void default_stream_scheduler_update_state(quicly_stream_scheduler_t *sel
     }
 }
 
-quicly_stream_scheduler_t quicly_default_stream_scheduler = {default_stream_scheduler_can_send, default_stream_scheduler_do_send,
-                                                             default_stream_scheduler_update_state};
+quicly_stream_scheduler_t quicly_default_stream_scheduler = {
+    .can_send = quicly_default_stream_scheduler_can_send,
+    .do_send = quicly_default_stream_scheduler_do_send,
+    .update_state = quicly_default_stream_scheduler_update_state,
+};
 
 quicly_stream_t *quicly_default_alloc_stream(quicly_context_t *ctx)
 {
