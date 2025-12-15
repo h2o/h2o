@@ -202,18 +202,26 @@ static size_t do_random_read_from_fd(int fd, uint64_t file_off, const size_t max
 {
     /* build iovecs */
     assert(*num_dstvecs != 0);
-    struct iovec *iovecs = alloca(sizeof(*iovecs) * *num_dstvecs);
-    size_t num_iovecs, remain_len = maxlen;
-    for (num_iovecs = 0; num_iovecs < *num_dstvecs && remain_len > 0; ++num_iovecs) {
-        iovecs[num_iovecs] = (struct iovec){.iov_base = (*dstvecs)[num_iovecs].base, .iov_len = (*dstvecs)[num_iovecs].len};
-        if (num_iovecs == 0) {
-            iovecs[0].iov_base += *off_within_first_dstvec;
-            iovecs[0].iov_len -= *off_within_first_dstvec;
-        }
-        if (iovecs[num_iovecs].iov_len >= remain_len)
+    struct iovec iovecs_array[10], *iovecs = iovecs_array;
+    size_t num_iovecs = 0, remain_len = maxlen;
+    do {
+        iovecs[num_iovecs] = (struct iovec){
+            .iov_base = (*dstvecs)->base + *off_within_first_dstvec,
+            .iov_len = (*dstvecs)->len - *off_within_first_dstvec,
+        };
+        if (iovecs[num_iovecs].iov_len > remain_len) {
             iovecs[num_iovecs].iov_len = remain_len;
+            ++num_iovecs;
+            *off_within_first_dstvec += remain_len;
+            remain_len = 0;
+            break;
+        }
         remain_len -= iovecs[num_iovecs].iov_len;
-    }
+        ++num_iovecs;
+        ++*dstvecs;
+        --*num_dstvecs;
+        *off_within_first_dstvec = 0;
+    } while (*num_dstvecs != 0);
 
     /* read while we run out of destination vectors */
     size_t bytes_read = 0;
@@ -231,18 +239,14 @@ static size_t do_random_read_from_fd(int fd, uint64_t file_off, const size_t max
             rret -= iovecs->iov_len;
             ++iovecs;
             --num_iovecs;
-            ++*dstvecs;
-            --*num_dstvecs;
-            *off_within_first_dstvec = 0;
         }
         if (rret != 0) {
             iovecs->iov_base += rret;
             iovecs->iov_len -= rret;
-            *off_within_first_dstvec += rret;
         }
     } while (num_iovecs != 0);
 
-    return bytes_read;
+    return maxlen - remain_len;
 }
 
 static size_t do_random_read(h2o_sendvec_t *src, size_t srcoff, const ptls_iovec_t **dstvecs, size_t *num_dstvecs,
