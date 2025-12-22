@@ -3931,24 +3931,38 @@ static int popen_crash_handler(void)
     return pipefds[1];
 }
 
-static int crash_handler_fd = -1;
+static struct {
+    int fd;
+    unsigned halt_on_crash : 1;
+} crash_handler = {-1, -1};
 
 static void on_sigfatal(int signo)
 {
-    fprintf(stderr, "received fatal signal %d\n", signo);
+    char buf[256];
+
+    sprintf(buf, "received fatal signal %d\n", signo);
+    write(2, buf, strlen(buf));
 
     h2o_set_signal_handler(signo, SIG_DFL);
 
     void *frames[128];
     int framecnt = backtrace(frames, sizeof(frames) / sizeof(frames[0]));
-    backtrace_symbols_fd(frames, framecnt, crash_handler_fd);
+    backtrace_symbols_fd(frames, framecnt, crash_handler.fd);
 
     if (conf.crash_handler_wait_pipe_close) {
         struct pollfd pfd[1];
-        pfd[0].fd = crash_handler_fd;
+        pfd[0].fd = crash_handler.fd;
         pfd[0].events = POLLERR | POLLHUP;
         while (poll(pfd, 1, -1) == -1 && errno == EINTR)
             ;
+    }
+
+    if (crash_handler.halt_on_crash) {
+        sprintf(buf, "**** pid:%d on halt ****\n", (int)getpid());
+        write(2, buf, strlen(buf));
+        while (1) {
+            sleep(60);
+        }
     }
 
     raise(signo);
@@ -3960,14 +3974,17 @@ static void setup_signal_handlers(void)
 {
     h2o_set_signal_handler(SIGTERM, on_sigterm_set_flag_only);
     h2o_set_signal_handler(SIGPIPE, SIG_IGN);
+
 #ifdef LIBC_HAS_BACKTRACE
-    if ((crash_handler_fd = popen_crash_handler()) == -1)
-        crash_handler_fd = 2;
+    if ((crash_handler.fd = popen_crash_handler()) == -1)
+        crash_handler.fd = 2;
     h2o_set_signal_handler(SIGABRT, on_sigfatal);
     h2o_set_signal_handler(SIGBUS, on_sigfatal);
     h2o_set_signal_handler(SIGFPE, on_sigfatal);
     h2o_set_signal_handler(SIGILL, on_sigfatal);
     h2o_set_signal_handler(SIGSEGV, on_sigfatal);
+    if (getenv("H2O_HALT_ON_CRASH") != NULL)
+        crash_handler.halt_on_crash = 1;
 #endif
 }
 
