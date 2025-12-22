@@ -887,6 +887,10 @@ struct st_h2o_ostream_t {
      * called by the core via h2o_send_informational
      */
     void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
+    /**
+     * if the output stream prefers use the random_read callback above one backed by io_uring & splice
+     */
+    unsigned prefer_random_read : 1;
 };
 
 /**

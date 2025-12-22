@@ -55,6 +55,9 @@ struct st_h2o_sendfile_generator_t {
     unsigned send_vary : 1;
     unsigned send_etag : 1;
     unsigned gunzip : 1;
+#if H2O_USE_IO_URING
+    unsigned try_io_uring : 1;
+#endif
     struct {
         char *multirange_buf; /* multi-range mode uses push */
         size_t filesize;
@@ -268,8 +271,20 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
 
-    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
 #if H2O_USE_IO_URING
+    /* activate use of io_uring by calling `h2o_pipe_sender_start`, if desired */
+    if (self->try_io_uring) {
+        self->try_io_uring = 0;
+        if (!self->src_req->_ostr_top->prefer_random_read) {
+            if (h2o_pipe_sender_start(self->src_req->conn->ctx, &self->pipe_sender)) {
+                self->super.stop = do_stop_async_splice;
+            } else {
+                h2o_req_log_error(self->src_req, "lib/handler/file.c",
+                                  "failed to allocate pipe for async I/O; falling back to blocking I/O");
+            }
+        }
+    }
+    /* if io_uring is used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
     if (h2o_pipe_sender_in_use(&self->pipe_sender)) {
         h2o_mem_addref_shared(self);
         h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
@@ -409,12 +424,7 @@ Opened:
 #if H2O_USE_IO_URING
     self->src_req = req;
     h2o_pipe_sender_init(&self->pipe_sender);
-    int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
-    if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
-        self->super.stop = do_stop_async_splice;
-    } else if (try_async_splice) {
-        h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
-    }
+    self->try_io_uring = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
 #endif
 
     return self;
