@@ -1,0 +1,11 @@
+[Unit]
+Description=h2o
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/h2o --conf=/etc/h2o/h2o.conf --m worker
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
