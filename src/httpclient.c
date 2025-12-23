@@ -58,6 +58,7 @@ struct {
     size_t body_size;
     h2o_url_t *connect_to; /* when non-NULL, this property specifies the layer-4 address where the client should connect to */
 } req = {NULL, "GET"};
+static h2o_iovec_t server_name_override = {NULL, 0};
 static unsigned cnt_left = 1, concurrency = 1;
 static int chunk_size = 10;
 static h2o_iovec_t iov_filler;
@@ -446,7 +447,8 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
     if (connpool == NULL) {
         connpool = h2o_mem_alloc(sizeof(*connpool));
         h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
-        h2o_socketpool_target_t *target = h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : target_uri, NULL);
+        h2o_socketpool_target_t *target =
+            h2o_socketpool_create_target(req.connect_to != NULL ? req.connect_to : target_uri, NULL, &server_name_override);
         h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
         h2o_socketpool_set_timeout(sockpool, io_timeout);
         h2o_socketpool_register_loop(sockpool, ctx->loop);
@@ -674,6 +676,7 @@ static void usage(const char *progname)
             "  -o <path>    file to which the response body is written (default: stdout)\n"
             "  -s <session-file>\n"
             "               file to read / write session information (atm HTTP/3 only)\n"
+            "  -S <sni>     server name to use in TLS for when -x specifies an IP address\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
             "  -W <bytes>   receive window size (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
@@ -819,7 +822,7 @@ int main(int argc, char **argv)
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
-    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
+    const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:S:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
 #endif
@@ -831,6 +834,9 @@ int main(int argc, char **argv)
                 fprintf(stderr, "count (-t) must be a number greater than zero\n");
                 exit(EXIT_FAILURE);
             }
+            break;
+        case 'S':
+            server_name_override = h2o_strdup(NULL, optarg, SIZE_MAX);
             break;
         case 'm':
             req.method = optarg;

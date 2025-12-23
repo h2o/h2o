@@ -229,6 +229,7 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
+    free(conn->server.server_name.base);
     free(conn->server.origin_url.authority.base);
     free(conn->server.origin_url.host.base);
     free(conn->handshake_properties.client.session_ticket.base);
@@ -270,7 +271,7 @@ static void start_connect(struct st_h2o_httpclient__h3_conn_t *conn, struct sock
             goto Fail;
     }
     assert(conn->ctx->http3->h3.next_cid != NULL && "to identify connections, next_cid must be set");
-    if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.origin_url.host.base, sa, NULL,
+    if ((ret = quicly_connect(&qconn, &conn->ctx->http3->quic, conn->server.server_name.base, sa, NULL,
                               conn->ctx->http3->h3.next_cid, address_token, &conn->handshake_properties,
                               conn->handshake_properties.client.session_ticket.base != NULL ? &resumed_tp : NULL, NULL)) != 0) {
         conn->super.super.quic = NULL; /* just in case */
@@ -347,13 +348,20 @@ Fail:
     h2o_quic_close_connection(&conn->super.super, err, err_desc);
 }
 
-struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *pool,
-                                                       h2o_url_t *origin)
+static struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx, h2o_httpclient_connection_pool_t *pool,
+                                                              h2o_url_t *origin)
 {
+    h2o_iovec_t *server_name;
+
     /* FIXME When using a non-global socket pool, let the socket pool load balance H3 connections among the list of targets being
      * available. But until then, we use the first entry. */
-    if (!h2o_socketpool_is_global(pool->socketpool))
-        origin = &pool->socketpool->targets.entries[0]->url;
+    if (!h2o_socketpool_is_global(pool->socketpool)) {
+        h2o_socketpool_target_t *target = pool->socketpool->targets.entries[0];
+        origin = &target->url;
+        server_name = &target->server_name;
+    } else {
+        server_name = &origin->host;
+    }
 
     static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
@@ -364,6 +372,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
+    conn->server.server_name = h2o_strdup(NULL, server_name->base, server_name->len);
     sprintf(conn->server.named_serv, "%" PRIu16, h2o_url_get_port(origin));
     conn->handshake_properties.client.negotiated_protocols.list = h2o_http3_alpn;
     conn->handshake_properties.client.negotiated_protocols.count = sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]);
