@@ -93,6 +93,9 @@ hosts:
       "/":
         mruby.handler: |
           Proc.new do |env|
+            if env["rack.input"]
+              env["rack.input"].read
+            end
             [200, {}, ["server=$server_id"]]
           end
       "/server-status":
