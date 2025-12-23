@@ -918,7 +918,13 @@ GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON AND NOT (OPENSSL_VERSION VERSION_LESS "1.1.1"))
     ExternalProject_Add(h2get
-                        CONFIGURE_COMMAND ${CMAKE_COMMAND} -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
+                        CONFIGURE_COMMAND ${CMAKE_COMMAND}
+                                          -DH2GET_SSL_ROOT_DIR=${EXTERNALPROJECT_SSL_ROOT_DIR}
+    IF (WITH_MRUBY)
+                                          -DWITH_MRUBY_INCLUDE=${CMAKE_CURRENT_SOURCE_DIR}/deps/mruby/include
+                                          -DWITH_MRUBY_LIB=${CMAKE_CURRENT_BINARY_DIR}/mruby/host/lib/libmruby.a
+    ENDIF (WITH_MRUBY)
+                                          ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get
                         BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/h2get_bin
                         BUILD_COMMAND ${CMAKE_MAKE_PROGRAM}
