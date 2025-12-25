@@ -23,6 +23,12 @@ my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
+      /best-of-two/:
+        proxy.reverse.url:
+          backends:
+            - url: http://localhost.examp1e.net:$upstream_port/
+            - http://localhost.examp1e.net:$upstream_port/subdir/
+          balancer: best-of-two
       /least-conn/:
         proxy.reverse.url:
           backends:
@@ -84,5 +90,22 @@ for my $i (1..50) {
 
 # if upstream connections are always closed, least-conn will always connect to the same upstream when no other leased connection exists.
 ok $access_count1 * $access_count2 == 0 && $access_count1 + $access_count2 > 0, "least conn applied";
+
+$access_count1 = 0;
+$access_count2 = 0;
+
+for my $i (1..50) {
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent $proto://127.0.0.1:$port/best-of-two/index.txt`;
+        like $resp, $body_re;
+        if ($resp eq $expected1) {
+            $access_count1 += 1;
+        } else {
+            $access_count2 += 1;
+        }
+    });
+}
+ok $access_count1 > 0 && $access_count2 > 0, "best-of-two applied";
 
 done_testing();
