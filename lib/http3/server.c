@@ -469,6 +469,7 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         /* it's possible the tunnel wasn't established yet */
         if (iter != kh_end(conn->datagram_flows))
             kh_del(stream, conn->datagram_flows, iter);
+        stream->datagram_flow_id = UINT64_MAX;
     }
 
     if (stream->req.is_tunnel_req)
