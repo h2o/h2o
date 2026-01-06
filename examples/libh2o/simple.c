@@ -27,13 +27,27 @@
 #include <stdlib.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "h2o.h"
 #include "h2o/http1.h"
 #include "h2o/http2.h"
 #include "h2o/memcached.h"
+#ifndef H2O_USE_HTTP3
+#define H2O_USE_HTTP3 1
+#endif
+#if H2O_USE_HTTP3
+#include "h2o/http3_server.h"
+#include "h2o/http3_common.h"
+#include "picotls.h"
+#include "picotls/openssl.h"
+#include "quicly.h"
+#include "quicly/defaults.h"
+#endif
 
 #define USE_HTTPS 1
 #define USE_MEMCACHED 0
+#define USE_HTTP3 H2O_USE_HTTP3
+#define HTTP3_PORT 7891
 
 static h2o_pathconf_t *register_handler(h2o_hostconf_t *hostconf, const char *path, int (*on_req)(h2o_handler_t *, h2o_req_t *))
 {
@@ -93,6 +107,15 @@ static h2o_globalconf_t config;
 static h2o_context_t ctx;
 static h2o_multithread_receiver_t libmemcached_receiver;
 static h2o_accept_ctx_t accept_ctx;
+
+#if USE_HTTP3
+static h2o_http3_server_ctx_t http3_ctx;
+static quicly_context_t quic_ctx;
+static ptls_context_t ptls_ctx;
+static ptls_openssl_sign_certificate_t sign_certificate;
+static quicly_cid_plaintext_t next_cid;
+static h2o_accept_ctx_t http3_accept_ctx;
+#endif
 
 #if H2O_USE_LIBUV
 
@@ -177,6 +200,171 @@ static int create_listener(void)
     return 0;
 }
 
+#endif
+
+#if USE_HTTP3
+static int on_client_hello_cb(ptls_on_client_hello_t *self, ptls_t *tls, ptls_on_client_hello_parameters_t *params)
+{
+    if (params->incompatible_version)
+        return 0;
+
+    if (params->negotiated_protocols.count != 0) {
+        size_t i, j;
+        for (i = 0; i != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++i) {
+            for (j = 0; j != params->negotiated_protocols.count; ++j)
+                if (h2o_memis(h2o_http3_alpn[i].base, h2o_http3_alpn[i].len, params->negotiated_protocols.list[j].base,
+                              params->negotiated_protocols.list[j].len))
+                    goto Found;
+        }
+        return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
+    Found: {
+        int ret = ptls_set_negotiated_protocol(tls, (const char *)h2o_http3_alpn[i].base, h2o_http3_alpn[i].len);
+        if (ret != 0)
+            return ret;
+    }
+    }
+    return 0;
+}
+
+static ptls_on_client_hello_t on_client_hello = {on_client_hello_cb};
+
+static int setup_ptls_context(const char *cert_file, const char *key_file)
+{
+    ptls_ctx = (ptls_context_t){
+        .random_bytes = ptls_openssl_random_bytes,
+        .get_time = &ptls_get_time,
+        .key_exchanges = ptls_openssl_key_exchanges,
+        .cipher_suites = ptls_openssl_cipher_suites,
+        .sign_certificate = &sign_certificate.super,
+        .on_client_hello = &on_client_hello,
+    };
+
+    if (ptls_load_certificates(&ptls_ctx, cert_file) != 0) {
+        fprintf(stderr, "failed to load certificates from %s\n", cert_file);
+        return -1;
+    }
+
+    FILE *fp = fopen(key_file, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "failed to open key file: %s\n", key_file);
+        return -1;
+    }
+    EVP_PKEY *pkey = PEM_read_PrivateKey(fp, NULL, NULL, NULL);
+    fclose(fp);
+    if (pkey == NULL) {
+        fprintf(stderr, "failed to load private key from %s\n", key_file);
+        return -1;
+    }
+
+    if (ptls_openssl_init_sign_certificate(&sign_certificate, pkey) != 0) {
+        fprintf(stderr, "failed to setup private key\n");
+        EVP_PKEY_free(pkey);
+        return -1;
+    }
+    EVP_PKEY_free(pkey);
+
+    return 0;
+}
+
+static int setup_quic_context(void)
+{
+    static uint8_t cid_key[32] = {0};
+    ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
+
+    quic_ctx = quicly_spec_context;
+    quic_ctx.tls = &ptls_ctx;
+    quic_ctx.now = &quicly_default_now;
+    quic_ctx.init_cc = &quicly_default_init_cc;
+    quic_ctx.crypto_engine = &quicly_default_crypto_engine;
+
+    quic_ctx.cid_encryptor =
+        quicly_new_default_cid_encryptor(&ptls_openssl_aes128ecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
+                                         ptls_iovec_init(cid_key, sizeof(cid_key)));
+    if (quic_ctx.cid_encryptor == NULL) {
+        fprintf(stderr, "failed to create CID encryptor\n");
+        return -1;
+    }
+
+    quicly_amend_ptls_context(&ptls_ctx);
+    h2o_http3_server_amend_quicly_context(&config, &quic_ctx);
+
+    next_cid = (quicly_cid_plaintext_t){
+        .master_id = 0,
+        .thread_id = 0,
+        .node_id = 0,
+    };
+
+    return 0;
+}
+
+static int create_udp_listener(h2o_socket_t **sock_out)
+{
+    struct sockaddr_in addr;
+    int fd, optval = 1;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(0x7f000001);
+    addr.sin_port = htons(HTTP3_PORT);
+
+    if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+        perror("socket(SOCK_DGRAM)");
+        return -1;
+    }
+
+    if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) != 0) {
+        perror("setsockopt(SO_REUSEADDR)");
+        close(fd);
+        return -1;
+    }
+
+#if defined(IP_PKTINFO)
+    if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &optval, sizeof(optval)) != 0) {
+        perror("setsockopt(IP_PKTINFO)");
+        close(fd);
+        return -1;
+    }
+#elif defined(IP_RECVDSTADDR)
+    if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &optval, sizeof(optval)) != 0) {
+        perror("setsockopt(IP_RECVDSTADDR)");
+        close(fd);
+        return -1;
+    }
+#endif
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) != 0) {
+        perror("bind(UDP)");
+        close(fd);
+        return -1;
+    }
+
+    h2o_socket_set_df_bit(fd, AF_INET);
+
+    /* QUIC reads datagrams directly using recvmsg / recvmmsg; prevent the socket layer from consuming UDP payloads. */
+    *sock_out = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+
+    return 0;
+}
+
+static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *quic_ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                        quicly_decoded_packet_t *packet)
+{
+    h2o_http3_server_ctx_t *h3ctx = H2O_STRUCT_FROM_MEMBER(h2o_http3_server_ctx_t, super, quic_ctx);
+
+    h2o_http3_conn_t *conn = h2o_http3_server_accept(h3ctx, destaddr, srcaddr, packet, NULL, &H2O_HTTP3_CONN_CALLBACKS);
+
+    if (conn == NULL) {
+        return NULL;
+    }
+    if (&conn->super == &h2o_quic_accept_conn_decryption_failed) {
+        return NULL;
+    }
+    if (conn == &h2o_http3_accept_conn_closed) {
+        return NULL;
+    }
+
+    return &conn->super;
+}
 #endif
 
 static int setup_ssl(const char *cert_file, const char *key_file, const char *ciphers)
@@ -275,6 +463,30 @@ int main(int argc, char **argv)
         fprintf(stderr, "failed to listen to 127.0.0.1:7890:%s\n", strerror(errno));
         goto Error;
     }
+    printf("HTTP/1 and HTTP/2 listening on https://127.0.0.1:7890 (TCP)\n");
+
+#if USE_HTTP3 && !H2O_USE_LIBUV
+    if (setup_ptls_context("examples/h2o/server.crt", "examples/h2o/server.key") != 0)
+        goto Error;
+
+    if (setup_quic_context() != 0)
+        goto Error;
+
+    h2o_socket_t *udp_sock;
+    if (create_udp_listener(&udp_sock) != 0) {
+        fprintf(stderr, "failed to create UDP listener on 127.0.0.1:%d\n", HTTP3_PORT);
+        goto Error;
+    }
+
+    http3_accept_ctx.ctx = &ctx;
+    http3_accept_ctx.hosts = config.hosts;
+
+    h2o_http3_server_init_context(&ctx, &http3_ctx.super, ctx.loop, udp_sock, &quic_ctx, &next_cid, on_http3_accept, NULL,
+                                  config.http3.use_gso);
+    http3_ctx.accept_ctx = &http3_accept_ctx;
+
+    printf("HTTP/3 listening on https://127.0.0.1:%d (UDP/QUIC)\n", HTTP3_PORT);
+#endif
 
 #if H2O_USE_LIBUV
     uv_run(ctx.loop, UV_RUN_DEFAULT);
