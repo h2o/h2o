@@ -2621,7 +2621,7 @@ COMPUTE_DURATION(process_time, &req->processed_at.at, &req->timestamps.response_
 COMPUTE_DURATION(response_time, &req->timestamps.response_start_at, &req->timestamps.response_end_at)
 COMPUTE_DURATION(total_time, &req->timestamps.request_begin_at, &req->timestamps.response_end_at)
 
-COMPUTE_DURATION(proxy_idle_time, &req->timestamps.request_begin_at, &req->proxy_stats.timestamps.start_at)
+COMPUTE_DURATION(proxy_idle_time, &req->proxy_stats.timestamps.request_begin_at, &req->proxy_stats.timestamps.start_at)
 COMPUTE_DURATION(proxy_connect_time, &req->proxy_stats.timestamps.start_at, &req->proxy_stats.timestamps.request_begin_at)
 COMPUTE_DURATION(proxy_request_time, &req->proxy_stats.timestamps.request_begin_at, &req->proxy_stats.timestamps.request_end_at)
 COMPUTE_DURATION(proxy_process_time, &req->proxy_stats.timestamps.request_end_at, &req->proxy_stats.timestamps.response_start_at)
