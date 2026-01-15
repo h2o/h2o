@@ -210,6 +210,7 @@ static int64_t quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint
 
 inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, uint32_t initial_rtt)
 {
+    (void)conf;
     rtt->minimum = UINT32_MAX;
     rtt->latest = 0;
     rtt->smoothed = initial_rtt;

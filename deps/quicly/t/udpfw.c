@@ -262,16 +262,12 @@ static int enqueue(struct queue_t *q, struct connection_t *conn, int64_t now)
     int reordered = 0;
     if (q->num_reorders > 0 && packet_num >= q->reorders[0] && packet_num <= q->reorders[q->num_reorders - 1]) {
         for (size_t i = 0; i < q->num_reorders; i++) {
-            //fprintf(stderr, "%s:%d:\n", __FUNCTION__, __LINE__);
             if (packet_num == q->reorders[i]) {
                 size_t added = (q->ring.tail - 1 + q->ring.depth) % q->ring.depth;
-                //fprintf(stderr, "%s:%d:added=%zu,head=%zu\n", __FUNCTION__, __LINE__, added, q->ring.head);
                 if (q->ring.head != added) {
                     size_t prev = (added - 1 + q->ring.depth) % q->ring.depth;
-                    swap_memory(&q->ring.elements[added].data, &q->ring.elements[prev].data,
-                                sizeof(q->ring.elements[0].data));
-                    swap_memory(&q->ring.elements[added].len, &q->ring.elements[prev].len,
-                                sizeof(q->ring.elements[0].len));
+                    swap_memory(&q->ring.elements[added].data, &q->ring.elements[prev].data, sizeof(q->ring.elements[0].data));
+                    swap_memory(&q->ring.elements[added].len, &q->ring.elements[prev].len, sizeof(q->ring.elements[0].len));
                     ++q->num_reordered;
                     reordered = 1;
                 }

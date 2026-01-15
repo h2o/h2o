@@ -155,7 +155,8 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             ", num-loss-episodes: %" PRIu32 ", num-ecn-loss-episodes: %" PRIu32 ", delivery-rate: %" PRIu64 ", cwnd: %" PRIu32
             ", cwnd-exiting-slow-start: %" PRIu32 ", slow-start-exit-at: %" PRId64 ", jumpstart-cwnd: %" PRIu32
             ", jumpstart-exit: %" PRIu32 ", jumpstart-prev-rate: %" PRIu64 ", jumpstart-prev-rtt: %" PRIu32
-            ", token-sent-rate: %" PRIu64 ", token-sent-rtt: %" PRIu32 "\n",
+            ", token-sent-rate: %" PRIu64 ", token-sent-rtt: %" PRIu32 ", ack-frequency-frames-sent: %" PRIu64
+            ", ack-frequency-frames-received: %" PRIu64 "\n",
             stats.num_packets.received, stats.num_packets.initial_received, stats.num_packets.zero_rtt_received,
             stats.num_packets.handshake_received, stats.num_packets.received_ecn_counts[0],
             stats.num_packets.received_ecn_counts[1], stats.num_packets.received_ecn_counts[2], stats.num_packets.decryption_failed,
@@ -166,7 +167,8 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             stats.num_paths.validated, stats.num_paths.promoted, stats.rtt.smoothed, stats.cc.num_loss_episodes,
             stats.cc.num_ecn_loss_episodes, stats.delivery_rate.smoothed, stats.cc.cwnd, stats.cc.cwnd_exiting_slow_start,
             stats.cc.exit_slow_start_at, stats.jumpstart.cwnd, stats.cc.cwnd_exiting_jumpstart, stats.jumpstart.prev_rate,
-            stats.jumpstart.prev_rtt, stats.token_sent.rate, stats.token_sent.rtt);
+            stats.jumpstart.prev_rtt, stats.token_sent.rate, stats.token_sent.rtt, stats.num_frames_sent.ack_frequency,
+            stats.num_frames_received.ack_frequency);
 }
 
 static int validate_path(const char *path)
