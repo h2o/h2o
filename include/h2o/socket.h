@@ -132,6 +132,12 @@ enum {
     H2O_SOCKET_LATENCY_OPTIMIZATION_STATE_DETERMINED
 };
 
+typedef enum {
+    H2O_SENDVEC_RANDOM_READ_ERROR,
+    H2O_SENDVEC_RANDOM_READ_SUCCESS,
+    H2O_SENDVEC_RANDOM_READ_BLOCKED,
+} h2o_sendvec_random_read_result_t;
+
 typedef struct st_h2o_sendvec_t h2o_sendvec_t;
 
 /**
@@ -151,12 +157,15 @@ typedef struct st_h2o_sendvec_callbacks_t {
      */
     size_t (*send_)(h2o_sendvec_t *vec, int sockfd, size_t len);
     /**
-     * Optional callback for reading specific bytes within a sendvec. Once this function is called, `read_` must not be called for
-     * the same sendvec. Unlike `read_` and `send_`, this callback must remain usable until the generator is disposed of, rather
-     * than until when the proceed callback is called. This rule allows the HTTP/3 server to invoke the proceed callback before
-     * receiving acknowledgements for all data being sent.
+     * Optional callback for reading specific bytes within a sendvec from outside of h2o, e.g., by calling `pread` or io_uring. Due
+     * to this nature, this callback i) might return BLOCKED and ii) will be invoked to fetch payload spanning across multiple
+     * HTTP/3 packets at once, after which the payload will be scattered. Doing (ii) reduces the static overhead of syscalls; see
+     * https://github.com/h2o/quicly/pull/609. Note that once this function is called, `read_` must not be called for the same
+     * sendvec. Also, unlike other callbacks, this callback must remain usable until the generator is disposed of, rather than until
+     * when the proceed callback is called. This rule allows the HTTP/3 server to invoke the proceed callback before receiving
+     * acknowledgements for all data being sent.
      */
-    int (*random_read)(h2o_sendvec_t *vec, void *dst, size_t len, size_t off);
+    h2o_sendvec_random_read_result_t (*random_read)(h2o_sendvec_t *vec, void *dst, size_t len, size_t off);
 } h2o_sendvec_callbacks_t;
 
 /**

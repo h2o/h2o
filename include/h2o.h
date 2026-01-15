@@ -888,9 +888,9 @@ struct st_h2o_ostream_t {
      */
     void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
     /**
-     * if the output stream prefers use the random_read callback above one backed by io_uring & splice
+     * called when the random read is unblocked
      */
-    unsigned prefer_random_read : 1;
+    void (*random_read_unblocked)(struct st_h2o_ostream_t *self);
 };
 
 /**

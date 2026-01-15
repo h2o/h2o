@@ -77,6 +77,14 @@ struct st_h2o_sendfile_generator_t {
      */
     h2o_req_t *src_req;
     h2o_pipe_sender_t pipe_sender;
+    struct uring_reader {
+        off_t file_off;
+        size_t len;
+        size_t bytes_read;
+        unsigned async : 1;
+        unsigned complete : 1;
+        char buf[1];
+    } *uring_reader;
 #endif
 };
 
@@ -125,6 +133,18 @@ static int tm_is_lessthan(struct tm *x, struct tm *y)
 #undef CMP
 }
 
+#if H2O_USE_IO_URING
+
+static void discard_uring_reader(struct st_h2o_sendfile_generator_t *self)
+{
+    if (self->uring_reader != NULL) {
+        free(self->uring_reader);
+        self->uring_reader = NULL;
+    }
+}
+
+#endif
+
 static void close_file(struct st_h2o_sendfile_generator_t *self)
 {
     if (self->file.ref != NULL) {
@@ -140,6 +160,9 @@ static void on_generator_dispose(void *_self)
 {
     struct st_h2o_sendfile_generator_t *self = _self;
     close_file(self);
+#if H2O_USE_IO_URING
+    discard_uring_reader(self);
+#endif
 }
 
 #if H2O_USE_IO_URING
@@ -198,23 +221,113 @@ static int do_sequential_read(h2o_sendvec_t *src, void *dst, size_t len)
     return 1;
 }
 
-static int do_random_read(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
+#if H2O_USE_IO_URING
+
+static void on_uring_read_complete(h2o_io_uring_cmd_t *cmd)
+{
+    struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
+
+    if (self->src_req == NULL) {
+        assert(self->uring_reader->async);
+        h2o_mem_release_shared(self);
+        return;
+    }
+
+    if (cmd->result == 0 || (cmd->result < 0 && cmd->result != -EINTR))
+        goto Complete;
+
+    self->uring_reader->bytes_read += cmd->result > 0 ? cmd->result : 0;
+    if (self->uring_reader->bytes_read < self->uring_reader->len) {
+        /* read more */
+        h2o_io_uring_read(
+            self->src_req->conn->ctx->loop, self->file.ref->fd, self->uring_reader->buf + self->uring_reader->bytes_read,
+            self->uring_reader->len - self->uring_reader->bytes_read,
+            self->uring_reader->file_off + self->uring_reader->bytes_read, on_uring_read_complete, self);
+        return;
+    }
+
+Complete:
+    /* read is complete, notify downstream that it is now unblocked */
+    h2o_mem_release_shared(self);
+    self->uring_reader->complete = 1;
+    if (self->uring_reader->async)
+        self->src_req->_ostr_top->random_read_unblocked(self->src_req->_ostr_top);
+}
+
+#endif
+
+static h2o_sendvec_random_read_result_t do_random_read(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
     uint64_t file_off = src->cb_arg[1] + chunk_off;
     ssize_t rret;
 
+    /* if io_uring is available, try reading from the page cache. Then, if we fail to read completely, fallback to io_uring */
+#if H2O_USE_IO_URING
+    assert(self->src_req != NULL);
+    assert(self->src_req->_ostr_top->random_read_unblocked != NULL);
+    if (self->try_io_uring) {
+        /* if read using io_uring is complete, either use it or discard it */
+        if (self->uring_reader != NULL && self->uring_reader->complete) {
+            if (self->uring_reader->bytes_read < self->uring_reader->len) {
+                discard_uring_reader(self);
+                return H2O_SENDVEC_RANDOM_READ_ERROR;
+            }
+            if (file_off == self->uring_reader->file_off && len <= self->uring_reader->len) {
+                memcpy(dst, self->uring_reader->buf, len);
+                discard_uring_reader(self);
+                return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+            }
+            discard_uring_reader(self);
+        }
+        /* read from file but do not wait for disk I/O */
+        struct iovec iovec = {.iov_base = dst, .iov_len = len};
+        if ((rret = preadv2(self->file.ref->fd, &iovec, 1, file_off, RWF_NOWAIT)) == len)
+            return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+        if (!(rret > 0 || (rret == -1 && errno == EAGAIN)))
+            return H2O_SENDVEC_RANDOM_READ_ERROR;
+        /* data was not immediatlely available, start async read if none is in flight */
+        if (self->uring_reader != NULL) {
+            assert(!self->uring_reader->complete);
+            return H2O_SENDVEC_RANDOM_READ_BLOCKED;
+        }
+        self->uring_reader = h2o_mem_alloc(offsetof(struct uring_reader, buf) + len);
+        self->uring_reader->file_off = file_off;
+        self->uring_reader->len = len;
+        self->uring_reader->bytes_read = 0;
+        self->uring_reader->async = 0;
+        self->uring_reader->complete = 0;
+        h2o_mem_addref_shared(self);
+        h2o_io_uring_read(self->src_req->conn->ctx->loop, self->file.ref->fd, self->uring_reader->buf,
+                          self->uring_reader->len, self->uring_reader->file_off, on_uring_read_complete, self);
+        /* if all data was read synchronously, return it; otherwise let the completion callback unblock quicly */
+        if (self->uring_reader->complete) {
+            if (self->uring_reader->bytes_read == len) {
+                memcpy(dst, self->uring_reader->buf, len);
+                discard_uring_reader(self);
+                return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+            } else {
+                discard_uring_reader(self);
+                return H2O_SENDVEC_RANDOM_READ_ERROR;
+            }
+        } else {
+            self->uring_reader->async = 1;
+            return H2O_SENDVEC_RANDOM_READ_BLOCKED;
+        }
+    }
+#endif
+
     while (len != 0) {
         while ((rret = pread(self->file.ref->fd, dst, len, file_off)) == -1 && errno == EINTR)
             ;
         if (rret <= 0)
-            return 0;
+            return H2O_SENDVEC_RANDOM_READ_ERROR;
         file_off += rret;
         dst = (char *)dst + rret;
         len -= rret;
     }
 
-    return 1;
+    return H2O_SENDVEC_RANDOM_READ_SUCCESS;
 }
 
 #if defined(__linux__)
@@ -273,9 +386,9 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
 
 #if H2O_USE_IO_URING
     /* activate use of io_uring by calling `h2o_pipe_sender_start`, if desired */
-    if (self->try_io_uring) {
-        self->try_io_uring = 0;
-        if (!self->src_req->_ostr_top->prefer_random_read) {
+    if (self->src_req->_ostr_top->random_read_unblocked == NULL) {
+        if (self->try_io_uring) {
+            self->try_io_uring = 0;
             if (h2o_pipe_sender_start(self->src_req->conn->ctx, &self->pipe_sender)) {
                 self->super.stop = do_stop_async_splice;
             } else {
@@ -283,13 +396,13 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
                                   "failed to allocate pipe for async I/O; falling back to blocking I/O");
             }
         }
-    }
-    /* if io_uring is used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
-    if (h2o_pipe_sender_in_use(&self->pipe_sender)) {
-        h2o_mem_addref_shared(self);
-        h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
-                            bytes_to_send, 0, do_proceed_on_splice_complete, self);
-        return;
+        /* if io_uring is used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
+        if (h2o_pipe_sender_in_use(&self->pipe_sender)) {
+            h2o_mem_addref_shared(self);
+            h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
+                                bytes_to_send, 0, do_proceed_on_splice_complete, self);
+            return;
+        }
     }
 #endif
 
@@ -425,6 +538,7 @@ Opened:
     self->src_req = req;
     h2o_pipe_sender_init(&self->pipe_sender);
     self->try_io_uring = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
+    self->uring_reader = NULL;
 #endif
 
     return self;
