@@ -692,17 +692,20 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         quicly_address_t destaddr, srcaddr;
         struct iovec vec;
         uint8_t ttl;
-        char controlbuf[
+        union {
+            struct cmsghdr _align; /* natrually align the contents of controlbuf (which are of type cmsghdr) */
+            char controlbuf[
 #ifdef IPV6_PKTINFO
-            CMSG_SPACE(sizeof(struct in6_pktinfo))
+                CMSG_SPACE(sizeof(struct in6_pktinfo))
 #elif defined(IP_PKTINFO)
-            CMSG_SPACE(sizeof(struct in_pktinfo))
+                CMSG_SPACE(sizeof(struct in_pktinfo))
 #elif defined(IP_RECVDSTADDR)
-            CMSG_SPACE(sizeof(struct in_addr))
+                CMSG_SPACE(sizeof(struct in_addr))
 #else
-            CMSG_SPACE(1)
+                CMSG_SPACE(1)
 #endif
-        ];
+            ];
+        };
         uint8_t buf[1600];
     } dgrams[10];
 #ifdef __linux__
