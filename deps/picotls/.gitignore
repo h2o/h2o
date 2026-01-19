@@ -31,3 +31,7 @@ deps/picotest
 /picotlsvs/testopenssl/testopenssl.vcxproj.user
 /fuzz/fuzzer-asn1-type-and-length.c
 /fuzz/fuzzer-asn1-validation.c
+/deps/micro-ecc/test/ecc_test
+/src/esni.c
+/t/assets
+/.travis.yml

@@ -1,4 +1,4 @@
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12...4.0)
 CMAKE_POLICY(SET CMP0003 NEW)
 
 PROJECT(quicly)
@@ -59,7 +59,6 @@ SET(QUICLY_LIBRARY_FILES
     lib/rate.c
     lib/recvstate.c
     lib/remote_cid.c
-    lib/retire_cid.c
     lib/sendstate.c
     lib/sentmap.c
     lib/streambuf.c
@@ -67,6 +66,7 @@ SET(QUICLY_LIBRARY_FILES
 
 SET(UNITTEST_SOURCE_FILES
     deps/picotest/picotest.c
+    t/cc.c
     t/frame.c
     t/jumpstart.c
     t/local_cid.c
@@ -77,7 +77,6 @@ SET(UNITTEST_SOURCE_FILES
     t/ranges.c
     t/rate.c
     t/remote_cid.c
-    t/retire_cid.c
     t/sentmap.c
     t/simple.c
     t/stream-concurrency.c

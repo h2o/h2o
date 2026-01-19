@@ -201,3 +201,22 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
 
     return 0;
 }
+
+uint64_t quicly_ranges_next_missing(quicly_ranges_t *ranges, uint64_t lower_bound, size_t *slots_traversed)
+{
+    size_t slot = ranges->num_ranges;
+    uint64_t result = lower_bound;
+
+    while (slot-- > 0 && ranges->ranges[slot].end >= lower_bound) {
+        result = ranges->ranges[slot].end;
+        if (slot != 0 && ranges->ranges[slot].start > lower_bound && lower_bound > ranges->ranges[slot - 1].end) {
+            --slot; // To correctly calculate the accurate number of slots traversed.
+            result = lower_bound;
+            break;
+        }
+    }
+
+    if (slots_traversed)
+        *slots_traversed = ranges->num_ranges - (slot + 1);
+    return result;
+}

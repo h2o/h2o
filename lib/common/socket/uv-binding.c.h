@@ -223,6 +223,8 @@ void report_early_write_error(h2o_socket_t *_sock)
 static void on_ssl_write_complete(uv_write_t *wreq, int status)
 {
     struct st_h2o_uv_socket_t *sock = H2O_STRUCT_FROM_MEMBER(struct st_h2o_uv_socket_t, stream._wreq, wreq);
+    if (uv_is_closing(sock->handle))
+        return;
 
     assert(has_pending_ssl_bytes(sock->super.ssl));
     dispose_ssl_output_buffer(sock->super.ssl);

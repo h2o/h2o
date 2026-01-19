@@ -77,6 +77,7 @@ inline void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value)
 
 inline void quicly_maxsender_dispose(quicly_maxsender_t *m)
 {
+    (void)m;
 }
 
 inline void quicly_maxsender_request_transmit(quicly_maxsender_t *m)

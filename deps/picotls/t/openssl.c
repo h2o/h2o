@@ -553,6 +553,7 @@ int main(int argc, char **argv)
 #endif
 
     subtest("bf", test_bf);
+    subtest("quiclb", test_quiclb, &ptls_openssl_quiclb);
 
     subtest("key-exchange", test_key_exchanges);
 

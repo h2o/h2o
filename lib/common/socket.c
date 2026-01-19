@@ -1601,13 +1601,17 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
             uint32_t cipher_id = SSL_CIPHER_get_id(cipher);
             switch (cipher_id) {
             case TLS1_CK_RSA_WITH_AES_128_GCM_SHA256:
+#if defined(TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256)
             case TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256:
+#endif
             case TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256:
             case TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:
                 sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;
                 break;
             case TLS1_CK_RSA_WITH_AES_256_GCM_SHA384:
+#if defined(TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384)
             case TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384:
+#endif
             case TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384:
             case TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384:
                 sock->ssl->record_overhead = 5 /* header */ + 8 /* iv (RFC 5288 3) */ + 16 /* tag (RFC 5116 5.1) */;

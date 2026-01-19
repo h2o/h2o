@@ -237,7 +237,11 @@ h2o_loop_t *h2o_multithread_get_loop(h2o_multithread_queue_t *queue)
     if (queue == NULL)
         return NULL;
 #if H2O_USE_LIBUV
+#if UV_VERSION_MAJOR > 1 || (UV_VERSION_MAJOR == 1 && UV_VERSION_MINOR >= 19)
+    return uv_handle_get_loop((uv_handle_t *)&queue->async);
+#else
     return ((uv_handle_t *)&queue->async)->loop;
+#endif
 #else
     return h2o_socket_get_loop(queue->async.read);
 #endif

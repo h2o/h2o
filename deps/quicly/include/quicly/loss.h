@@ -136,7 +136,10 @@ typedef struct quicly_loss_t {
     /**
      * The largest packet number acknowledged in an ack frame, added by one (so that zero can mean "below any PN").
      */
-    uint64_t largest_acked_packet_plus1[QUICLY_NUM_EPOCHS];
+    struct {
+        uint64_t per_epoch[QUICLY_NUM_EPOCHS];
+        uint64_t all_;
+    } largest_acked_packet_plus1;
     /**
      * Total number of application data bytes sent when the last tail occurred, not including retransmissions.
      */
@@ -207,6 +210,7 @@ static int64_t quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint
 
 inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, uint32_t initial_rtt)
 {
+    (void)conf;
     rtt->minimum = UINT32_MAX;
     rtt->latest = 0;
     rtt->smoothed = initial_rtt;
@@ -254,7 +258,7 @@ inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, u
                          .thresholds = {.use_packet_based = 1, .time_based_percentile = 1024 / 8 /* start from 1/8 RTT */},
                          .pto_count = 0,
                          .time_of_last_packet_sent = 0,
-                         .largest_acked_packet_plus1 = {0},
+                         .largest_acked_packet_plus1 = {.per_epoch = {0}, .all_ = 0},
                          .total_bytes_sent = 0,
                          .loss_time = INT64_MAX,
                          .alarm_at = INT64_MAX};
@@ -345,9 +349,12 @@ inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
         r->pto_count = 0;
 
     /* If largest newly acked is not larger than before, skip RTT sample */
-    if (largest_newly_acked == UINT64_MAX || r->largest_acked_packet_plus1[epoch] > largest_newly_acked)
+    if (largest_newly_acked == UINT64_MAX || r->largest_acked_packet_plus1.per_epoch[epoch] > largest_newly_acked)
         return;
-    r->largest_acked_packet_plus1[epoch] = largest_newly_acked + 1;
+    r->largest_acked_packet_plus1.per_epoch[epoch] = largest_newly_acked + 1;
+    if (r->largest_acked_packet_plus1.all_ >= r->largest_acked_packet_plus1.per_epoch[epoch])
+        return;
+    r->largest_acked_packet_plus1.all_ = r->largest_acked_packet_plus1.per_epoch[epoch];
 
     /* If ack does not acknowledge any ack-eliciting packet, skip RTT sample */
     if (kind == QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING)

@@ -38,6 +38,10 @@ static void test_calc_rate(void)
     /* half the rate as above, due to multiplier being 1x */
     bytes_per_msec = quicly_pacer_calc_send_rate(1, 50 * 1200, 100);
     ok(bytes_per_msec == 600);
+
+    /* guard against overflow */
+    bytes_per_msec = quicly_pacer_calc_send_rate(2, 2147483648, 21);
+    ok(bytes_per_msec == 204522253);
 }
 
 static const uint16_t mtu = 1200;

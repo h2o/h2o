@@ -32,10 +32,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <openssl/opensslv.h>
-#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
-#include <openssl/provider.h>
-#define LOAD_OPENSSL_PROVIDER 1
-#endif
 #include "picotls.h"
 #include "picotls/openssl.h"
 #include "quicly.h"
@@ -78,11 +74,7 @@ static h2o_socket_t *udp_sock = NULL;
 static const char *upgrade_token = NULL;
 static h2o_httpclient_forward_datagram_cb udp_write;
 static struct sockaddr_in udp_sock_remote_addr;
-static const ptls_key_exchange_algorithm_t *h3_key_exchanges[] = {
-#if PTLS_OPENSSL_HAVE_X25519
-    &ptls_openssl_x25519,
-#endif
-    &ptls_openssl_secp256r1, NULL};
+static const ptls_key_exchange_algorithm_t *h3_key_exchanges[128];
 static h2o_http3client_ctx_t h3ctx = {
     .tls =
         {
@@ -698,6 +690,8 @@ static void usage(const char *progname)
             "               (default: %" PRIu64 ")\n"
             " --io-timeout <milliseconds>\n"
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
+            " --http3-key-exchange <name>\n"
+            "               overrides the TLS/1.3 key exchanges to be used\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
@@ -761,12 +755,6 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    /* When using OpenSSL >= 3.0, load legacy provider so that blowfish can be used for 64-bit QUIC CIDs. */
-#if LOAD_OPENSSL_PROVIDER
-    OSSL_PROVIDER_load(NULL, "legacy");
-    OSSL_PROVIDER_load(NULL, "default");
-#endif
-
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
@@ -778,7 +766,7 @@ int main(int argc, char **argv)
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
         h3ctx.quic.cid_encryptor = quicly_new_default_cid_encryptor(
-            &ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(random_key, sizeof(random_key)));
+            &ptls_openssl_quiclb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(random_key, sizeof(random_key)));
         assert(h3ctx.quic.cid_encryptor != NULL);
         ptls_clear_memory(random_key, sizeof(random_key));
     }
@@ -818,6 +806,7 @@ int main(int argc, char **argv)
         OPT_ACK_FREQUENCY,
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
+        OPT_HTTP3_KEY_EXCHANGE,
         OPT_UPGRADE,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -826,6 +815,7 @@ int main(int argc, char **argv)
                                 {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+                                {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
@@ -1007,6 +997,19 @@ int main(int argc, char **argv)
                 exit(EXIT_FAILURE);
             }
             break;
+        case OPT_HTTP3_KEY_EXCHANGE: {
+            ptls_key_exchange_algorithm_t **named, **slot;
+            for (named = ptls_openssl_key_exchanges_all; *named != NULL; ++named)
+                if (strcasecmp((*named)->name, optarg) == 0)
+                    break;
+            if (*named == NULL) {
+                fprintf(stderr, "unknown key exchange: %s\n", optarg);
+                exit(EXIT_FAILURE);
+            }
+            for (slot = h3_key_exchanges; *slot != NULL; ++slot)
+                ;
+            *slot = *named;
+        } break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
             break;
@@ -1026,6 +1029,14 @@ int main(int argc, char **argv)
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
+    }
+
+    if (h3_key_exchanges[0] == NULL) {
+        size_t i = 0;
+#if PTLS_OPENSSL_HAVE_X25519
+        h3_key_exchanges[i++] = &ptls_openssl_x25519;
+#endif
+        h3_key_exchanges[i++] = &ptls_openssl_secp256r1;
     }
 
     int is_connect = 0;

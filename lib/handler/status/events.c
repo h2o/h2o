@@ -78,7 +78,7 @@ static void events_status_per_thread(void *priv, h2o_context_t *ctx)
     if (esc->quic_stats.num_sentmap_packets_largest < ctx->quic_stats.num_sentmap_packets_largest)
         esc->quic_stats.num_sentmap_packets_largest = ctx->quic_stats.num_sentmap_packets_largest;
 #define ACC(fld, _unused) esc->quic_stats.quicly.fld += ctx->quic_stats.quicly.fld;
-    H2O_QUIC_AGGREGATED_STATS_APPLY(ACC);
+    QUICLY_STATS_FOREACH_COUNTERS(ACC);
 #undef ACC
 
     pthread_mutex_unlock(&esc->mutex);
@@ -146,7 +146,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                                           " \"quic.packet-received\": %" PRIu64 ",\n"
                                           " \"quic.packet-processed\": %" PRIu64 ",\n"
                                           " \"quic.num-sentmap-packets-largest\": %zu"
-                                          ",\n" H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_FMT)
+                                          ",\n" QUICLY_STATS_FOREACH_COUNTERS(QUIC_FMT)
                                           " \"ssl.errors\": %" PRIu64 ",\n"
                                           " \"memory.mmap_errors\": %zu,\n"
                                           " \"h2olog.lost\": %zu\n",
@@ -161,7 +161,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
                        esc->connection_stats.idle_closed, esc->connection_stats.num_idle, esc->connection_stats.num_active,
                        esc->connection_stats.num_shutdown, esc->quic_stats.packet_received, esc->quic_stats.packet_processed,
                        esc->quic_stats.num_sentmap_packets_largest
-                       H2O_QUIC_AGGREGATED_STATS_APPLY(QUIC_VAL),
+                       QUICLY_STATS_FOREACH_COUNTERS(QUIC_VAL),
                        esc->ssl_errors, h2o_mmap_errors, ptls_log_num_lost());
     /* clang-format on */
     assert(ret.len < BUFSIZE);

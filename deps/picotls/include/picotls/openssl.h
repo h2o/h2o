@@ -149,6 +149,8 @@ extern ptls_cipher_suite_t ptls_openssl_tls12_ecdhe_ecdsa_chacha20poly1305sha256
 extern ptls_cipher_algorithm_t ptls_openssl_bfecb;
 #endif
 
+extern ptls_cipher_algorithm_t ptls_openssl_quiclb;
+
 extern ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256;
 extern ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384;
 #if PTLS_OPENSSL_HAVE_X25519

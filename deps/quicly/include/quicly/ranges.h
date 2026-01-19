@@ -65,6 +65,11 @@ int quicly_ranges_subtract(quicly_ranges_t *ranges, uint64_t start, uint64_t end
  * removes ranges->ranges[I] where begin_index <= I && I < end_index
  */
 void quicly_ranges_drop_by_range_indices(quicly_ranges_t *ranges, size_t begin_index, size_t end_index);
+/**
+ * returns the next missing number from ranges greater than or equal to lower_bound. Sets *slots_traversed, if not null, to number
+ * of slots traversed before finding the next missing number. We traverse slots in reverse order.
+ */
+uint64_t quicly_ranges_next_missing(quicly_ranges_t *ranges, uint64_t lower_bound, size_t *slots_traversed);
 
 /* inline functions */
 

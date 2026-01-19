@@ -19,11 +19,8 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 # IN THE SOFTWARE.
 
-CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12)
+CMAKE_MINIMUM_REQUIRED(VERSION 2.8.12...4.0)
 CMAKE_POLICY(SET CMP0003 NEW)
-IF (NOT CMAKE_VERSION VERSION_LESS 3.0)
-  CMAKE_POLICY(SET CMP0042 NEW)
-ENDIF()
 
 PROJECT(h2o)
 
@@ -386,7 +383,6 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/rate.c
     deps/quicly/lib/recvstate.c
     deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
@@ -421,6 +417,7 @@ SET(LIB_SOURCE_FILES
     lib/core/context.c
     lib/core/headers.c
     lib/core/logconf.c
+    lib/core/pipe_sender.c
     lib/core/proxy.c
     lib/core/request.c
     lib/core/util.c

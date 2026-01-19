@@ -58,6 +58,7 @@
 #ifdef PTLS_HAVE_AEGIS
 #include "./libaegis.h"
 #endif
+#include "./quiclb-impl.h"
 
 #ifdef _WINDOWS
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -1436,6 +1437,42 @@ static int bfecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void
 
 #endif
 
+struct quiclb_context_t {
+    ptls_cipher_context_t super;
+    ptls_cipher_context_t *aesecb;
+};
+
+static void quiclb_dispose(ptls_cipher_context_t *_ctx)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    ptls_cipher_free(ctx->aesecb);
+}
+
+static void quiclb_encrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    picotls_quiclb_transform(picotls_quiclb_cipher_aes, ctx->aesecb, output, input, len, 1);
+}
+
+static void quiclb_decrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    picotls_quiclb_transform(picotls_quiclb_cipher_aes, ctx->aesecb, output, input, len, 0);
+}
+
+static int quiclb_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+
+    ctx->super.do_dispose = quiclb_dispose;
+    ctx->super.do_init = picotls_quiclb_do_init;
+    ctx->super.do_transform = is_enc ? quiclb_encrypt : quiclb_decrypt;
+    if ((ctx->aesecb = ptls_cipher_new(&ptls_openssl_aes128ecb, 1, key)) == NULL)
+        return PTLS_ERROR_LIBRARY;
+
+    return 0;
+}
+
 struct aead_crypto_context_t {
     ptls_aead_context_t super;
     EVP_CIPHER_CTX *evp_ctx;
@@ -2609,6 +2646,15 @@ ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_e
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,
                                               0 /* iv size */, sizeof(struct cipher_context_t), bfecb_setup_crypto};
 #endif
+
+ptls_cipher_algorithm_t ptls_openssl_quiclb = {
+    .name = "QUICLB",
+    .key_size = PTLS_QUICLB_KEY_SIZE,
+    .block_size = PTLS_QUICLB_DEFAULT_BLOCK_SIZE,
+    .iv_size = 0,
+    .context_size = sizeof(struct quiclb_context_t),
+    .setup_crypto = quiclb_setup_crypto,
+};
 
 ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256 = {PTLS_HPKE_KEM_P256_SHA256, &ptls_openssl_secp256r1, &ptls_openssl_sha256};
 ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384 = {PTLS_HPKE_KEM_P384_SHA384, &ptls_openssl_secp384r1, &ptls_openssl_sha384};

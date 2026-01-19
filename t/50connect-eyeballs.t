@@ -90,7 +90,8 @@ foreach_http(sub {
             die "failed to launch $client_prog:$!";
         }
         close $wfh;
-        like do { local $/; <$rfh> }, qr{^HTTP/[0-9\.]+ 200.*\n\n$expected_resp$}s;
+        # the tunnel can be closed either by FIN or STOP_SENDING, and in the case of the latter, I/O error is reported; see #3521
+        like do { local $/; <$rfh> }, qr{^HTTP/[0-9\.]+ 200.*\n\n$expected_resp(?:|[^\n]*h2o-httpclient: I/O error\n)$}s;
         my $elapsed = time - $start_at;
         note "elapsed: $elapsed";
         cmp_ok $elapsed, ">=", $expected_time->[0];

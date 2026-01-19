@@ -26,6 +26,9 @@
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
 #include "h2o/http3_server.h"
+#if H2O_USE_FUSION
+#include "picotls/fusion.h"
+#endif
 
 struct rp_handler_t {
     h2o_handler_t super;
@@ -94,8 +97,12 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
     h3ctx->quic.transport_params.max_streams_uni = 10;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
     ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
-    h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_bfecb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
-                                                                 ptls_iovec_init(cid_key, sizeof(cid_key)));
+    h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(
+#if H2O_USE_FUSION
+        ptls_fusion_is_supported_by_cpu() ? &ptls_fusion_quiclb :
+#endif
+                                          &ptls_openssl_quiclb,
+        &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, sizeof(cid_key)));
     ptls_clear_memory(cid_key, sizeof(cid_key));
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
 
