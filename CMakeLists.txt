@@ -58,7 +58,34 @@ IF ((CMAKE_SYSTEM_NAME STREQUAL "Darwin") AND NOT (DEFINED OPENSSL_ROOT_DIR OR D
 ENDIF ()
 FIND_PACKAGE(OpenSSL REQUIRED)
 BORINGSSL_ADJUST()
-FIND_PACKAGE(ZLIB REQUIRED)
+if(WITH_ZLIB_NG)
+    find_path(ZLIB_NG_INCLUDE_DIR NAMES zlib-ng.h)
+    find_library(ZLIB_NG_LIBRARY NAMES z-ng libz-ng)
+
+    if(NOT ZLIB_NG_INCLUDE_DIR OR NOT ZLIB_NG_LIBRARY)
+        message(FATAL_ERROR "zlib-ng not found. Please install zlib-ng")
+    endif()
+
+    add_definitions(
+        -DZ_PREFIX
+        -DZLIBNG_PREFIX
+        -DzlibVersion=zng_zlibVersion
+        -DinflateInit_=zng_inflateInit_
+        -DinflateInit2_=zng_inflateInit2_
+        -Dinflate=zng_inflate
+        -DinflateEnd=zng_inflateEnd
+        -DdeflateInit_=zng_deflateInit_
+        -DdeflateInit2_=zng_deflateInit2_
+        -Ddeflate=zng_deflate
+        -DdeflateEnd=zng_deflateEnd
+        -DdeflateReset=zng_deflateReset
+    )
+    set(ZLIB_INCLUDE_DIRS ${ZLIB_NG_INCLUDE_DIR})
+    set(ZLIB_LIBRARIES ${ZLIB_NG_LIBRARY})
+    set(ZLIB_FOUND true)
+else()
+    FIND_PACKAGE(ZLIB REQUIRED)
+endif()
 
 CHECK_C_SOURCE_COMPILES("
 #include <stdint.h>
