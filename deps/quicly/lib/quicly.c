@@ -4100,11 +4100,7 @@ static quicly_error_t allocate_frame(quicly_conn_t *conn, quicly_send_context_t 
         if ((ret = quicly_sentmap_prepare(&conn->egress.loss.sentmap, conn->egress.packet_number, conn->stash.now, ack_epoch)) != 0)
             return ret;
         /* adjust ack-frequency */
-<<<<<<< HEAD
         if ((flags & ALLOCATE_FRAME_FLAG_ADJUST_ACK_FREQUENCY) != 0 && conn->stash.now >= conn->egress.ack_frequency.update_at &&
-=======
-        if (frame_type == ALLOCATE_FRAME_TYPE_ACK_ELICITING && conn->stash.now >= conn->egress.ack_frequency.update_at &&
->>>>>>> master
             s->dst_end - s->dst >= QUICLY_ACK_FREQUENCY_FRAME_CAPACITY + min_space) {
             assert(conn->super.remote.transport_params.min_ack_delay_usec != UINT64_MAX);
             if (conn->egress.cc.num_loss_episodes >= QUICLY_FIRST_ACK_FREQUENCY_LOSS_EPISODE && conn->initial == NULL &&
