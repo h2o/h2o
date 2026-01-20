@@ -2787,8 +2787,6 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     quicly_loss_init(&conn->egress.loss, &conn->super.ctx->loss,
                      conn->super.ctx->loss.default_initial_rtt /* FIXME remember initial_rtt in session ticket */,
                      &conn->super.remote.transport_params.max_ack_delay, &conn->super.remote.transport_params.ack_delay_exponent);
-    conn->egress.next_pn_to_skip =
-        calc_next_pn_to_skip(conn->super.ctx->tls, 0, initcwnd, conn->super.ctx->initial_egress_max_udp_payload_size);
     conn->egress.max_udp_payload_size = conn->super.ctx->initial_egress_max_udp_payload_size;
     init_max_streams(&conn->egress.max_streams.uni);
     init_max_streams(&conn->egress.max_streams.bidi);
@@ -4102,7 +4100,11 @@ static quicly_error_t allocate_frame(quicly_conn_t *conn, quicly_send_context_t 
         if ((ret = quicly_sentmap_prepare(&conn->egress.loss.sentmap, conn->egress.packet_number, conn->stash.now, ack_epoch)) != 0)
             return ret;
         /* adjust ack-frequency */
+<<<<<<< HEAD
         if ((flags & ALLOCATE_FRAME_FLAG_ADJUST_ACK_FREQUENCY) != 0 && conn->stash.now >= conn->egress.ack_frequency.update_at &&
+=======
+        if (frame_type == ALLOCATE_FRAME_TYPE_ACK_ELICITING && conn->stash.now >= conn->egress.ack_frequency.update_at &&
+>>>>>>> master
             s->dst_end - s->dst >= QUICLY_ACK_FREQUENCY_FRAME_CAPACITY + min_space) {
             assert(conn->super.remote.transport_params.min_ack_delay_usec != UINT64_MAX);
             if (conn->egress.cc.num_loss_episodes >= QUICLY_FIRST_ACK_FREQUENCY_LOSS_EPISODE && conn->initial == NULL &&
@@ -6341,6 +6343,9 @@ static quicly_error_t handle_reset_stream_frame(quicly_conn_t *conn, struct st_q
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
+    if (frame.final_size > stream->recvstate.data_off + stream->_recv_aux.window)
+        return QUICLY_TRANSPORT_ERROR_FLOW_CONTROL;
+
     if (!quicly_recvstate_transfer_complete(&stream->recvstate)) {
         uint64_t bytes_missing;
         if ((ret = quicly_recvstate_reset(&stream->recvstate, frame.final_size, &bytes_missing)) != 0)
@@ -6383,6 +6388,10 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
 
     if ((ret = quicly_decode_ack_frame(&state->src, state->end, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN)) != 0)
         return ret;
+
+    /* early bail out if the peer is acking a PN that would have never been sent */
+    if (frame.largest_acknowledged > conn->egress.packet_number)
+        return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
 
     uint64_t pn_acked = frame.smallest_acknowledged;
 
@@ -6973,7 +6982,7 @@ quicly_error_t handle_close(quicly_conn_t *conn, quicly_error_t err, uint64_t fr
                                               (const char *)reason_phrase.base, reason_phrase.len);
     destroy_all_streams(conn, err, 0);
 
-    return 0;
+    return QUICLY_ERROR_IS_CLOSING;
 }
 
 static quicly_error_t handle_transport_close_frame(quicly_conn_t *conn, struct st_quicly_handle_payload_state_t *state)

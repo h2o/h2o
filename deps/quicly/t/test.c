@@ -1650,7 +1650,10 @@ int main(int argc, char **argv)
 
     quicly_amend_ptls_context(quic_ctx.tls);
 
+<<<<<<< HEAD
     /* module-level tests */
+=======
+>>>>>>> master
     subtest("ack_frequency_handling", test_ack_frequency);
     subtest("error-codes", test_error_codes);
     subtest("enable_with_ratio255", test_enable_with_ratio255);

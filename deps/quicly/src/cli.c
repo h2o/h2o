@@ -111,10 +111,12 @@ static struct {
 /**
  * list of requests to be processed, terminated by reqs[N].path == NULL
  */
-struct {
+static struct {
     const char *path;
     int to_file;
 } *reqs;
+
+static int exit_after_handshake;
 
 struct st_stream_data_t {
     quicly_streambuf_t streambuf;
@@ -755,16 +757,22 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                         quicly_send_datagram_frames(conn, &datagram, 1);
                         send_datagram_frame = 0;
                     }
-                    if (quicly_num_streams(conn) == 0) {
-                        if (request_interval != 0 && client_gotsig != SIGTERM) {
-                            if (enqueue_requests_at == INT64_MAX)
-                                enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
-                        } else {
-                            static int close_called;
-                            if (!close_called) {
-                                dump_stats(stderr, conn);
-                                quicly_close(conn, 0, "");
-                                close_called = 1;
+                    if (exit_after_handshake) {
+                        quicly_stats_t stats;
+                        if (quicly_get_stats(conn, &stats) == 0 && stats.handshake_confirmed_msec != UINT64_MAX)
+                            exit(0);
+                    } else {
+                        if (quicly_num_streams(conn) == 0) {
+                            if (request_interval != 0 && client_gotsig != SIGTERM) {
+                                if (enqueue_requests_at == INT64_MAX)
+                                    enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
+                            } else {
+                                static int close_called;
+                                if (!close_called) {
+                                    dump_stats(stderr, conn);
+                                    quicly_close(conn, 0, "");
+                                    close_called = 1;
+                                }
                             }
                         }
                     }
@@ -1217,6 +1225,8 @@ static void usage(const char *cmd)
            "                            retry_configs from the server\n"
            "  --ech-key <file>          ECH private key for each ECH config provided by\n"
            "                            --ech-config\n"
+           "  --exit-after-handshake    immediately exists one the handshake concludes,\n"
+           "                            without sending application data\n"
            "  -f fraction               increases the induced ack frequency to specified\n"
            "                            fraction of CWND (default: 0)\n"
            "  -G                        enable UDP generic segmentation offload\n"
@@ -1239,6 +1249,7 @@ static void usage(const char *cmd)
            "  --rapid-start             turns on rapid start\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
+           "  --sockfd fd               specifies the UDP socket to be used\n"
            "  -u size                   initial size of UDP datagram payload\n"
            "  -U size                   maximum size of UDP datagram payload\n"
            "  -V                        verify peer using the default certificates\n"
@@ -1254,10 +1265,12 @@ static void usage(const char *cmd)
            "Miscellaneous Options:\n"
            "  -h                        print this help\n"
            "  --calc-initial-secret     calculate Initial client traffic secret given DCID\n"
-           "  --decrypt-packet secret   given a QUIC packet and traffic key, decrypts and\n"
-           "                            prints the packet payload\n"
+           "  --decrypt-packet secret[:dcid-length]\n"
+           "                            given a QUIC packet and a traffic secret, decrypts\n"
+           "                            and prints the packet payload; to decode short\n"
+           "                            header packets, DCID length must be supplied\n"
            "  --encrypt-packet secret   given a packet without encryption applied, emits a\n"
-           "                            packet encrypted using given traffic key\n"
+           "                            packet encrypted using the given traffic secret\n"
            "\n",
            cmd);
 }
@@ -1274,14 +1287,17 @@ static int decode_hex(int ch)
     return -1;
 }
 
-static size_t decode_hexstring(uint8_t *dst, size_t capacity, const char *src)
+static size_t decode_hexstring(uint8_t *dst, size_t capacity, const char *src, size_t srclen)
 {
+    if (srclen == SIZE_MAX)
+        srclen = strlen(src);
+    if (srclen > capacity * 2)
+        return SIZE_MAX;
+
     size_t dst_off = 0;
     int hi, lo;
 
-    while (*src != '\0') {
-        if (dst_off >= capacity)
-            return SIZE_MAX;
+    while (*src != '\0' && dst_off < capacity) {
         if ((hi = decode_hex(*src++)) == -1 || (lo = decode_hex(*src++)) == -1)
             return SIZE_MAX;
         dst[dst_off++] = (uint8_t)(hi * 16 + lo);
@@ -1297,7 +1313,7 @@ static int cmd_calc_initial_secret(const char *dcid_hex)
     size_t dcid_len;
 
     /* decode dcid_hex */
-    if ((dcid_len = decode_hexstring(dcid, sizeof(dcid), dcid_hex)) == SIZE_MAX) {
+    if ((dcid_len = decode_hexstring(dcid, sizeof(dcid), dcid_hex, SIZE_MAX)) == SIZE_MAX) {
         fprintf(stderr, "Invalid DCID: %s\n", dcid_hex);
         return 1;
     }
@@ -1316,38 +1332,54 @@ static int cmd_calc_initial_secret(const char *dcid_hex)
     return 0;
 }
 
-static size_t determine_pn_offset(ptls_iovec_t input, size_t *packet_size)
+static size_t determine_pn_offset(ptls_iovec_t input, size_t *packet_size, size_t *epoch, size_t short_packet_dcid_len)
 {
-    if (input.len < 5)
+    if (input.len < 1)
         goto Broken;
 
-    if ((input.base[0] & QUICLY_PACKET_TYPE_BITMASK) != QUICLY_PACKET_TYPE_INITIAL)
-        goto UnexpectedType;
+    if ((input.base[0] & QUICLY_LONG_HEADER_BIT) == QUICLY_LONG_HEADER_BIT) {
 
-    size_t off = 5;
+        /* long header packet; at the moment, only Inital packets are supported */
+        if ((input.base[0] & QUICLY_PACKET_TYPE_BITMASK) != QUICLY_PACKET_TYPE_INITIAL)
+            goto UnexpectedType;
 
-    /* skip CIDs */
-    for (int i = 0; i < 2; ++i) {
-        if (off >= input.len || (off += 1 + input.base[off]) > input.len)
+        if (input.len < 5)
             goto Broken;
-    }
+        size_t off = 5;
 
-    { /* skip token length */
-        const uint8_t *p = input.base + off;
-        uint64_t token_len = quicly_decodev(&p, input.base + input.len);
-        if (token_len == UINT64_MAX || (off = p - input.base + token_len) > input.len)
+        /* skip CIDs */
+        for (int i = 0; i < 2; ++i) {
+            if (off >= input.len || (off += 1 + input.base[off]) > input.len)
+                goto Broken;
+        }
+
+        { /* skip token length */
+            const uint8_t *p = input.base + off;
+            uint64_t token_len = quicly_decodev(&p, input.base + input.len);
+            if (token_len == UINT64_MAX || (off = p - input.base + token_len) > input.len)
+                goto Broken;
+        }
+
+        { /* read packet length and adjust so that `*packet_size` contains  */
+            const uint8_t *p = input.base + off;
+            if ((*packet_size = quicly_decodev(&p, input.base + input.len)) == SIZE_MAX)
+                goto Broken;
+            off = p - input.base;
+            *packet_size += off;
+        }
+
+        *epoch = QUICLY_EPOCH_INITIAL;
+        return off;
+
+    } else {
+
+        /* short header packet */
+        if (input.len < 1 + short_packet_dcid_len + 4 + 16)
             goto Broken;
+        *packet_size = input.len;
+        *epoch = QUICLY_EPOCH_1RTT;
+        return 1 + short_packet_dcid_len;
     }
-
-    { /* read packet length and adjust so that `*packet_size` contains  */
-        const uint8_t *p = input.base + off;
-        if ((*packet_size = quicly_decodev(&p, input.base + input.len)) == SIZE_MAX)
-            goto Broken;
-        off = p - input.base;
-        *packet_size += off;
-    }
-
-    return off;
 
 Broken:
     fprintf(stderr, "Invalid or unsupported type of QUIC packet.\n");
@@ -1358,24 +1390,27 @@ UnexpectedType:
     return SIZE_MAX;
 }
 
-static int cmd_encrypt_packet(int is_enc, const char *secret_hex)
+static int cmd_encrypt_packet(int is_enc, const char *secret_dcid_len)
 {
     quicly_crypto_engine_t *engine = &quicly_default_crypto_engine;
     ptls_cipher_suite_t *cs = &ptls_openssl_aes128gcmsha256;
     ptls_cipher_context_t *header_protect;
     ptls_aead_context_t *packet_protect;
     uint8_t buf[1500] = {}, secret[PTLS_MAX_DIGEST_SIZE];
-    size_t inlen, pn_off, packet_size;
+    size_t inlen, pn_off, packet_size, short_header_dcid_len = 0, epoch;
 
-    /* setup crypto */
-    if (decode_hexstring(secret, cs->hash->digest_size, secret_hex) != cs->hash->digest_size) {
-        fprintf(stderr, "Invalid secret (must be of %zu bytes in hex)\n", cs->hash->digest_size);
-        return 1;
-    }
-    if (engine->setup_cipher(engine, NULL, QUICLY_EPOCH_INITIAL, is_enc, &header_protect, &packet_protect, cs->aead, cs->hash,
-                             secret) != 0) {
-        fprintf(stderr, "Crypto faiure.\n");
-        return 1;
+    { /* decode secret and dcid length */
+        const char *separator = strchr(secret_dcid_len, ':');
+        if (decode_hexstring(secret, cs->hash->digest_size, secret_dcid_len,
+                             separator != NULL ? separator - secret_dcid_len : strlen(secret_dcid_len)) != cs->hash->digest_size) {
+            fprintf(stderr, "Invalid secret (must be of %zu bytes in hex)\n", cs->hash->digest_size);
+            return 1;
+        }
+        if (separator != NULL &&
+            (sscanf(separator + 1, "%zu", &short_header_dcid_len) != 1 || short_header_dcid_len > QUICLY_MAX_CID_LEN_V1)) {
+            fprintf(stderr, "Invalid DCID length\n");
+            return 1;
+        }
     }
 
     /* read the packet */
@@ -1387,10 +1422,16 @@ static int cmd_encrypt_packet(int is_enc, const char *secret_hex)
         fprintf(stderr, "Unexpected amount of input.\n");
         return 1;
     }
-    if ((pn_off = determine_pn_offset(ptls_iovec_init(buf, inlen), &packet_size)) == SIZE_MAX)
+    if ((pn_off = determine_pn_offset(ptls_iovec_init(buf, inlen), &packet_size, &epoch, short_header_dcid_len)) == SIZE_MAX)
         return 1;
     if (packet_size - pn_off < QUICLY_MAX_PN_SIZE + cs->aead->tag_size) {
         fprintf(stderr, "encrypted part of the packet is too small.\n");
+        return 1;
+    }
+
+    /* setup crypto */
+    if (engine->setup_cipher(engine, NULL, epoch, is_enc, &header_protect, &packet_protect, cs->aead, cs->hash, secret) != 0) {
+        fprintf(stderr, "Crypto faiure.\n");
         return 1;
     }
 
@@ -1424,7 +1465,6 @@ static int cmd_encrypt_packet(int is_enc, const char *secret_hex)
             buf[pn_off + i] ^= hpmask[i + 1];
             pn = (pn << 8) | buf[pn_off + i];
         }
-        fprintf(stderr, "pn: %" PRIu64 "\n", pn);
         /* decrypt */
         if (ptls_aead_decrypt(packet_protect, buf + pn_off + pn_len, buf + pn_off + pn_len, packet_size - (pn_off + pn_len), pn,
                               buf, pn_off + pn_len) == SIZE_MAX) {
@@ -1455,7 +1495,7 @@ int main(int argc, char **argv)
     struct sockaddr_storage sa;
     socklen_t salen;
     unsigned udpbufsize = 0;
-    int ch, opt_index, fd;
+    int ch, opt_index, fd = -1;
 
     ERR_load_crypto_strings();
     OpenSSL_add_all_algorithms();
@@ -1489,6 +1529,8 @@ int main(int argc, char **argv)
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
+                                             {"sockfd", required_argument, NULL, 0},
+                                             {"exit-after-handshake", no_argument, NULL, 0},
                                              {"calc-initial-secret", required_argument, NULL, 0},
                                              {"decrypt-packet", required_argument, NULL, 0},
                                              {"encrypt-packet", required_argument, NULL, 0},
@@ -1517,6 +1559,13 @@ int main(int argc, char **argv)
                 }
             } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {
                 ctx.enable_ratio.rapid_start = 255;
+            } else if (strcmp(longopts[opt_index].name, "sockfd") == 0) {
+                if (sscanf(optarg, "%d", &fd) != 1) {
+                    fprintf(stderr, "invalid argument passed to --sockfd\n");
+                    exit(1);
+                }
+            } else if (strcmp(longopts[opt_index].name, "exit-after-handshake") == 0) {
+                exit_after_handshake = 1;
             } else if (strcmp(longopts[opt_index].name, "calc-initial-secret") == 0) {
                 return cmd_calc_initial_secret(optarg);
             } else if (strcmp(longopts[opt_index].name, "decrypt-packet") == 0) {
@@ -1758,8 +1807,15 @@ int main(int argc, char **argv)
     argc -= optind;
     argv += optind;
 
-    if (reqs[0].path == NULL)
-        push_req("/", 0);
+    if (exit_after_handshake) {
+        if (reqs[0].path != NULL) {
+            fprintf(stderr, "-p and --exit-after-handshake cannot be used together\n");
+            exit(1);
+        }
+    } else {
+        if (reqs[0].path == NULL)
+            push_req("/", 0);
+    }
 
     if (key_exchanges[0] == NULL)
         key_exchanges[0] = &ptls_openssl_secp256r1;
@@ -1858,7 +1914,7 @@ int main(int argc, char **argv)
     if (resolve_address((void *)&sa, &salen, host, port, AF_INET, SOCK_DGRAM, IPPROTO_UDP) != 0)
         exit(1);
 
-    if ((fd = socket(sa.ss_family, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+    if (fd == -1 && (fd = socket(sa.ss_family, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
         perror("socket(2) failed");
         return 1;
     }

@@ -160,12 +160,11 @@ quicly_error_t quicly_sentmap_update(quicly_sentmap_t *map, quicly_sentmap_iter_
     }
     for (next_entry(iter); iter->p->acked != quicly_sentmap__type_packet; next_entry(iter)) {
         if (should_notify && (ret = iter->p->acked(map, &packet, event == QUICLY_SENTMAP_EVENT_ACKED, iter->p)) != 0)
-            goto Exit;
+            should_notify = 0;
         if (should_discard)
             discard_entry(map, iter);
     }
 
-Exit:
     return ret;
 }
 
