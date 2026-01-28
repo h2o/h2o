@@ -118,6 +118,7 @@ typedef int64_t quicly_error_t;
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
 #define QUICLY_ERROR_INVALID_INITIAL_VERSION 0xff08
 #define QUICLY_ERROR_DECRYPTION_FAILED 0xff09
+#define QUICLY_ERROR_SEND_EMIT_BLOCKED 0xff0a
 
 typedef int64_t quicly_stream_id_t;
 

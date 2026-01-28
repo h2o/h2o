@@ -441,16 +441,15 @@ Exit:
     return ret;
 }
 
-static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
-                                         ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t packet_number,
-                                         int coalesced)
+static void default_encrypt_packet2(quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
+                                    ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
+                                    ptls_iovec_t payload, uint64_t packet_number, int coalesced)
 {
+    size_t payload_from = datagram.len - packet_protect_ctx->algo->tag_size - payload.len;
     ptls_aead_supplementary_encryption_t supp = {.ctx = header_protect_ctx,
                                                  .input = datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE};
 
-    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, datagram.base + payload_from,
-                        datagram.len - payload_from - packet_protect_ctx->algo->tag_size, packet_number,
+    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, payload.base, payload.len, packet_number,
                         datagram.base + first_byte_at, payload_from - first_byte_at, &supp);
 
     datagram.base[first_byte_at] ^= supp.output[0] & (QUICLY_PACKET_IS_LONG_HEADER(datagram.base[first_byte_at]) ? 0xf : 0x1f);
@@ -458,4 +457,18 @@ static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_
         datagram.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= supp.output[i + 1];
 }
 
-quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};
+static void default_encrypt_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
+                                   ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
+                                   size_t payload_from, uint64_t packet_number, int coalesced)
+{
+    default_encrypt_packet2(
+        engine, conn, header_protect_ctx, packet_protect_ctx, datagram, first_byte_at,
+        ptls_iovec_init(datagram.base + payload_from, datagram.len - payload_from - packet_protect_ctx->algo->tag_size),
+        packet_number, coalesced);
+}
+
+quicly_crypto_engine_t quicly_default_crypto_engine = {
+    .setup_cipher = default_setup_cipher,
+    .encrypt_packet = default_encrypt_packet,
+    .encrypt_packet2 = default_encrypt_packet2,
+};

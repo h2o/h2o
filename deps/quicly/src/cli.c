@@ -637,7 +637,7 @@ static quicly_error_t send_pending(int fd, quicly_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec packets[MAX_BURST_PACKETS];
-    uint8_t buf[MAX_BURST_PACKETS * quicly_get_context(conn)->transport_params.max_udp_payload_size];
+    uint8_t buf[(MAX_BURST_PACKETS + 2) * quicly_get_context(conn)->transport_params.max_udp_payload_size];
     size_t num_packets = MAX_BURST_PACKETS;
     quicly_error_t ret;
 
