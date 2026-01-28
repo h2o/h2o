@@ -4453,7 +4453,11 @@ int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level)
 
 int quicly_can_send_data(quicly_conn_t *conn, quicly_send_context_t *s)
 {
-    return s->num_datagrams < s->max_datagrams;
+    if (s->num_datagrams >= s->max_datagrams)
+        return 0;
+    if (s->max_datagrams - s->num_datagrams == 1 && s->packet.cipher != NULL && s->frames.dst == s->frames.end)
+        return 0;
+    return 1;
 }
 
 static void commit_stream_frame(quicly_stream_t *stream, quicly_sent_t *sent, uint64_t off, const uint8_t *data, size_t len,
