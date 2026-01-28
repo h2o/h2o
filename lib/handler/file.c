@@ -392,7 +392,7 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
                 self->super.stop = do_stop_async_splice;
             } else {
                 h2o_req_log_error(self->src_req, "lib/handler/file.c",
-                                  "failed to allocate pipe for async I/O; falling back to blocking I/O");
+                                  "failed to allocate a pipe for async I/O; falling back to blocking I/O");
             }
         }
         /* if io_uring is used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
