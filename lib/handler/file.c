@@ -264,9 +264,8 @@ static h2o_sendvec_random_read_result_t do_random_read(h2o_sendvec_t *src, void 
 
     /* if io_uring is available, try reading from the page cache. Then, if we fail to read completely, fallback to io_uring */
 #if H2O_USE_IO_URING
-    assert(self->src_req != NULL);
-    assert(self->src_req->_ostr_top->random_read_unblocked != NULL);
     if (self->try_io_uring) {
+        assert(self->src_req != NULL && self->src_req->_ostr_top->random_read_unblocked != NULL);
         /* if read using io_uring is complete, either use it or discard it */
         if (self->uring_reader != NULL && self->uring_reader->complete) {
             if (self->uring_reader->bytes_read < self->uring_reader->len) {
@@ -406,10 +405,22 @@ static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
 #endif
 
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {
-        .read_ = do_sequential_read, .send_ = sendvec_sendfile, .random_read = do_random_read};
+    static const h2o_sendvec_callbacks_t callbacks_with_random_read = {do_sequential_read, sendvec_sendfile, do_random_read},
+                                         callbacks_no_random_read = {do_sequential_read, sendvec_sendfile};
     h2o_sendvec_t vec = {
-        .callbacks = &sendvec_callbacks, .len = bytes_to_send, .cb_arg[0] = (uint64_t)self, .cb_arg[1] = self->file.off};
+        .callbacks =
+#if H2O_USE_IO_URING
+            /* when io_uring is (to be) used, random_read works only if random_read_unblocked can be called */
+            !self->try_io_uring || self->src_req->_ostr_top->random_read_unblocked != NULL
+#else
+            1
+#endif
+                ? &callbacks_with_random_read
+                : &callbacks_no_random_read,
+        .len = bytes_to_send,
+        .cb_arg[0] = (uint64_t)self,
+        .cb_arg[1] = self->file.off,
+    };
 
     self->file.off += vec.len;
     self->bytesleft -= vec.len;
