@@ -3932,19 +3932,10 @@ static quicly_error_t commit_send_packet(quicly_conn_t *conn, quicly_send_contex
     assert((s->frames.start == s->packet.dst + s->packet.frames_at ||
             s->packet.dst + conn->egress.max_udp_payload_size <= s->frames.start) &&
            "encryption happens either in-place or without overlap");
-    if (conn->super.ctx->crypto_engine->encrypt_packet2 != NULL) {
-        conn->super.ctx->crypto_engine->encrypt_packet2(conn->super.ctx->crypto_engine, conn, s->packet.cipher->header_protection,
-                                                        s->packet.cipher->aead, datagram, s->packet.dst - datagram.base,
-                                                        ptls_iovec_init(s->frames.start, s->frames.dst - s->frames.start),
-                                                        conn->egress.packet_number, coalesced);
-    } else {
-        if (s->frames.start != s->packet.dst + s->packet.frames_at)
-            memcpy(s->packet.dst + s->packet.frames_at, s->frames.start, s->frames.dst - s->frames.start);
-        conn->super.ctx->crypto_engine->encrypt_packet(conn->super.ctx->crypto_engine, conn, s->packet.cipher->header_protection,
-                                                       s->packet.cipher->aead, datagram, s->packet.dst - datagram.base,
-                                                       s->packet.dst + s->packet.frames_at - datagram.base,
-                                                       conn->egress.packet_number, coalesced);
-    }
+    conn->super.ctx->crypto_engine->encrypt_packet(conn->super.ctx->crypto_engine, conn, s->packet.cipher->header_protection,
+                                                   s->packet.cipher->aead, datagram, s->packet.dst - datagram.base,
+                                                   s->packet.dst - datagram.base + s->packet.frames_at, s->frames.start,
+                                                   conn->egress.packet_number, coalesced);
 
     /* update CC, commit sentmap */
     int on_promoted_path = s->path_index == 0 && !conn->paths[0]->initial;
@@ -6117,8 +6108,8 @@ size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_
 
     /* encrypt packet */
     quicly_default_crypto_engine.encrypt_packet(&quicly_default_crypto_engine, NULL, egress.header_protection, egress.aead,
-                                                ptls_iovec_init(datagram, datagram_len), 0, payload_from - (uint8_t *)datagram, 0,
-                                                0);
+                                                ptls_iovec_init(datagram, datagram_len), 0, payload_from - (uint8_t *)datagram,
+                                                payload_from, 0, 0);
 
     dispose_cipher(&egress);
     return datagram_len;

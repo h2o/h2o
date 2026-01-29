@@ -192,17 +192,12 @@ typedef struct st_quicly_crypto_engine_t {
      * header protection using `header_protect_ctx`. Quicly does not read or write the content of the UDP datagram payload after
      * this function is called. Therefore, an engine might retain the information provided by this function, and protect the packet
      * and the header at a later moment (e.g., hardware crypto offload).
+     * Note: #651 added the `payload` parameter that allows out-of-place encryption. For backward compatibility, refer to
+     * https://gist.github.com/kazuho/ac85028fe7810c68255a8d967eb2400d.
      */
     void (*encrypt_packet)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
-                           size_t payload_from, uint64_t packet_number, int coalesced);
-    /**
-     * Optional callback that allows out-of-place encryption. If provided, this callback is used instead of `encrypt_packet`.
-     */
-    void (*encrypt_packet2)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn,
-                            ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                            ptls_iovec_t datagram, size_t first_byte_at, ptls_iovec_t payload, uint64_t packet_number,
-                            int coalesced);
+                           size_t payload_from, const void *payload, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
 
 /**

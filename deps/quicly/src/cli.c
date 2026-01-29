@@ -1447,7 +1447,8 @@ static int cmd_encrypt_packet(int is_enc, const char *secret_dcid_len)
             return 1;
         }
         engine->encrypt_packet(engine, NULL, header_protect, packet_protect, ptls_iovec_init(buf, packet_size), 0,
-                               pn_off + QUICLY_SEND_PN_SIZE, buf[pn_off] * 256 + buf[pn_off + 1], 0);
+                               pn_off + QUICLY_SEND_PN_SIZE, buf + pn_off + QUICLY_SEND_PN_SIZE,
+                               buf[pn_off] * 256 + buf[pn_off + 1], 0);
         fwrite(buf, 1, packet_size, stdout);
     } else {
         if (packet_size > inlen) {
