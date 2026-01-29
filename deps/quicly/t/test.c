@@ -181,6 +181,30 @@ static void test_enable_with_ratio255(void)
     ok(num_enabled == 63 * (65535 / 255));
 }
 
+static void test_encodev_reverse(void)
+{
+    uint8_t buf[8];
+
+#define TEST(val, len)                                                                                                             \
+    do {                                                                                                                           \
+        ok(encodev_reverse(buf + 8, (val)) == buf + 8 - (len));                                                                    \
+        const uint8_t *p = buf + 8 - (len);                                                                                        \
+        ok(quicly_decodev(&p, buf + 8) == (val));                                                                                  \
+        ok(p == buf + 8);                                                                                                          \
+    } while (0)
+
+    TEST(0, 1);
+    TEST(0x3f, 1);
+    TEST(0x40, 2);
+    TEST(0x3fff, 2);
+    TEST(0x4000, 4);
+    TEST(0x3fffffff, 4);
+    TEST(0x40000000, 8);
+    TEST(0x3fffffffffffffff, 8);
+
+#undef TEST
+}
+
 static void test_adjust_crypto_frame_layout(void)
 {
 #define TEST(_capacity, _check)                                                                                                    \
@@ -1543,6 +1567,7 @@ int main(int argc, char **argv)
 
     subtest("error-codes", test_error_codes);
     subtest("enable_with_ratio255", test_enable_with_ratio255);
+    subtest("encodev-reverse", test_encodev_reverse);
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);

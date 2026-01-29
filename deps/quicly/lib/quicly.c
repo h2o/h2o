@@ -649,6 +649,25 @@ static void set_address(quicly_address_t *addr, struct sockaddr *sa)
     }
 }
 
+static uint8_t *encodev_reverse(uint8_t *dst, uint64_t v)
+{
+    if (v <= 63) {
+        *--dst = (uint8_t)v;
+    } else {
+        if (v <= 16383) {
+            v |= 0x4000;
+        } else if (v <= 1073741823) {
+            v |= 0x80000000;
+        } else {
+            v |= 0xc000000000000000;
+        }
+        do {
+            *--dst = (uint8_t)v;
+        } while ((v >>= 8) != 0);
+    }
+    return dst;
+}
+
 static ptls_cipher_suite_t *get_aes128gcmsha256(quicly_context_t *ctx)
 {
     ptls_cipher_suite_t **cs;
@@ -4688,12 +4707,10 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
                 return ret;
             if ((sent = quicly_sentmap_allocate(&stream->conn->egress.loss.sentmap, on_ack_stream)) == NULL)
                 return PTLS_ERROR_NO_MEMORY;
-            uint8_t frame_header[1 + 8 + 8], *hp = frame_header;
-            *hp++ = QUICLY_FRAME_TYPE_STREAM_BASE | QUICLY_FRAME_TYPE_STREAM_BIT_OFF;
-            hp = quicly_encodev(hp, stream->stream_id);
-            hp = quicly_encodev(hp, off_of_packet);
-            s->frames.start = dst - (hp - frame_header);
-            memcpy(s->frames.start, frame_header, hp - frame_header);
+            s->frames.start = dst;
+            s->frames.start = encodev_reverse(s->frames.start, off_of_packet);
+            s->frames.start = encodev_reverse(s->frames.start, stream->stream_id);
+            *--s->frames.start = QUICLY_FRAME_TYPE_STREAM_BASE | QUICLY_FRAME_TYPE_STREAM_BIT_OFF;
             s->frames.end = s->frames.start + (stream->conn->egress.max_udp_payload_size - s->packet.frames_at -
                                                s->packet.cipher->aead->algo->tag_size);
             s->frames.dst = s->frames.start;
