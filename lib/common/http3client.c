@@ -416,7 +416,14 @@ static quicly_error_t handle_input_data_payload(struct st_h2o_http3client_req_t 
         size_t payload_bytes = req->bytes_left_in_data_frame;
         if (src_end - *src < payload_bytes)
             payload_bytes = src_end - *src;
-        h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes);
+        
+        /* Check if application wants to handle data directly without buffering */
+        if (req->super.ctx->http3 != NULL && req->super.ctx->http3->on_body_chunk != NULL) {
+            /* Always skip buffering when on_body_chunk is set */
+            req->super.ctx->http3->on_body_chunk(&req->super, (const char *)*src, payload_bytes);
+        } else {
+            h2o_buffer_append(&req->recvbuf.body, *src, payload_bytes);
+        }
         *src += payload_bytes;
         req->bytes_left_in_data_frame -= payload_bytes;
     }
