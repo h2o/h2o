@@ -483,8 +483,8 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
             ;
     } else if (getenv("H2O_VIA_MASTER") == NULL) {
         h2o_configurator_errprintf(cmd, node,
-                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                    "launched with neither `-m master` nor `-m worker`");
+                                   "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                   "launched with neither `-m master` nor `-m worker`");
     }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
@@ -2209,8 +2209,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
             if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node,
-                                           "to use ACME, the `ssl` node must only be specified within each host");
+                h2o_configurator_errprintf(cmd, *ssl_node, "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
             }
             /* load certificate from acme.sh */
@@ -2519,7 +2518,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             if (identity->ptls.ctx != NULL)
                 h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
         } else {
-            /* at the moment, on the OpenSSL-side, we do not support multiple types of certificate. */
+            /* For OpenSSL (TLS 1.2), load additional certificates into the first identity's SSL_CTX to support multiple certificate
+             * types (e.g., RSA + ECDSA). OpenSSL automatically selects the appropriate certificate based on the cipher suite
+             * offered by the client. */
+            ptls_iovec_t raw_pubkey_dummy;
+            if (load_ssl_identity(cmd, ssl_config->identities[0].ossl, &identity->cert_chain_pem, &raw_pubkey_dummy, use_neverbleed,
+                                  parsed, client_ca_file) != 0)
+                goto Error;
+            /* Free the SSL_CTX created for this identity since we're using the first one instead */
             SSL_CTX_free(identity->ossl);
             identity->ossl = NULL;
         }
@@ -5079,8 +5085,8 @@ int main(int argc, char **argv)
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
-                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
-                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
+                    printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                           ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
