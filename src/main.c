@@ -2547,28 +2547,34 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
              * them from disk, as OpenSSL uses ref-counting for these objects. */
             X509 *cert = SSL_CTX_get0_certificate(identity->ossl);
             EVP_PKEY *pkey = SSL_CTX_get0_privatekey(identity->ossl);
-            if (cert == NULL || pkey == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node, "failed to get certificate or private key from SSL_CTX");
-                goto Error;
-            }
-            /* Keep a reference to the certificate for OCSP stapling (pointer matching in the callback) */
-            identity->cert = cert;
-            X509_up_ref(identity->cert);
-            /* Add certificate and private key to the first identity's SSL_CTX. These functions will automatically manage refcounts.
+            /* If cert is NULL, this is a raw public key which can only be used with TLS 1.3/QUIC, so skip adding to shared context
              */
-            if (SSL_CTX_use_certificate(ssl_config->identities[0].ossl, cert) != 1) {
-                h2o_configurator_errprintf(cmd, *ssl_node, "failed to add certificate to first SSL_CTX");
-                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+            if (cert == NULL) {
+                SSL_CTX_free(identity->ossl);
+                identity->ossl = NULL;
+            } else if (pkey == NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "failed to get private key from SSL_CTX");
                 goto Error;
+            } else {
+                /* Keep a reference to the certificate for OCSP stapling (pointer matching in the callback) */
+                identity->cert = cert;
+                X509_up_ref(identity->cert);
+                /* Add certificate and private key to the first identity's SSL_CTX. These functions will automatically manage
+                 * refcounts. */
+                if (SSL_CTX_use_certificate(ssl_config->identities[0].ossl, cert) != 1) {
+                    h2o_configurator_errprintf(cmd, *ssl_node, "failed to add certificate to first SSL_CTX");
+                    ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                    goto Error;
+                }
+                if (SSL_CTX_use_PrivateKey(ssl_config->identities[0].ossl, pkey) != 1) {
+                    h2o_configurator_errprintf(cmd, *ssl_node, "failed to add private key to first SSL_CTX");
+                    ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                    goto Error;
+                }
+                /* Free the SSL_CTX created for this identity since we're using the first one instead */
+                SSL_CTX_free(identity->ossl);
+                identity->ossl = NULL;
             }
-            if (SSL_CTX_use_PrivateKey(ssl_config->identities[0].ossl, pkey) != 1) {
-                h2o_configurator_errprintf(cmd, *ssl_node, "failed to add private key to first SSL_CTX");
-                ERR_print_errors_cb(on_openssl_print_errors, stderr);
-                goto Error;
-            }
-            /* Free the SSL_CTX created for this identity since we're using the first one instead */
-            SSL_CTX_free(identity->ossl);
-            identity->ossl = NULL;
         }
 
         /* start OCSP fetcher */
