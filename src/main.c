@@ -164,6 +164,11 @@ struct listener_ssl_identity_t {
      */
     h2o_iovec_t cert_chain_pem;
     /**
+     * Certificate (for OCSP stapling with multiple certs in TLS 1.2). Kept as a reference to match certificates in the shared
+     * SSL_CTX.
+     */
+    X509 *cert;
+    /**
      * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, `ptls.ctx` will be set to NULL.
      */
     struct {
@@ -1446,22 +1451,32 @@ Exit:
 
 #ifndef OPENSSL_NO_OCSP
 
-static int on_staple_ocsp_ossl(SSL *ssl, void *_identity)
+static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_config)
 {
-    struct listener_ssl_identity_t *identity = _identity;
+    struct listener_ssl_config_t *ssl_config = _ssl_config;
+    X509 *cert_in_use = SSL_get_certificate(ssl);
     void *resp = NULL;
     size_t len = 0;
 
-    /* fetch ocsp response */
-    pthread_mutex_lock(&identity->dynamic.mutex);
-    if (identity->dynamic.ocsp_status != NULL) {
-        resp = CRYPTO_malloc((int)identity->dynamic.ocsp_status->size, __FILE__, __LINE__);
-        if (resp != NULL) {
-            len = identity->dynamic.ocsp_status->size;
-            memcpy(resp, identity->dynamic.ocsp_status->bytes, len);
+    if (cert_in_use == NULL)
+        return SSL_TLSEXT_ERR_NOACK;
+
+    /* Find the identity whose certificate matches the one being used (pointer comparison for speed) */
+    for (struct listener_ssl_identity_t *identity = ssl_config->identities; identity->certificate_file != NULL; identity++) {
+        if (identity->cert != NULL && cert_in_use == identity->cert) {
+            /* fetch ocsp response */
+            pthread_mutex_lock(&identity->dynamic.mutex);
+            if (identity->dynamic.ocsp_status != NULL) {
+                resp = CRYPTO_malloc((int)identity->dynamic.ocsp_status->size, __FILE__, __LINE__);
+                if (resp != NULL) {
+                    len = identity->dynamic.ocsp_status->size;
+                    memcpy(resp, identity->dynamic.ocsp_status->bytes, len);
+                }
+            }
+            pthread_mutex_unlock(&identity->dynamic.mutex);
+            break;
         }
     }
-    pthread_mutex_unlock(&identity->dynamic.mutex);
 
     if (resp != NULL) {
         SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
@@ -2477,8 +2492,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_ssl_register_alpn_protocols(identity->ossl, h2o_alpn_protocols);
 #endif
 #ifndef OPENSSL_NO_OCSP
-        SSL_CTX_set_tlsext_status_cb(identity->ossl, on_staple_ocsp_ossl);
-        SSL_CTX_set_tlsext_status_arg(identity->ossl, identity);
+        /* Register OCSP callback only for the first identity's SSL_CTX, passing the SSL config so it can search through all
+         * identities */
+        if (identity == ssl_config->identities) {
+            SSL_CTX_set_tlsext_status_cb(identity->ossl, on_staple_ocsp_ossl);
+            SSL_CTX_set_tlsext_status_arg(identity->ossl, ssl_config);
+        }
 #endif
 
         /* load identity */
@@ -2517,6 +2536,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* associate picotls context to SSL_CTX, so that the handshake can switch to TLS 1.3 */
             if (identity->ptls.ctx != NULL)
                 h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
+            /* keep a reference to the certificate for OCSP stapling */
+            identity->cert = SSL_CTX_get0_certificate(identity->ossl);
+            if (identity->cert != NULL)
+                X509_up_ref(identity->cert);
         } else {
             /* For OpenSSL (TLS 1.2), add additional certificates to the first identity's SSL_CTX to support multiple certificate
              * types (e.g., RSA + ECDSA). OpenSSL automatically selects the appropriate certificate based on the cipher suite
@@ -2528,6 +2551,9 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 h2o_configurator_errprintf(cmd, *ssl_node, "failed to get certificate or private key from SSL_CTX");
                 goto Error;
             }
+            /* Keep a reference to the certificate for OCSP stapling (pointer matching in the callback) */
+            identity->cert = cert;
+            X509_up_ref(identity->cert);
             /* Add certificate and private key to the first identity's SSL_CTX. These functions will automatically manage refcounts.
              */
             if (SSL_CTX_use_certificate(ssl_config->identities[0].ossl, cert) != 1) {
