@@ -2518,13 +2518,28 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             if (identity->ptls.ctx != NULL)
                 h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
         } else {
-            /* For OpenSSL (TLS 1.2), load additional certificates into the first identity's SSL_CTX to support multiple certificate
+            /* For OpenSSL (TLS 1.2), add additional certificates to the first identity's SSL_CTX to support multiple certificate
              * types (e.g., RSA + ECDSA). OpenSSL automatically selects the appropriate certificate based on the cipher suite
-             * offered by the client. */
-            ptls_iovec_t raw_pubkey_dummy;
-            if (load_ssl_identity(cmd, ssl_config->identities[0].ossl, &identity->cert_chain_pem, &raw_pubkey_dummy, use_neverbleed,
-                                  parsed, client_ca_file) != 0)
+             * offered by the client. We share the certificate and private key from this identity's SSL_CTX instead of reloading
+             * them from disk, as OpenSSL uses ref-counting for these objects. */
+            X509 *cert = SSL_CTX_get0_certificate(identity->ossl);
+            EVP_PKEY *pkey = SSL_CTX_get0_privatekey(identity->ossl);
+            if (cert == NULL || pkey == NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "failed to get certificate or private key from SSL_CTX");
                 goto Error;
+            }
+            /* Add certificate and private key to the first identity's SSL_CTX. These functions will automatically manage refcounts.
+             */
+            if (SSL_CTX_use_certificate(ssl_config->identities[0].ossl, cert) != 1) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "failed to add certificate to first SSL_CTX");
+                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                goto Error;
+            }
+            if (SSL_CTX_use_PrivateKey(ssl_config->identities[0].ossl, pkey) != 1) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "failed to add private key to first SSL_CTX");
+                ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                goto Error;
+            }
             /* Free the SSL_CTX created for this identity since we're using the first one instead */
             SSL_CTX_free(identity->ossl);
             identity->ossl = NULL;
