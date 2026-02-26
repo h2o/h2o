@@ -17,7 +17,7 @@ listen:
         certificate-file: examples/h2o/server.crt
       - key-file: deps/picotls/t/assets/secp256r1/key.pem
         certificate-file: deps/picotls/t/assets/secp256r1/cert.pem
-    ocsp-update-cmd: t/mock-ocsp-fetcher-tls12-dualcert.pl
+    ocsp-update-cmd: t/assets/tls12-dualcert-ocsp/mock-ocsp-fetcher.pl
 hosts:
   default:
     paths:
