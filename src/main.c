@@ -164,6 +164,11 @@ struct listener_ssl_identity_t {
      */
     h2o_iovec_t cert_chain_pem;
     /**
+     * Certificate (for OCSP stapling with multiple certs in TLS 1.2). Kept as a reference to match certificates in the shared
+     * SSL_CTX.
+     */
+    X509 *cert;
+    /**
      * Picotls context used for accepting TLS 1.3 handshakes. When TLS 1.3 is disabled, `ptls.ctx` will be set to NULL.
      */
     struct {
@@ -483,8 +488,8 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
             ;
     } else if (getenv("H2O_VIA_MASTER") == NULL) {
         h2o_configurator_errprintf(cmd, node,
-                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                    "launched with neither `-m master` nor `-m worker`");
+                                   "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                   "launched with neither `-m master` nor `-m worker`");
     }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
@@ -1446,22 +1451,32 @@ Exit:
 
 #ifndef OPENSSL_NO_OCSP
 
-static int on_staple_ocsp_ossl(SSL *ssl, void *_identity)
+static int on_staple_ocsp_ossl(SSL *ssl, void *_ssl_config)
 {
-    struct listener_ssl_identity_t *identity = _identity;
+    struct listener_ssl_config_t *ssl_config = _ssl_config;
+    X509 *cert_in_use = SSL_get_certificate(ssl);
     void *resp = NULL;
     size_t len = 0;
 
-    /* fetch ocsp response */
-    pthread_mutex_lock(&identity->dynamic.mutex);
-    if (identity->dynamic.ocsp_status != NULL) {
-        resp = CRYPTO_malloc((int)identity->dynamic.ocsp_status->size, __FILE__, __LINE__);
-        if (resp != NULL) {
-            len = identity->dynamic.ocsp_status->size;
-            memcpy(resp, identity->dynamic.ocsp_status->bytes, len);
+    if (cert_in_use == NULL)
+        return SSL_TLSEXT_ERR_NOACK;
+
+    /* Find the identity whose certificate matches the one being used (pointer comparison for speed) */
+    for (struct listener_ssl_identity_t *identity = ssl_config->identities; identity->certificate_file != NULL; identity++) {
+        if (identity->cert != NULL && cert_in_use == identity->cert) {
+            /* fetch ocsp response */
+            pthread_mutex_lock(&identity->dynamic.mutex);
+            if (identity->dynamic.ocsp_status != NULL) {
+                resp = CRYPTO_malloc((int)identity->dynamic.ocsp_status->size, __FILE__, __LINE__);
+                if (resp != NULL) {
+                    len = identity->dynamic.ocsp_status->size;
+                    memcpy(resp, identity->dynamic.ocsp_status->bytes, len);
+                }
+            }
+            pthread_mutex_unlock(&identity->dynamic.mutex);
+            break;
         }
     }
-    pthread_mutex_unlock(&identity->dynamic.mutex);
 
     if (resp != NULL) {
         SSL_set_tlsext_status_ocsp_resp(ssl, resp, len);
@@ -2209,8 +2224,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
             if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node,
-                                           "to use ACME, the `ssl` node must only be specified within each host");
+                h2o_configurator_errprintf(cmd, *ssl_node, "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
             }
             /* load certificate from acme.sh */
@@ -2478,8 +2492,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_ssl_register_alpn_protocols(identity->ossl, h2o_alpn_protocols);
 #endif
 #ifndef OPENSSL_NO_OCSP
-        SSL_CTX_set_tlsext_status_cb(identity->ossl, on_staple_ocsp_ossl);
-        SSL_CTX_set_tlsext_status_arg(identity->ossl, identity);
+        /* Register OCSP callback only for the first identity's SSL_CTX, passing the SSL config so it can search through all
+         * identities */
+        if (identity == ssl_config->identities) {
+            SSL_CTX_set_tlsext_status_cb(identity->ossl, on_staple_ocsp_ossl);
+            SSL_CTX_set_tlsext_status_arg(identity->ossl, ssl_config);
+        }
 #endif
 
         /* load identity */
@@ -2518,10 +2536,45 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* associate picotls context to SSL_CTX, so that the handshake can switch to TLS 1.3 */
             if (identity->ptls.ctx != NULL)
                 h2o_socket_ssl_set_picotls_context(identity->ossl, identity->ptls.ctx);
+            /* keep a reference to the certificate for OCSP stapling */
+            identity->cert = SSL_CTX_get0_certificate(identity->ossl);
+            if (identity->cert != NULL)
+                X509_up_ref(identity->cert);
         } else {
-            /* at the moment, on the OpenSSL-side, we do not support multiple types of certificate. */
-            SSL_CTX_free(identity->ossl);
-            identity->ossl = NULL;
+            /* For OpenSSL (TLS 1.2), add additional certificates to the first identity's SSL_CTX to support multiple certificate
+             * types (e.g., RSA + ECDSA). OpenSSL automatically selects the appropriate certificate based on the cipher suite
+             * offered by the client. We share the certificate and private key from this identity's SSL_CTX instead of reloading
+             * them from disk, as OpenSSL uses ref-counting for these objects. */
+            X509 *cert = SSL_CTX_get0_certificate(identity->ossl);
+            EVP_PKEY *pkey = SSL_CTX_get0_privatekey(identity->ossl);
+            /* If cert is NULL, this is a raw public key which can only be used with TLS 1.3/QUIC, so skip adding to shared context
+             */
+            if (cert == NULL) {
+                SSL_CTX_free(identity->ossl);
+                identity->ossl = NULL;
+            } else if (pkey == NULL) {
+                h2o_configurator_errprintf(cmd, *ssl_node, "failed to get private key from SSL_CTX");
+                goto Error;
+            } else {
+                /* Keep a reference to the certificate for OCSP stapling (pointer matching in the callback) */
+                identity->cert = cert;
+                X509_up_ref(identity->cert);
+                /* Add certificate and private key to the first identity's SSL_CTX. These functions will automatically manage
+                 * refcounts. */
+                if (SSL_CTX_use_certificate(ssl_config->identities[0].ossl, cert) != 1) {
+                    h2o_configurator_errprintf(cmd, *ssl_node, "failed to add certificate to first SSL_CTX");
+                    ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                    goto Error;
+                }
+                if (SSL_CTX_use_PrivateKey(ssl_config->identities[0].ossl, pkey) != 1) {
+                    h2o_configurator_errprintf(cmd, *ssl_node, "failed to add private key to first SSL_CTX");
+                    ERR_print_errors_cb(on_openssl_print_errors, stderr);
+                    goto Error;
+                }
+                /* Free the SSL_CTX created for this identity since we're using the first one instead */
+                SSL_CTX_free(identity->ossl);
+                identity->ossl = NULL;
+            }
         }
 
         /* start OCSP fetcher */
@@ -5079,8 +5132,8 @@ int main(int argc, char **argv)
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
-                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
-                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
+                    printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                           ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
