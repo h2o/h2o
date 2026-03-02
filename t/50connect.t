@@ -156,4 +156,58 @@ subtest "h2o-httpclient" => sub {
     }
 };
 
+subtest "port-range-acl" => sub {
+    plan skip_all => "curl not found"
+        unless prog_exists("curl");
+
+    # Spawn 2 more origin servers and then
+    # Spawn a second h2o with a port-range ACL that allows 2 and not the third
+    my $origin_port2 = empty_port();
+    my $origin2 = spawn_server(
+        argv     => [
+            qw(plackup -s Starlet --access-log /dev/null -p), $origin_port2, ASSETS_DIR . "/upstream.psgi",
+        ],
+        is_ready => sub {
+            check_port($origin_port2);
+        },
+    );
+
+    my $origin_port3 = empty_port();
+    my $origin3 = spawn_server(
+        argv     => [
+            qw(plackup -s Starlet --access-log /dev/null -p), $origin_port3, ASSETS_DIR . "/upstream.psgi",
+        ],
+        is_ready => sub {
+            check_port($origin_port3);
+        },
+    );
+
+    my ($port_min, $port_max, $port_disallowed) = sort { $a <=> $b } ($origin_port, $origin_port2, $origin_port3);
+
+    my $server2 = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      "/":
+        proxy.connect:
+          - "+127.0.0.0/8:$port_min-$port_max"
+          - "-*"
+EOT
+
+    my $curl_success = qr{Proxy replied 200 to CONNECT request|CONNECT tunnel established, response 200}m;
+    my $curl_fail_403 = qr{Received HTTP code 403 from proxy after CONNECT|CONNECT tunnel failed, response 403}m;
+
+    subtest "within range - allowed" => sub {
+        my $content = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_min/echo 2>&1`;
+        like $content, $curl_success, "port in range accepted";
+
+        my $content2 = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_max/echo 2>&1`;
+        like $content2, $curl_success, "port in range accepted";
+    };
+    subtest "outside range - rejected" => sub {
+        my $content = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_disallowed/echo 2>&1`;
+        like $content, $curl_fail_403, "port outside range rejected";
+    };
+};
+
 done_testing;
