@@ -637,7 +637,7 @@ static quicly_error_t send_pending(int fd, quicly_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec packets[MAX_BURST_PACKETS];
-    uint8_t buf[MAX_BURST_PACKETS * quicly_get_context(conn)->transport_params.max_udp_payload_size];
+    uint8_t buf[(MAX_BURST_PACKETS + 2) * quicly_get_context(conn)->transport_params.max_udp_payload_size];
     size_t num_packets = MAX_BURST_PACKETS;
     quicly_error_t ret;
 
@@ -1447,7 +1447,8 @@ static int cmd_encrypt_packet(int is_enc, const char *secret_dcid_len)
             return 1;
         }
         engine->encrypt_packet(engine, NULL, header_protect, packet_protect, ptls_iovec_init(buf, packet_size), 0,
-                               pn_off + QUICLY_SEND_PN_SIZE, buf[pn_off] * 256 + buf[pn_off + 1], 0);
+                               pn_off + QUICLY_SEND_PN_SIZE, buf + pn_off + QUICLY_SEND_PN_SIZE,
+                               buf[pn_off] * 256 + buf[pn_off + 1], 0);
         fwrite(buf, 1, packet_size, stdout);
     } else {
         if (packet_size > inlen) {

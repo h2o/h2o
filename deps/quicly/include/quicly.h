@@ -192,10 +192,12 @@ typedef struct st_quicly_crypto_engine_t {
      * header protection using `header_protect_ctx`. Quicly does not read or write the content of the UDP datagram payload after
      * this function is called. Therefore, an engine might retain the information provided by this function, and protect the packet
      * and the header at a later moment (e.g., hardware crypto offload).
+     * Note: #651 added the `payload` parameter that allows out-of-place encryption. For backward compatibility, refer to
+     * https://gist.github.com/kazuho/ac85028fe7810c68255a8d967eb2400d.
      */
     void (*encrypt_packet)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
-                           size_t payload_from, uint64_t packet_number, int coalesced);
+                           size_t payload_from, const void *payload, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
 
 /**
@@ -946,8 +948,10 @@ typedef struct st_quicly_stream_callbacks_t {
      * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
      * changes as `on_send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data
      * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
-     * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
-     * to be available - that is `len` return value should be non-zero.
+     * This callback typically writes some data and therefore sets `*len` to a non-zero value, as the callback is triggered by
+     * calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present. However, the callback may set `*len` to zero to
+     * indicate that payload was not immediately avaiable (e,g., when it has to be loaded from disk). It is the responsibility of
+     * the user-supplied stream scheduler to reschedule the stream once data is loaded.
      */
     void (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
