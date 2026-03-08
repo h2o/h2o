@@ -71,30 +71,39 @@ static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
 static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
-static const char *upgrade_token = NULL;
-static h2o_httpclient_forward_datagram_cb udp_write;
-static struct sockaddr_in udp_sock_remote_addr;
-static const ptls_key_exchange_algorithm_t *h3_key_exchanges[128];
-static h2o_http3client_ctx_t h3ctx = {
-    .tls =
-        {
-            .random_bytes = ptls_openssl_random_bytes,
-            .get_time = &ptls_get_time,
-            .key_exchanges = h3_key_exchanges,
-            .cipher_suites = ptls_openssl_cipher_suites,
-            .save_ticket = &save_http3_ticket,
-        },
-    .max_frame_payload_size = 16384,
-};
+    static const char *upgrade_token = NULL;
+    static h2o_httpclient_forward_datagram_cb udp_write;
+    static struct sockaddr_in udp_sock_remote_addr;
+    static const ptls_key_exchange_algorithm_t *h3_key_exchanges[128];
+    static h2o_http3client_ctx_t h3ctx = {
+        .tls =
+            {
+                .random_bytes = ptls_openssl_random_bytes,
+                .get_time = &ptls_get_time,
+                .key_exchanges = h3_key_exchanges,
+                .cipher_suites = ptls_openssl_cipher_suites,
+                .save_ticket = &save_http3_ticket,
+            },
+        .max_frame_payload_size = 16384,
+        .on_body_chunk = NULL, /* disabled by default; set to on_body_chunk for performance testing */
+    };
 static quicly_cid_plaintext_t h3_next_cid;
 static const char *session_file = NULL;
-static const char *progname; /* refers to argv[0] */
+    static const char *progname; /* refers to argv[0] */
+    static int h3_skip_buffering = 0; /* when non-zero, skip buffering H3 payload for performance testing */
 
-static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
-                                         const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
-                                         h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
-                                         h2o_url_t *origin);
-static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
+static int on_body_chunk(h2o_httpclient_t *client, const char *data, size_t len)
+{
+    fwrite(data, 1, len, stdout);
+    fflush(stdout);
+    return 1; /* return 1 to indicate data has been handled and should not be buffered */
+}
+
+    static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *url,
+                                          const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                          h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                          h2o_url_t *origin);
+    static h2o_httpclient_body_cb on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args);
 
 static void load_session(const char *server_name, ptls_iovec_t *tls_session, quicly_transport_parameters_t *quic_tp,
                          ptls_iovec_t *quic_address_token)
@@ -505,9 +514,14 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
         }
     }
 
-    fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
-    fflush(stdout);
-    h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
+    /* Skip writing from buffer if H3 skip-buffering mode is enabled */
+    if (client->ctx->http3 != NULL && client->ctx->http3->on_body_chunk != NULL) {
+        /* Data has already been written directly by on_body_chunk callback */
+    } else {
+        fwrite((*client->buf)->bytes, 1, (*client->buf)->size, stdout);
+        fflush(stdout);
+        h2o_buffer_consume(&(*client->buf), (*client->buf)->size);
+    }
 
     if (errstr == h2o_httpclient_error_is_eos) {
         h2o_mem_clear_pool(client->pool);
@@ -653,47 +667,49 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
 }
 
 static void usage(const char *progname)
-{
-    fprintf(stderr,
-            "Usage: %s [options] <url>\n"
-            "Options:\n"
-            "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
-            "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
-            "  -b <size>    size of request body (in bytes; default: 0)\n"
-            "  -C <concurrency>\n"
-            "               sets the number of requests run at once (default: 1)\n"
-            "  -c <size>    size of body chunk (in bytes; default: 10)\n"
-            "  -d <delay>   request interval (in msec; default: 0)\n"
-            "  -f           returns an error if an HTTP response code is 400 or greater.\n"
-            "  -H <name:value>\n"
-            "               adds a request header\n"
-            "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
-            "  -k           skip peer verification\n"
-            "  -m <method>  request method (default: GET). When method is CONNECT,\n"
-            "               \"host:port\" should be specified in place of URL.\n"
-            "  -o <path>    file to which the response body is written (default: stdout)\n"
-            "  -s <session-file>\n"
-            "               file to read / write session information (atm HTTP/3 only)\n"
-            "  -t <times>   number of requests to send the request (default: 1)\n"
-            "  -W <bytes>   receive window size (HTTP/3 only)\n"
-            "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
-            "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
-            "               TLS is used and the provided hostname is used for peer.\n"
-            "               verification\n"
-            "  -X <local-udp-port>\n"
-            "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
-            "  --initial-udp-payload-size <bytes>\n"
-            "               specifies the udp payload size of the initial message (default:\n"
-            "               %" PRIu16 ")\n"
-            "  --max-udp-payload-size <bytes>\n"
-            "               specifies the max_udp_payload_size transport parameter to send\n"
-            "               (default: %" PRIu64 ")\n"
-            " --io-timeout <milliseconds>\n"
-            "               specifies the timeout for I/O operations (default: 5000ms)\n"
-            " --http3-key-exchange <name>\n"
-            "               overrides the TLS/1.3 key exchanges to be used\n"
-            "  -h, --help   prints this help\n"
-            "\n",
+    {
+        fprintf(stderr,
+                "Usage: %s [options] <url>\n"
+                "Options:\n"
+                "  -2 <ratio>   HTTP/2 ratio (between 0 and 100)\n"
+                "  -3 <ratio>   HTTP/3 ratio (between 0 and 100)\n"
+                "  -b <size>    size of request body (in bytes; default: 0)\n"
+                "  -C <concurrency>\n"
+                "               sets the number of requests run at once (default: 1)\n"
+                "  -c <size>    size of body chunk (in bytes; default: 10)\n"
+                "  -d <delay>   request interval (in msec; default: 0)\n"
+                "  -f           returns an error if an HTTP response code is 400 or greater.\n"
+                "  -H <name:value>\n"
+                "               adds a request header\n"
+                "  -i <delay>   I/O interval between sending chunks (in msec; default: 0)\n"
+                "  -k           skip peer verification\n"
+                "  -m <method>  request method (default: GET). When method is CONNECT,\n"
+                "               \"host:port\" should be specified in place of URL.\n"
+                "  -o <path>    file to which the response body is written (default: stdout)\n"
+                "  -s <session-file>\n"
+                "               file to read / write session information (atm HTTP/3 only)\n"
+                "  -t <times>   number of requests to send the request (default: 1)\n"
+                "  -W <bytes>   receive window size (HTTP/3 only)\n"
+                "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
+                "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
+                "               TLS is used and the provided hostname is used for peer.\n"
+                "               verification\n"
+                "  -X <local-udp-port>\n"
+                "               specifies that the tunnel being created is a CONNECT-UDP tunnel\n"
+                "  --initial-udp-payload-size <bytes>\n"
+                "               specifies the udp payload size of the initial message (default:\n"
+                "               %" PRIu16 ")\n"
+                "  --max-udp-payload-size <bytes>\n"
+                "               specifies the max_udp_payload_size transport parameter to send\n"
+                "               (default: %" PRIu64 ")\n"
+                " --io-timeout <milliseconds>\n"
+                "               specifies the timeout for I/O operations (default: 5000ms)\n"
+                " --http3-key-exchange <name>\n"
+                "               overrides the TLS/1.3 key exchanges to be used\n"
+                " --h3-skip-buffering\n"
+                "               skip buffering H3 payload for performance testing (experimental)\n"
+                "  -h, --help   prints this help\n"
+                "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
             quicly_spec_context.transport_params.max_udp_payload_size);
 }
@@ -770,8 +786,9 @@ int main(int argc, char **argv)
         assert(h3ctx.quic.cid_encryptor != NULL);
         ptls_clear_memory(random_key, sizeof(random_key));
     }
-    h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
-    h3ctx.load_session = load_http3_session_cb;
+h3ctx.quic.stream_open = &h2o_httpclient_http3_on_stream_open;
+        h3ctx.load_session = load_http3_session_cb;
+        h3ctx.on_body_chunk = h3_skip_buffering ? on_body_chunk : NULL;
 
 #if H2O_USE_LIBUV
     ctx.loop = uv_loop_new();
@@ -808,6 +825,7 @@ int main(int argc, char **argv)
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_HTTP3_KEY_EXCHANGE,
         OPT_UPGRADE,
+        OPT_H3_SKIP_BUFFERING,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -817,6 +835,7 @@ int main(int argc, char **argv)
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
+                                {"h3-skip-buffering", no_argument, NULL, OPT_H3_SKIP_BUFFERING},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -1012,6 +1031,9 @@ int main(int argc, char **argv)
         } break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
+            break;
+        case OPT_H3_SKIP_BUFFERING:
+            h3_skip_buffering = 1;
             break;
         default:
             exit(EXIT_FAILURE);
