@@ -1729,13 +1729,13 @@ Enables on-the-fly compression of HTTP response.
 .PP
 
 
-If the argument is ON, both brotli and gzip compression are enabled.
+If the argument is ON, brotli, zstd, and gzip compression are enabled.
 If the argument is OFF, on-the-fly compression is disabled.
 If the argument is a sequence, the elements are the list of compression algorithms to be enabled.
-If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms.
+If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms (gzip: 1-9, br: 0-11, zstd: 1-22). When omitted, the default qualities are 1 for gzip, 1 for brotli, and 3 for zstd.
 
 
-When both brotli and gzip are enabled and if the client supports both, H2O is hard-coded to prefer brotli.
+When multiple algorithms are enabled and if the client supports several, H2O prefers brotli, then zstd, then gzip.
 
 .PP
 .BR Example:\ 
@@ -1747,10 +1747,14 @@ Enabling on-the-fly compression
 compress: ON
 
 # enable by name
-compress: [ gzip, br ]
+compress: [ gzip, br, zstd ]
 
 # enable gzip only
 compress: [ gzip ]
+
+# tune zstd quality
+compress:
+  zstd: 7
 
 .RE
 .fi
@@ -5311,6 +5315,5 @@ Here’s an example trace.
 .RE
 .fi
 .PP
-
 
 
