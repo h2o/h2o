@@ -53,27 +53,7 @@
 /* to maximize code-reuse between different stacks, we intentionally use API declared by OpenSSL as legacy */
 #define OPENSSL_SUPPRESS_DEPRECATED
 
-#include <openssl/opensslconf.h>
-#include <openssl/opensslv.h>
-
-#if defined(LIBRESSL_VERSION_NUMBER) ? LIBRESSL_VERSION_NUMBER >= 0x3050000fL : OPENSSL_VERSION_NUMBER >= 0x1010000fL
-/* RSA_METHOD is opaque, so RSA_meth* are used. */
-#define NEVERBLEED_OPAQUE_RSA_METHOD
-#endif
-
-#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) &&                                                            \
-    (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
-/* EC_KEY_METHOD and related APIs are avaliable, so ECDSA is enabled. */
-#define NEVERBLEED_ECDSA
-#endif
-
-#include <openssl/bn.h>
-#ifdef NEVERBLEED_ECDSA
-#include <openssl/ec.h>
-#endif
-#include <openssl/rand.h>
-#include <openssl/rsa.h>
-#include <openssl/ssl.h>
+#include "neverbleed.h"
 
 #ifdef __linux
 #if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(LIBRESSL_VERSION_NUMBER) && !defined(OPENSSL_IS_BORINGSSL)
@@ -131,8 +111,6 @@ static void RSA_set_flags(RSA *r, int flags)
 #define EVP_PKEY_up_ref(p) CRYPTO_add(&(p)->references, 1, CRYPTO_LOCK_EVP_PKEY)
 
 #endif
-
-#include "neverbleed.h"
 
 enum neverbleed_type { NEVERBLEED_TYPE_ERROR, NEVERBLEED_TYPE_RSA, NEVERBLEED_TYPE_ECDSA };
 
@@ -903,7 +881,16 @@ static EVP_PKEY *create_pkey(neverbleed_t *nb, size_t key_index, const char *ebu
     exdata->nb = nb;
     exdata->key_index = key_index;
 
+#ifdef OPENSSL_NO_ENGINE
+    rsa = RSA_new();
+    if (!rsa) {
+        fprintf(stderr, "no memory\n");
+        abort();
+    }
+    RSA_set_method(rsa, nb->rsa_method);
+#else
     rsa = RSA_new_method(nb->engine);
+#endif
     RSA_set_ex_data(rsa, get_rsa_exdata_idx(), exdata);
     if (BN_hex2bn(&e, ebuf) == 0) {
         fprintf(stderr, "failed to parse e:%s\n", ebuf);
@@ -1047,7 +1034,19 @@ static EVP_PKEY *ecdsa_create_pkey(neverbleed_t *nb, size_t key_index, int curve
     exdata->nb = nb;
     exdata->key_index = key_index;
 
+#ifdef OPENSSL_NO_ENGINE
+    ec_key = EC_KEY_new();
+    if (!ec_key) {
+        fprintf(stderr, "no memory\n");
+        abort();
+    }
+#ifdef NEVERBLEED_ECDSA
+    if (nb->ecdsa_method != NULL)
+        EC_KEY_set_method(ec_key, nb->ecdsa_method);
+#endif
+#else
     ec_key = EC_KEY_new_method(nb->engine);
+#endif
     EC_KEY_set_ex_data(ec_key, get_ecdsa_exdata_idx(), exdata);
 
     ec_group = EC_GROUP_new_by_curve_name(curve_name);
@@ -2072,7 +2071,7 @@ __attribute__((noreturn)) static void daemon_main(int listen_fd, int close_notif
         ENGINE_load_qat();
         bssl_qat_set_default_string("RSA");
         use_offload = ENGINE_QAT_PTR_GET() != NULL;
-#elif USE_OFFLOAD && !defined(OPENSSL_IS_BORINGSSL)
+#elif USE_OFFLOAD && !defined(OPENSSL_IS_BORINGSSL) && !defined(OPENSSL_NO_ENGINE)
         ENGINE *qat = ENGINE_by_id("qatengine");
         if (qat != NULL && ENGINE_init(qat)) {
             if (!ENGINE_set_default_RSA(qat))
@@ -2233,6 +2232,12 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
         EC_KEY_METHOD_set_sign(ecdsa_method, ecdsa_sign_proxy, NULL, NULL);
 #endif
 
+#ifdef OPENSSL_NO_ENGINE
+        nb->rsa_method = rsa_method;
+#ifdef NEVERBLEED_ECDSA
+        nb->ecdsa_method = ecdsa_method;
+#endif
+#else
         if ((nb->engine = ENGINE_new()) == NULL || !ENGINE_set_id(nb->engine, "neverbleed") ||
             !ENGINE_set_name(nb->engine, "privilege separation software engine") || !ENGINE_set_RSA(nb->engine, rsa_method)
 #ifdef NEVERBLEED_ECDSA
@@ -2243,6 +2248,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
             goto Fail;
         }
         ENGINE_add(nb->engine);
+#endif
     }
 #endif
 
@@ -2262,10 +2268,12 @@ Fail:
     }
     if (listen_fd != -1)
         close(listen_fd);
+#ifndef OPENSSL_NO_ENGINE
     if (nb->engine != NULL) {
         ENGINE_free(nb->engine);
         nb->engine = NULL;
     }
+#endif
     return -1;
 }
 
