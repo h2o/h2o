@@ -1479,6 +1479,22 @@ typedef struct st_h2o_accept_ctx_t {
 
 /* util */
 
+typedef struct st_h2o_accept_data_t {
+    h2o_accept_ctx_t *ctx;
+    h2o_socket_t *sock;
+    h2o_timer_t timeout;
+    struct timeval connected_at;
+} h2o_accept_data_t;
+
+typedef h2o_accept_data_t *(*h2o_accept_data_callback_create)(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
+typedef void (*h2o_accept_data_callback_destroy)(h2o_accept_data_t *accept_data);
+
+h2o_accept_data_t *h2o_accept_data_create(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at,
+                                          h2o_timer_cb timeout_cb, size_t sz);
+void h2o_accept_data_destroy(h2o_accept_data_t *data);
+void h2o_accept_data_timeout(h2o_accept_data_t *data);
+void h2o_accept_data_set_callbacks(h2o_accept_data_callback_create create, h2o_accept_data_callback_destroy destroy);
+
 extern const char h2o_http2_npn_protocols[];
 extern const char h2o_npn_protocols[];
 extern const h2o_iovec_t h2o_http2_alpn_protocols[];
