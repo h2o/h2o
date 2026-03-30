@@ -431,9 +431,13 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
     /* detach the content */
     self->last_content_before_send = *self->client->buf;
     h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
-    if (errstr == h2o_httpclient_error_is_eos) {
+
+    if (errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel) {
+        if (errstr == h2o_httpclient_error_graceful_cancel) {
+            self->src_req->upstream_cancel_graceful = 1;
+        }
         self->res_done = 1;
-        if (self->req_done)
+        if (self->req_done || errstr == h2o_httpclient_error_graceful_cancel)
             detach_client(self);
     } else {
         detach_client(self);
@@ -453,7 +457,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
-        assert(errstr == h2o_httpclient_error_is_eos);
+        assert(errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel);
         self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
     }
 
@@ -478,7 +482,7 @@ static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_heade
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
-        assert(errstr == h2o_httpclient_error_is_eos);
+        assert(errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel);
         self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
     }
 
@@ -689,6 +693,11 @@ static void proceed_request(h2o_httpclient_t *client, const char *errstr)
     struct rp_generator_t *self = client->data;
     if (self == NULL)
         return;
+
+    if (errstr == h2o_httpclient_error_graceful_cancel) {
+        self->src_req->upstream_cancel_graceful = 1;
+    }
+
     if (errstr != NULL)
         detach_client(self);
     if (self->src_req->proceed_req != NULL)
@@ -704,6 +713,9 @@ static int write_req(void *ctx, int is_end_stream)
     assert(chunk.len != 0 || is_end_stream);
 
     if (client == NULL) {
+        if (self->src_req->upstream_cancel_graceful) {
+            return 0;
+        }
         return -1;
     }
 

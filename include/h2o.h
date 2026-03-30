@@ -1402,6 +1402,10 @@ struct st_h2o_req_t {
      */
     unsigned char upstream_refused : 1;
     /**
+     * set by the proxy handler if the http2 upstream reset the stream with no error
+     */
+    unsigned char upstream_cancel_graceful : 1;
+    /**
      * if h2o_process_request has been called
      */
     unsigned char process_called : 1;

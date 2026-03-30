@@ -369,6 +369,7 @@ struct st_h2o_httpclient__h3_conn_t {
     h2o_linklist_t pending_requests;
 };
 
+extern const char h2o_httpclient_error_graceful_cancel[];
 extern const char h2o_httpclient_error_is_eos[];
 extern const char h2o_httpclient_error_refused_stream[];
 extern const char h2o_httpclient_error_unknown_alpn_protocol[];

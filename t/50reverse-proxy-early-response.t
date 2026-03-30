@@ -196,6 +196,100 @@ EOS
             }
             Time::HiRes::alarm(0);
         };
+
+        subtest 'upstream graceful cancel (NO_ERROR)' => sub {
+            plan skip_all => "only applicable for h2 down" unless $down_is_h2;
+            plan skip_all => "only applicable for h2 up" unless $up_is_h2;
+
+            my $upstream_port = empty_port({ host => '0.0.0.0' });
+
+            my $upstream = spawn_h2_server($upstream_port, +{}, +{
+                &HEADERS => sub {
+                    my ($conn, $stream_id, $headers) = @_;
+
+                    # 500 followed by RST_STREAM(NO_ERROR)
+                    $conn->send_headers($stream_id, [ ':status' => 500 ], 0);
+                    $conn->send_data($stream_id, 'half close', 0);
+                    $conn->stream_error($stream_id, 0);
+                },
+                &DATA => sub {
+                    # sink late data frames
+                },
+            });
+
+            my $server = spawn_h2o(h2o_conf($upstream_port, $up_is_h2));
+
+            my $output = run_with_h2get_simple($server, <<"EOS");
+                req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                    "content-length" => "102400"
+                }
+
+                h2g.send_headers(req, 1, END_HEADERS)
+                h2g.send_data(1, 0, "a" * 1024)
+                h2g.read_loop(500)
+                sleep 1
+                h2g.send_data(1, 0, "a" * 1024)
+                h2g.read_loop(500)
+EOS
+
+            like $output, qr/':status' => '500'.*?half close.*?RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\s+error_code => 0/s,
+                "Proxy forwarded headers, the complete body, and then RST_STREAM (NO_ERROR) in strict order";
+        };
+
+        subtest 'upstream graceful cancel with late data' => sub {
+            plan skip_all => "only applicable for h2 down" unless $down_is_h2;
+            plan skip_all => "only applicable for h2 up" unless $up_is_h2;
+
+            my $upstream_port = empty_port({ host => '0.0.0.0' });
+
+            # 1. Create the rogue H2 upstream
+            my $upstream = spawn_h2_server($upstream_port, +{}, +{
+                &HEADERS => sub {
+                    my ($conn, $stream_id, $headers) = @_;
+                    $conn->send_headers($stream_id, [ ':status' => 500 ], 0);
+                    $conn->send_data($stream_id, 'half close', 0);
+                    $conn->stream_error($stream_id, 0);
+                },
+                &DATA => sub {},
+            });
+
+            my $server = spawn_h2o(h2o_conf($upstream_port, $up_is_h2));
+
+            my $output = run_with_h2get_simple($server, <<"EOS");
+                req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                    "content-length" => "102400"
+                }
+
+                h2g.send_headers(req, 1, END_HEADERS)
+                h2g.send_data(1, 0, "a" * 1024)
+
+                while true
+                    f = h2g.read(1000)
+                    if f != nil
+                        puts f.to_s
+                        if f.type == "HEADERS"
+                            break
+                        end
+                    end
+                end
+                h2g.send_data(1, 0, "late data chunk")
+                
+                while true
+                    f = h2g.read(1000)
+                    if f == nil
+                        break
+                    end
+                    puts f.to_s
+                end
+EOS
+            diag($output) if $ENV{TEST_DEBUG};
+            like $output, qr/':status' => '500'/s, "Proxy forwarded the HTTP 500 OK";
+            my $end_stream_pos = index($output, 'DATA frame <length=0, flags=0x01, stream_id=1>');
+            my $rst_no_error_pos = index($output, "RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\terror_code => 0");
+            ok $end_stream_pos != -1, "Proxy flushed END_STREAM flag";
+            ok $rst_no_error_pos != -1, "Proxy sent RST_STREAM (NO_ERROR)";
+            ok $end_stream_pos < $rst_no_error_pos, "END_STREAM flag arrived strictly BEFORE RST_STREAM (NO_ERROR)";
+        };
     };
 };
 

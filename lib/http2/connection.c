@@ -937,6 +937,9 @@ void proceed_request(h2o_req_t *req, const char *errstr)
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
             /* Send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which might
              * trigger the destruction of the generator being the caller. */
+            if (errstr == h2o_httpclient_error_graceful_cancel) {
+                return;
+            }
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_scheduler_deactivate(&stream->_scheduler);
             if (!h2o_linklist_is_linked(&stream->_link))
@@ -992,6 +995,9 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     }
     if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
           stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
+        if (stream->req.upstream_cancel_graceful) {
+            return 0;
+        }
         stream->reset_by_peer_action = 1;
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
