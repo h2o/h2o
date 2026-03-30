@@ -6927,8 +6927,7 @@ void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point
         pthread_mutex_unlock(&logctx.mutex);
 }
 
-void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg)
+void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni)
 {
     if (!caller_locked)
         pthread_mutex_lock(&logctx.mutex);
@@ -6936,7 +6935,7 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
     if (conn->state.generation != ptls_log._generation) {
         /* update active bitmap */
         uint32_t new_active = 0;
-        const char *sni = get_sni != NULL ? get_sni(get_sni_arg) : NULL;
+        const char *sni = getsni.cb != NULL ? getsni.cb(getsni.arg) : NULL;
         for (size_t slot = 0; slot < PTLS_ELEMENTSOF(logctx.conns); ++slot) {
             if (logctx.conns[slot].points != NULL && conn->random_ < logctx.conns[slot].sample_ratio &&
                 is_in_stringlist(logctx.conns[slot].snis, sni) && is_in_addresslist(logctx.conns[slot].addresses, &conn->address)) {
@@ -7088,8 +7087,8 @@ void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time)
     logbuf.buf.off = (size_t)written;
 }
 
-int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg, int includes_appdata)
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni,
+                           int includes_appdata)
 {
     if (!expand_logbuf_or_invalidate("}\n", 2, 0))
         return 0;
@@ -7103,7 +7102,7 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
         ptls_log__recalc_point(1, point);
     uint32_t active = point->state.active_conns;
     if (conn != NULL && conn->state.generation != ptls_log._generation) {
-        ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
+        ptls_log__recalc_conn(1, conn, getsni);
         active &= conn->state.active_conns;
     }
 
