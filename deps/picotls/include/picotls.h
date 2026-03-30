@@ -1417,7 +1417,7 @@ typedef struct st_ptls_log_getsni_t {
 #define PTLS_LOG_DEFINE_GETSNI(suffix, type, body)                                                                                 \
     static inline const char *ptls_log_getsni_cb_##suffix(ptls_log_getsni_t *self)                                                 \
     {                                                                                                                              \
-        type arg = self->arg;                                                                                                      \
+        type arg = (type)self->arg;                                                                                                \
         body                                                                                                                       \
     }                                                                                                                              \
     static inline ptls_log_getsni_t ptls_log_getsni_##suffix(type arg)                                                             \
