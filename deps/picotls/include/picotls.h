@@ -1414,6 +1414,9 @@ typedef struct st_ptls_log_getsni_t {
     void *arg;
 } ptls_log_getsni_t;
 
+/**
+ * Creates a lazy callback object for obtaining SNI. The object is used to delay materialization of SNI to only when it is needed.
+ */
 #define PTLS_LOG_DEFINE_GETSNI(suffix, type, body)                                                                                 \
     static inline const char *ptls_log_getsni_cb_##suffix(ptls_log_getsni_t *self)                                                 \
     {                                                                                                                              \
