@@ -543,6 +543,8 @@ int h2o_socket_boringssl_get_async_job_index(void);
 int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
 #endif
 
+PTLS_LOG_DEFINE_GETSNI(h2o_sock, h2o_socket_t *, { return h2o_socket_get_ssl_server_name(arg); })
+
 /* inline defs */
 
 inline int h2o_socket_is_writing(h2o_socket_t *sock)
