@@ -437,7 +437,7 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
             self->src_req->upstream_cancel_graceful = 1;
         }
         self->res_done = 1;
-        if (self->req_done || errstr == h2o_httpclient_error_graceful_cancel)
+        if (self->req_done)
             detach_client(self);
     } else {
         detach_client(self);
