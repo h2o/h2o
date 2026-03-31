@@ -1410,7 +1410,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
     } while (0)
 
 typedef struct st_ptls_log_getsni_t {
-    const char *(*cb)(struct st_ptls_log_getsni_t *self);
+    const char *(*cb)(void *arg);
     void *arg;
 } ptls_log_getsni_t;
 
@@ -1418,9 +1418,9 @@ typedef struct st_ptls_log_getsni_t {
  * Creates a lazy callback object for obtaining SNI. The object is used to delay materialization of SNI to only when it is needed.
  */
 #define PTLS_LOG_DEFINE_GETSNI(suffix, type, body)                                                                                 \
-    static inline const char *ptls_log_getsni_cb_##suffix(ptls_log_getsni_t *self)                                                 \
+    static inline const char *ptls_log_getsni_cb_##suffix(void *_arg)                                                              \
     {                                                                                                                              \
-        type arg = (type)self->arg;                                                                                                \
+        type arg = (type)_arg;                                                                                                     \
         body                                                                                                                       \
     }                                                                                                                              \
     static inline ptls_log_getsni_t ptls_log_getsni_##suffix(type arg)                                                             \
