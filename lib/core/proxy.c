@@ -689,12 +689,6 @@ static void proceed_request(h2o_httpclient_t *client, const char *errstr)
     struct rp_generator_t *self = client->data;
     if (self == NULL)
         return;
-
-    if (errstr == h2o_httpclient_error_is_eos) {
-        assert(self->res_done);
-        self->src_req->upstream_cancel_graceful = 1;
-    }
-
     if (errstr != NULL)
         detach_client(self);
     if (self->src_req->proceed_req != NULL)
@@ -710,9 +704,6 @@ static int write_req(void *ctx, int is_end_stream)
     assert(chunk.len != 0 || is_end_stream);
 
     if (client == NULL) {
-        if (self->src_req->upstream_cancel_graceful) {
-            return 0;
-        }
         return -1;
     }
 

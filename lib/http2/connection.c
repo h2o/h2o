@@ -935,12 +935,16 @@ void proceed_request(h2o_req_t *req, const char *errstr)
         stream->req.proceed_req = NULL;
         set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
-            /* Send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which might
-             * trigger the destruction of the generator being the caller. */
-            if (errstr == h2o_httpclient_error_is_eos) {
+            /* When RST_STREAM(NO_ERROR) is received before the entire response is sent to the client, propagation of the reset
+             * needs to be delayed. */
+            if (errstr == h2o_httpclient_error_is_eos && stream->state < H2O_HTTP2_STREAM_STATE_END_STREAM) {
+                stream->delayed_rst_stream_no_error = 1;
                 return;
             }
-            stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
+            /* Otherwise, send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which
+             * might trigger the destruction of the generator being the caller. */
+            stream_send_error(conn, stream->stream_id,
+                              errstr == h2o_httpclient_error_is_eos ? H2O_HTTP2_ERROR_NONE : H2O_HTTP2_ERROR_STREAM_CLOSED);
             h2o_http2_scheduler_deactivate(&stream->_scheduler);
             if (!h2o_linklist_is_linked(&stream->_link))
                 h2o_linklist_insert(&conn->_write.streams_to_proceed, &stream->_link);
@@ -995,9 +999,6 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     }
     if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
           stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
-        if (stream->req.upstream_cancel_graceful) {
-            return 0;
-        }
         stream->reset_by_peer_action = 1;
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
@@ -1516,6 +1517,10 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
             h2o_http2_stream_t *stream = H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->_write.streams_to_proceed.next);
             assert(!h2o_http2_stream_has_pending_data(stream));
             h2o_linklist_unlink(&stream->_link);
+            if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM && stream->delayed_rst_stream_no_error) {
+                stream->delayed_rst_stream_no_error = 0;
+                stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_NONE);
+            }
             h2o_http2_stream_proceed(conn, stream);
         }
     }

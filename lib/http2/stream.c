@@ -444,11 +444,6 @@ void h2o_http2_stream_proceed(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream
             h2o_http2_stream_close(conn, stream);
             break;
         default:
-               if (stream->req.upstream_cancel_graceful) {
-                h2o_http2__encode_rst_stream_frame(&conn->_write.buf, stream->stream_id, H2O_HTTP2_ERROR_NONE);
-                h2o_http2_conn_request_write(conn);
-                h2o_http2_stream_close(conn, stream);
-            }
             break; /* the stream will be closed when the read side is done */
         }
     } else {
