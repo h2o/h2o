@@ -734,7 +734,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
         ptls_build_v4_mapped_v6_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
         break;
     case AF_INET6:
-        sock->_log_state.address = peeraddr.sin6.sin6_addr;
+        memcpy(sock->_log_state.address, peeraddr.sin6.sin6_addr.s6_addr, sizeof(sock->_log_state.address));
         break;
     default:
         break;

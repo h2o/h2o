@@ -1108,7 +1108,7 @@ typedef struct st_quicly_decoded_packet_t {
      */
     size_t encrypted_off;
     /**
-     * size of the UDP datagram; set to zero if this is not the first QUIC packet within the datagram
+     * size of the UDP datagram
      */
     size_t datagram_size;
     /**
@@ -1122,6 +1122,10 @@ typedef struct st_quicly_decoded_packet_t {
      * ECN bits
      */
     uint8_t ecn : 2;
+    /**
+     * if it is the first packet within the datagram
+     */
+    uint8_t first_packet : 1;
     /**
      *
      */
@@ -1593,10 +1597,10 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         quicly_conn_t *_c = (_conn);                                                                                               \
         ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
         ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
+        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, _c->stash.now == 0, {     \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \

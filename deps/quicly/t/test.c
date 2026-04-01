@@ -1508,7 +1508,6 @@ int main(int argc, char **argv)
 
     quicly_amend_ptls_context(quic_ctx.tls);
 
-    subtest("ack_frequency_handling", test_ack_frequency);
     subtest("error-codes", test_error_codes);
     subtest("enable_with_ratio255", test_enable_with_ratio255);
     subtest("next-packet-number", test_next_packet_number);
@@ -1534,6 +1533,7 @@ int main(int argc, char **argv)
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("jumpstart-cwnd", test_jumpstart_cwnd);
     subtest("jumpstart", test_jumpstart);
+    subtest("ack-frequency", test_ack_frequency);
     subtest("cc", test_cc);
 
     subtest("state-exhaustion", test_state_exhaustion);

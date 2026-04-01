@@ -29,7 +29,9 @@
 #include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
+#if !defined(OPENSSL_NO_ENGINE)
 #include <openssl/engine.h>
+#endif
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/provider.h>
 #endif
@@ -385,6 +387,7 @@ Exit:
 
 #if ASYNC_TESTS
 
+#if !defined(OPENSSL_NO_ENGINE)
 static ENGINE *load_engine(const char *name)
 {
     ENGINE *e;
@@ -398,6 +401,7 @@ static ENGINE *load_engine(const char *name)
 
     return e;
 }
+#endif
 
 static struct {
     struct {
@@ -639,6 +643,7 @@ int main(int argc, char **argv)
     subtest("many-handshakes-non-async", many_handshakes);
     openssl_sign_certificate.async = 0;
     subtest("many-handshakes-async", many_handshakes);
+#if !defined(OPENSSL_NO_ENGINE)
     { /* qatengine should be tested at last, because we do not have the code to unload or un-default it */
         const char *engine_name = "qatengine";
         ENGINE *qatengine;
@@ -651,6 +656,7 @@ int main(int argc, char **argv)
             note("%s not found", engine_name);
         }
     }
+#endif
 #endif
 
     int ret = done_testing();
