@@ -202,38 +202,54 @@ EOS
             plan skip_all => "only applicable for h2 up" unless $up_is_h2;
 
             my $upstream_port = empty_port({ host => '0.0.0.0' });
-
-            my $upstream = spawn_h2_server($upstream_port, +{}, +{
-                &HEADERS => sub {
-                    my ($conn, $stream_id, $headers) = @_;
-
-                    # 500 followed by RST_STREAM(NO_ERROR)
-                    $conn->send_headers($stream_id, [ ':status' => 500 ], 0);
-                    $conn->send_data($stream_id, 'half close', 0);
-                    $conn->stream_error($stream_id, 0);
-                },
-                &DATA => sub {
-                    # sink late data frames
-                },
-            });
-
             my $server = spawn_h2o(h2o_conf($upstream_port, $up_is_h2));
 
-            my $output = run_with_h2get_simple($server, <<"EOS");
-                req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
-                    "content-length" => "102400"
-                }
+            my $doit = sub {
+                my $rst_delay = shift;
 
-                h2g.send_headers(req, 1, END_HEADERS)
-                h2g.send_data(1, 0, "a" * 1024)
-                h2g.read_loop(500)
-                sleep 1
-                h2g.send_data(1, 0, "a" * 1024)
-                h2g.read_loop(500)
+                my $upstream = spawn_h2_server($upstream_port, +{}, +{
+                    &HEADERS => sub {
+                        my ($conn, $stream_id, $headers) = @_;
+
+                        # 500 followed by RST_STREAM(NO_ERROR)
+                        $conn->send_headers($stream_id, [ ':status' => 500 ], 0);
+                        $conn->send_data($stream_id, 'half close', 1);
+                        $conn->stream_error($stream_id, 0)
+                            unless $rst_delay;
+                    },
+                    &DATA => sub {
+                        my ($conn, $stream_id) = @_;
+                        # sink late data frames
+                        if ($rst_delay) {
+                            sleep $rst_delay;
+                            $conn->stream_error($stream_id, 0);
+                        }
+                    },
+                });
+
+                my $output = run_with_h2get_simple($server, <<"EOS");
+                    req = { ":method" => "POST", ":authority" => authority, ":scheme" => "https", ":path" => "/",
+                        "content-length" => "102400"
+                    }
+
+                    h2g.send_headers(req, 1, END_HEADERS)
+                    h2g.send_data(1, 0, "a" * 1024)
+                    h2g.read_loop(500)
+                    sleep 1
+                    h2g.send_data(1, 0, "a" * 1024)
+                    h2g.read_loop(500)
 EOS
 
-            like $output, qr/':status' => '500'.*?half close.*?RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\s+error_code => 0/s,
-                "Proxy forwarded headers, the complete body, and then RST_STREAM (NO_ERROR) in strict order";
+                like $output, qr/':status' => '500'.*?half close.*?RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\s+error_code => 0/s,
+                    "Proxy forwarded headers, the complete body, and then RST_STREAM (NO_ERROR) in strict order";
+            };
+
+            subtest "rst-delay=0" => sub {
+                $doit->(0);
+            };
+            subtest "rst-delay=0.2" => sub {
+                $doit->(0.2);
+            };
         };
 
         subtest 'upstream graceful cancel with late data' => sub {
@@ -247,7 +263,7 @@ EOS
                 &HEADERS => sub {
                     my ($conn, $stream_id, $headers) = @_;
                     $conn->send_headers($stream_id, [ ':status' => 500 ], 0);
-                    $conn->send_data($stream_id, 'half close', 0);
+                    $conn->send_data($stream_id, 'half close', 1);
                     $conn->stream_error($stream_id, 0);
                 },
                 &DATA => sub {},
@@ -284,11 +300,11 @@ EOS
 EOS
             diag($output) if $ENV{TEST_DEBUG};
             like $output, qr/':status' => '500'/s, "Proxy forwarded the HTTP 500 OK";
-            my $end_stream_pos = index($output, 'DATA frame <length=0, flags=0x01, stream_id=1>');
+            my $end_stream_pos = index($output, 'DATA frame <length=10, flags=0x01, stream_id=1>');
             my $rst_no_error_pos = index($output, "RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\terror_code => 0");
-            ok $end_stream_pos != -1, "Proxy flushed END_STREAM flag";
-            ok $rst_no_error_pos != -1, "Proxy sent RST_STREAM (NO_ERROR)";
-            ok $end_stream_pos < $rst_no_error_pos, "END_STREAM flag arrived strictly BEFORE RST_STREAM (NO_ERROR)";
+            isnt $end_stream_pos, -1, "Proxy flushed END_STREAM flag";
+            isnt $rst_no_error_pos, -1, "Proxy sent RST_STREAM (NO_ERROR)";
+            cmp_ok $end_stream_pos, '<', $rst_no_error_pos, "END_STREAM flag arrived strictly BEFORE RST_STREAM (NO_ERROR)";
         };
     };
 };
