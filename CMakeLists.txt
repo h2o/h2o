@@ -383,7 +383,6 @@ SET(LIB_SOURCE_FILES
     deps/quicly/lib/rate.c
     deps/quicly/lib/recvstate.c
     deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sendstate.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
@@ -915,7 +914,9 @@ ADD_CUSTOM_TARGET(doc-publish ${CMAKE_MAKE_PROGRAM} -f ../misc/doc.mk publish BI
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc
     DEPENDS h2o)
 
-GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
+IF (NOT EXTERNALPROJECT_SSL_ROOT_DIR)
+    GET_FILENAME_COMPONENT(EXTERNALPROJECT_SSL_ROOT_DIR ${OPENSSL_INCLUDE_DIR} PATH)
+ENDIF ()
 
 IF (EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/misc/h2get/CMakeLists.txt AND RUBY AND BISON AND NOT (OPENSSL_VERSION VERSION_LESS "1.1.1"))
     ExternalProject_Add(h2get

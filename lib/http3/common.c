@@ -145,15 +145,23 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         }
     }
 
-    /* next CMSG is UDP_SEGMENT size (for GSO) */
-    int using_gso = 0;
+    /* next CMSG is UDP_SEGMENT size (for GSO); assert that the input follows the expected pattern (see the doc-comment of
+     * `quicly_send`), then set the CMSG and convert `datagrams` into one. */
+    for (size_t i = 1; i < num_datagrams; ++i) {
+        assert(datagrams[i - 1].iov_base + datagrams[i - 1].iov_len == datagrams[i].iov_base);
+        assert(i == num_datagrams - 1 || datagrams[i].iov_len == datagrams[0].iov_len);
+    }
 #ifdef UDP_SEGMENT
+    struct iovec gso_iovec;
     if (num_datagrams > 1 && ctx->use_gso) {
-        for (size_t i = 1; i < num_datagrams - 1; ++i)
-            assert(datagrams[i].iov_len == datagrams[0].iov_len);
         uint16_t segsize = (uint16_t)datagrams[0].iov_len;
         PUSH_CMSG(SOL_UDP, UDP_SEGMENT, segsize);
-        using_gso = 1;
+        gso_iovec = (struct iovec){
+            .iov_base = datagrams[0].iov_base,
+            .iov_len = datagrams[num_datagrams - 1].iov_base + datagrams[num_datagrams - 1].iov_len - datagrams[0].iov_base,
+        };
+        datagrams = &gso_iovec;
+        num_datagrams = 1;
     }
 #endif
 
@@ -162,22 +170,13 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         mess.msg_control = NULL;
 
     /* send datagrams */
-    if (using_gso) {
-        mess.msg_iov = datagrams;
-        mess.msg_iovlen = (int)num_datagrams;
+    for (size_t i = 0; i < num_datagrams; ++i) {
+        mess.msg_iov = datagrams + i;
+        mess.msg_iovlen = 1;
         while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
-    } else {
-        for (size_t i = 0; i < num_datagrams; ++i) {
-            mess.msg_iov = datagrams + i;
-            mess.msg_iovlen = 1;
-            while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
-                ;
-            if (ret == -1)
-                goto SendmsgError;
-        }
     }
 
     h2o_error_reporter_record_success(&track_sendmsg);
@@ -693,17 +692,20 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         quicly_address_t destaddr, srcaddr;
         struct iovec vec;
         uint8_t ttl;
-        char controlbuf[
+        union {
+            struct cmsghdr _align; /* natrually align the contents of controlbuf (which are of type cmsghdr) */
+            char controlbuf[
 #ifdef IPV6_PKTINFO
-            CMSG_SPACE(sizeof(struct in6_pktinfo))
+                CMSG_SPACE(sizeof(struct in6_pktinfo))
 #elif defined(IP_PKTINFO)
-            CMSG_SPACE(sizeof(struct in_pktinfo))
+                CMSG_SPACE(sizeof(struct in_pktinfo))
 #elif defined(IP_RECVDSTADDR)
-            CMSG_SPACE(sizeof(struct in_addr))
+                CMSG_SPACE(sizeof(struct in_addr))
 #else
-            CMSG_SPACE(1)
+                CMSG_SPACE(1)
 #endif
-        ];
+            ];
+        };
         uint8_t buf[1600];
     } dgrams[10];
 #ifdef __linux__

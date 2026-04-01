@@ -62,7 +62,7 @@ subtest "nxdomain" => sub {
         my ($proto, $port, $curl) = @_;
         plan skip_all => "curl does not support proxying over HTTP/3"
             if $curl =~ /--http3/;
-        my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.example.org/ 2>&1`;
+        my $content = `$curl --proxy-insecure -p -x $proto://127.0.0.1:$port --silent -v --show-error https://doesnotexist.invalid./ 2>&1`;
         like $content, qr{proxy-status: h2o/test; error=dns_error; rcode="NXDOMAIN"}i;
         like $content, $curl_fail->(502);
     });

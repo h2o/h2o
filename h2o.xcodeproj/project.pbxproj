@@ -453,13 +453,9 @@
 		E98403CC2485172E00E3A6B1 /* remote_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C72485172E00E3A6B1 /* remote_cid.c */; };
 		E98403CD2485172E00E3A6B1 /* remote_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C72485172E00E3A6B1 /* remote_cid.c */; };
 		E98403CE2485172E00E3A6B1 /* remote_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C72485172E00E3A6B1 /* remote_cid.c */; };
-		E98403CF2485172E00E3A6B1 /* retire_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C82485172E00E3A6B1 /* retire_cid.c */; };
-		E98403D02485172E00E3A6B1 /* retire_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C82485172E00E3A6B1 /* retire_cid.c */; };
-		E98403D12485172E00E3A6B1 /* retire_cid.c in Sources */ = {isa = PBXBuildFile; fileRef = E98403C82485172E00E3A6B1 /* retire_cid.c */; };
 		E98403D62485174B00E3A6B1 /* remote_cid.h in Headers */ = {isa = PBXBuildFile; fileRef = E98403D22485174A00E3A6B1 /* remote_cid.h */; };
 		E98403D72485174B00E3A6B1 /* cid.h in Headers */ = {isa = PBXBuildFile; fileRef = E98403D32485174A00E3A6B1 /* cid.h */; };
 		E98403D82485174B00E3A6B1 /* local_cid.h in Headers */ = {isa = PBXBuildFile; fileRef = E98403D42485174B00E3A6B1 /* local_cid.h */; };
-		E98403D92485174B00E3A6B1 /* retire_cid.h in Headers */ = {isa = PBXBuildFile; fileRef = E98403D52485174B00E3A6B1 /* retire_cid.h */; };
 		E987E5CF1FD7BE8800DE4346 /* utf8_util.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5861FD7BE2200DE4346 /* utf8_util.c */; };
 		E987E5D01FD7BE8D00DE4346 /* static_dict.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E58C1FD7BE2300DE4346 /* static_dict.c */; };
 		E987E5D11FD7BE9200DE4346 /* metablock.c in Sources */ = {isa = PBXBuildFile; fileRef = E987E5801FD7BE2100DE4346 /* metablock.c */; };
@@ -1244,11 +1240,9 @@
 		E980423C2246304F008B9745 /* defaults.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = defaults.c; sourceTree = "<group>"; };
 		E98403C62485172E00E3A6B1 /* local_cid.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = local_cid.c; sourceTree = "<group>"; };
 		E98403C72485172E00E3A6B1 /* remote_cid.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = remote_cid.c; sourceTree = "<group>"; };
-		E98403C82485172E00E3A6B1 /* retire_cid.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = retire_cid.c; sourceTree = "<group>"; };
 		E98403D22485174A00E3A6B1 /* remote_cid.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = remote_cid.h; sourceTree = "<group>"; };
 		E98403D32485174A00E3A6B1 /* cid.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cid.h; sourceTree = "<group>"; };
 		E98403D42485174B00E3A6B1 /* local_cid.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = local_cid.h; sourceTree = "<group>"; };
-		E98403D52485174B00E3A6B1 /* retire_cid.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = retire_cid.h; sourceTree = "<group>"; };
 		E987E5551FD7BE1D00DE4346 /* bit_cost.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bit_cost.c; sourceTree = "<group>"; };
 		E987E5561FD7BE1D00DE4346 /* memory.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = memory.h; sourceTree = "<group>"; };
 		E987E5571FD7BE1D00DE4346 /* brotli_bit_stream.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = brotli_bit_stream.h; sourceTree = "<group>"; };
@@ -2592,7 +2586,6 @@
 				0829879526E1F3700053638F /* rate.c */,
 				E98884CE21E7F3C80060F010 /* recvstate.c */,
 				E98403C72485172E00E3A6B1 /* remote_cid.c */,
-				E98403C82485172E00E3A6B1 /* retire_cid.c */,
 				E98884CD21E7F3C80060F010 /* sendstate.c */,
 				E98884CC21E7F3C80060F010 /* sentmap.c */,
 				E98884CB21E7F3C80060F010 /* streambuf.c */,
@@ -2616,7 +2609,6 @@
 				0829879326E1F3530053638F /* rate.h */,
 				E98884C321E7F3AE0060F010 /* recvstate.h */,
 				E98403D22485174A00E3A6B1 /* remote_cid.h */,
-				E98403D52485174B00E3A6B1 /* retire_cid.h */,
 				E98884C421E7F3AE0060F010 /* sendstate.h */,
 				E98884C621E7F3AF0060F010 /* sentmap.h */,
 				E98884C521E7F3AF0060F010 /* streambuf.h */,
@@ -2953,7 +2945,6 @@
 				10EC2A361A0B4D370083514F /* socketpool.h in Headers */,
 				105534EB1A42A87E00627ECB /* _templates.c.h in Headers */,
 				7D67C724204F8CA50049E935 /* httpclient.h in Headers */,
-				E98403D92485174B00E3A6B1 /* retire_cid.h in Headers */,
 				1079236A19A3210E00C52AD6 /* khash.h in Headers */,
 				E98884C721E7F3AF0060F010 /* recvstate.h in Headers */,
 				E98403D62485174B00E3A6B1 /* remote_cid.h in Headers */,
@@ -3401,7 +3392,6 @@
 				1079239619A3210E00C52AD6 /* picohttpparser.c in Sources */,
 				E98403C92485172E00E3A6B1 /* local_cid.c in Sources */,
 				10AAAC651B6C9275004487C3 /* casper.c in Sources */,
-				E98403CF2485172E00E3A6B1 /* retire_cid.c in Sources */,
 				10AA2EC41AA0403A004322AC /* reproxy.c in Sources */,
 				0829879626E1F3710053638F /* rate.c in Sources */,
 				E96A24CF23E6743600CA970A /* absprio.c in Sources */,
@@ -3488,7 +3478,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E98403D02485172E00E3A6B1 /* retire_cid.c in Sources */,
 				107D4D441B588021004A9B21 /* ssl.c in Sources */,
 				E98403CA2485172E00E3A6B1 /* local_cid.c in Sources */,
 				E9316EEC24417EAA00C9C127 /* state.c in Sources */,
@@ -3736,7 +3725,6 @@
 				E9708B4D1E52C7DF0029E0A5 /* socket.c in Sources */,
 				08E86F442B56675900F7211C /* h2olog.c in Sources */,
 				E987E5DC1FD7BEB500DE4346 /* dictionary_hash.c in Sources */,
-				E98403D12485172E00E3A6B1 /* retire_cid.c in Sources */,
 				10E598011CE1683A000D7B94 /* mruby.c in Sources */,
 				E9708B6A1E52C81D0029E0A5 /* access_log.c in Sources */,
 				E9F677D520074770006476D3 /* roundrobin.c in Sources */,

@@ -2435,6 +2435,8 @@ void h2o_log_register(h2o_hostconf_t *hostconf);
  */
 void h2o_log_register_configurator(h2o_globalconf_t *conf);
 
+PTLS_LOG_DEFINE_GETSNI(h2o_conn, h2o_conn_t *, { return arg->callbacks->get_ssl_server_name(arg); })
+
 /* inline defs */
 
 #ifdef H2O_NO_64BIT_ATOMICS

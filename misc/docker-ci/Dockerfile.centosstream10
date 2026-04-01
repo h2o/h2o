@@ -1,0 +1,113 @@
+FROM quay.io/centos/centos:stream10
+
+ENV DNF_INSTALL_OPTS="--assumeyes"
+
+RUN dnf update $DNF_INSTALL_OPTS -y
+RUN dnf install $DNF_INSTALL_OPTS \
+	ca-certificates \
+	autoconf \
+	bison \
+	bpftrace \
+	brotli \
+	brotli-devel \
+	bzip2 \
+	clang \
+	cmake \
+	cmake-filesystem \
+	dnsutils \
+	flex \
+	git \
+	iproute \
+	libbpf-tools \
+	c-ares-devel \
+	libcap-devel \
+	llvm-libs \
+	llvm-devel \
+	libedit-devel \
+	elfutils-libelf-devel \
+	libnghttp2-devel \
+	libpsl-devel \
+	openssl-devel \
+	libtool \
+	libuv-devel \
+	memcached \
+	net-tools \
+	nc \
+	nodejs \
+	php-fpm \
+	pkgconf-pkg-config \
+	python3 \
+	rsync \
+	ruby-devel \
+	rubygems \
+	sudo \
+	systemtap-sdt-devel \
+	time \
+	wget \
+	zlib-devel \
+	llvm-filesystem
+
+# perl
+RUN dnf install $DNF_INSTALL_OPTS \
+	perl-App-cpanminus \
+	perl-BSD-Resource \
+	perl-FCGI \
+	perl-File-ShareDir \
+	perl-IO-Socket-SSL \
+	perl-JSON \
+	perl-List-MoreUtils \
+	perl-libwww-perl
+ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
+RUN cpanm -n FCGI::ProcManager IPC::Signal Plack Scope::Guard Test::Exception Starlet Protocol::HTTP2
+RUN cpanm -n NLNETLABS/Net-DNS-1.36.tar.gz # Net-DNS 1.39 has issues around use of alarm, fork, etc.
+
+# curl with ngtcp2
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch openssl-3.0.10+quic https://github.com/quictls/openssl /opt/src/quictls \
+	&& cd /opt/src/quictls \
+	&& ./config enable-tls1_3 no-shared --prefix=/usr/local/quictls \
+	&& make -j$(nproc) \
+	&& make install \
+	&& make clean
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch v1.1.0 https://github.com/ngtcp2/nghttp3 /opt/src/nghttp3 \
+	&& cd /opt/src/nghttp3 \
+	&& autoreconf -fi \
+	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& make -j$(nproc) \
+	&& make install \
+	&& make clean
+RUN mkdir -p /opt/src \
+	&& git clone --depth 1 --branch v1.2.0 https://github.com/ngtcp2/ngtcp2 /opt/src/ngtcp2 \
+	&& cd /opt/src/ngtcp2 \
+	&& autoreconf -fi \
+	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& make -j$(nproc) \
+	&& make install \
+	&& make clean
+RUN mkdir -p /opt/src \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://curl.se/download/curl-8.6.0.tar.bz2 | tar xjf - \
+	&& cd curl-8.6.0 \
+	&& USE_CURL_SSLKEYLOGFILE=true ./configure --disable-shared --with-nghttp2 --with-ngtcp2 --with-nghttp3 --with-openssl=/usr/local/quictls \
+	&& make -j$(nproc) \
+	&& make install \
+	&& make clean
+
+# h2spec
+RUN curl -Ls https://github.com/summerwind/h2spec/releases/download/v2.6.0/h2spec_linux_amd64.tar.gz | tar zx -C /usr/local/bin
+
+# use dumb-init
+RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
+ && chmod +x /usr/local/bin/dumb-init
+
+# komake
+RUN wget -O /usr/local/bin/komake https://raw.githubusercontent.com/kazuho/komake/main/komake && chmod +x /usr/local/bin/komake
+
+# create user
+RUN useradd --create-home ci
+RUN echo 'ci ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+WORKDIR /home/ci
+USER ci
+
+ENTRYPOINT ["/usr/local/bin/dumb-init", "--rewrite", "1:0"]
