@@ -431,11 +431,7 @@ static void on_body_on_close(struct rp_generator_t *self, const char *errstr)
     /* detach the content */
     self->last_content_before_send = *self->client->buf;
     h2o_buffer_init(self->client->buf, &h2o_socket_buffer_prototype);
-
-    if (errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel) {
-        if (errstr == h2o_httpclient_error_graceful_cancel) {
-            self->src_req->upstream_cancel_graceful = 1;
-        }
+    if (errstr == h2o_httpclient_error_is_eos) {
         self->res_done = 1;
         if (self->req_done)
             detach_client(self);
@@ -457,7 +453,7 @@ static int on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *t
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
-        assert(errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel);
+        assert(errstr == h2o_httpclient_error_is_eos);
         self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
     }
 
@@ -482,7 +478,7 @@ static int on_body_piped(h2o_httpclient_t *client, const char *errstr, h2o_heade
     h2o_timer_unlink(&self->send_headers_timeout);
 
     if (num_trailers != 0) {
-        assert(errstr == h2o_httpclient_error_is_eos || errstr == h2o_httpclient_error_graceful_cancel);
+        assert(errstr == h2o_httpclient_error_is_eos);
         self->src_req->res.trailers = (h2o_headers_t){trailers, num_trailers, num_trailers};
     }
 
@@ -694,7 +690,8 @@ static void proceed_request(h2o_httpclient_t *client, const char *errstr)
     if (self == NULL)
         return;
 
-    if (errstr == h2o_httpclient_error_graceful_cancel) {
+    if (errstr == h2o_httpclient_error_is_eos) {
+        assert(self->res_done);
         self->src_req->upstream_cancel_graceful = 1;
     }
 

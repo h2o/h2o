@@ -937,7 +937,7 @@ void proceed_request(h2o_req_t *req, const char *errstr)
         if (conn->state < H2O_HTTP2_CONN_STATE_IS_CLOSING) {
             /* Send error and close. State disposal is delayed so as to avoid freeing `req` within this function, which might
              * trigger the destruction of the generator being the caller. */
-            if (errstr == h2o_httpclient_error_graceful_cancel) {
+            if (errstr == h2o_httpclient_error_is_eos) {
                 return;
             }
             stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);

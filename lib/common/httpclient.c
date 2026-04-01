@@ -22,7 +22,6 @@
 
 #include "h2o/httpclient.h"
 
-const char h2o_httpclient_error_graceful_cancel[] = "half close";
 const char h2o_httpclient_error_is_eos[] = "end of stream";
 const char h2o_httpclient_error_refused_stream[] = "refused stream";
 const char h2o_httpclient_error_unknown_alpn_protocol[] = "unknown alpn protocol";
