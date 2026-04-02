@@ -689,10 +689,20 @@ static int handle_rst_stream_frame(struct st_h2o_http2client_conn_t *conn, h2o_h
     }
 
     stream = get_stream(conn, frame->stream_id);
+
     if (stream != NULL) {
-        /* reset the stream */
-        call_callback_with_error(stream, payload.error_code == -H2O_HTTP2_ERROR_REFUSED_STREAM ? h2o_httpclient_error_refused_stream
-                                                                                               : h2o_httpclient_error_io);
+        /* Determine the error string:
+         * * Refusal is handled specially, as it allow the client to retry safely.
+         * * If RST_STREAM(NO_ERROR) is received after the response is closed, it is an indication that the server is not interested
+         *   in receiving more bytes, and the signal needs to be propagated.
+         * * Otherwise, it is a generic failure (I/O error). */
+        const char *errstr = h2o_httpclient_error_io;
+        if (payload.error_code == -H2O_HTTP2_ERROR_REFUSED_STREAM) {
+            errstr = h2o_httpclient_error_refused_stream;
+        } else if (payload.error_code == -H2O_HTTP2_ERROR_NONE && stream->state.res == STREAM_STATE_CLOSED) {
+            errstr = h2o_httpclient_error_is_eos;
+        }
+        call_callback_with_error(stream, errstr);
         close_stream(stream);
     }
 
