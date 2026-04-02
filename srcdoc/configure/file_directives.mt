@@ -116,6 +116,26 @@ The sequence of filenames are searched from left to right, and the first file th
 
 <?
 $ctx->{directive}->(
+    name         => "file.io_uring",
+    levels       => [ qw(global host path) ],
+    default      => "file.io_uring: OFF",
+    desc         => q{If io_uring should be used for serving files.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/base_directives.html#io_uring-batch-size"><code>io_uring-batch-size</code></a>,
+<a href="configure/base_directives.html#max-spare-pipes"><code>max-spare-pipes</code></a>
+EOT
+)->(sub {
+?>
+<p>
+By default, H2O uses system calls such as pread (2) or sendfile (2), which block if the file being read is not in the page cache.
+This can prevent H2O's worker threads from making progress on any connection handled by the affected thread.
+When this flag is enabled, H2O is no longer blocked by the I/O calls, as the data is asynchronously copied from disk to the page cache before h2o attempts to access it.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name     => "file.mime.addtypes",
     levels   => [ qw(global host path) ],
     see_also => render_mt(<<'EOT'),
@@ -219,7 +239,7 @@ EOT
 )->(sub {
 ?>
 <p>
-If set to <code>ON</code>, the handler looks for a file with <code>.br</code>, <code>.zstd</code>, or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://www.rfc-editor.org/rfc/rfc7932.html" target=_blank>brotli</a>, <a href="https://www.rfc-editor.org/rfc/rfc8878.html" target=_blank>zstd</a>, or <a href="https://tools.ietf.org/html/rfc1952" target=_blank>gzip</a>-encoded response.
+If set to <code>ON</code>, the handler looks for a file with <code>.br</code>, <code>.zst</code>, or <code>.gz</code> appended and sends the file, if the client is capable of transparently decoding a <a href="https://www.rfc-editor.org/rfc/rfc7932.html" target=_blank>brotli</a>, <a href="https://www.rfc-editor.org/rfc/rfc8878.html" target=_blank>zstd</a>, or <a href="https://tools.ietf.org/html/rfc1952" target=_blank>gzip</a>-encoded response.
 For example, if a client requests a file named <code>index.html</code> with <code>Accept-Encoding: gzip</code> header and if <code>index.html.gz</code> exists, the <code>.gz</code> file is sent as a response together with a <code>Content-Encoding: gzip</code> response header.
 When both the client and the server support multiple content encodings, the encoding chosen is the first one listed in the following order: brotli, zstd, gzip.
 </p>

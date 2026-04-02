@@ -201,8 +201,49 @@ static void test_subtract(void)
     CHECK({100, 117});
 }
 
+static void test_next_missing(void)
+{
+    quicly_ranges_t ranges;
+    int ret;
+
+    quicly_ranges_init(&ranges);
+    ok(ranges.num_ranges == 0);
+
+    ret = quicly_ranges_add(&ranges, 1, 3);
+    ok(ret == 0);
+    CHECK({1, 3});
+
+    ret = quicly_ranges_add(&ranges, 6, 10);
+    ok(ret == 0);
+    CHECK({1, 3}, {6, 10});
+
+    ret = quicly_ranges_add(&ranges, 12, 15);
+    ok(ret == 0);
+    CHECK({1, 3}, {6, 10}, {12, 15});
+
+    struct st_missing_test_case {
+        uint64_t lower_bound;
+        uint64_t expected_missing;
+        uint64_t expected_slots_traversed;
+    };
+
+    struct st_missing_test_case missing_test_cases[] = {
+        {1, 3, 3},  {2, 3, 3},   {3, 3, 3},   {4, 4, 2},   {5, 5, 2},   {6, 10, 2},  {7, 10, 2},  {8, 10, 2},
+        {9, 10, 2}, {10, 10, 2}, {11, 11, 1}, {12, 15, 1}, {13, 15, 1}, {15, 15, 1}, {15, 15, 1}, {16, 16, 0},
+    };
+
+    uint64_t missing;
+    size_t slot_traversed;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(missing_test_cases); ++i) {
+        missing = quicly_ranges_next_missing(&ranges, missing_test_cases[i].lower_bound, &slot_traversed);
+        ok(missing == missing_test_cases[i].expected_missing);
+        ok(slot_traversed == missing_test_cases[i].expected_slots_traversed);
+    }
+}
+
 void test_ranges(void)
 {
     subtest("add", test_add);
     subtest("subtract", test_subtract);
+    subtest("next_missing", test_next_missing);
 }

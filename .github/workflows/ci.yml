@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-20.04]
+    runs-on: [ubuntu-24.04]
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -21,11 +21,11 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 1.1.1
             command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
-          - name: OpenSSL 3.0 (Ubuntu 22.04 / DTrace)
+          - name: OpenSSL 3.0 (Ubuntu 24.04 / DTrace)
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: boringssl
             command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
-          - name: ASan (Ubuntu 20.04)
+          - name: ASan (Ubuntu 24.04)
             command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: Coverage
             command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
@@ -35,6 +35,15 @@ jobs:
     - uses: actions/checkout@v3
       with:
         submodules: recursive
+    - name: setup-docker
+      uses: docker/setup-docker-action@v4
+      with:
+        daemon-config: |
+          {
+            "ipv6": true,
+            "fixed-cidr-v6": "2001:db8:1::/64"
+          }
+        channel: stable
     - name: Login to Docker Hub
       uses: docker/login-action@v2
       with:
@@ -46,8 +55,6 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        # restart docker with ipv6 support
-        cat /etc/docker/daemon.json | perl -pe 's| }|, "ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64" }|' | sudo tee /etc/docker/daemon.json > /dev/null; sudo systemctl restart docker; sleep 10
         ${{ matrix.command }}
         # if there's a summary markdown in the container, show it.
         container_id=$(docker container ls -al --format '{{ .ID }}')

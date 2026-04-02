@@ -184,7 +184,7 @@ typedef struct st_h2o_http2_settings_kvpair {
 uint8_t *h2o_http2_encode_frame_header(uint8_t *dst, size_t length, uint8_t type, uint8_t flags, int32_t stream_id);
 
 #define h2o_http2_encode_rst_stream_frame(buf, stream_id, errnum)                                                                  \
-    h2o_http2__encode_rst_stream_frame(buf, stream_id, (H2O_BUILD_ASSERT((errnum) > 0), errnum))
+    h2o_http2__encode_rst_stream_frame(buf, stream_id, (H2O_BUILD_ASSERT((errnum) >= 0), errnum))
 
 void h2o_http2__encode_rst_stream_frame(h2o_buffer_t **buf, uint32_t stream_id, int errnum);
 void h2o_http2_encode_ping_frame(h2o_buffer_t **buf, int is_ack, const uint8_t *data);

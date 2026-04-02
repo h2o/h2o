@@ -127,6 +127,24 @@ static int on_config_dir_listing(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_io_uring(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
+
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    case 0: /* off */
+        self->vars->flags &= ~H2O_FILE_FLAG_IO_URING;
+        break;
+    case 1: /* on */
+        self->vars->flags |= H2O_FILE_FLAG_IO_URING;
+        break;
+    default: /* error */
+        return -1;
+    }
+
+    return 0;
+}
+
 static const char **dup_strlist(const char **s)
 {
     size_t i;
@@ -194,4 +212,8 @@ void h2o_file_register_configurator(h2o_globalconf_t *globalconf)
                                     (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_dir_listing);
+    h2o_configurator_define_command(&self->super, "file.io_uring",
+                                    (H2O_CONFIGURATOR_FLAG_ALL_LEVELS & ~H2O_CONFIGURATOR_FLAG_EXTENSION) |
+                                        H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_io_uring);
 }

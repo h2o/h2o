@@ -51,13 +51,14 @@
 #include "picotls/openssl.h"
 #ifdef OPENSSL_IS_BORINGSSL
 #include "./chacha20poly1305.h"
-#endif
-#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+#if defined(OPENSSL_IS_BORINGSSL) && PTLS_OPENSSL_HAVE_X25519MLKEM768
 #include <openssl/mlkem.h>
+#endif
 #endif
 #ifdef PTLS_HAVE_AEGIS
 #include "./libaegis.h"
 #endif
+#include "./quiclb-impl.h"
 
 #ifdef _WINDOWS
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -709,7 +710,7 @@ Exit:
 
 #endif
 
-#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+#if defined(OPENSSL_IS_BORINGSSL) && PTLS_OPENSSL_HAVE_X25519MLKEM768
 
 struct st_x25519mlkem768_context_t {
     ptls_key_exchange_context_t super;
@@ -833,6 +834,172 @@ Exit:
         *secret = ptls_iovec_init(NULL, 0);
     }
     ptls_clear_memory(&x25519_privkey, sizeof(x25519_privkey));
+    return ret;
+}
+
+#endif
+
+#if PTLS_OPENSSL_HAVE_MLKEM
+
+static int evp_kem_on_exchange(ptls_key_exchange_context_t **_ctx, int release, ptls_iovec_t *secret, ptls_iovec_t ciphertext)
+{
+    struct st_evp_keyex_context_t *ctx = (void *)*_ctx;
+    EVP_PKEY_CTX *evpctx = NULL;
+    int ret;
+
+    if (secret == NULL) {
+        ret = 0;
+        goto Exit;
+    }
+
+    *secret = ptls_iovec_init(NULL, 0);
+
+    if ((evpctx = EVP_PKEY_CTX_new_from_pkey(NULL, ctx->privkey, NULL)) == NULL) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_decapsulate_init(evpctx, NULL) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_decapsulate(evpctx, NULL, &secret->len, ciphertext.base, ciphertext.len) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if ((secret->base = malloc(secret->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if (EVP_PKEY_decapsulate(evpctx, secret->base, &secret->len, ciphertext.base, ciphertext.len) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    ret = 0;
+
+Exit:
+    if (evpctx != NULL)
+        EVP_PKEY_CTX_free(evpctx);
+    if (ret != 0) {
+        free(secret->base);
+        *secret = ptls_iovec_init(NULL, 0);
+    }
+    if (release) {
+        evp_keyex_free(ctx);
+        *_ctx = NULL;
+    }
+    return ret;
+}
+
+static int evp_kem_create(ptls_key_exchange_algorithm_t *algo, ptls_key_exchange_context_t **_ctx)
+{
+    struct st_evp_keyex_context_t *ctx = NULL;
+    EVP_PKEY_CTX *evpctx = NULL;
+    int ret;
+
+    /* instantiate */
+    if ((ctx = malloc(sizeof(*ctx))) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    *ctx = (struct st_evp_keyex_context_t){{algo, {NULL}, evp_kem_on_exchange}, NULL};
+
+    /* generate private key */
+    if ((evpctx = EVP_PKEY_CTX_new_from_name(NULL, (const char *)algo->data, NULL)) == NULL) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_keygen_init(evpctx) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_generate(evpctx, &ctx->privkey) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    /* set public key */
+    if ((ctx->super.pubkey.len = EVP_PKEY_get1_encoded_public_key(ctx->privkey, &ctx->super.pubkey.base)) == 0) {
+        ctx->super.pubkey.base = NULL;
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+
+    *_ctx = &ctx->super;
+    ret = 0;
+
+Exit:
+    if (ret != 0 && ctx != NULL)
+        evp_keyex_free(ctx);
+    if (evpctx != NULL)
+        EVP_PKEY_CTX_free(evpctx);
+    return ret;
+}
+
+static int evp_kem_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *ciphertext, ptls_iovec_t *secret,
+                            ptls_iovec_t peerkey)
+{
+    EVP_PKEY_CTX *evpctx = NULL;
+    EVP_PKEY *key = NULL;
+    int ret;
+
+    *ciphertext = ptls_iovec_init(NULL, 0);
+    *secret = ptls_iovec_init(NULL, 0);
+
+    if ((evpctx = EVP_PKEY_CTX_new_from_name(NULL, (const char *)algo->data, NULL)) == NULL) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_paramgen_init(evpctx) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_paramgen(evpctx, &key) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_set1_encoded_public_key(key, peerkey.base, peerkey.len) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+
+    evpctx = EVP_PKEY_CTX_new_from_pkey(NULL, key, NULL);
+    if (evpctx == NULL) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_encapsulate_init(evpctx, NULL) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if (EVP_PKEY_encapsulate(evpctx, NULL, &ciphertext->len, NULL, &secret->len) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    if ((ciphertext->base = malloc(ciphertext->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if ((secret->base = malloc(secret->len)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
+    if (EVP_PKEY_encapsulate(evpctx, ciphertext->base, &ciphertext->len, secret->base, &secret->len) <= 0) {
+        ret = PTLS_ERROR_LIBRARY;
+        goto Exit;
+    }
+    ret = 0;
+
+Exit:
+    if (evpctx != NULL)
+        EVP_PKEY_CTX_free(evpctx);
+    if (key != NULL)
+        EVP_PKEY_free(key);
+    if (ret != 0) {
+        free(secret->base);
+        *secret = ptls_iovec_init(NULL, 0);
+        free(ciphertext->base);
+        *ciphertext = ptls_iovec_init(NULL, 0);
+    }
     return ret;
 }
 
@@ -1269,6 +1436,42 @@ static int bfecb_setup_crypto(ptls_cipher_context_t *ctx, int is_enc, const void
 }
 
 #endif
+
+struct quiclb_context_t {
+    ptls_cipher_context_t super;
+    ptls_cipher_context_t *aesecb;
+};
+
+static void quiclb_dispose(ptls_cipher_context_t *_ctx)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    ptls_cipher_free(ctx->aesecb);
+}
+
+static void quiclb_encrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    picotls_quiclb_transform(picotls_quiclb_cipher_aes, ctx->aesecb, output, input, len, 1);
+}
+
+static void quiclb_decrypt(ptls_cipher_context_t *_ctx, void *output, const void *input, size_t len)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+    picotls_quiclb_transform(picotls_quiclb_cipher_aes, ctx->aesecb, output, input, len, 0);
+}
+
+static int quiclb_setup_crypto(ptls_cipher_context_t *_ctx, int is_enc, const void *key)
+{
+    struct quiclb_context_t *ctx = (struct quiclb_context_t *)_ctx;
+
+    ctx->super.do_dispose = quiclb_dispose;
+    ctx->super.do_init = picotls_quiclb_do_init;
+    ctx->super.do_transform = is_enc ? quiclb_encrypt : quiclb_decrypt;
+    if ((ctx->aesecb = ptls_cipher_new(&ptls_openssl_aes128ecb, 1, key)) == NULL)
+        return PTLS_ERROR_LIBRARY;
+
+    return 0;
+}
 
 struct aead_crypto_context_t {
     ptls_aead_context_t super;
@@ -2195,12 +2398,28 @@ ptls_key_exchange_algorithm_t ptls_openssl_x25519 = {.id = PTLS_GROUP_X25519,
                                                      .exchange = evp_keyex_exchange,
                                                      .data = NID_X25519};
 #endif
-#if PTLS_OPENSSL_HAVE_X25519MLKEM768
+#if defined(OPENSSL_IS_BORINGSSL) && PTLS_OPENSSL_HAVE_X25519MLKEM768
 ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768 = {.id = PTLS_GROUP_X25519MLKEM768,
                                                              .name = PTLS_GROUP_NAME_X25519MLKEM768,
                                                              .create = x25519mlkem768_create,
                                                              .exchange = x25519mlkem768_exchange};
 #endif
+#if PTLS_OPENSSL_HAVE_MLKEM
+#define DEFINE_MLKEM_KEYEX(lowcase, upcase)                                                                                        \
+    ptls_key_exchange_algorithm_t ptls_openssl_##lowcase = {.id = PTLS_GROUP_##upcase,                                             \
+                                                            .name = PTLS_GROUP_NAME_##upcase,                                      \
+                                                            .create = evp_kem_create,                                              \
+                                                            .exchange = evp_kem_exchange,                                          \
+                                                            .data = (intptr_t)PTLS_GROUP_NAME_##upcase}
+DEFINE_MLKEM_KEYEX(x25519mlkem768, X25519MLKEM768);
+DEFINE_MLKEM_KEYEX(secp256r1mlkem768, SECP256R1MLKEM768);
+DEFINE_MLKEM_KEYEX(secp384r1mlkem1024, SECP384R1MLKEM1024);
+DEFINE_MLKEM_KEYEX(mlkem512, MLKEM512);
+DEFINE_MLKEM_KEYEX(mlkem768, MLKEM768);
+DEFINE_MLKEM_KEYEX(mlkem1024, MLKEM1024);
+#undef DEFINE_MLKEM_KEYEX
+#endif
+
 ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges[] = {&ptls_openssl_secp256r1, NULL};
 ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges_all[] = {
 #if PTLS_OPENSSL_HAVE_X25519MLKEM768
@@ -2215,7 +2434,15 @@ ptls_key_exchange_algorithm_t *ptls_openssl_key_exchanges_all[] = {
 #if PTLS_OPENSSL_HAVE_X25519
     &ptls_openssl_x25519,
 #endif
-    &ptls_openssl_secp256r1,      NULL};
+#if PTLS_OPENSSL_HAVE_MLKEM
+    &ptls_openssl_secp384r1mlkem1024,
+    &ptls_openssl_secp256r1mlkem768,
+    &ptls_openssl_mlkem1024,
+    &ptls_openssl_mlkem768,
+    &ptls_openssl_mlkem512,
+#endif
+    &ptls_openssl_secp256r1,
+    NULL};
 ptls_cipher_algorithm_t ptls_openssl_aes128ecb = {
     "AES128-ECB",          PTLS_AES128_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 0 /* iv size */, sizeof(struct cipher_context_t),
     aes128ecb_setup_crypto};
@@ -2419,6 +2646,15 @@ ptls_cipher_suite_t *ptls_openssl_tls12_cipher_suites[] = {&ptls_openssl_tls12_e
 ptls_cipher_algorithm_t ptls_openssl_bfecb = {"BF-ECB",        PTLS_BLOWFISH_KEY_SIZE,          PTLS_BLOWFISH_BLOCK_SIZE,
                                               0 /* iv size */, sizeof(struct cipher_context_t), bfecb_setup_crypto};
 #endif
+
+ptls_cipher_algorithm_t ptls_openssl_quiclb = {
+    .name = "QUICLB",
+    .key_size = PTLS_QUICLB_KEY_SIZE,
+    .block_size = PTLS_QUICLB_DEFAULT_BLOCK_SIZE,
+    .iv_size = 0,
+    .context_size = sizeof(struct quiclb_context_t),
+    .setup_crypto = quiclb_setup_crypto,
+};
 
 ptls_hpke_kem_t ptls_openssl_hpke_kem_p256sha256 = {PTLS_HPKE_KEM_P256_SHA256, &ptls_openssl_secp256r1, &ptls_openssl_sha256};
 ptls_hpke_kem_t ptls_openssl_hpke_kem_p384sha384 = {PTLS_HPKE_KEM_P384_SHA384, &ptls_openssl_secp384r1, &ptls_openssl_sha384};

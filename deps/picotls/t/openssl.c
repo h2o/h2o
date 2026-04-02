@@ -29,7 +29,9 @@
 #include <openssl/opensslv.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
+#if !defined(OPENSSL_NO_ENGINE)
 #include <openssl/engine.h>
+#endif
 #if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/provider.h>
 #endif
@@ -143,7 +145,14 @@ static void test_key_exchanges(void)
 #endif
 
 #if PTLS_OPENSSL_HAVE_X25519MLKEM768
-    subtest("x25519mlkem768", test_key_exchange, &ptls_openssl_x25519mlkem768, &ptls_openssl_x25519mlkem768);
+    subtest("X25519MLKEM768", test_key_exchange, &ptls_openssl_x25519mlkem768, &ptls_openssl_x25519mlkem768);
+#endif
+#if PTLS_OPENSSL_HAVE_MLKEM
+    subtest("MLKEM512", test_key_exchange, &ptls_openssl_mlkem512, &ptls_openssl_mlkem512);
+    subtest("MLKEM768", test_key_exchange, &ptls_openssl_mlkem768, &ptls_openssl_mlkem768);
+    subtest("MLKEM1024", test_key_exchange, &ptls_openssl_mlkem1024, &ptls_openssl_mlkem1024);
+    subtest("SecP256r1MLKEM768", test_key_exchange, &ptls_openssl_secp256r1mlkem768, &ptls_openssl_secp256r1mlkem768);
+    subtest("SecP384r1MLKEM1024", test_key_exchange, &ptls_openssl_secp384r1mlkem1024, &ptls_openssl_secp384r1mlkem1024);
 #endif
 }
 
@@ -378,6 +387,7 @@ Exit:
 
 #if ASYNC_TESTS
 
+#if !defined(OPENSSL_NO_ENGINE)
 static ENGINE *load_engine(const char *name)
 {
     ENGINE *e;
@@ -391,6 +401,7 @@ static ENGINE *load_engine(const char *name)
 
     return e;
 }
+#endif
 
 static struct {
     struct {
@@ -546,6 +557,7 @@ int main(int argc, char **argv)
 #endif
 
     subtest("bf", test_bf);
+    subtest("quiclb", test_quiclb, &ptls_openssl_quiclb);
 
     subtest("key-exchange", test_key_exchanges);
 
@@ -631,6 +643,7 @@ int main(int argc, char **argv)
     subtest("many-handshakes-non-async", many_handshakes);
     openssl_sign_certificate.async = 0;
     subtest("many-handshakes-async", many_handshakes);
+#if !defined(OPENSSL_NO_ENGINE)
     { /* qatengine should be tested at last, because we do not have the code to unload or un-default it */
         const char *engine_name = "qatengine";
         ENGINE *qatengine;
@@ -643,6 +656,7 @@ int main(int argc, char **argv)
             note("%s not found", engine_name);
         }
     }
+#endif
 #endif
 
     int ret = done_testing();

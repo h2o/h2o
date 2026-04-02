@@ -112,8 +112,22 @@ struct st_h2o_http2_stream_t {
             unsigned casper_is_ready : 1;
         } pull;
     };
+    /**
+     * see h2o_http2_conn_t::num_streams.blocked_by_server
+     */
     unsigned blocked_by_server : 1;
+    /**
+     * if the stream was reset by peer sending an RST_STREAM
+     */
     unsigned reset_by_peer : 1;
+    /**
+     * if the stream was reset by peer's invalid action
+     */
+    unsigned reset_by_peer_action : 1;
+    /**
+     * indicates if RST_STREAM(NO_ERROR) should be sent to the client after sending a complete response
+     */
+    unsigned delayed_rst_stream_no_error : 1;
     /**
      *  state of the ostream, only used in push mode
      */
@@ -167,6 +181,9 @@ struct st_h2o_http2_conn_t {
         h2o_http2_conn_num_streams_t priority;
         h2o_http2_conn_num_streams_t pull;
         h2o_http2_conn_num_streams_t push;
+        /**
+         * number of streams current blocked due to the internal concurrency limit
+         */
         uint32_t blocked_by_server;
         /**
          * number of streams that have the flag with the same name being set
@@ -385,6 +402,9 @@ inline void h2o_http2_stream_set_state(h2o_http2_conn_t *conn, h2o_http2_stream_
         }
         stream->state = new_state;
         stream->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+        if (h2o_timeval_is_null(&stream->req.timestamps.response_start_at)) {
+            stream->req.timestamps.response_start_at = stream->req.timestamps.response_end_at;
+        }
         --stream->_num_streams_slot->open;
         stream->_num_streams_slot = NULL;
         if (stream->blocked_by_server)

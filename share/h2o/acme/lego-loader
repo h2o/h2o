@@ -1,0 +1,133 @@
+#! /bin/sh
+exec ${H2O_PERL:-perl} -x $0 "$@"
+#! perl
+
+# This script is the glue between h2o and lego (the ACME client).
+# The script is launched by the master process of h2o, and is expected to behave as follows:
+#
+# 1. For the list of domains provided, issue or renew certificates for them and store the credentials in the directories
+#    specified below.
+# 2. Continue running until STDIN gets closed, renewing the certificates as needed.
+# 3. Every time a new certificate is issued or renewed, send SIGHUP to the process specified by `-p`.
+# 4. When the script is called with `--check`, emit whatever warning to STDERR when the prerequisites are not met
+
+use strict;
+use warnings;
+use Getopt::Long qw(GetOptions);
+use IO::Select;
+
+$| = 1;
+
+my ($root_dir, $email, $launcher_pid);
+
+GetOptions(
+    "check|c" => sub {
+        if (system("which lego > /dev/null 2>&1") != 0) {
+            print STDERR "!!!!WARNING!!!! lego command not installed! ACME integration is unlikely to work as expected\n";
+        }
+        exit 0;
+    },
+    "directory|d=s" => \$root_dir,
+    "email|e=s" => \$email,
+    "pid|p=s" => \$launcher_pid,
+    "help|h" => sub {
+        print <<"EOT";
+Usage: $0 [options] domains...
+
+Options:
+  -c, --check.         checks if prerequisites are met
+  -d, --directory=DIR  the lego directory; see below
+  -e, --email=EMAIL    email address to be used for ACME registration
+  -p, --pid=PID        PID of the h2o master process to which SIGHUP is sent upon certificate update
+  -h, --help           print this help
+
+Directory structure:
+  <DIR>/certificates/<DOMAIN>.crt
+  <DIR>/certificates/<DOMAIN>.key
+  <DIR>/webroot  - where the challenges are stored
+
+EOT
+        exit 0;
+    },
+);
+
+die "-d, -e, and -p are mandatory\n"
+    if !defined $root_dir || !defined $email || !defined $launcher_pid;
+
+my @domains = do { my %h; grep !$h{$_}++, @ARGV };
+die "no domains specified\n"
+    if @domains == 0;
+
+my $fail_cnt = 0;
+while (1) {
+    my ($needs_hup, $failed);
+    for my $domain (@domains) {
+        if (!stat "$root_dir/certificates/$domain.crt") {
+            # the certificate file does not exist, request issuance
+            print STDERR "acme-helper:requesting certificate for new $domain\n";
+            if (run_lego("--domains", $domain, "run")) {
+                $needs_hup = 1;
+            } else {
+                $failed = 1;
+            }
+        } else {
+            # the certificate already exists, invoke `renew` and see it it gets updated
+            my $orig_cert = slurp_file("$root_dir/certificates/$domain.crt")
+                or die "failed to read certificate file:$root_dir/certificates/$domain.crt:$!";
+            print STDERR "acme-helper:requesting renewal if necessary for $domain\n";
+            if (run_lego("--domains", $domain, "renew")) {
+                my $new_cert = slurp_file("$root_dir/certificates/$domain.crt")
+                    or die "failed to read certificate file:$root_dir/certificates/$domain.crt:$!";
+                if ($new_cert ne $orig_cert) {
+                    $needs_hup = 1;
+                }
+            } else {
+                $failed = 1;
+            }
+        }
+        # make sure the certificate is accessible to anybody, including the helper process of h2o that fetches OCSP responses
+        # to be stapled
+        chmod 0755, "$root_dir/certificates";
+        chmod 0644, "$root_dir/certificates/$domain.crt";
+    }
+    # send signal
+    if ($needs_hup) {
+        print STDERR "acme-helper:sending SIGHUP to $launcher_pid\n";
+        kill "HUP", $launcher_pid;
+    }
+    # adjust fail count and calculate retry interval
+    my $retry_after;
+    if ($failed) {
+        ++$fail_cnt;
+        $retry_after = 60 * (1 << $fail_cnt);
+        $retry_after = 3600 if $retry_after > 3600; # cap at 1 hour
+    } else {
+        $fail_cnt = 0;
+        $retry_after = 3600;
+    }
+    print STDERR "acme-helper:retrying in $retry_after seconds\n";
+    # wait for next iteration, or exit if STDIN is closed
+    if (IO::Select->new(\*STDIN)->can_read($retry_after)) {
+        last if sysread(STDIN, my $dummy, 1) == 0;
+    }
+}
+
+sub run_lego {
+    my @args = @_;
+    unshift @args, "lego", "--path", $root_dir, "--email", $email, "--http", "--http.webroot", "$root_dir/webroot", "--accept-tos";
+    print STDERR "acme-helper:running: @{[ join ' ', @args ]}\n";
+    if (system(@args) == 0) {
+        return 1;
+    } else {
+        print STDERR "acme-helper:lego failed: $!\n";
+        return undef;
+    }
+}
+
+sub slurp_file {
+    my $fn = shift;
+    open my $fh, "<", $fn
+        or return undef;
+    local $/;
+    <$fh>;
+}

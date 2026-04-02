@@ -173,52 +173,50 @@ EOT
 ?>
 <h4 id="listen-ssl">SSL Attribute</h4>
 <p>
-The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping, and recognizes the following attributes.
+The <code style="font-weight: bold;">ssl</code> attribute must be defined as a mapping.
 </p>
-<dl>
-<dt id="certificate-file">certificate-file:</dt>
-<dd>
-Path of the SSL certificate file (mandatory).
-This attribute can specify a PEM file containing either an X.509 certificate chain or a raw public key.
+<p>
+The identity of the TLS listener is specified in one of the following ways:
+<ul>
+<li>by specifying the <code>certificate-file</code> and <code>key-file</code> attributes directly under <code>ssl</code>,</li>
+<li>by specifying a sequence of certificate- and key-file pairs inside <code>identity</code>, or</li>
+<li>if neither of the above is used, the identity is obtained using ACME; see <a href="configure/base_directives.html#acme">acme</a>.
+</ul>
+</p>
+<p id="certificate-file">
+The <code>certificate-file</code> attribute specifies the path of a PEM file containing either an X.509 certificate chain or a raw public key.
 When the latter form is being used, <a href="https://datatracker.ietf.org/doc/html/rfc7250">RFC 7250</a> handshake will be used.
-</dd>
-<dt id="key-file">key-file:</dt>
-<dd>Path of the SSL private key file (mandatory).</dd>
-<dt>identity:</dt>
-<dd>List of certificate / key pairs.
-This attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
+</p>
+<p id="key-file">
+The <code>key-file</code> attribute specifies the path of a PEM file that contains the corresponding private key.
+</p>
+<p>
+The <code>identity</code> attribute can be used in place of <code>certificate-file</code> and <code>key-file</code> to specify more than one pair of certificates and keys.
 When a TLS handshake is performed, h2o uses the first pair that contains a compatible certificate / key.
 The last pair acts as the fallback.
-<?= $ctx->{example}->('Using RSA and ECDSA certificates', <<'EOT')
+<?= $ctx->{example}->('Using both RSA and ECDSA certificates', <<'EOT')
 ssl:
   identity:
-  - key-file: /path/to/rsa.key
-    certificate-file: /path/to/rsa.crt
-  - key-file: /path/to/ecdsa.key
-    certificate-file: /path/to/ecdsa.crt
+  - certificate-file: /path/to/ecdsa.crt   # prefer ECDSA if client supports both
+    key-file: /path/to/ecdsa.key
+  - certificate-file: /path/to/rsa.crt.    # use RSA if ECDSA is not supported
+    key-file: /path/to/rsa.key
 EOT
 ?>
-<dt id="minimum-version">minimum-version:</dt>
+</p>
+<p>
+In addition, the <code>ssl</code> mapping recognizes the following attributes.
+</p>
+<dl>
+<dt id="client-ca-file">client-ca-file:</dt>
 <dd>
-minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
-Default is <code>TLSv1</code>.
-</dd>
-<dt id="min-version">min-version:</dt>
-<dd>
-synonym of <code>minimum-version</code> (introduced in version 2.2)
-</dd>
-<dt id="maximum-version">maximum-version:</dt>
-<dd>
-maximum protocol version.
-Introduced in version 2.2.
-Default is the maximum protocol version supported by the server.
-</dd>
-<dt id="maximum-version">max-version:</dt>
-<dd>
-synonym of <code>maximum-version</code>.
+path to a file of Certificate Authority (CA) certificates used to verify client certificates.
+If set, H2O will request a client certificate from connecting clients and validate it against these CAs.
+Connections lacking a valid client certificate (either not provided or not signed by one of the given CAs) will be rejected.
+This enables mutual TLS (mTLS) authentication.
 </dd>
 <dt id="cipher-suite">cipher-suite:</dt>
-<dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list (optional)</dd>
+<dd>list of cipher suites to be passed to OpenSSL via SSL_CTX_set_cipher_list</dd>
 <dt id="cipher-suite-tls1.3">cipher-suite-tls1.3:</dt>
 <dd>list of TLS 1.3 cipher suites to use; the list must be a YAML sequence where each element specifies the cipher suite using the name as registered to the <a href="https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4" target=_blank>IANA TLS Cipher Suite Registry</a>; e.g., <code>TLS_AES_128_GCM_SHA256</code>, <code>TLS_CHACHA20_POLY1305_SHA256</code>.
 <dt id="cipher-preferences">cipher-preference:</dt>
@@ -234,21 +232,48 @@ Use of the file is recommended for servers using Diffie-Hellman key agreement.
 </dd>
 <dt id="key-exchange-tls1.3">key-exchange-tls1.3:</dt>
 <dd>list of TLS 1.3 key exchange algorithms to use; the list must be a YAML sequence of algorithms. <code>x25519</code> and <code>secp256r1</code> are supported and enabled by default. In addition, <code>secp384r1</code>, <code>secp521r1</code>, and <code>x25519mlkem768</code> might be available if they are supported by libcrypto.</dd>
-<dt id="ocsp-update-interval">ocsp-update-interval:</dt>
+<dt id="max-tickets">max-tickets:</dt>
 <dd>
-interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
-Default is <code>14400</code> (4 hours).
+maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
+Default is 4.
+</dd>
+<dt id="minimum-version">minimum-version:</dt>
+<dd>
+minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
+Default is <code>TLSv1</code>.
+</dd>
+<dt id="min-version">min-version:</dt>
+<dd>
+synonym of <code>minimum-version</code> (introduced in version 2.2)
+</dd>
+<dt id="maximum-version">maximum-version:</dt>
+<dd>
+maximum protocol version.
+Introduced in version 2.2.
+Default is the maximum protocol version supported by the server.
+</dd>
+<dt id="max-version">max-version:</dt>
+<dd>
+synonym of <code>maximum-version</code>.
 </dd>
 <dt id="ocsp-max-failures">ocsp-max-failures:</dt>
 <dd>
 number of consecutive OCSP query failures before stopping to send OCSP stapling data to the client.
 Default is 3.
 </dd>
-<dt id="max-tickets">max-tickets:</dt>
+<dt id="ocsp-update-interval">ocsp-update-interval:</dt>
 <dd>
-maximum number of TLS/1.3 session tickets to send, when the client requests for them using the ticket_request extension.
-Default is 4.
+interval for updating the OCSP stapling data (in seconds), or set to zero to disable OCSP stapling.
+Default is <code>14400</code> (4 hours).
 </dd>
+<dt id="neverbleed">neverbleed:</dt>
+<dd>
+unless set to <code>OFF</code>, H2O isolates SSL private key operations to a different process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
+Default is <code>ON</code>.
+</dl>
+<p>
+<a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
+</p>
 <dt id="ech">ech:</dt>
 <dd>
 This experimental attribute controls the use of <a href="https://datatracker.ietf.org/doc/draft-ietf-tls-esni/">TLS Encrypted Client Hello extension (draft-15)</a>.
@@ -284,14 +309,6 @@ This may take long depending on the TTL of the HTTPS / SVC DNS resource record a
 </p>
 The <code>ech</code> attribute must be set only in the first <code>ssl</code> attribute that binds to a particular address.
 </dd>
-<dt id="neverbleed">neverbleed:</dt>
-<dd>
-unless set to <code>OFF</code>, H2O isolates SSL private key operations to a different process by using <a href="https://github.com/h2o/neverbleed">Neverbleed</a>.
-Default is <code>ON</code>.
-</dl>
-<p>
-<a href="configure/base_directives.html#ssl-session-resumption"><code>ssl-session-resumption</code></a> directive is provided for tuning parameters related to session resumption and session tickets.
-</p>
 <h4 id="listen-cc">The CC Attribute</h4>
 <p>
 The <code>CC</code> attribute specifies the congestion controller to be used for incoming HTTP connections.
@@ -361,6 +378,52 @@ listen:
   permission: 600
 EOT
 ?>
+? })
+
+<?
+$ctx->{directive}->(
+  name     => "acme",
+  levels   => [ qw(global) ],
+  desc   => "Set the parameters for automatic certificate management using ACME (e.g., Letsencrypt).",
+)->(sub {
+?>
+<p>
+Unless a custom loader program is specified, h2o obtains certificates from <a href="https://letsencrypt.org" target="_blank">Let's Encrypt</a> using the popular ACME client: <a href="https://github.com/go-acme/lego" target="_blank">Lego</a>.
+On most distributions, Lego should be available as pre-build packages.
+</p>
+<p>This directive takes two mandatory and one optional parameters.
+<dl>
+<dt>email (mandatory)</dt>
+<dd>The email address to be registered to the ACME service provider.</dd>
+<dt>accept-tos (mandatory)</dt>
+<dd>Must be set to <code>YES</code> to accept the terms of service of the ACME service provider.</dd>
+<dt>loader (optional)</dt>
+<dd>The program to be launched for issuing and renewing the certificates.
+If omitted, <code>H2O_ROOT/share/h2o/acme/lego-loader</code> is used.</dd>
+</dl>
+</p>
+<p>
+The below example shows a configuration that relies on ACME for serving <code>https://example.org</code>.
+<?= $ctx->{example}->('Simple h2o.conf using ACME', <<'EOT')
+acme:
+  email: admin@example.org  # email address to be used when contacting Let's Encrypt
+  accept-tos: YES           # consent to the Terms of Service of Let's Encrypt
+hosts:
+  example.org:
+    listen:
+      port: 80
+    listen:
+      port: 443
+      ssl: {}               # omission on an identity indicates the use of ACME
+    paths:
+      ...
+EOT
+?>
+</p>
+<p>
+The certificates and keys being issued or generated are stored under the <code>$prefix/var/h2o/acme</code> directory.
+Output of the lego command (including errors) are emitted to the error log of h2o.
+</p>
 ? })
 
 <?
@@ -457,6 +520,19 @@ Times spent for receiving <a href="configure/base_directives.html#listen-proxy-p
 
 <?
 $ctx->{directive}->(
+    name         => "io_uring-batch-size",
+    levels       => [ qw(global) ],
+    default      => "io_uring-batch-size: 1",
+    desc         => q{Number of io_uring calls to issue at once. Increasing this number might reduce overhead.},
+    experimental => 1,
+    see_also     => render_mt(<<'EOT'),
+<a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>
+EOT
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
     name   => "limit-request-body",
     levels => [ qw(global) ],
     desc   => q{Maximum size of request body in bytes (e.g. content of POST).},
@@ -516,6 +592,33 @@ $ctx->{directive}->(
     desc    => q{Limits the number of internal redirects.},
 )->(sub {});
 
+<?
+$ctx->{directive}->(
+    name     => "max-spare-pipes",
+    levels   => [ qw(global) ],
+    desc     => q{This setting specifies the maximum number of pipes retained for reuse, when <code>file.io_uring</code> or <code>proxy.zerocopy</code> is used.},
+    default  => 0,
+    see_also => render_mt(<<'EOT'),
+<a href="configure/file_directives.html#file.io_uring"><code>file.io_uring</code></a>, <a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
+EOT
+)->(sub {
+?>
+<p>
+The setting can be used to reduce lock contention in the kernel under high load.
+</p>
+<p>
+This maximum is applied per each worker thread.
+</p>
+<p>
+Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
+In this case, h2o will create new pipes each time they are needed.
+</p>
+<p>
+In previous versions, this configuration directive was called <code>proxy.max-spare-pipes</code>.
+</p>
+? })
+
+<?
 $ctx->{directive}->(
     name         => "neverbleed-offload",
     levels       => [ qw(global) ],

@@ -404,7 +404,7 @@ static int64_t quic_now_cb(quicly_now_t *self)
     return (int64_t)(now * 1000);
 }
 
-static void stream_destroy_cb(quicly_stream_t *stream, int err)
+static void stream_destroy_cb(quicly_stream_t *stream, quicly_error_t err)
 {
 }
 
@@ -419,7 +419,7 @@ static void stream_egress_emit_cb(quicly_stream_t *stream, size_t off, void *dst
     *wrote_all = 0;
 }
 
-static void stream_on_stop_sending_cb(quicly_stream_t *stream, int err)
+static void stream_on_stop_sending_cb(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(!"unexpected");
 }
@@ -431,14 +431,21 @@ static void stream_on_receive_cb(quicly_stream_t *stream, size_t off, const void
 
     if (stream->recvstate.data_off < stream->recvstate.received.ranges[0].end)
         quicly_stream_sync_recvbuf(stream, stream->recvstate.received.ranges[0].end - stream->recvstate.data_off);
+
+    struct sockaddr *peer = quicly_get_peername(stream->conn);
+    assert(peer->sa_family == AF_INET);
+    uint32_t packet_src = ntohl(((struct sockaddr_in *)peer)->sin_addr.s_addr);
+
+    printf("{\"bytes-available\": %" PRIu64 ", \"at\": %f, \"packet-src\": %" PRIu32 "}\n", stream->recvstate.data_off, now,
+           packet_src);
 }
 
-static void stream_on_receive_reset_cb(quicly_stream_t *stream, int err)
+static void stream_on_receive_reset_cb(quicly_stream_t *stream, quicly_error_t err)
 {
     assert(!"unexpected");
 }
 
-static int stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *stream)
+static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *stream)
 {
     static const quicly_stream_callbacks_t stream_callbacks = {stream_destroy_cb,     stream_egress_shift_cb,
                                                                stream_egress_emit_cb, stream_on_stop_sending_cb,
@@ -452,17 +459,152 @@ static void usage(const char *cmd)
     printf("Usage: %s ...\n"
            "\n"
            "Options:\n"
-           "  -n <cc>             adds a sender using specified controller\n"
+           "  -c <cc>             sets congestion controller\n"
            "  -b <bytes_per_sec>  bottleneck bandwidth (default: 1000000, i.e., 1MB/s)\n"
+           "  -d <delay_secs>     delay added between the sender and the botteneck\n"
+           "                      (default: 0.1)\n"
+           "  -i <packets>        sets initial CWND (default: %" PRIu32 ")\n"
+           "  -j <packets>        enables use of jumpstart using given window size\n"
            "  -l <seconds>        number of seconds to simulate (default: 100)\n"
-           "  -d <delay>          delay to be introduced between the sender and the botteneck, in seconds (default: 0.1)\n"
-           "  -q <seconds>        maximum depth of the bottleneck queue, in seconds (default: 0.1)\n"
-           "  -r <rate>           introduce random loss at specified probability (default: 0)\n"
-           "  -s <seconds>        delay until the sender is introduced to the simulation (default: 0)\n"
+           "  -p                  turns on pacing\n"
+           "  -q <seconds>        max depth of the bottleneck queue (default: 0.1)\n"
+           "  -r <probability>    adds random loss at given probability (default: 0)\n"
+           "  -R                  turns on rapid start\n"
+           "  -s <seconds>        delay until the sender is added to the simulation\n"
+           "                      (default: 0)\n"
            "  -t                  emits trace as well\n"
            "  -h                  print this help\n"
            "\n",
-           cmd);
+           cmd, quicly_spec_context.initcwnd_packets);
+}
+
+static void reset_getopt_state(void)
+{
+#if defined(__APPLE__)
+    extern int optreset;
+    optreset = 1;
+#endif
+    optind = 1;
+}
+
+static int find_next_separator(int argc, char **argv, int start)
+{
+    for (int i = start; i < argc; ++i)
+        if (strcmp(argv[i], "--") == 0)
+            return i;
+    return argc;
+}
+
+static int parse_options(int argc, char **argv, quicly_context_t *quicctx, double *delay, double *start, double *bw, double *depth,
+                         double *length, double *random_loss, FILE **trace_fp)
+{
+    reset_getopt_state();
+    int ch;
+    while ((ch = getopt(argc, argv, "c:b:d:i:j:l:pq:r:Rs:th")) != -1) {
+        switch (ch) {
+        case 'c':
+            {
+                quicly_cc_type_t **cc;
+                for (cc = quicly_cc_all_types; *cc != NULL; ++cc)
+                    if (strcmp((*cc)->name, optarg) == 0)
+                        break;
+                if (*cc == NULL) {
+                    fprintf(stderr, "unknown congestion controller: %s\n", optarg);
+                    return 0;
+                }
+                quicctx->init_cc = (*cc)->cc_init;
+            }
+            break;
+        case 'b':
+            if (bw == NULL) {
+                fprintf(stderr, "-%c is a global option and cannot be used inside a flow block\n", ch);
+                return 0;
+            }
+            if (sscanf(optarg, "%lf", bw) != 1) {
+                fprintf(stderr, "invalid bandwidth: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'd':
+            if (sscanf(optarg, "%lf", delay) != 1) {
+                fprintf(stderr, "invalid delay value: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'i':
+            if (sscanf(optarg, "%" PRIu32, &quicctx->initcwnd_packets) != 1) {
+                fprintf(stderr, "invalid INITCWND size: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'j':
+            if (sscanf(optarg, "%" PRIu32, &quicctx->default_jumpstart_cwnd_packets) != 1) {
+                fprintf(stderr, "invalid jumpstart window size: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'l':
+            if (length == NULL) {
+                fprintf(stderr, "-%c is a global option and cannot be used inside a flow block\n", ch);
+                return 0;
+            }
+            if (sscanf(optarg, "%lf", length) != 1) {
+                fprintf(stderr, "invalid length: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'p':
+            quicctx->enable_ratio.pacing = 255;
+            break;
+        case 'q':
+            if (depth == NULL) {
+                fprintf(stderr, "-%c is a global option and cannot be used inside a flow block\n", ch);
+                return 0;
+            }
+            if (sscanf(optarg, "%lf", depth) != 1) {
+                fprintf(stderr, "invalid queue depth: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'r':
+            if (random_loss == NULL) {
+                fprintf(stderr, "-%c is a global option and cannot be used inside a flow block\n", ch);
+                return 0;
+            }
+            if (sscanf(optarg, "%lf", random_loss) != 1) {
+                fprintf(stderr, "invalid random loss rate: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 'R':
+            quicctx->enable_ratio.rapid_start = 255;
+            break;
+        case 's':
+            if (sscanf(optarg, "%lf", start) != 1) {
+                fprintf(stderr, "invaild start: %s\n", optarg);
+                return 0;
+            }
+            break;
+        case 't':
+            if (trace_fp == NULL) {
+                fprintf(stderr, "-%c is a global option and cannot be used inside a flow block\n", ch);
+                return 0;
+            }
+            *trace_fp = stdout;
+            break;
+        case 'h':
+            usage(argv[0]);
+            exit(0);
+        default:
+            usage(argv[0]);
+            exit(0);
+        }
+    }
+    if (optind != argc) {
+        fprintf(stderr, "unexpected token in args: %s\n", argv[optind]);
+        return 0;
+    }
+    return 1;
 }
 
 #define RSA_PRIVATE_KEY                                                                                                            \
@@ -575,29 +717,50 @@ int main(int argc, char **argv)
 
     /* parse args */
     double delay = 0.1, bw = 1e6, depth = 0.1, start = 0, random_loss = 0;
-    unsigned length = 100;
-    int ch;
-    while ((ch = getopt(argc, argv, "n:b:d:s:l:q:r:th")) != -1) {
-        switch (ch) {
-        case 'n': {
-            quicly_cc_type_t **cc;
-            for (cc = quicly_cc_all_types; *cc != NULL; ++cc)
-                if (strcmp((*cc)->name, optarg) == 0)
-                    break;
-            if (*cc != NULL) {
-                quicctx.init_cc = (*cc)->cc_init;
-            } else {
-                fprintf(stderr, "unknown congestion controller: %s\n", optarg);
+    double length = 100;
+    int first_sep = find_next_separator(argc, argv, 1);
+
+    if (first_sep == argc) {
+        fprintf(stderr, "missing flow separator `--`\n");
+        usage(argv[0]);
+        exit(1);
+    }
+
+    argv[first_sep] = NULL;
+    if (!parse_options(first_sep, argv, &quicctx, &delay, &start, &bw, &depth, &length, &random_loss, &quicly_trace_fp))
+        exit(1);
+    argv[first_sep] = "--";
+
+    int sender_count = 0;
+    for (int seg_start = first_sep + 1; seg_start < argc;) {
+        int seg_end = find_next_separator(argc, argv, seg_start);
+        if (seg_end > seg_start) {
+            quicly_context_t flow_ctx = quicctx;
+            double flow_delay = delay, flow_start = start;
+
+            int flow_argc = seg_end - seg_start + 1;
+            char **flow_argv = &argv[seg_start - 1];
+            char *saved_argv0 = flow_argv[0];
+            char *saved = seg_end < argc ? argv[seg_end] : NULL;
+            flow_argv[0] = argv[0];
+            if (seg_end < argc)
+                argv[seg_end] = NULL;
+
+            if (!parse_options(flow_argc, flow_argv, &flow_ctx, &flow_delay, &flow_start, NULL, NULL, NULL, NULL, NULL))
                 exit(1);
-            }
+            flow_argv[0] = saved_argv0;
+            if (seg_end < argc)
+                argv[seg_end] = saved;
+
             struct net_delay *delay_node = malloc(sizeof(*delay_node));
-            net_delay_init(delay_node, delay);
+            net_delay_init(delay_node, flow_delay);
             delay_node->next_node = &bottleneck_node.super;
             *node_insert_at++ = &delay_node->super;
+
             struct net_endpoint *client_node = malloc(sizeof(*client_node));
             net_endpoint_init(client_node);
-            client_node->start_at = now + start;
-            int ret = quicly_connect(&client_node->conns[0].quic, &quicctx, "hello.example.com", &server_node.node.addr.sa,
+            client_node->start_at = now + flow_start;
+            int ret = quicly_connect(&client_node->conns[0].quic, &flow_ctx, "hello.example.com", &server_node.node.addr.sa,
                                      &client_node->addr.sa, &next_quic_cid, ptls_iovec_init(NULL, 0), NULL, NULL, NULL);
             ++next_quic_cid.master_id;
             assert(ret == 0);
@@ -608,53 +771,14 @@ int main(int argc, char **argv)
             assert(ret == 0);
             client_node->conns[0].egress = &delay_node->super;
             *node_insert_at++ = &client_node->super;
-        } break;
-        case 'b':
-            if (sscanf(optarg, "%lf", &bw) != 1) {
-                fprintf(stderr, "invalid bandwidth: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 'd':
-            if (sscanf(optarg, "%lf", &delay) != 1) {
-                fprintf(stderr, "invalid delay value: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 's':
-            if (sscanf(optarg, "%lf", &start) != 1) {
-                fprintf(stderr, "invaild start: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 'l':
-            if (sscanf(optarg, "%u", &length) != 1) {
-                fprintf(stderr, "invalid length: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 'q':
-            if (sscanf(optarg, "%lf", &depth) != 1) {
-                fprintf(stderr, "invalid queue depth: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 'r':
-            if (sscanf(optarg, "%lf", &random_loss) != 1) {
-                fprintf(stderr, "invalid random loss rate: %s\n", optarg);
-                exit(1);
-            }
-            break;
-        case 't':
-            quicly_trace_fp = stdout;
-            break;
-        default:
-            usage(argv[0]);
-            exit(0);
+            ++sender_count;
         }
+        seg_start = seg_end + 1;
     }
-    argc -= optind;
-    argv += optind;
+    if (sender_count == 0) {
+        fprintf(stderr, "no flow blocks found after --\n");
+        exit(1);
+    }
 
     /* setup bottleneck */
     net_bottleneck_init(&bottleneck_node, bw, depth);

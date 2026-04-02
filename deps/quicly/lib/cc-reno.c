@@ -39,7 +39,7 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     /* Slow start. */
     if (cc->cwnd < cc->ssthresh) {
         if (cc_limited) {
-            cc->cwnd += bytes;
+            cc->cwnd = quicly_u32_add_saturating(cc->cwnd, bytes);
             if (cc->cwnd_maximum < cc->cwnd)
                 cc->cwnd_maximum = cc->cwnd;
         }
@@ -54,7 +54,7 @@ static void reno_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     /* Increase congestion window by 1 MSS per congestion window acked. */
     uint32_t count = cc->state.reno.stash / cc->cwnd;
     cc->state.reno.stash -= count * cc->cwnd;
-    cc->cwnd += count * max_udp_payload_size;
+    cc->cwnd = quicly_u32_add_saturating(cc->cwnd, count * max_udp_payload_size);
     if (cc->cwnd_maximum < cc->cwnd)
         cc->cwnd_maximum = cc->cwnd;
 }
@@ -71,7 +71,7 @@ void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t
 
     /* if detected loss before receiving all acks for jumpstart, restore original CWND */
     if (cc->ssthresh == UINT32_MAX)
-        quicly_cc_jumpstart_on_first_loss(cc, lost_pn);
+        quicly_cc_jumpstart_on_first_loss(cc, lost_pn, 0);
 
     ++cc->num_loss_episodes;
     if (cc->cwnd_exiting_slow_start == 0) {

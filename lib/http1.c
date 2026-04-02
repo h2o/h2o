@@ -745,6 +745,8 @@ static void handle_incoming_request(struct st_h2o_http1_conn_t *conn)
         /* Is a CONNECT request or an upgrade (e.g., WebSocket). Request is submitted immediately and body is streamed. */
         if (!h2o_req_can_stream_request(&conn->req) &&
             h2o_memis(conn->req.input.method.base, conn->req.input.method.len, H2O_STRLIT("CONNECT"))) {
+            clear_timeouts(conn);
+            h2o_socket_read_stop(conn->sock);
             h2o_send_error_405(&conn->req, "Method Not Allowed", "Method Not Allowed", 0);
             return;
         }
@@ -867,6 +869,9 @@ static void on_send_complete(h2o_socket_t *sock, const char *err)
         } else {
             /* success */
             conn->req.timestamps.response_end_at = h2o_gettimeofday(conn->super.ctx->loop);
+            if (h2o_timeval_is_null(&conn->req.timestamps.response_start_at)) {
+                conn->req.timestamps.response_start_at = conn->req.timestamps.response_end_at;
+            }
         }
     }
 

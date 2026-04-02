@@ -111,6 +111,9 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
+/* used by probes */
+struct st_h2o_io_uring_cmd_t;
+
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.h"
 #else
@@ -539,6 +542,8 @@ int h2o_socket_boringssl_get_async_job_index(void);
  */
 int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
 #endif
+
+PTLS_LOG_DEFINE_GETSNI(h2o_sock, h2o_socket_t *, { return h2o_socket_get_ssl_server_name(arg); })
 
 /* inline defs */
 

@@ -60,7 +60,7 @@ void test_lossy(void);
 void test_stream_concurrency(void);
 void test_received_cid(void);
 void test_local_cid(void);
-void test_retire_cid(void);
 void test_jumpstart(void);
+void test_cc(void);
 
 #endif

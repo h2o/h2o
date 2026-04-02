@@ -264,9 +264,13 @@ void on_body_to_pipe(h2o_socket_t *_sock, const char *err)
         return;
     }
 
+    size_t bytes_to_splice = client->_body_decoder.content_length.bytesleft < H2O_PULL_SENDVEC_MAX_SIZE
+                                 ? client->_body_decoder.content_length.bytesleft
+                                 : H2O_PULL_SENDVEC_MAX_SIZE;
+
     ssize_t bytes_read;
-    while ((bytes_read = splice(h2o_socket_get_fd(client->sock), NULL, client->pipe_reader.fd, NULL,
-                                client->_body_decoder.content_length.bytesleft, SPLICE_F_NONBLOCK)) == -1 &&
+    while ((bytes_read = splice(h2o_socket_get_fd(client->sock), NULL, client->pipe_reader.fd, NULL, bytes_to_splice,
+                                SPLICE_F_NONBLOCK)) == -1 &&
            errno == EINTR)
         ;
     if (bytes_read == -1 && errno == EAGAIN) {
@@ -549,7 +553,7 @@ static void on_head(h2o_socket_t *sock, const char *err)
      * transferring the content zero-copy. As switching to pipe involves the cost of creating a pipe (and disposing it when the
      * request is complete), we adopt this margin of 64KB, which offers clear improvement (5%) on 9th-gen Intel Core. */
     if (client->_app_prefers_pipe_reader && reader == on_body_content_length &&
-        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft)
+        client->sock->input->size + 65536 <= client->_body_decoder.content_length.bytesleft && client->sock->ssl == NULL)
         on_head.pipe_reader = &client->pipe_reader;
 #endif
 

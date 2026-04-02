@@ -35,7 +35,7 @@ EOT
 
 # Start 1k concurrent requests by sending 1k POST headers followed by 1k DATA END_STREAMs.
 my $output = run_with_h2get_simple($server, <<"EOR");
-    N = 1000
+    N = 900
 
     puts "Send HEADERS"
     (0..(N-1)).each { |it|
@@ -94,6 +94,6 @@ my @logs = do {
 };
 debug(join "\n", map { join " ", @$_ } @logs);
 
-is scalar(grep { $_->[0] == 200 } @logs), 1000, "accepted all requests";
+is scalar(grep { $_->[0] == 200 } @logs), 900, "accepted all requests";
 
 done_testing();

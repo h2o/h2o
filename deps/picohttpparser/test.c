@@ -423,6 +423,14 @@ static void test_chunked(void)
         test_chunked_failure(__LINE__, "6\r\nhello \r\nfffffffffffffffff\r\nabcdefg", -1);
     }
     test_chunked_failure(__LINE__, "1x\r\na\r\n0\r\n", -1);
+
+    /* bare lf cannot be used in chunk header */
+    test_chunked_failure(__LINE__, "6\nhello \r\n5\r\nworld\r\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6\r\nhello \n5\r\nworld\r\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6\r\nhello \r\n5\r\nworld\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6\r\nhello \r\n5\r\nworld\n0\r\n", -1);
+    test_chunked_failure(__LINE__, "6\r\nhello \r\n5\r\nworld\r\n0\n", -1);
+    test_chunked_failure(__LINE__, "6\rX\nhello \n5\r\nworld\r\n0\r\n", -1);
 }
 
 static void test_chunked_consume_trailer(void)
@@ -434,8 +442,10 @@ static void test_chunked_consume_trailer(void)
         chunked_test_runners[i](__LINE__, 1, "6\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", -2);
         chunked_test_runners[i](__LINE__, 1, "6;comment=hi\r\nhello \r\n5\r\nworld\r\n0\r\n", "hello world", -2);
         chunked_test_runners[i](__LINE__, 1, "b\r\nhello world\r\n0\r\n\r\n", "hello world", 0);
-        chunked_test_runners[i](__LINE__, 1, "b\nhello world\n0\n\n", "hello world", 0);
         chunked_test_runners[i](__LINE__, 1, "6\r\nhello \r\n5\r\nworld\r\n0\r\na: b\r\nc: d\r\n\r\n", "hello world", 0);
+        /* bare lf is allowed in trailers, for consistency to when they are parsed using phr_parse_headers */
+        chunked_test_runners[i](__LINE__, 1, "b\r\nhello world\r\n0\r\n\n", "hello world", 0);
+        chunked_test_runners[i](__LINE__, 1, "6\r\nhello \r\n5\r\nworld\r\n0\r\na: b\nc: d\n\n", "hello world", 0);
     }
 }
 

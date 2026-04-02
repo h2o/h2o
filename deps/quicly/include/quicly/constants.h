@@ -65,8 +65,6 @@ extern "C" {
 #define QUICLY_EPOCH_HANDSHAKE 2
 #define QUICLY_EPOCH_1RTT 3
 #define QUICLY_NUM_EPOCHS 4
-#define QUICLY_EPOCH_ON_STREAMS_TP 4 /* used internally */
-#define QUICLY_EPOCH_ON_STREAMS_OTHER 5
 
 /**
  * Error code used by quicly. The code coalesces the following to an int64_t.
@@ -110,7 +108,7 @@ typedef int64_t quicly_error_t;
 #define QUICLY_TRANSPORT_ERROR_AEAD_LIMIT_REACHED QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0xf)
 #define QUICLY_TRANSPORT_ERROR_CRYPTO(tls_alert) QUICLY_ERROR_FROM_TRANSPORT_ERROR_CODE(0x100 + (tls_alert))
 
-/* internal error codes, used purely for signaling status to the application */
+/* local error codes, used for signaling status between quicly and the application */
 #define QUICLY_ERROR_PACKET_IGNORED 0xff01
 #define QUICLY_ERROR_SENDBUF_FULL 0xff02    /* internal use only; the error code is never exposed to the application */
 #define QUICLY_ERROR_FREE_CONNECTION 0xff03 /* returned by quicly_send when the connection is freeable */
@@ -120,11 +118,12 @@ typedef int64_t quicly_error_t;
 #define QUICLY_ERROR_STATE_EXHAUSTION 0xff07
 #define QUICLY_ERROR_INVALID_INITIAL_VERSION 0xff08
 #define QUICLY_ERROR_DECRYPTION_FAILED 0xff09
-#define QUICLY_ERROR_PARTIAL_FRAME 0xff0a
 
 typedef int64_t quicly_stream_id_t;
 
 typedef struct st_quicly_conn_t quicly_conn_t;
+
+static uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y);
 
 /**
  * Used for emitting arbitrary debug message through probes. The debug message might get emitted unescaped as a JSON string,
@@ -134,6 +133,18 @@ void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, c
     __attribute__((format(printf, 4, 5)));
 
 #define quicly_debug_printf(conn, ...) quicly__debug_printf((conn), __FUNCTION__, __LINE__, __VA_ARGS__)
+
+/* inline definitions */
+
+inline uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y)
+{
+#ifdef __GNUC__ /* GCC or clang */
+    uint32_t r;
+    return __builtin_add_overflow(x, y, &r) ? UINT32_MAX : r;
+#else
+    return x > UINT32_MAX - y ? UINT32_MAX : x + y;
+#endif
+}
 
 #ifdef __cplusplus
 }

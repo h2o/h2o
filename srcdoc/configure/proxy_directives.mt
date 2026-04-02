@@ -363,28 +363,6 @@ But if the backend server has enough concurrency, <code>proxy.max-buffer-size</c
 
 <?
 $ctx->{directive}->(
-    name     => "proxy.max-spare-pipes",
-    levels   => [ qw(global) ],
-    desc     => q{This setting specifies the maximum number of pipes retained for reuse, when <code>proxy.zerocopy</code> is used.},
-    default  => 0,
-    see_also => render_mt(<<'EOT'),
-<a href="configure/proxy_directives.html#proxy.zerocopy"><code>proxy.zerocopy</code></a>
-EOT
-)->(sub {
-?>
-<p>
-This maximum is applied per each worker thread.
-The intention of this setting is to reduce lock contention in the kernel under high load when zerocopy is used.
-When this setting is set to a non-zero value, specified number of pipes will be allocated upon startup for each worker thread.
-</p>
-<p>
-Setting this value to 0 will cause no pipes to be retained by h2o; the pipes will be closed after they are used.
-In this case, h2o will create new pipes each time they are needed.
-</p>
-? })
-
-<?
-$ctx->{directive}->(
     name    => "proxy.preserve-host",
     levels  => [ qw(global host path extension) ],
     default => q{proxy.preserve-host: OFF},
@@ -567,7 +545,7 @@ $ctx->{directive}->(
     desc         => q{Sets the use of zerocopy operations for forwarding the response body.},
     experimental => 1,
     see_also     => render_mt(<<'EOT'),
-<a href="configure/base_directives.html#ssl-offload"><code>ssl-offload</code></a>, <a href="configure/proxy_directives.html#proxy.max-spare-pipes"><code>proxy.max-spare-pipes</code></a>
+<a href="configure/base_directives.html#max-spare-pipes"><code>proxy.max-spare-pipes</code></a>, <a href="configure/base_directives.html#ssl-offload"><code>ssl-offload</code></a>
 EOT
 )->(sub {
 ?>

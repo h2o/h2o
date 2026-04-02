@@ -32,11 +32,17 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #endif
 #ifdef __linux__
 #include <sys/syscall.h>
+#endif
+#ifdef __APPLE__
+#include <AvailabilityMacros.h>
 #endif
 #include "picotls.h"
 #if PICOTLS_USE_DTRACE
@@ -3200,19 +3206,17 @@ static int send_certificate_verify(ptls_t *tls, ptls_message_emitter_t *emitter,
             if ((ret = tls->ctx->sign_certificate->cb(
                      tls->ctx->sign_certificate, tls, tls->is_server ? &tls->server.async_job : NULL, &algo, sendbuf,
                      ptls_iovec_init(data, datalen), signature_algorithms != NULL ? signature_algorithms->list : NULL,
-                     signature_algorithms != NULL ? signature_algorithms->count : 0)) != 0) {
-                if (ret == PTLS_ERROR_ASYNC_OPERATION) {
-                    assert(tls->is_server || !"async operation only supported on the server-side");
-                    assert(tls->server.async_job != NULL);
-                    /* Reset the output to the end of the previous handshake message. CertificateVerify will be rebuilt when the
-                     * async operation completes. */
-                    emitter->buf->off = start_off;
-                } else {
-                    assert(tls->server.async_job == NULL);
-                }
+                     signature_algorithms != NULL ? signature_algorithms->count : 0)) == PTLS_ERROR_ASYNC_OPERATION) {
+                assert(tls->is_server || !"async operation only supported on the server-side");
+                assert(tls->server.async_job != NULL);
+                /* Reset the output to the end of the previous handshake message. CertificateVerify will be rebuilt when the async
+                 * operation completes. */
+                emitter->buf->off = start_off;
                 goto Exit;
             }
-            assert(tls->server.async_job == NULL);
+            assert(!tls->is_server || tls->server.async_job == NULL);
+            if (ret != 0)
+                goto Exit;
             sendbuf->base[algo_off] = (uint8_t)(algo >> 8);
             sendbuf->base[algo_off + 1] = (uint8_t)algo;
         });
@@ -6769,10 +6773,11 @@ char *ptls_jsonescape(char *buf, const char *unsafe_str, size_t len)
     return dst;
 }
 
-void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *v4)
+void ptls_build_v4_mapped_v6_address(void *v6, const void *v4)
 {
-    *v6 = (struct in6_addr){.s6_addr[10] = 0xff, .s6_addr[11] = 0xff};
-    memcpy(&v6->s6_addr[12], &v4->s_addr, 4);
+    memset(v6, 0, 10);
+    memset((uint8_t *)v6 + 10, 0xff, 2);
+    memcpy((uint8_t *)v6 + 12, v4, 4);
 }
 
 struct st_ptls_log_t ptls_log = {
@@ -6923,8 +6928,7 @@ void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point
         pthread_mutex_unlock(&logctx.mutex);
 }
 
-void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg)
+void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni)
 {
     if (!caller_locked)
         pthread_mutex_lock(&logctx.mutex);
@@ -6932,10 +6936,11 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
     if (conn->state.generation != ptls_log._generation) {
         /* update active bitmap */
         uint32_t new_active = 0;
-        const char *sni = get_sni != NULL ? get_sni(get_sni_arg) : NULL;
+        const char *sni = getsni.cb != NULL ? getsni.cb(getsni.arg) : NULL;
         for (size_t slot = 0; slot < PTLS_ELEMENTSOF(logctx.conns); ++slot) {
             if (logctx.conns[slot].points != NULL && conn->random_ < logctx.conns[slot].sample_ratio &&
-                is_in_stringlist(logctx.conns[slot].snis, sni) && is_in_addresslist(logctx.conns[slot].addresses, &conn->address)) {
+                is_in_stringlist(logctx.conns[slot].snis, sni) &&
+                is_in_addresslist(logctx.conns[slot].addresses, (struct in6_addr *)&conn->address)) {
                 new_active |= (uint32_t)1 << slot;
             }
         }
@@ -7057,7 +7062,11 @@ void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time)
         logbuf.tid.len = sprintf(logbuf.tid.buf, ",\"tid\":%" PRId64, (int64_t)syscall(SYS_gettid));
 #elif defined(__APPLE__)
         uint64_t t = 0;
+#if MAC_OS_X_VERSION_MAX_ALLOWED < 1060 || defined(__POWERPC__)
+        t = pthread_mach_thread_np(pthread_self());
+#else
         (void)pthread_threadid_np(NULL, &t);
+#endif
         logbuf.tid.len = sprintf(logbuf.tid.buf, ",\"tid\":%" PRIu64, t);
 #else
         /* other platforms: skip emitting tid, by keeping logbuf.tid.len == 0 */
@@ -7080,8 +7089,8 @@ void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time)
     logbuf.buf.off = (size_t)written;
 }
 
-int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg, int includes_appdata)
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni,
+                           int includes_appdata)
 {
     if (!expand_logbuf_or_invalidate("}\n", 2, 0))
         return 0;
@@ -7095,7 +7104,7 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
         ptls_log__recalc_point(1, point);
     uint32_t active = point->state.active_conns;
     if (conn != NULL && conn->state.generation != ptls_log._generation) {
-        ptls_log__recalc_conn(1, conn, get_sni, get_sni_arg);
+        ptls_log__recalc_conn(1, conn, getsni);
         active &= conn->state.active_conns;
     }
 
@@ -7146,7 +7155,7 @@ void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)
 
     *state = (ptls_log_conn_state_t){
         .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
-        .address = in6addr_any,
+        .address = {0}, /* inaddr6_any */
     };
 }
 

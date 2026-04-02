@@ -400,6 +400,10 @@ struct st_h2o_globalconf_t {
      * SSL handshake timeout
      */
     uint64_t handshake_timeout;
+    /**
+     * maximum number of pipes to retain for reuse
+     */
+    size_t max_spare_pipes;
 
     struct {
         /**
@@ -540,10 +544,6 @@ struct st_h2o_globalconf_t {
          * maximum size to buffer for the response
          */
         size_t max_buffer_size;
-        /**
-         * maximum number of pipes to retain for reuse
-         */
-        size_t max_spare_pipes;
         /**
          * a boolean flag if set to true, instructs to use zero copy (i.e., splice to pipe then splice to socket) if possible
          */
@@ -692,6 +692,13 @@ struct st_h2o_context_t {
      */
     h2o_filecache_t *filecache;
     /**
+     * the list of spare pipes currently retained for reuse
+     */
+    struct {
+        int (*pipes)[2];
+        size_t count;
+    } spare_pipes;
+    /**
      * context scope storage for general use
      */
     h2o_context_storage_t storage;
@@ -800,13 +807,6 @@ struct st_h2o_context_t {
          * the default connection pool for proxy
          */
         h2o_httpclient_connection_pool_t connpool;
-        /**
-         * the list of spare pipes currently retained for reuse
-         */
-        struct {
-            int (*pipes)[2];
-            size_t count;
-        } spare_pipes;
     } proxy;
 
     struct {
@@ -1424,6 +1424,10 @@ struct st_h2o_req_t {
      * When the protocol handler returns a successful response, filters are skipped.
      */
     unsigned char is_tunnel_req : 1;
+    /**
+     * if path_normalized contains a NULL character
+     */
+    unsigned path_normalized_has_null_char : 1;
 
     /**
      * whether if the response should include server-timing header. Logical OR of H2O_SEND_SERVER_TIMING_*
@@ -1669,7 +1673,15 @@ static int h2o_send_state_is_in_progress(h2o_send_state_t s);
  * @param state describes if the output is final, has an error, or is in progress
  */
 void h2o_send(h2o_req_t *req, h2o_iovec_t *bufs, size_t bufcnt, h2o_send_state_t state);
+/**
+ * Same as `h2o_send` but sends `h2o_sendvec_t`s
+ */
 void h2o_sendvec(h2o_req_t *req, h2o_sendvec_t *vecs, size_t veccnt, h2o_send_state_t state);
+/**
+ * Wrapper around `h2o_sendvec` that sends the contents of pipe
+ */
+void h2o_send_from_pipe(h2o_req_t *req, int pipefd, size_t len, h2o_send_state_t send_state);
+
 /**
  * creates an uninitialized prefilter and returns pointer to it
  */
@@ -2185,7 +2197,8 @@ enum {
     H2O_FILE_FLAG_NO_ETAG = 0x1,
     H2O_FILE_FLAG_DIR_LISTING = 0x2,
     H2O_FILE_FLAG_SEND_COMPRESSED = 0x4,
-    H2O_FILE_FLAG_GUNZIP = 0x8
+    H2O_FILE_FLAG_GUNZIP = 0x8,
+    H2O_FILE_FLAG_IO_URING = 0x16,
 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
@@ -2433,6 +2446,8 @@ void h2o_log_register(h2o_hostconf_t *hostconf);
  * registers the h2olog configurator.
  */
 void h2o_log_register_configurator(h2o_globalconf_t *conf);
+
+PTLS_LOG_DEFINE_GETSNI(h2o_conn, h2o_conn_t *, { return arg->callbacks->get_ssl_server_name(arg); })
 
 /* inline defs */
 

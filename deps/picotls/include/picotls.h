@@ -34,10 +34,6 @@ extern "C" {
 #include <inttypes.h>
 #include <string.h>
 #include <sys/types.h>
-#ifndef _WINDOWS
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif
 
 #if __GNUC__ >= 3
 #define PTLS_LIKELY(x) __builtin_expect(!!(x), 1)
@@ -117,6 +113,13 @@ extern "C" {
 #define PTLS_BLOWFISH_KEY_SIZE 16
 #define PTLS_BLOWFISH_BLOCK_SIZE 8
 
+#define PTLS_QUICLB_KEY_SIZE 16 /* same as the underlying aes128ecb */
+#define PTLS_QUICLB_MIN_BLOCK_SIZE 7
+#define PTLS_QUICLB_MAX_BLOCK_SIZE 19 /* inclusive */
+#define PTLS_QUICLB_DEFAULT_BLOCK_SIZE                                                                                             \
+    8 /* when the quiclb cipher is used, the blob passed to ptls_cipher_encrypt can be anything between the min and max above;     \
+         however, 8 is the default set in `ptls_cipher_algorithm_t::block_size` */
+
 #define PTLS_SHA256_BLOCK_SIZE 64
 #define PTLS_SHA256_DIGEST_SIZE 32
 
@@ -171,8 +174,18 @@ extern "C" {
 #define PTLS_GROUP_NAME_X25519 "x25519"
 #define PTLS_GROUP_X448 30
 #define PTLS_GROUP_NAME_X448 "x448"
+#define PTLS_GROUP_SECP256R1MLKEM768 4587
+#define PTLS_GROUP_NAME_SECP256R1MLKEM768 "SecP256r1MLKEM768"
 #define PTLS_GROUP_X25519MLKEM768 4588
 #define PTLS_GROUP_NAME_X25519MLKEM768 "X25519MLKEM768"
+#define PTLS_GROUP_SECP384R1MLKEM1024 4589
+#define PTLS_GROUP_NAME_SECP384R1MLKEM1024 "SecP384r1MLKEM1024"
+#define PTLS_GROUP_MLKEM512 512
+#define PTLS_GROUP_NAME_MLKEM512 "MLKEM512"
+#define PTLS_GROUP_MLKEM768 513
+#define PTLS_GROUP_NAME_MLKEM768 "MLKEM768"
+#define PTLS_GROUP_MLKEM1024 514
+#define PTLS_GROUP_NAME_MLKEM1024 "MLKEM1024"
 
 /* signature algorithms */
 #define PTLS_SIGNATURE_RSA_PKCS1_SHA1 0x0201
@@ -1392,8 +1405,27 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         ptls_decode_assert_block_close((src), end);                                                                                \
     } while (0)
 
+typedef struct st_ptls_log_getsni_t {
+    const char *(*cb)(void *arg);
+    void *arg;
+} ptls_log_getsni_t;
+
+/**
+ * Creates a lazy callback object for obtaining SNI. The object is used to delay materialization of SNI to only when it is needed.
+ */
+#define PTLS_LOG_DEFINE_GETSNI(suffix, type, body)                                                                                 \
+    static inline const char *ptls_log_getsni_cb_##suffix(void *_arg)                                                              \
+    {                                                                                                                              \
+        type arg = (type)_arg;                                                                                                     \
+        body                                                                                                                       \
+    }                                                                                                                              \
+    static inline ptls_log_getsni_t ptls_log_getsni_##suffix(type arg)                                                             \
+    {                                                                                                                              \
+        return (ptls_log_getsni_t){ptls_log_getsni_cb_##suffix, arg};                                                              \
+    }
+
 #if PTLS_HAVE_LOG
-#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, add_time, block)                                          \
+#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, add_time, block)                                                       \
     do {                                                                                                                           \
         int ptlslog_include_appdata = 0;                                                                                           \
         do {                                                                                                                       \
@@ -1401,12 +1433,11 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
-            ptlslog_include_appdata =                                                                                              \
-                ptls_log__do_write_end(&logpoint, (conn_state), (get_sni), (get_sni_arg), ptlslog_include_appdata);                \
+            ptlslog_include_appdata = ptls_log__do_write_end(&logpoint, (conn_state), (get_sni), ptlslog_include_appdata);         \
         } while (PTLS_UNLIKELY(ptlslog_include_appdata));                                                                          \
     } while (0)
 #else
-#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, get_sni_arg, add_time, block) /* don't generate code */
+#define PTLS_LOG__DO_LOG(module, name, conn_state, get_sni, add_time, block) /* don't generate code */
 #endif
 
 #define PTLS_LOG_DEFINE_POINT(_module, _name, _var)                                                                                \
@@ -1417,7 +1448,7 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
         PTLS_LOG_DEFINE_POINT(module, name, logpoint);                                                                             \
         if (PTLS_LIKELY(ptls_log_point_maybe_active(&logpoint) == 0))                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(module, name, NULL, NULL, NULL, 1, {block});                                                              \
+        PTLS_LOG__DO_LOG(module, name, NULL, (ptls_log_getsni_t){NULL}, 1, {block});                                               \
     } while (0)
 
 #define PTLS_LOG_CONN(name, tls, block)                                                                                            \
@@ -1428,10 +1459,10 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
             break;                                                                                                                 \
         ptls_t *_tls = (tls);                                                                                                      \
         ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
+        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(picotls, name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, 1, {                      \
+        PTLS_LOG__DO_LOG(picotls, name, conn_state, ptls_log_getsni_ptls(_tls), 1, {                                               \
             PTLS_LOG_ELEMENT_PTR(tls, _tls);                                                                                       \
             do {                                                                                                                   \
                 block                                                                                                              \
@@ -1471,19 +1502,15 @@ uint64_t ptls_decode_quicint(const uint8_t **src, const uint8_t *end);
 #define PTLS_LOG_ELEMENT_BOOL(name, value) ptls_log__do_push_element_bool(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value))
 #define PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, value, value_len)                                                                 \
     do {                                                                                                                           \
-        if (ptlslog_include_appdata) {                                                                                             \
+        if (ptlslog_include_appdata)                                                                                               \
             PTLS_LOG_ELEMENT_UNSAFESTR(name, value, value_len);                                                                    \
-        } else {                                                                                                                   \
-            PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                    \
-        }                                                                                                                          \
+        PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                        \
     } while (0)
 #define PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(name, value, value_len)                                                                   \
     do {                                                                                                                           \
-        if (ptlslog_include_appdata) {                                                                                             \
+        if (ptlslog_include_appdata)                                                                                               \
             PTLS_LOG_ELEMENT_HEXDUMP(name, value, value_len);                                                                      \
-        } else {                                                                                                                   \
-            PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                    \
-        }                                                                                                                          \
+        PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                        \
     } while (0)
 
 /**
@@ -1518,9 +1545,9 @@ typedef struct st_ptls_log_conn_state_t {
      */
     float random_;
     /**
-     * represents peer address; ipv4 addresses are stored using the mapped form (::ffff:192.0.2.1)
+     * represents the peer address using ipv6; ipv4 addresses are stored using the mapped form (::ffff:192.0.2.1)
      */
-    struct in6_addr address;
+    uint8_t address[16];
     struct st_ptls_log_state_t state;
 } ptls_log_conn_state_t;
 
@@ -1562,7 +1589,7 @@ static uint32_t ptls_log_point_maybe_active(struct st_ptls_log_point_t *point);
 /**
  * returns a bitmap indicating the loggers active for given connection
  */
-static uint32_t ptls_log_conn_maybe_active(ptls_log_conn_state_t *conn, const char *(*get_sni)(void *), void *get_sni_arg);
+static uint32_t ptls_log_conn_maybe_active(ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni);
 
 /**
  * Returns the number of log events that were unable to be emitted.
@@ -1579,8 +1606,7 @@ size_t ptls_log_num_lost(void);
 int ptls_log_add_fd(int fd, float sample_ratio, const char *points, const char *snis, const char *addresses, int appdata);
 
 void ptls_log__recalc_point(int caller_locked, struct st_ptls_log_point_t *point);
-void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg);
+void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni);
 void ptls_log__do_push_element_safestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_unsafestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, const void *s, size_t l);
@@ -1594,8 +1620,8 @@ void ptls_log__do_push_appdata_element_unsafestr(int includes_appdata, const cha
 void ptls_log__do_push_appdata_element_hexdump(int includes_appdata, const char *prefix, size_t prefix_len, const void *s,
                                                size_t l);
 void ptls_log__do_write_start(struct st_ptls_log_point_t *point, int add_time);
-int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, const char *(*get_sni)(void *),
-                           void *get_sni_arg, int includes_appdata);
+int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni,
+                           int includes_appdata);
 
 /**
  * create a client object to handle new TLS connection
@@ -1941,9 +1967,9 @@ char *ptls_hexdump(char *dst, const void *src, size_t len);
  */
 char *ptls_jsonescape(char *buf, const char *s, size_t len);
 /**
- * builds a v4-mapped address (i.e., ::ffff:192.0.2.1)
+ * Builds a v4-mapped address (i.e., ::ffff:192.0.2.1). The v4 address must be in big-endian.
  */
-void ptls_build_v4_mapped_v6_address(struct in6_addr *v6, const struct in_addr *v4);
+void ptls_build_v4_mapped_v6_address(void *v6, const void *v4);
 
 /**
  * the default get_time callback
@@ -1953,6 +1979,8 @@ extern ptls_get_time_t ptls_get_time;
  * default hash clone function that calls memcpy
  */
 static void ptls_hash_clone_memcpy(void *dst, const void *src, size_t size);
+
+PTLS_LOG_DEFINE_GETSNI(ptls, ptls_t *, { return ptls_get_server_name(arg); })
 
 /* inline functions */
 
@@ -1972,11 +2000,11 @@ inline void ptls_log_recalc_conn_state(ptls_log_conn_state_t *state)
     state->state.generation = 0;
 }
 
-inline uint32_t ptls_log_conn_maybe_active(ptls_log_conn_state_t *conn, const char *(*get_sni)(void *), void *get_sni_arg)
+inline uint32_t ptls_log_conn_maybe_active(ptls_log_conn_state_t *conn, ptls_log_getsni_t getsni)
 {
 #if PTLS_HAVE_LOG
     if (PTLS_UNLIKELY(conn->state.generation != ptls_log._generation))
-        ptls_log__recalc_conn(0, conn, get_sni, get_sni_arg);
+        ptls_log__recalc_conn(0, conn, getsni);
     return conn->state.active_conns;
 #else
     return 0;

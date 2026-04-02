@@ -23,6 +23,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include "cloexec.h"
 #include "h2o.h"
 #include "h2o/http3_server.h"
 #include "h2o/memcached.h"
@@ -94,6 +95,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->queue = h2o_multithread_create_queue(loop);
     h2o_multithread_register_receiver(ctx->queue, &ctx->receivers.hostinfo_getaddr, h2o_hostinfo_getaddr_receiver);
     ctx->filecache = h2o_filecache_create(config->filecache.capacity);
+    ctx->spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->spare_pipes.pipes[0]) * config->max_spare_pipes);
 
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
@@ -114,18 +116,6 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
     ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
     h2o_httpclient_connection_pool_init(&ctx->proxy.connpool, &ctx->globalconf->proxy.global_socketpool);
-    ctx->proxy.spare_pipes.pipes = h2o_mem_alloc(sizeof(ctx->proxy.spare_pipes.pipes[0]) * config->proxy.max_spare_pipes);
-
-#ifdef __linux__
-    /* pre-fill the pipe cache at context init */
-    for (i = 0; i < config->proxy.max_spare_pipes; ++i) {
-        if (pipe2(ctx->proxy.spare_pipes.pipes[i], O_NONBLOCK | O_CLOEXEC) != 0) {
-            char errbuf[256];
-            h2o_fatal("pipe2(2) failed:%s", h2o_strerror_r(errno, errbuf, sizeof(errbuf)));
-        }
-        ctx->proxy.spare_pipes.count++;
-    }
-#endif
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);
@@ -150,19 +140,12 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
 void h2o_context_dispose(h2o_context_t *ctx)
 {
     h2o_globalconf_t *config = ctx->globalconf;
-    size_t i, j;
-
-    for (size_t i = 0; i < ctx->proxy.spare_pipes.count; ++i) {
-        close(ctx->proxy.spare_pipes.pipes[i][0]);
-        close(ctx->proxy.spare_pipes.pipes[i][1]);
-    }
-    free(ctx->proxy.spare_pipes.pipes);
 
     h2o_socketpool_unregister_loop(&ctx->globalconf->proxy.global_socketpool, ctx->loop);
 
-    for (i = 0; config->hosts[i] != NULL; ++i) {
+    for (size_t i = 0; config->hosts[i] != NULL; ++i) {
         h2o_hostconf_t *hostconf = config->hosts[i];
-        for (j = 0; j != hostconf->paths.size; ++j) {
+        for (size_t j = 0; j != hostconf->paths.size; ++j) {
             h2o_pathconf_t *pathconf = hostconf->paths.entries[j];
             h2o_context_dispose_pathconf_context(ctx, pathconf);
         }
@@ -172,11 +155,17 @@ void h2o_context_dispose(h2o_context_t *ctx)
     free(ctx->_module_configs);
     /* what should we do here? assert(!h2o_linklist_is_empty(&ctx->http2._conns); */
 
+    for (size_t i = 0; i < ctx->spare_pipes.count; ++i) {
+        close(ctx->spare_pipes.pipes[i][0]);
+        close(ctx->spare_pipes.pipes[i][1]);
+    }
+    free(ctx->spare_pipes.pipes);
+
     h2o_filecache_destroy(ctx->filecache);
     ctx->filecache = NULL;
 
     /* clear storage */
-    for (i = 0; i != ctx->storage.size; ++i) {
+    for (size_t i = 0; i != ctx->storage.size; ++i) {
         h2o_context_storage_item_t *item = ctx->storage.entries + i;
         if (item->dispose != NULL) {
             item->dispose(item->data);

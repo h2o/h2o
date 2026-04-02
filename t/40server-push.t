@@ -26,6 +26,7 @@ subtest "basic" => sub {
     );
     # spawn server
     my $server = spawn_h2o(<< "EOT");
+file.io_uring: OFF
 hosts:
   default:
     paths:
@@ -228,6 +229,7 @@ subtest "cache-digest" => sub {
     my $server = spawn_h2o(sub {
         my ($port, $tls_port) = @_;
         return << "EOT";
+file.io_uring: OFF
 hosts:
   "127.0.0.1:$tls_port":
     paths:

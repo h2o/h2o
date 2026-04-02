@@ -145,6 +145,7 @@ static void common_init(h2o_socketpool_t *pool, h2o_socketpool_target_t **target
         pool->targets.entries[pool->targets.size] = targets[pool->targets.size];
 
     pool->balancer = balancer;
+    pool->address_family = AF_UNSPEC;
 }
 
 h2o_socketpool_target_type_t detect_target_type(h2o_url_t *url, struct sockaddr_storage *sa, socklen_t *salen)
@@ -334,8 +335,9 @@ static void try_connect(h2o_socketpool_connect_request_t *req)
     switch (target->type) {
     case H2O_SOCKETPOOL_TYPE_NAMED:
         /* resolve the name, and connect */
-        req->getaddr_req = h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, AF_UNSPEC,
-                                                SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
+        req->getaddr_req =
+            h2o_hostinfo_getaddr(req->getaddr_receiver, target->url.host, target->peer.named_serv, req->pool->address_family,
+                                 SOCK_STREAM, IPPROTO_TCP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, req);
         break;
     case H2O_SOCKETPOOL_TYPE_SOCKADDR:
         /* connect (using sockaddr_in) */
@@ -471,6 +473,12 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     size_t target = SIZE_MAX;
     h2o_linklist_t *sockets = NULL;
 
+    /* As an optimization, avoid trying to reuse (and obtaining lock for the purpose) when the pool is not going to retain sockets.
+     * The optimization is limited to non-global socket pools, as the rest of the logic depends on a valid entry within
+     * `pool->targets` to be targeted, that a global pool allocates dynamically. */
+    if (pool->timeout == 0 && !h2o_socketpool_is_global(pool))
+        goto SkipLookup;
+
     /* fetch an entry and return it */
     pthread_mutex_lock(&pool->_shared.mutex);
     check_pool_expired_locked(pool, loop);
@@ -534,7 +542,8 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
     }
     pthread_mutex_unlock(&pool->_shared.mutex);
 
-    /* FIXME repsect `capacity` */
+SkipLookup:
+    /* FIXME respect `capacity` */
     __sync_add_and_fetch(&pool->_shared.count, 1);
 
     /* prepare request object */

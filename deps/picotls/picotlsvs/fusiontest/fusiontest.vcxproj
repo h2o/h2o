@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\deps\picotest\picotest.c" />
     <ClCompile Include="..\..\t\fusion.c" />
+    <ClCompile Include="..\..\t\quiclb.c" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>

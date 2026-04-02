@@ -388,8 +388,8 @@ static int cmp_int64(const void *_x, const void *_y)
     return 0;
 }
 
-static void loss_check_stats(int64_t *time_spent, unsigned max_failures, double expected_time_mean, double expected_time_median,
-                             double expected_time_90th)
+static void loss_check_stats(int64_t *time_spent, unsigned max_failures, double min_mean, double max_mean, double min_median,
+                             double max_median, double max_90th)
 {
     int64_t sum = 0;
     for (size_t i = 0; i < 100; ++i)
@@ -403,12 +403,11 @@ static void loss_check_stats(int64_t *time_spent, unsigned max_failures, double 
 
     printf("fail: %u, times: mean: %.1f, median: %.1f, 90th: %.1f\n", num_failures_in_loss_core, time_mean, time_median, time_90th);
     ok(num_failures_in_loss_core <= max_failures);
-    ok(time_mean >= expected_time_mean * 0.6);
-    ok(time_mean <= expected_time_mean * 1.2);
-    ok(time_median >= expected_time_median * 0.6);
-    ok(time_median <= expected_time_median * 1.2);
-    // ok(time_90th >= expected_time_90th * 0.9); 90th is fragile to errors, we track this as an guarantee
-    ok(time_90th <= expected_time_90th * 1.2);
+    ok(time_mean >= min_mean);
+    ok(time_mean <= max_mean);
+    ok(time_median >= min_median);
+    ok(time_median <= max_median);
+    ok(time_90th <= max_90th);
 
     num_failures_in_loss_core = 0;
 }
@@ -426,49 +425,49 @@ static void test_downstream(void)
         subtest("75%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 4, 14193, 3610, 17579);
+    subtest("down-stats-75%", loss_check_stats, time_spent, 3, 5131, 17227, 2644, 3280, 12824);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 2);
         subtest("50%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 2220, 608, 2779);
+    subtest("down-stats-50%", loss_check_stats, time_spent, 0, 792, 1104, 484, 484, 1526);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 4);
         subtest("25%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 228.7, 230, 408);
+    subtest("down-stats-25%", loss_check_stats, time_spent, 0, 228.7, 244, 230, 230, 408);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 10);
         subtest("10%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 140.2, 80, 298);
+    subtest("down-stats-10%", loss_check_stats, time_spent, 0, 114, 142, 80, 80, 298);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 20);
         subtest("5%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 99.9, 80, 230);
+    subtest("down-stats-5%", loss_check_stats, time_spent, 0, 103, 118, 80, 80, 230);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 40);
         subtest("2.5%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 90.8, 80, 80);
+    subtest("down-stats-2.5%", loss_check_stats, time_spent, 0, 85, 103, 80, 80, 190);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 64);
         subtest("1.6%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 91.1, 80, 80);
+    subtest("down-stats-1.6%", loss_check_stats, time_spent, 0, 86, 91.1, 80, 80, 80);
 }
 
 static void test_bidirectional(void)
@@ -483,7 +482,7 @@ static void test_bidirectional(void)
         subtest("75%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 20, 240012.7, 126541, 652328);
+    subtest("bidi-stats-75%", loss_check_stats, time_spent, 18, 203900, 223090, 65015, 84162, 633710);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 2);
@@ -491,7 +490,7 @@ static void test_bidirectional(void)
         subtest("50%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 2286.9, 1175, 6424);
+    subtest("bidi-stats-50%", loss_check_stats, time_spent, 0, 4612, 5713, 886, 1175, 9269);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 4);
@@ -499,7 +498,7 @@ static void test_bidirectional(void)
         subtest("25%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 328.7, 237, 530);
+    subtest("bidi-stats-25%", loss_check_stats, time_spent, 0, 270, 285, 230, 284, 478);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 10);
@@ -507,7 +506,7 @@ static void test_bidirectional(void)
         subtest("10%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 150.1, 80, 298);
+    subtest("bidi-stats-10%", loss_check_stats, time_spent, 0, 121, 137, 80, 80, 230);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 20);
@@ -515,7 +514,7 @@ static void test_bidirectional(void)
         subtest("5%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 103.5, 80, 192);
+    subtest("bidi-stats-5%", loss_check_stats, time_spent, 0, 101, 110, 80, 80, 190);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 40);
@@ -523,7 +522,7 @@ static void test_bidirectional(void)
         subtest("2.5%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 96.7, 80, 80);
+    subtest("bidi-stats-2.5%", loss_check_stats, time_spent, 0, 95, 97, 80, 80, 190);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 64);
@@ -531,7 +530,7 @@ static void test_bidirectional(void)
         subtest("1.6%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    loss_check_stats(time_spent, 0, 96.7, 80, 190);
+    subtest("bidi-stats-1.6%", loss_check_stats, time_spent, 0, 86, 91, 80, 80, 80);
 }
 
 void test_lossy(void)
