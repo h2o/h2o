@@ -170,6 +170,10 @@ QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
  *
  */
 QUICLY_CALLBACK_TYPE(int, qmux_is_writing, quicly_conn_t *conn);
+/**
+ *
+ */
+QUICLY_CALLBACK_TYPE(ptls_log_conn_state_t *, qmux_log_state, quicly_conn_t *conn, ptls_log_getsni_t *getsni);
 
 /**
  * crypto offload API
@@ -439,6 +443,10 @@ struct st_quicly_context_t {
      *
      */
     quicly_qmux_is_writing_t *qmux_is_writing;
+    /**
+     *
+     */
+    quicly_qmux_log_state_t *qmux_log_state;
 };
 
 /**
@@ -1532,6 +1540,10 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
 /**
  *
  */
+ptls_log_conn_state_t *quicly_log_state(quicly_conn_t *conn, ptls_log_getsni_t *getsni);
+/**
+ *
+ */
 void quicly_amend_ptls_context(ptls_context_t *ptls);
 /**
  * Encrypts an address token by serializing the plaintext structure and appending an authentication tag.
@@ -1608,12 +1620,12 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
-        ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
-        ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
+        ptls_log_getsni_t getsni;                                                                                                  \
+        ptls_log_conn_state_t *conn_state = quicly_log_state(_c, &getsni);                                                         \
+        active &= ptls_log_conn_maybe_active(conn_state, getsni);                                                                  \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, getsni, _c->stash.now == 0, {                                                  \
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
