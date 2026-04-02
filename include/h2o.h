@@ -2069,6 +2069,9 @@ typedef struct st_h2o_compress_args_t {
     struct {
         int quality; /* -1 if disabled */
     } brotli;
+    struct {
+        int quality; /* -1 if disabled */
+    } zstd;
 } h2o_compress_args_t;
 
 /**
@@ -2093,6 +2096,11 @@ h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool);
  */
 h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length,
                                                  size_t preferred_chunk_size);
+/**
+ * instantiates the zstd compressor
+ */
+h2o_compress_context_t *h2o_compress_zstd_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length,
+                                               size_t preferred_chunk_size);
 /**
  * registers the configurator for the gzip/brotli output filter
  */
