@@ -131,7 +131,7 @@ typedef struct st_h2o_httpclient_connection_pool_t {
 
     struct {
         h2o_linklist_t conns;
-    } http3_on_streams;
+    } h3qx;
 
     struct {
         h2o_linklist_t conns;
@@ -148,9 +148,9 @@ typedef struct st_h2o_httpclient_protocol_ratio_t {
      */
     int8_t http2;
     /**
-     * Indicates the percentage of requests for which HTTP/3-on-Streams should be used (TODO support negative value).
+     * Indicates the percentage of requests for which HTTP/3 on QMux should be used (TODO support negative value).
      */
-    int8_t h3_on_streams;
+    int8_t h3qx;
     /**
      * Indicates the percentage of requests for which HTTP/3 should be used. Unlike HTTP/2, this value cannot be negative, because
      * unlike ALPN over TLS over TCP, the choice of the protocol is up to the client.
@@ -429,8 +429,8 @@ extern quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_
 void h2o_httpclient__connect_h3(h2o_httpclient_t **client, h2o_mem_pool_t *pool, void *data, h2o_httpclient_ctx_t *ctx,
                                 h2o_httpclient_connection_pool_t *connpool, h2o_url_t *target, const char *upgrade_to,
                                 h2o_httpclient_connect_cb cb);
-void h2o_httpclient__h3s_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin);
-struct st_h2o_httpclient__h3_conn_t *h2o_httpclient__find_h3_connection(h2o_httpclient_connection_pool_t *pool, int on_streams,
+void h2o_httpclient__h3qx_on_connect(h2o_httpclient_t *_client, h2o_socket_t *sock, h2o_url_t *origin);
+struct st_h2o_httpclient__h3_conn_t *h2o_httpclient__find_h3_connection(h2o_httpclient_connection_pool_t *pool, int qmux,
                                                                         h2o_url_t *origin);
 extern const size_t h2o_httpclient__h3_size;
 

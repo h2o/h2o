@@ -1120,7 +1120,7 @@ static void qos_on_read(h2o_socket_t *sock, const char *err)
     }
 
     size_t len = sock->input->size;
-    quicly_error_t ret = quicly_qos_receive(conn->quic, sock->input->bytes, &len);
+    quicly_error_t ret = quicly_qmux_receive(conn->quic, sock->input->bytes, &len);
     switch (ret) {
     case QUICLY_ERROR_STATE_EXHAUSTION:
     case PTLS_ERROR_NO_MEMORY:
@@ -1147,7 +1147,7 @@ static void qos_on_write_complete(h2o_socket_t *sock, const char *err)
     h2o_quic_schedule_timer(conn);
 }
 
-static int qos_is_writing(quicly_qos_is_writing_t *_self, quicly_conn_t *quic)
+static int qmux_is_writing(quicly_qmux_is_writing_t *_self, quicly_conn_t *quic)
 {
     h2o_quic_conn_t *conn = *quicly_get_data(quic);
     assert(conn->streams_sock != NULL);
@@ -1155,8 +1155,7 @@ static int qos_is_writing(quicly_qos_is_writing_t *_self, quicly_conn_t *quic)
     return h2o_socket_is_writing(conn->streams_sock);
 }
 
-quicly_qos_is_writing_t h2o_quic_qos_is_writing = {.cb = qos_is_writing};
-
+quicly_qmux_is_writing_t h2o_quic_qmux_is_writing = {.cb = qmux_is_writing};
 
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
@@ -1281,7 +1280,7 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
             return 1;
         uint8_t buf[16384];
         h2o_iovec_t vec = h2o_iovec_init(buf, sizeof(buf));
-        if ((send_result = quicly_qos_send(conn->quic, vec.base, &vec.len)) != 0)
+        if ((send_result = quicly_qmux_send(conn->quic, vec.base, &vec.len)) != 0)
             goto Fail;
         if (vec.len != 0)
             h2o_socket_write(conn->streams_sock, &vec, 1, qos_on_write_complete);

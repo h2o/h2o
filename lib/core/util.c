@@ -370,10 +370,10 @@ static void on_ssl_handshake_complete(h2o_socket_t *sock, const char *err)
     }
 
     h2o_iovec_t proto = h2o_socket_ssl_get_selected_protocol(sock);
-    if (is_protocol(proto, h2o_h3_on_streams_alpn_protocols)) {
-        /* connected as h3-on-streams */
-        ++data->ctx->ctx->ssl.alpn_h3_on_streams;
-        h2o_http3_accept_on_streams(data->ctx, sock, data->connected_at);
+    if (is_protocol(proto, h2o_h3qx_alpn_protocols)) {
+        /* connected as h3qx */
+        ++data->ctx->ctx->ssl.alpn_h3qx;
+        h2o_http3_qmux_accept(data->ctx, sock, data->connected_at);
     } else if (is_protocol(proto, h2o_http2_alpn_protocols)) {
         /* connect as http2 */
         ++data->ctx->ctx->ssl.alpn_h2;
@@ -939,13 +939,12 @@ h2o_iovec_t h2o_build_server_timing_trailer(h2o_req_t *req, const char *prefix, 
     "h2-16"                                                                                                                        \
     "\x05"                                                                                                                         \
     "h2-14"
-#define ALPN_PROTOCOLS_H3_ON_STREAMS ALPN_ENTRY("h3")
+#define ALPN_PROTOCOLS_H3QX ALPN_ENTRY("h3qx-01")
 
 const h2o_iovec_t h2o_http2_alpn_protocols[] = {ALPN_PROTOCOLS_H2, {NULL}};
 const h2o_iovec_t h2o_alpn_protocols[] = {ALPN_PROTOCOLS_H2, ALPN_ENTRY("http/1.1"), {NULL}};
-const h2o_iovec_t h2o_h3_on_streams_alpn_protocols[] = {ALPN_PROTOCOLS_H3_ON_STREAMS, {NULL}};
-const h2o_iovec_t h2o_alpn_protocols_including_h3_on_streams[] = {
-    ALPN_PROTOCOLS_H3_ON_STREAMS, ALPN_PROTOCOLS_H2, ALPN_ENTRY("http/1.1"), {NULL}};
+const h2o_iovec_t h2o_h3qx_alpn_protocols[] = {ALPN_PROTOCOLS_H3QX, {NULL}};
+const h2o_iovec_t h2o_alpn_protocols_including_h3qx[] = {ALPN_PROTOCOLS_H3QX, ALPN_PROTOCOLS_H2, ALPN_ENTRY("http/1.1"), {NULL}};
 
 const char h2o_http2_npn_protocols[] = NPN_PROTOCOLS_CORE;
 const char h2o_npn_protocols[] = NPN_PROTOCOLS_CORE "\x08"

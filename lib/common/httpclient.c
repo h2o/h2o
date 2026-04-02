@@ -48,7 +48,7 @@ void h2o_httpclient_connection_pool_init(h2o_httpclient_connection_pool_t *connp
 {
     connpool->socketpool = sockpool;
     h2o_linklist_init_anchor(&connpool->http2.conns);
-    h2o_linklist_init_anchor(&connpool->http3_on_streams.conns);
+    h2o_linklist_init_anchor(&connpool->h3qx.conns);
     h2o_linklist_init_anchor(&connpool->http3.conns);
 }
 
@@ -139,10 +139,10 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
     } else if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_httpclient__h1_on_connect(client, sock, origin);
     } else {
-        if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h3"))) {
+        if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h3qx-01"))) {
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
             h2o_socketpool_detach(client->connpool->socketpool, sock);
-            h2o_httpclient__h3s_on_connect(client, sock, origin);
+            h2o_httpclient__h3qx_on_connect(client, sock, origin);
         } else if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h2"))) {
         ForceH2:
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
@@ -189,12 +189,11 @@ static size_t select_protocol(struct st_h2o_httpclient_protocol_selector_t *sele
 
     /* update the deficits */
     if (selector->ratio.http2 < 0) {
-        selector->_deficits[PROTOCOL_SELECTOR_SERVER_DRIVEN] += 100 - selector->ratio.h3_on_streams - selector->ratio.http3;
+        selector->_deficits[PROTOCOL_SELECTOR_SERVER_DRIVEN] += 100 - selector->ratio.h3qx - selector->ratio.http3;
     } else {
-        selector->_deficits[PROTOCOL_SELECTOR_H1] +=
-            100 - selector->ratio.http2 - selector->ratio.h3_on_streams - selector->ratio.http3;
+        selector->_deficits[PROTOCOL_SELECTOR_H1] += 100 - selector->ratio.http2 - selector->ratio.h3qx - selector->ratio.http3;
         selector->_deficits[PROTOCOL_SELECTOR_H2] += selector->ratio.http2;
-        selector->_deficits[PROTOCOL_SELECTOR_H3_ON_STREAMS] += selector->ratio.h3_on_streams;
+        selector->_deficits[PROTOCOL_SELECTOR_H3_ON_STREAMS] += selector->ratio.h3qx;
     }
     selector->_deficits[PROTOCOL_SELECTOR_H3] += selector->ratio.http3;
 
@@ -252,7 +251,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
                             h2o_httpclient_connect_cb on_connect)
 {
     static const h2o_iovec_t alpn_none = {}, alpn_h2h1 = {H2O_STRLIT("\x02h2\x08http/1.1")},
-                             alpn_h3h2h1 = {H2O_STRLIT("\x02h3\x02h2\x08http/1.1")};
+                             alpn_h3h2h1 = {H2O_STRLIT("\x07h3qx-01\x02h2\x08http/1.1")};
     assert(connpool != NULL);
 
     size_t selected_protocol = select_protocol(&ctx->protocol_selector);
@@ -284,7 +283,7 @@ void h2o_httpclient_connect(h2o_httpclient_t **_client, h2o_mem_pool_t *pool, vo
         struct st_h2o_httpclient__h3_conn_t *h3conn = h2o_httpclient__find_h3_connection(connpool, 1, origin);
         if (h3conn != NULL) {
             h2o_httpclient_t *client = create_client(_client, pool, data, h3conn->ctx, connpool, upgrade_to, on_connect);
-            h2o_httpclient__h3s_on_connect(client, h3conn->super.super.streams_sock, origin);
+            h2o_httpclient__h3qx_on_connect(client, h3conn->super.super.streams_sock, origin);
         } else {
             connect_using_socket_pool(_client, pool, data, ctx, connpool, origin, upgrade_to, on_connect, alpn_h3h2h1);
         }

@@ -500,7 +500,7 @@ struct st_h2o_globalconf_t {
          */
         struct {
             h2o_http3_qpack_context_t qpack;
-        } on_streams;
+        } qmux;
     } http3;
 
     struct {
@@ -795,7 +795,7 @@ struct st_h2o_context_t {
         struct {
             quicly_context_t _quicly;
             h2o_quic_ctx_t quic;
-        } on_streams;
+        } qmux;
     } http3;
 
     struct {
@@ -819,7 +819,7 @@ struct st_h2o_context_t {
          */
         uint64_t alpn_h1;
         uint64_t alpn_h2;
-        uint64_t alpn_h3_on_streams;
+        uint64_t alpn_h3qx;
         /**
          * counter for handshakes
          */
@@ -1497,8 +1497,8 @@ extern const char h2o_http2_npn_protocols[];
 extern const char h2o_npn_protocols[];
 extern const h2o_iovec_t h2o_http2_alpn_protocols[];
 extern const h2o_iovec_t h2o_alpn_protocols[];
-extern const h2o_iovec_t h2o_h3_on_streams_alpn_protocols[];
-extern const h2o_iovec_t h2o_alpn_protocols_including_h3_on_streams[];
+extern const h2o_iovec_t h2o_h3qx_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols_including_h3qx[];
 
 /**
  * accepts a connection

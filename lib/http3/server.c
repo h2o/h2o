@@ -2277,11 +2277,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     return &conn->h3;
 }
 
-void h2o_http3_accept_on_streams(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
-    struct st_h2o_http3_server_conn_t *conn = create_connection(
-        ctx, &ctx->ctx->http3.on_streams.quic, &ctx->ctx->globalconf->http3.on_streams.qpack, &H2O_HTTP3_CONN_CALLBACKS);
-    quicly_conn_t *quic = quicly_qos_new(conn->h3.super.ctx->quic, 0, NULL);
+    struct st_h2o_http3_server_conn_t *conn =
+        create_connection(ctx, &ctx->ctx->http3.qmux.quic, &ctx->ctx->globalconf->http3.qmux.qpack, &H2O_HTTP3_CONN_CALLBACKS);
+    quicly_conn_t *quic = quicly_qmux_new(conn->h3.super.ctx->quic, 0, NULL);
     assert(quic != NULL);
     h2o_http3_setup(&conn->h3, quic, sock);
 }
@@ -2301,7 +2301,7 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
-    quic->qos_is_writing = &h2o_quic_qos_is_writing;
+    quic->qmux_is_writing = &h2o_quic_qmux_is_writing;
 
     if (quic->tls != NULL) {
         for (size_t i = 0; quic->tls->cipher_suites[i] != NULL; ++i)

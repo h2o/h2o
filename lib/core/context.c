@@ -100,10 +100,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
     h2o_linklist_init_anchor(&ctx->_conns.shutdown);
-    ctx->http3.on_streams._quicly = quicly_spec_context;
-    ctx->http3.on_streams.quic.loop = loop;
-    ctx->http3.on_streams.quic.quic = &ctx->http3.on_streams._quicly;
-    h2o_http3_server_amend_quicly_context(ctx->globalconf, ctx->http3.on_streams.quic.quic);
+    ctx->http3.qmux._quicly = quicly_spec_context;
+    ctx->http3.qmux.quic.loop = loop;
+    ctx->http3.qmux.quic.quic = &ctx->http3.qmux._quicly;
+    h2o_http3_server_amend_quicly_context(ctx->globalconf, ctx->http3.qmux.quic.quic);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;

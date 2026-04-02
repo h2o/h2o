@@ -57,7 +57,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
 /**
  *
  */
-void h2o_http3_accept_on_streams(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
+void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
 /**
  * amends the quicly context so that it could be used for the server
  */
