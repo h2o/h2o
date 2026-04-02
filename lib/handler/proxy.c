@@ -126,6 +126,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
                                   h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */
+    h3ctx->on_body_chunk = NULL;
 
     return h3ctx;
 #endif

@@ -202,6 +202,14 @@ struct st_h2o_http3client_ctx_t {
      */
     int (*load_session)(h2o_httpclient_ctx_t *ctx, struct sockaddr *server_addr, const char *server_name,
                         ptls_iovec_t *address_token, ptls_iovec_t *session_ticket, quicly_transport_parameters_t *resumed_tp);
+    /**
+     * Optional callback invoked when receiving HTTP/3 response body data. When set, the callback is invoked for each chunk of
+     * response body data as it arrives, allowing the application to process data without buffering it in memory. This is useful
+     * for performance testing scenarios where the goal is to measure server throughput without the overhead of buffering.
+     * When the callback returns non-zero, the data is not buffered and the callback is responsible for handling the data.
+     * When the callback returns zero, the data is buffered as usual.
+     */
+    int (*on_body_chunk)(h2o_httpclient_t *client, const char *data, size_t len);
 };
 
 typedef struct st_h2o_httpclient_timings_t {
