@@ -1157,6 +1157,17 @@ static int qmux_is_writing(quicly_qmux_is_writing_t *_self, quicly_conn_t *quic)
 
 quicly_qmux_is_writing_t h2o_quic_qmux_is_writing = {.cb = qmux_is_writing};
 
+static ptls_log_conn_state_t *qmux_log_state(quicly_qmux_log_state_t *_self, quicly_conn_t *quic, ptls_log_getsni_t *getsni)
+{
+    h2o_quic_conn_t *conn = *quicly_get_data(quic);
+    assert(conn->streams_sock != NULL);
+
+    *getsni = ptls_log_getsni_h2o_sock(conn->streams_sock);
+    return h2o_socket_log_state(conn->streams_sock);
+}
+
+quicly_qmux_log_state_t h2o_quic_qmux_log_state = {.cb = qmux_log_state};
+
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
     /* Setup relation between `h2o_quic_conn_t` and `quicly_conn_t`. At this point, `conn` will not have `quic` associated, though

@@ -763,6 +763,7 @@ int main(int argc, char **argv)
     h3ctx.quic.tls = &h3ctx.tls;
     h3ctx.quic.save_resumption_token = &save_http3_token;
     h3ctx.quic.qmux_is_writing = &h2o_quic_qmux_is_writing;
+    h3ctx.quic.qmux_log_state = &h2o_quic_qmux_log_state;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));

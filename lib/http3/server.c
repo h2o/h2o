@@ -2302,6 +2302,7 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
     quic->qmux_is_writing = &h2o_quic_qmux_is_writing;
+    quic->qmux_log_state = &h2o_quic_qmux_log_state;
 
     if (quic->tls != NULL) {
         for (size_t i = 0; quic->tls->cipher_suites[i] != NULL; ++i)
