@@ -32,10 +32,10 @@
             break;                                                                                                                 \
         h2o_socket_t *sock_ = (_sock);                                                                                             \
         ptls_log_conn_state_t *conn_state = h2o_socket_log_state(sock_);                                                           \
-        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_);          \
+        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_h2o_sock(sock_));                                         \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))h2o_socket_get_ssl_server_name, sock_, 1, {              \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, ptls_log_getsni_h2o_sock(sock_), 1, {                                             \
             PTLS_LOG_ELEMENT_PTR(sock, sock_);                                                                                     \
             do {                                                                                                                   \
                 _block                                                                                                             \
@@ -50,10 +50,10 @@
             break;                                                                                                                 \
         h2o_conn_t *conn_ = (_conn);                                                                                               \
         ptls_log_conn_state_t *conn_state = conn_->callbacks->log_state(conn_);                                                    \
-        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_);   \
+        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_h2o_conn(conn_));                                         \
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(h2o, _name, conn_state, (const char *(*)(void *))conn_->callbacks->get_ssl_server_name, conn_, 1, {       \
+        PTLS_LOG__DO_LOG(h2o, _name, conn_state, ptls_log_getsni_h2o_conn(conn_), 1, {                                             \
             PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
             do {                                                                                                                   \
                 _block                                                                                                             \
@@ -174,8 +174,7 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
     if (H2O_PROBE_IS_ENABLED(RECEIVE_REQUEST_HEADER) ||
         (ptls_log_point_maybe_active(&receive_request_header_logpoint) != 0 &&
          (receive_request_header_logpoint.state.active_conns &
-          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn),
-                                     (const char *(*)(void *))req->conn->callbacks->get_ssl_server_name, req->conn)) != 0)) {
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), ptls_log_getsni_h2o_conn(req->conn))) != 0)) {
         if (req->input.authority.base != NULL)
             h2o_probe_request_header(req, req_index, H2O_TOKEN_AUTHORITY->buf, req->input.authority);
         if (req->input.method.base != NULL)
@@ -203,8 +202,7 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
     if (H2O_PROBE_IS_ENABLED(SEND_RESPONSE_HEADER) ||
         (ptls_log_point_maybe_active(&send_response_header_logpoint) != 0 &&
          (send_response_header_logpoint.state.active_conns &
-          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn),
-                                     (const char *(*)(void *))req->conn->callbacks->get_ssl_server_name, req->conn)) != 0)) {
+          ptls_log_conn_maybe_active(req->conn->callbacks->log_state(req->conn), ptls_log_getsni_h2o_conn(req->conn))) != 0)) {
         if (req->res.content_length != SIZE_MAX) {
             char buf[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t len = (size_t)sprintf(buf, "%zu", req->res.content_length);

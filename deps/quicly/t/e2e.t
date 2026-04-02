@@ -603,7 +603,50 @@ subtest "invalid-ack" => sub {
         like $received, qr/^\x1c\x0a\x02/, "responds with CONNECTION_CLOSE(PROTOCOL_VIOLATION) for ACK";
     };
 };
+ 
+subtest "coalesced-initials" => sub {
+    # Test that server processes coalesced Initial packets (RFC 9000 Section 12.2)
+    # The test uses a pre-generated coalesced datagram with [Handshake][Initial]
+    # where both packets have matching Connection IDs.
 
+    # Read the coalesced packet
+    open(my $fh, "<:raw", "t/assets/coalesced_packet.bin")
+        or BAIL_OUT("Cannot read coalesced_packet.bin: $!");
+    my $coalesced = do { local $/; <$fh> };
+    close($fh);
+
+    ok length($coalesced) > 0, "coalesced packet is non-empty";
+
+    # Spawn server
+    my $guard = spawn_server();
+
+    # Send coalesced packet
+    my $socket = IO::Socket::INET->new(
+        Proto => 'udp',
+        PeerAddr => '127.0.0.1',
+        PeerPort => $port,
+    ) or BAIL_OUT("Cannot create socket: $!");
+
+    $socket->send($coalesced);
+
+    # Wait for response with timeout
+    my $ih = IO::Select->new($socket);
+    my $n = $ih->can_read(2);
+
+    if ($n && $n > 0) {
+        my $response;
+        $socket->recv($response, 65535);
+        ok length($response) > 0, "server responds to coalesced Initial packet";
+
+        # Verify response is an Initial or Handshake packet
+        my $first_byte = ord(substr($response, 0, 1));
+        ok (($first_byte & 0xF0) == 0xC0 || ($first_byte & 0xF0) == 0xD0),
+            "server response is Initial or Handshake packet";
+    } else {
+        fail "server does not respond to coalesced Initial packet";
+    }
+};
+ 
 done_testing;
 
 sub spawn_server {
@@ -643,6 +686,7 @@ package SpawnedProcess {
                 last;
             }
             if (waitpid($self->{pid}, WNOHANG) == $self->{pid}) {
+                undef $self->{pid};
                 die "failed to launch @{[$cmd->[0]]}:$?";
             }
             sleep 0.1;
