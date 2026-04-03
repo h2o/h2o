@@ -420,7 +420,7 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
  */
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);
 
-extern quicly_qmux_is_writing_t h2o_quic_qmux_is_writing;
+extern quicly_qmux_writable_t h2o_quic_qmux_writable;
 extern quicly_qmux_log_state_t h2o_quic_qmux_log_state;
 
 /**

@@ -1147,15 +1147,15 @@ static void qmux_on_write_complete(h2o_socket_t *sock, const char *err)
     h2o_quic_schedule_timer(conn);
 }
 
-static int qmux_is_writing(quicly_qmux_is_writing_t *_self, quicly_conn_t *quic)
+static int qmux_writable(quicly_qmux_writable_t *_self, quicly_conn_t *quic)
 {
     h2o_quic_conn_t *conn = *quicly_get_data(quic);
     assert(conn->streams_sock != NULL);
 
-    return h2o_socket_is_writing(conn->streams_sock);
+    return !h2o_socket_is_writing(conn->streams_sock);
 }
 
-quicly_qmux_is_writing_t h2o_quic_qmux_is_writing = {.cb = qmux_is_writing};
+quicly_qmux_writable_t h2o_quic_qmux_writable = {.cb = qmux_writable};
 
 static ptls_log_conn_state_t *qmux_log_state(quicly_qmux_log_state_t *_self, quicly_conn_t *quic, ptls_log_getsni_t *getsni)
 {
