@@ -167,11 +167,11 @@ QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  */
 QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
 /**
- *
+ * returns a boolean indicating if the underlying transport is ready for writing
  */
-QUICLY_CALLBACK_TYPE(int, qmux_is_writing, quicly_conn_t *conn);
+QUICLY_CALLBACK_TYPE(int, qmux_writable, quicly_conn_t *conn);
 /**
- *
+ * [probing] returns log state and the getsni delayed callback object associated with the underlying transport
  */
 QUICLY_CALLBACK_TYPE(ptls_log_conn_state_t *, qmux_log_state, quicly_conn_t *conn, ptls_log_getsni_t *getsni);
 
@@ -442,7 +442,7 @@ struct st_quicly_context_t {
     /**
      *
      */
-    quicly_qmux_is_writing_t *qmux_is_writing;
+    quicly_qmux_writable_t *qmux_writable;
     /**
      *
      */
@@ -1635,9 +1635,20 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         });                                                                                                                        \
     } while (0)
 
-quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
-quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *src, size_t *len);
+/**
+ * Creates a new connection object.
+ */
 quicly_conn_t *quicly_qmux_new(quicly_context_t *ctx, int is_client, void *appdata);
+/**
+ * Writes QMux records to the given buffer.
+ * @param [in,out] bufsize  Upon entry, the size of the buffer. Upon return, number of bytes being written to the buffer.
+ */
+quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
+/**
+ * Reads QMumx records in a given buffer and processes them.
+ * @param [in,out] len  Upon entry, the size of the input. Upon return, the number of bytes being read out.
+ */
+quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *src, size_t *len);
 
 /* inline definitions */
 

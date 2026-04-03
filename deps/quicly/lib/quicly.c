@@ -3682,7 +3682,7 @@ static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, ui
                                int restrict_sending)
 {
     if (quicly_is_qmux(conn))
-        return conn->super.ctx->qmux_is_writing->cb(conn->super.ctx->qmux_is_writing, conn) ? 0 : SIZE_MAX;
+        return conn->super.ctx->qmux_writable->cb(conn->super.ctx->qmux_writable, conn) ? SIZE_MAX : 0;
 
     uint64_t window = 0;
     if (restrict_sending) {
