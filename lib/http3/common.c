@@ -1109,7 +1109,7 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
     h2o_timer_unlink(&conn->_timeout);
 }
 
-static void qos_on_read(h2o_socket_t *sock, const char *err)
+static void qmux_on_read(h2o_socket_t *sock, const char *err)
 {
     h2o_quic_conn_t *conn = sock->data;
     assert(conn->streams_sock != NULL);
@@ -1134,7 +1134,7 @@ static void qos_on_read(h2o_socket_t *sock, const char *err)
     h2o_quic_schedule_timer(conn);
 }
 
-static void qos_on_write_complete(h2o_socket_t *sock, const char *err)
+static void qmux_on_write_complete(h2o_socket_t *sock, const char *err)
 {
     h2o_quic_conn_t *conn = sock->data;
     assert(conn->streams_sock != NULL);
@@ -1185,7 +1185,7 @@ void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *st
         assert(!h2o_socket_is_reading(streams_sock));
         conn->streams_sock = streams_sock;
         conn->streams_sock->data = conn;
-        h2o_socket_read_start(conn->streams_sock, qos_on_read);
+        h2o_socket_read_start(conn->streams_sock, qmux_on_read);
     } else {
         /* register to the idmap */
         int r;
@@ -1294,7 +1294,7 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
         if ((send_result = quicly_qmux_send(conn->quic, vec.base, &vec.len)) != 0)
             goto Fail;
         if (vec.len != 0)
-            h2o_socket_write(conn->streams_sock, &vec, 1, qos_on_write_complete);
+            h2o_socket_write(conn->streams_sock, &vec, 1, qmux_on_write_complete);
     } else {
         quicly_address_t dest, src;
         struct iovec datagrams[10];
