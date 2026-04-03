@@ -1011,7 +1011,7 @@ int quicly_is_qmux(quicly_conn_t *conn)
 
 int quicly_connection_is_ready(quicly_conn_t *conn)
 {
-    return conn->application != NULL;
+    return quicly_is_qmux(conn) ? conn->super.stats.num_frames_received.qx_transport_parameters > 0 : conn->application != NULL;
 }
 
 static int stream_is_destroyable(quicly_stream_t *stream)
@@ -1509,9 +1509,9 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
         *consumed = conn->ingress.max_data.bytes_consumed;
 }
 
-static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
+static void update_idle_timeout(quicly_conn_t *conn, int must_rearm)
 {
-    if (!is_in_receive && !conn->idle_timeout.should_rearm_on_send)
+    if (!must_rearm && !conn->idle_timeout.should_rearm_on_send)
         return;
 
     /* calculate the minimum of the two max_idle_timeout */
@@ -1524,10 +1524,14 @@ static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
     if (idle_msec == INT64_MAX)
         return;
 
-    uint32_t three_pto = 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.remote.transport_params.max_ack_delay,
-                                                conn->egress.loss.conf->min_pto);
-    conn->idle_timeout.at = conn->stash.now + (idle_msec > three_pto ? idle_msec : three_pto);
-    conn->idle_timeout.should_rearm_on_send = is_in_receive;
+    if (!quicly_is_qmux(conn)) {
+        uint32_t three_pto = 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.remote.transport_params.max_ack_delay,
+                                                    conn->egress.loss.conf->min_pto);
+        if (idle_msec < three_pto)
+            idle_msec = three_pto;
+    }
+    conn->idle_timeout.at = conn->stash.now + idle_msec;
+    conn->idle_timeout.should_rearm_on_send = must_rearm;
 }
 
 static int scheduler_can_send(quicly_conn_t *conn)
@@ -2751,6 +2755,7 @@ static void init_connection_core(quicly_conn_t *conn, int is_client)
     quicly_linklist_init(&conn->egress.pending_streams.blocked.bidi);
     quicly_linklist_init(&conn->egress.pending_streams.control);
     conn->idle_timeout.at = INT64_MAX;
+    conn->idle_timeout.should_rearm_on_send = 1;
     conn->stash.on_ack_stream.active_acked_cache.stream_id = INT64_MIN;
 }
 
@@ -2864,7 +2869,6 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     }
     conn->crypto.handshake_properties.collect_extension = collect_transport_parameters;
     conn->retry_scid.len = UINT8_MAX;
-    conn->idle_timeout.should_rearm_on_send = 1;
     for (size_t i = 0; i != PTLS_ELEMENTSOF(conn->delayed_packets.as_array); ++i)
         conn->delayed_packets.as_array[i].tail = &conn->delayed_packets.as_array[i].head;
     conn->stash.on_ack_stream.active_acked_cache.stream_id = INT64_MIN;
@@ -3681,9 +3685,6 @@ static inline uint64_t calc_amplification_limit_allowance(quicly_conn_t *conn)
 static size_t calc_send_window(quicly_conn_t *conn, size_t min_bytes_to_send, uint64_t amp_window, uint64_t pacer_window,
                                int restrict_sending)
 {
-    if (quicly_is_qmux(conn))
-        return conn->super.ctx->qmux_writable->cb(conn->super.ctx->qmux_writable, conn) ? SIZE_MAX : 0;
-
     uint64_t window = 0;
     if (restrict_sending) {
         /* Send min_bytes_to_send on PTO */
@@ -3733,19 +3734,30 @@ int64_t quicly_get_first_timeout(quicly_conn_t *conn)
     if (conn->super.state >= QUICLY_STATE_CLOSING)
         return conn->egress.send_ack_at;
 
+    int64_t at = conn->idle_timeout.at;
+
+    /* Other than the idle timeout and `send_ack_at` which is used for closing, QMux needs to consult only transport state and if
+     * there are any frames need to be sent. */
+    if (quicly_is_qmux(conn)) {
+        if (conn->super.ctx->qmux_writable->cb(conn->super.ctx->qmux_writable, conn) &&
+            (conn->egress.pending_flows != 0 || quicly_linklist_is_linked(&conn->egress.pending_streams.control) ||
+             should_send_datagram_frame(conn) || scheduler_can_send(conn)))
+            at = 0;
+        return at;
+    }
+
     if (should_send_datagram_frame(conn))
         return 0;
 
     uint64_t amp_window = calc_amplification_limit_allowance(conn);
-    int64_t at = conn->idle_timeout.at, pacer_at = pacer_can_send_at(conn);
+    int64_t pacer_at = pacer_can_send_at(conn);
 
     /* reduce at to the moment pacer provides credit, if we are not CC-limited and there's something to be sent over CC */
     if (pacer_at < at && calc_send_window(conn, 0, amp_window, UINT64_MAX, 0) > 0) {
         if (conn->egress.pending_flows != 0) {
             /* crypto streams (as indicated by lower 4 bits) can be sent whenever CWND is available; other flows need application
              * packet number space */
-            if (quicly_is_qmux(conn) ||
-                (conn->application != NULL && conn->application->cipher.egress.key.header_protection != NULL) ||
+            if ((conn->application != NULL && conn->application->cipher.egress.key.header_protection != NULL) ||
                 (conn->egress.pending_flows & 0xf) != 0)
                 at = pacer_at;
         }
@@ -5259,21 +5271,17 @@ Exit:
     return ret;
 }
 
-static quicly_error_t send_connection_close(quicly_conn_t *conn, size_t epoch, quicly_send_context_t *s)
+static quicly_error_t send_connection_close(quicly_conn_t *conn, quicly_send_context_t *s)
 {
     uint64_t error_code, offending_frame_type;
     const char *reason_phrase;
     quicly_error_t ret;
 
-    /* setup send epoch, or return if it's impossible to send in this epoch */
-    if (setup_send_space(conn, epoch, s) == NULL)
-        return 0;
-
     /* determine the payload, masking the application error when sending the frame using an unauthenticated epoch */
     error_code = conn->egress.connection_close.error_code;
     offending_frame_type = conn->egress.connection_close.frame_type;
     reason_phrase = conn->egress.connection_close.reason_phrase;
-    if (offending_frame_type == UINT64_MAX) {
+    if (!quicly_is_qmux(conn) && offending_frame_type == UINT64_MAX) {
         switch (get_epoch(s->current.first_byte)) {
         case QUICLY_EPOCH_INITIAL:
         case QUICLY_EPOCH_HANDSHAKE:
@@ -5911,7 +5919,9 @@ static quicly_error_t do_send_closed(quicly_conn_t *conn, quicly_send_context_t 
         /* send CONNECTION_CLOSE in all possible epochs */
         s->dcid = get_dcid(conn, 0);
         for (size_t epoch = 0; epoch < QUICLY_NUM_EPOCHS; ++epoch) {
-            if ((ret = send_connection_close(conn, epoch, s)) != 0)
+            if (setup_send_space(conn, epoch, s) == NULL)
+                continue;
+            if ((ret = send_connection_close(conn, s)) != 0)
                 goto Exit;
         }
         if ((ret = commit_send_packet(conn, s, 0)) != 0)
@@ -8389,11 +8399,7 @@ quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize)
         break;
     case QUICLY_STATE_CLOSING:
         destroy_all_streams(conn, 0, 0);
-        s.dst = quicly_encode_close_frame(s.dst, conn->egress.connection_close.error_code, conn->egress.connection_close.frame_type,
-                                          conn->egress.connection_close.reason_phrase);
-        conn->super.state = QUICLY_STATE_DRAINING;
-        conn->egress.send_ack_at = 0;
-        ret = 0;
+        ret = send_connection_close(conn, &s);
         goto Exit;
     case QUICLY_STATE_DRAINING:
         destroy_all_streams(conn, 0, 0);
@@ -8417,6 +8423,8 @@ Exit:
         if (s.dst != NULL)
             qmux_commit_record(conn, &s);
         *bufsize -= s.payload_buf.end - s.payload_buf.datagram;
+        if (*bufsize != 0)
+            update_idle_timeout(conn, 1);
     }
     unlock_now(conn);
     return ret;
@@ -8455,6 +8463,7 @@ quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *_src, size_t
         src = payload + payload_len;
     }
 
+    update_idle_timeout(conn, 1);
     unlock_now(conn);
 
     return ret;
@@ -8470,8 +8479,13 @@ quicly_conn_t *quicly_qmux_new(quicly_context_t *ctx, int is_client, void *appda
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.data = appdata;
+
     lock_now(conn, 0);
+
     init_connection_core(conn, is_client);
+    conn->egress.pending_flows = QUICLY_PENDING_FLOW_OTHERS_BIT; /* set for sending QX_TRANSPORT_PARAMETERS */
+    conn->egress.send_ack_at = INT64_MAX;                        /* used when closing */
+
     unlock_now(conn);
 
     return conn;
