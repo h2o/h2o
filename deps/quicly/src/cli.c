@@ -1073,7 +1073,7 @@ static void load_session(void)
             src = end;
         });
         ptls_decode_open_block(src, end, 2, {
-            if ((ret = quicly_decode_transport_parameter_list(&resumed_transport_params, NULL, NULL, NULL, NULL, src, end)) != 0)
+            if ((ret = quicly_decode_transport_parameter_list(&resumed_transport_params, 0, NULL, NULL, NULL, NULL, src, end)) != 0)
                 goto Exit;
             src = end;
         });
@@ -1103,7 +1103,7 @@ int save_session(const quicly_transport_parameters_t *transport_params)
     ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, session_info.address_token.base, session_info.address_token.len); });
     ptls_buffer_push_block(&buf, 2, { ptls_buffer_pushv(&buf, session_info.tls_ticket.base, session_info.tls_ticket.len); });
     ptls_buffer_push_block(&buf, 2, {
-        if ((ret = quicly_encode_transport_parameter_list(&buf, transport_params, NULL, NULL, NULL, NULL, 0)) != 0)
+        if ((ret = quicly_encode_transport_parameter_list(&buf, 0, transport_params, NULL, NULL, NULL, NULL, 0)) != 0)
             goto Exit;
     });
 

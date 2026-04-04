@@ -1404,7 +1404,7 @@ int quicly_calc_initial_keys(ptls_cipher_suite_t *cs, uint8_t *ingress, uint8_t 
 /**
  *
  */
-int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_transport_parameters_t *params,
+int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int qmux, const quicly_transport_parameters_t *params,
                                            const quicly_cid_t *original_dcid, const quicly_cid_t *initial_scid,
                                            const quicly_cid_t *retry_scid, const void *stateless_reset_token, size_t expand_by);
 /**
@@ -1417,7 +1417,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  * pre-fills the vector with an unpredictable value (i.e. random), then calls this function to set the stateless reset token to the
  * value supplied by peer.
  */
-quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
+quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, int qmux, quicly_cid_t *original_dcid,
                                                       quicly_cid_t *initial_scid, quicly_cid_t *retry_scid,
                                                       void *stateless_reset_token, const uint8_t *src, const uint8_t *end);
 /**
@@ -1645,7 +1645,7 @@ quicly_conn_t *quicly_qmux_new(quicly_context_t *ctx, int is_client, void *appda
  */
 quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
 /**
- * Reads QMumx records in a given buffer and processes them.
+ * Reads QMux records in a given buffer and processes them.
  * @param [in,out] len  Upon entry, the size of the input. Upon return, the number of bytes being read out.
  */
 quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *src, size_t *len);
