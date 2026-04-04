@@ -135,7 +135,7 @@ static void load_session(const char *server_name, ptls_iovec_t *tls_session, qui
     });
     ptls_decode_open_block(src, end, -1, {
         if (tls_session->base != NULL) {
-            if ((ret = quicly_decode_transport_parameter_list(quic_tp, NULL, NULL, NULL, NULL, src, end)) != 0)
+            if ((ret = quicly_decode_transport_parameter_list(quic_tp, 0 /* FIXME QMux */, NULL, NULL, NULL, NULL, src, end)) != 0)
                 goto Exit;
         }
         src = end;
@@ -191,7 +191,7 @@ static void save_session(ptls_t *tls, ptls_iovec_t *tls_session, const quicly_tr
     ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, tls_session->base, tls_session->len); });
     ptls_buffer_push_block(&buf, -1, {
         if (tls_session->base != NULL &&
-            (ret = quicly_encode_transport_parameter_list(&buf, quic_tp, NULL, NULL, NULL, NULL, 0)) != 0)
+            (ret = quicly_encode_transport_parameter_list(&buf, 0 /* FIXME QMux */, quic_tp, NULL, NULL, NULL, NULL, 0)) != 0)
             goto Exit;
     });
     ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, quic_address_token->base, quic_address_token->len); });
@@ -762,6 +762,8 @@ int main(int argc, char **argv)
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
     h3ctx.quic.save_resumption_token = &save_http3_token;
+    h3ctx.quic.qmux_writable = &h2o_quic_qmux_writable;
+    h3ctx.quic.qmux_log_state = &h2o_quic_qmux_log_state;
     {
         uint8_t random_key[PTLS_SHA256_DIGEST_SIZE];
         h3ctx.tls.random_bytes(random_key, sizeof(random_key));
@@ -808,6 +810,7 @@ int main(int argc, char **argv)
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_HTTP3_KEY_EXCHANGE,
         OPT_UPGRADE,
+        OPT_RATIO_H3QX,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -817,6 +820,7 @@ int main(int argc, char **argv)
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
+                                {"h3qx", required_argument, NULL, OPT_RATIO_H3QX},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -916,6 +920,13 @@ int main(int argc, char **argv)
             } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.http2) != 1 ||
                        !(0 <= ctx.protocol_selector.ratio.http2 && ctx.protocol_selector.ratio.http2 <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/2 ratio (-2)\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_RATIO_H3QX:
+            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.h3qx) != 1 ||
+                !(0 <= ctx.protocol_selector.ratio.h3qx && ctx.protocol_selector.ratio.h3qx <= 100)) {
+                fprintf(stderr, "failed to parse HTTP/3-on-QMux ratio (--h3qx)\n");
                 exit(EXIT_FAILURE);
             }
             break;
@@ -1050,13 +1061,14 @@ int main(int argc, char **argv)
     } else if (upgrade_token != NULL) {
         /* masque using extended CONNECT (RFC 9298) */
         if (strcmp(req.method, "GET") == 0) {
-            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0) {
+            if (ctx.protocol_selector.ratio.http2 != 0 || ctx.protocol_selector.ratio.http3 != 0 ||
+                ctx.protocol_selector.ratio.h3qx != 0) {
                 fprintf(stderr, "extended CONNECT with GET cannot be used on H2/H3; specify `-2 0 -3 0`\n");
                 exit(EXIT_FAILURE);
             }
         } else if (strcmp(req.method, "CONNECT") == 0) {
             if (ctx.protocol_selector.ratio.http2 < 0 ||
-                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
+                ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 + ctx.protocol_selector.ratio.h3qx != 100) {
                 fprintf(stderr,
                         "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
                 exit(EXIT_FAILURE);

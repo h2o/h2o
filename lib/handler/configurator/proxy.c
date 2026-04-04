@@ -607,6 +607,19 @@ static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_h3qx_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNd8, &self->vars->conf.protocol_ratio.h3qx);
+    if (ret < 0)
+        return ret;
+    if (self->vars->conf.protocol_ratio.h3qx < 0 || 100 < self->vars->conf.protocol_ratio.h3qx) {
+        h2o_configurator_errprintf(cmd, node, "proxy.h3qx.ratio must be between 0 and 100");
+        return -1;
+    }
+    return 0;
+}
+
 static int on_config_expect(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -814,6 +827,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.h3qx.ratio",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_h3qx_ratio);
     h2o_configurator_define_command(&c->super, "proxy.expect",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_expect);
     h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",

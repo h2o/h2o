@@ -166,6 +166,14 @@ QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  * is complete.
  */
 QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
+/**
+ * returns a boolean indicating if the underlying transport is ready for writing
+ */
+QUICLY_CALLBACK_TYPE(int, qmux_writable, quicly_conn_t *conn);
+/**
+ * [probing] returns log state and the getsni delayed callback object associated with the underlying transport
+ */
+QUICLY_CALLBACK_TYPE(ptls_log_conn_state_t *, qmux_log_state, quicly_conn_t *conn, ptls_log_getsni_t *getsni);
 
 /**
  * crypto offload API
@@ -431,6 +439,14 @@ struct st_quicly_context_t {
      *
      */
     quicly_async_handshake_t *async_handshake;
+    /**
+     *
+     */
+    quicly_qmux_writable_t *qmux_writable;
+    /**
+     *
+     */
+    quicly_qmux_log_state_t *qmux_log_state;
 };
 
 /**
@@ -585,7 +601,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency, immediate_ack;                                                                                          \
+            ack_frequency, immediate_ack, qx_transport_parameters;                                                                 \
     } num_frames_received, num_frames_sent;                                                                                        \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -778,7 +794,8 @@ typedef struct st_quicly_stats_t {
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(handshake_done, dir, apply)                                                                \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(datagram, dir, apply)                                                                      \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack_frequency, dir, apply)                                                                 \
-    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(immediate_ack, dir, apply)
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(immediate_ack, dir, apply)                                                                 \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(qx_transport_parameters, dir, apply)
 
 #define QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)                                                                             \
     apply(num_paths.created, "num-paths.created")                                                                                  \
@@ -1208,6 +1225,10 @@ static const quicly_transport_parameters_t *quicly_get_remote_transport_paramete
 /**
  *
  */
+int quicly_is_qmux(quicly_conn_t *conn);
+/**
+ *
+ */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
 /**
  *
@@ -1383,7 +1404,7 @@ int quicly_calc_initial_keys(ptls_cipher_suite_t *cs, uint8_t *ingress, uint8_t 
 /**
  *
  */
-int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_transport_parameters_t *params,
+int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int qmux, const quicly_transport_parameters_t *params,
                                            const quicly_cid_t *original_dcid, const quicly_cid_t *initial_scid,
                                            const quicly_cid_t *retry_scid, const void *stateless_reset_token, size_t expand_by);
 /**
@@ -1396,7 +1417,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  * pre-fills the vector with an unpredictable value (i.e. random), then calls this function to set the stateless reset token to the
  * value supplied by peer.
  */
-quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
+quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, int qmux, quicly_cid_t *original_dcid,
                                                       quicly_cid_t *initial_scid, quicly_cid_t *retry_scid,
                                                       void *stateless_reset_token, const uint8_t *src, const uint8_t *end);
 /**
@@ -1519,6 +1540,10 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
 /**
  *
  */
+ptls_log_conn_state_t *quicly_log_state(quicly_conn_t *conn, ptls_log_getsni_t *getsni);
+/**
+ *
+ */
 void quicly_amend_ptls_context(ptls_context_t *ptls);
 /**
  * Encrypts an address token by serializing the plaintext structure and appending an authentication tag.
@@ -1595,12 +1620,12 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
-        ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
-        ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
+        ptls_log_getsni_t getsni;                                                                                                  \
+        ptls_log_conn_state_t *conn_state = quicly_log_state(_c, &getsni);                                                         \
+        active &= ptls_log_conn_maybe_active(conn_state, getsni);                                                                  \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, getsni, _c->stash.now == 0, {                                                  \
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
@@ -1609,6 +1634,21 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
             } while (0);                                                                                                           \
         });                                                                                                                        \
     } while (0)
+
+/**
+ * Creates a new connection object.
+ */
+quicly_conn_t *quicly_qmux_new(quicly_context_t *ctx, int is_client, void *appdata);
+/**
+ * Writes QMux records to the given buffer.
+ * @param [in,out] bufsize  Upon entry, the size of the buffer. Upon return, number of bytes being written to the buffer.
+ */
+quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
+/**
+ * Reads QMux records in a given buffer and processes them.
+ * @param [in,out] len  Upon entry, the size of the input. Upon return, the number of bytes being read out.
+ */
+quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *src, size_t *len);
 
 /* inline definitions */
 

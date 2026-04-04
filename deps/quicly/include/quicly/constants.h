@@ -65,6 +65,8 @@ extern "C" {
 #define QUICLY_EPOCH_HANDSHAKE 2
 #define QUICLY_EPOCH_1RTT 3
 #define QUICLY_NUM_EPOCHS 4
+#define QUICLY_EPOCH_ON_STREAMS_TP 4 /* used internally */
+#define QUICLY_EPOCH_ON_STREAMS_OTHER 5
 
 /**
  * Error code used by quicly. The code coalesces the following to an int64_t.

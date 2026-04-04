@@ -429,8 +429,8 @@ static void test_transport_parameters(void)
                                           0x07, 0x04, 0x80, 0x10, 0x00, 0x00, 0x04, 0x04, 0x81, 0x00, 0x00, 0x00,
                                           0x01, 0x04, 0x80, 0x00, 0x75, 0x30, 0x08, 0x01, 0x0a, 0x0a, 0x01, 0x0a};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, valid_bytes, valid_bytes + sizeof(valid_bytes)) ==
-       0);
+    ok(quicly_decode_transport_parameter_list(&decoded, 0, NULL, NULL, NULL, NULL, valid_bytes,
+                                              valid_bytes + sizeof(valid_bytes)) == 0);
     ok(decoded.max_stream_data.bidi_local = 0x100000);
     ok(decoded.max_stream_data.bidi_remote = 0x100000);
     ok(decoded.max_stream_data.uni = 0x100000);
@@ -444,7 +444,7 @@ static void test_transport_parameters(void)
 
     static const uint8_t dup_bytes[] = {0x05, 0x04, 0x80, 0x10, 0x00, 0x00, 0x05, 0x04, 0x80, 0x10, 0x00, 0x00};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes)) ==
+    ok(quicly_decode_transport_parameter_list(&decoded, 0, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes)) ==
        QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER);
 }
 
@@ -1461,6 +1461,73 @@ static void test_stats_foreach(void)
 #undef CHECK
 }
 
+static void test_qmux(void)
+{
+    static char message16k[16384];
+
+    if (message16k[0] == '\0') {
+        for (size_t i = 0; i < sizeof(message16k); i += 16)
+            memcpy(message16k + i, "helloworldhello\n", 16);
+    }
+
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_stream_t *cs1 = NULL, *cs2 = NULL, *ss1, *ss2;
+    quicly_streambuf_t *ss1buf, *ss2buf;
+    char buf[16384];
+    size_t bufsize, decoded_len;
+    quicly_error_t ret;
+
+    bufsize = sizeof(buf);
+    ret = quicly_qmux_send(sc, buf, &bufsize);
+    ok(ret == 0);
+
+    ret = quicly_qmux_receive(cc, buf, &bufsize);
+    ok(ret == 0);
+
+    ret = quicly_open_stream(cc, &cs1, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs1, "hello", 5);
+    ok(ret == 0);
+    ret = quicly_open_stream(cc, &cs2, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs2, message16k, sizeof(message16k));
+    ok(ret == 0);
+
+    bufsize = sizeof(buf);
+    ret = quicly_qmux_send(cc, buf, &bufsize);
+    ok(ret == 0);
+
+    decoded_len = bufsize; /* TODO add test for partial frame receive */
+    ret = quicly_qmux_receive(sc, buf, &decoded_len);
+    ok(ret == 0);
+    ok(decoded_len == bufsize);
+
+    ss1 = quicly_get_stream(sc, cs1->stream_id);
+    ok(ss1 != NULL);
+    ss1buf = ss1->data;
+    ok(ss1buf->ingress.off == 5);
+    ok(memcmp(ss1buf->ingress.base, "hello", 5) == 0);
+
+    ss2 = quicly_get_stream(sc, cs2->stream_id);
+    ok(ss2 != NULL);
+    ss2buf = ss2->data;
+    ok(ss2buf->ingress.off >= sizeof(message16k) - 400);
+    ok(ss2buf->ingress.off < sizeof(message16k));
+    ok(memcmp(ss2buf->ingress.base, message16k, ss2buf->ingress.off) == 0);
+
+    bufsize = sizeof(buf);
+    ret = quicly_qmux_send(cc, buf, &bufsize);
+    ok(ret == 0);
+
+    decoded_len = bufsize;
+    ret = quicly_qmux_receive(sc, buf, &decoded_len);
+    ok(ret == 0);
+    ok(decoded_len == bufsize);
+
+    ok(ss2buf->ingress.off == sizeof(message16k));
+    ok(memcmp(ss2buf->ingress.base, message16k, ss2buf->ingress.off) == 0);
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -1540,6 +1607,8 @@ int main(int argc, char **argv)
     subtest("migration-during-handshake", test_migration_during_handshake);
 
     subtest("stats-foreach", test_stats_foreach);
+
+    subtest("qmux", test_qmux);
 
     return done_testing();
 }
