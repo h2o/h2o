@@ -135,7 +135,7 @@ static void load_session(const char *server_name, ptls_iovec_t *tls_session, qui
     });
     ptls_decode_open_block(src, end, -1, {
         if (tls_session->base != NULL) {
-            if ((ret = quicly_decode_transport_parameter_list(quic_tp, NULL, NULL, NULL, NULL, src, end)) != 0)
+            if ((ret = quicly_decode_transport_parameter_list(quic_tp, 0 /* FIXME QMux */, NULL, NULL, NULL, NULL, src, end)) != 0)
                 goto Exit;
         }
         src = end;
@@ -191,7 +191,7 @@ static void save_session(ptls_t *tls, ptls_iovec_t *tls_session, const quicly_tr
     ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, tls_session->base, tls_session->len); });
     ptls_buffer_push_block(&buf, -1, {
         if (tls_session->base != NULL &&
-            (ret = quicly_encode_transport_parameter_list(&buf, quic_tp, NULL, NULL, NULL, NULL, 0)) != 0)
+            (ret = quicly_encode_transport_parameter_list(&buf, 0 /* FIXME QMux */, quic_tp, NULL, NULL, NULL, NULL, 0)) != 0)
             goto Exit;
     });
     ptls_buffer_push_block(&buf, -1, { ptls_buffer_pushv(&buf, quic_address_token->base, quic_address_token->len); });
