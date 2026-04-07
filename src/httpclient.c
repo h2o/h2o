@@ -788,6 +788,15 @@ int main(int argc, char **argv)
             perror("failed to create UDP socket");
             exit(EXIT_FAILURE);
         }
+#ifdef IP_RECVTOS
+        {
+            int on = 1;
+            if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0) {
+                perror("failed to set IP_RECVTOS option");
+                exit(EXIT_FAILURE);
+            }
+        }
+#endif
         memset(&sin, 0, sizeof(sin));
         if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
             perror("failed to bind bind UDP socket");

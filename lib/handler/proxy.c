@@ -116,6 +116,15 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
         char buf[256];
         h2o_fatal("failed to open UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
+#ifdef IP_RECVTOS
+    {
+        int on = 1;
+        if (setsockopt(sockfd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0) {
+            char buf[256];
+            h2o_fatal("failed to set IP_RECVTOS option:%s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        }
+    }
+#endif
     struct sockaddr_in sin = {};
     if (bind(sockfd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
         char buf[256];

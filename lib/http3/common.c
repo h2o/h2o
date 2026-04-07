@@ -89,11 +89,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef UDP_SEGMENT
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
-#ifdef IPV6_TCLASS
             + CMSG_SPACE(sizeof(int))
-#else
-            + CMSG_SPACE(sizeof(uint8_t))
-#endif
             + CMSG_SPACE(1) /* sentry */
         ];
     } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
@@ -173,8 +169,10 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 
     if (ecn != 0) {
         switch (dest->sa.sa_family) {
-        case AF_INET:
-            PUSH_CMSG(IPPROTO_IP, IP_TOS, ecn);
+        case AF_INET: {
+            int tos = ecn;
+            PUSH_CMSG(IPPROTO_IP, IP_TOS, tos);
+        }
             break;
         case AF_INET6:
 #ifdef IPV6_TCLASS
