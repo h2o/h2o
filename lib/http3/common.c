@@ -71,36 +71,6 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
-static void push_send_ecn(struct msghdr *mess, struct cmsghdr **cmsg, quicly_address_t *dest, uint8_t ecn)
-{
-    if (ecn == 0)
-        return;
-
-    switch (dest->sa.sa_family) {
-    case AF_INET:
-        (*cmsg)->cmsg_level = IPPROTO_IP;
-        (*cmsg)->cmsg_type = IP_TOS;
-        (*cmsg)->cmsg_len = CMSG_LEN(sizeof(ecn));
-        memcpy(CMSG_DATA(*cmsg), &ecn, sizeof(ecn));
-        *cmsg = CMSG_NXTHDR(mess, *cmsg);
-        break;
-    case AF_INET6:
-#ifdef IPV6_TCLASS
-    {
-        int tclass = ecn;
-        (*cmsg)->cmsg_level = IPPROTO_IPV6;
-        (*cmsg)->cmsg_type = IPV6_TCLASS;
-        (*cmsg)->cmsg_len = CMSG_LEN(sizeof(tclass));
-        memcpy(CMSG_DATA(*cmsg), &tclass, sizeof(tclass));
-        *cmsg = CMSG_NXTHDR(mess, *cmsg);
-    }
-#endif
-        break;
-    default:
-        break;
-    }
-}
-
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams, uint8_t ecn)
 {
@@ -201,7 +171,23 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
 #endif
 
-    push_send_ecn(&mess, &cmsg, dest, ecn);
+    if (ecn != 0) {
+        switch (dest->sa.sa_family) {
+        case AF_INET:
+            PUSH_CMSG(IPPROTO_IP, IP_TOS, ecn);
+            break;
+        case AF_INET6:
+#ifdef IPV6_TCLASS
+        {
+            int tclass = ecn;
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_TCLASS, tclass);
+        }
+#endif
+            break;
+        default:
+            break;
+        }
+    }
 
     /* commit CMSG length */
     if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
