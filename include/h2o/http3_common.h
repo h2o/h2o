@@ -358,7 +358,7 @@ extern const ptls_iovec_t h2o_http3_alpn[3];
  * the datagrams can be sent using GSO.
  */
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
-                            size_t num_datagrams);
+                            size_t num_datagrams, uint8_t ecn);
 /**
  * creates a unidirectional stream object
  */
