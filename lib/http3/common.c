@@ -727,10 +727,8 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #else
                 CMSG_SPACE(1)
 #endif
-#ifdef IPV6_TCLASS
-                + CMSG_SPACE(sizeof(int))
-#elif defined(IP_TOS) || defined(IP_RECVTOS)
-                + CMSG_SPACE(sizeof(uint8_t))
+#if defined(IPV6_TCLASS) || defined(IP_TOS) || defined(IP_RECVTOS)
+                + CMSG_SPACE(sizeof(int)) /* IPv6 uses int, which is bigger than uint8_t used by IPv4 */
 #endif
             ];
         };
@@ -826,6 +824,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #else
                     case IP_TOS:
 #endif
+                        /* draft-ietf-tsvwg-udp-ecn-05 recommends using a byte on all platforms */
                         dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
                         break;
 #endif
