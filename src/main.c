@@ -2878,29 +2878,29 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
     switch (family) {
     case AF_INET: {
 #ifdef IP_RECVTOS
-        int recv_tos_on = 1;
-        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &recv_tos_on, sizeof(recv_tos_on)) != 0)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
 #endif
 #if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
-        int pktinfo_on = 1;
-        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &pktinfo_on, sizeof(pktinfo_on)) != 0)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
 #elif defined(IP_RECVDSTADDR) /* *BSD */
-        int recvdstaddr_on = 1;
-        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &recvdstaddr_on, sizeof(recvdstaddr_on)) != 0)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
     } break;
     case AF_INET6: {
 #ifdef IPV6_RECVTCLASS
-        int recv_tclass_on = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &recv_tclass_on, sizeof(recv_tclass_on)) != 0)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
 #endif
 #ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
-        int recv_pktinfo_on = 1;
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &recv_pktinfo_on, sizeof(recv_pktinfo_on)) != 0)
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
     } break;
