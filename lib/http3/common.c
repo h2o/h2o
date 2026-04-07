@@ -804,50 +804,57 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             struct cmsghdr *cmsg;
             for (cmsg = CMSG_FIRSTHDR(&mess[dgram_index].msg_hdr); cmsg != NULL;
                  cmsg = CMSG_NXTHDR(&mess[dgram_index].msg_hdr, cmsg)) {
+                switch (cmsg->cmsg_level) {
+                case IPPROTO_IP:
+                    switch (cmsg->cmsg_type) {
 #ifdef IP_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
-                           sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
-                    continue;
-                }
+                    case IP_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                               sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
+                        break;
 #endif
 #ifdef IP_RECVDSTADDR
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
-                    continue;
-                }
-#endif
-#ifdef IPV6_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
-                           sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
-                    continue;
-                }
+                    case IP_RECVDSTADDR:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
+                        break;
 #endif
 #ifdef IP_RECVTOS
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type ==
 #ifdef __APPLE__
-                                                      IP_RECVTOS
+                    case IP_RECVTOS:
 #else
-                                                      IP_TOS
+                    case IP_TOS:
 #endif
-                ) {
-                    dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
-                    continue;
-                }
+                        dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
+                        break;
+#endif
+                    default:
+                        break;
+                    }
+                    break;
+                case IPPROTO_IPV6:
+                    switch (cmsg->cmsg_type) {
+#ifdef IPV6_PKTINFO
+                    case IPV6_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
+                        memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr,
+                               CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr), sizeof(struct in6_addr));
+                        dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
+                        break;
 #endif
 #ifdef IPV6_TCLASS
-                if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_TCLASS) {
-                    dgrams[dgram_index].ecn = *(int *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
-                    continue;
-                }
+                    case IPV6_TCLASS:
+                        dgrams[dgram_index].ecn = *(int *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
+                        break;
 #endif
+                    default:
+                        break;
+                    }
+                    break;
+                }
             }
         }
         dgrams[dgram_index].ttl = ctx->default_ttl;
