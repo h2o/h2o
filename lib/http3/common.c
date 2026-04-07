@@ -89,8 +89,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef UDP_SEGMENT
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
-            /* draft-ietf-tsvwg-udp-ecn says IPv4 `IP_TOS` is int-sized on Apple/Linux and IPv6 `IPV6_TCLASS` is int-sized. */
-            + CMSG_SPACE(sizeof(int))
+            + CMSG_SPACE(sizeof(int)) /* IP_TOS or IPV6_TCLASS */
             + CMSG_SPACE(1) /* sentry */
         ];
     } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
@@ -827,11 +826,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 #else
                     case IP_TOS:
 #endif
-                        if (cmsg->cmsg_len >= CMSG_LEN(sizeof(int))) {
-                            dgrams[dgram_index].ecn = *(int *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
-                        } else if (cmsg->cmsg_len >= CMSG_LEN(sizeof(uint8_t))) {
-                            dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
-                        }
+                        dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
                         break;
 #endif
                     default:
