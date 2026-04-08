@@ -2872,13 +2872,14 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
     return fd;
 }
 
-static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
+static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf, int ecn)
 {
+    int on = 1;
+
     /* set the option for obtaining destination address */
     switch (family) {
-    case AF_INET: {
-        int on = 1;
-#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
+    case AF_INET:
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux and macOS) */
         if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
 #elif defined(IP_RECVDSTADDR) /* *BSD */
@@ -2886,21 +2887,20 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
 #ifdef IP_RECVTOS
-        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
+        if (ecn && setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
 #endif
-    } break;
-    case AF_INET6: {
-        int on = 1;
+        break;
+    case AF_INET6:
 #ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
 #ifdef IPV6_RECVTCLASS
-        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
+        if (ecn && setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
 #endif
-    } break;
+        break;
     default:
         break;
     }
@@ -3271,7 +3271,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #undef APPLY_RATIO
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
-                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
+                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf,
+                                      listener->quic.ctx->enable_ratio.ecn > 0);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
