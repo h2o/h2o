@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #include "picotls/openssl.h"
 #include "h2o.h"
 #include "h2o/string_.h"
@@ -70,6 +71,52 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
+{
+    int fd;
+    union {
+        struct sockaddr sa;
+        struct sockaddr_in sin;
+        struct sockaddr_in6 sin6;
+    } addr = {.sa = {.sa_family = family}};
+    socklen_t addrlen;
+
+    if ((fd = socket(family, SOCK_DGRAM, 0)) == -1)
+        return NULL;
+
+    switch (family) {
+    case AF_INET:
+        addrlen = sizeof(addr.sin);
+        break;
+    case AF_INET6:
+#ifdef IPV6_V6ONLY
+    {
+        int on = 1;
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
+            goto Error;
+    }
+#endif
+        addrlen = sizeof(addr.sin6);
+        break;
+    default:
+        assert(!"unexpected address family");
+        goto Error;
+    }
+
+    if (bind(fd, &addr.sa, addrlen) != 0)
+        goto Error;
+
+    return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+
+Error:
+    {
+        int saved_errno = errno;
+    close(fd);
+        errno = saved_errno;
+    }
+    return NULL;
+}
+
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams)
 {
@@ -98,6 +145,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         .msg_controllen = sizeof(cmsgbuf.buf),
     };
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    h2o_quic_socket_t *qsock;
     int ret;
 
 #define PUSH_CMSG(level, type, value)                                                                                              \
@@ -109,19 +157,27 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
     } while (0)
 
+    if (ctx->sock.addr.ss_family == dest->sa.sa_family) {
+        qsock = &ctx->sock;
+    } else if (ctx->sock_alt_family.sock != NULL && ctx->sock_alt_family.addr.ss_family == dest->sa.sa_family) {
+        qsock = &ctx->sock_alt_family;
+    } else {
+        return 0;
+    }
+
     /* first CMSG is the source address */
     if (src->sa.sa_family != AF_UNSPEC) {
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
-            if (*ctx->sock.port != src->sin.sin_port)
+            if (*qsock->port != src->sin.sin_port)
                 return 0;
             struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
             PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
-            if (*ctx->sock.port != src->sin.sin_port)
+            if (*qsock->port != src->sin.sin_port)
                 return 0;
-            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
+            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&qsock->addr;
             assert(fdaddr->sin_family == AF_INET);
             if (fdaddr->sin_addr.s_addr == INADDR_ANY)
                 PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
@@ -131,7 +187,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         } break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
-            if (*ctx->sock.port != src->sin6.sin6_port)
+            if (*qsock->port != src->sin6.sin6_port)
                 return 0;
             struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
             PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
@@ -173,7 +229,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(qsock->sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
@@ -732,6 +788,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
     } while (0)
 
     int fd = h2o_socket_get_fd(sock);
+    h2o_quic_socket_t *qsock = ctx->sock_alt_family.sock == sock ? &ctx->sock_alt_family : &ctx->sock;
     size_t dgram_index, num_dgrams;
 
     /* Read datagrams. Sender should be provided an ACK every fraction of RTT, otherwise its behavior becomes bursty (assuming that
@@ -777,7 +834,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
                            sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = *qsock->port;
                     goto DestAddrFound;
                 }
 #endif
@@ -785,7 +842,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = *qsock->port;
                     goto DestAddrFound;
                 }
 #endif
@@ -794,7 +851,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
                     memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
                            sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
+                    dgrams[dgram_index].destaddr.sin6.sin6_port = *qsock->port;
                     goto DestAddrFound;
                 }
 #endif
@@ -902,6 +959,26 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_quic_read_socket(ctx, sock);
 }
 
+static void setup_quic_socket(h2o_quic_ctx_t *ctx, h2o_quic_socket_t *qsock, h2o_socket_t *sock)
+{
+    *qsock = (h2o_quic_socket_t){.sock = sock};
+    qsock->addrlen = h2o_socket_getsockname(qsock->sock, (void *)&qsock->addr);
+    assert(qsock->addrlen != 0);
+    switch (qsock->addr.ss_family) {
+    case AF_INET:
+        qsock->port = &((struct sockaddr_in *)&qsock->addr)->sin_port;
+        break;
+    case AF_INET6:
+        qsock->port = &((struct sockaddr_in6 *)&qsock->addr)->sin6_port;
+        break;
+    default:
+        assert(!"unexpected address family");
+        break;
+    }
+    qsock->sock->data = ctx;
+    h2o_socket_read_start(qsock->sock, on_read);
+}
+
 static void on_timeout(h2o_timer_t *timeout)
 {
     h2o_quic_conn_t *conn = H2O_STRUCT_FROM_MEMBER(h2o_quic_conn_t, _timeout, timeout);
@@ -998,7 +1075,8 @@ Validation_Success:;
     return 0;
 }
 
-void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, h2o_socket_t *sock_alt_family,
+                           quicly_context_t *quic,
                            quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                            h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats)
 {
@@ -1006,7 +1084,6 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
 
     *ctx = (h2o_quic_ctx_t){
         .loop = loop,
-        .sock = {.sock = sock},
         .quic = quic,
         .next_cid = next_cid,
         .conns_by_id = kh_init_h2o_quic_idmap(),
@@ -1016,22 +1093,10 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .use_gso = use_gso,
         .quic_stats = quic_stats,
     };
-    ctx->sock.sock->data = ctx;
-    ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
-    assert(ctx->sock.addrlen != 0);
-    switch (ctx->sock.addr.ss_family) {
-    case AF_INET:
-        ctx->sock.port = &((struct sockaddr_in *)&ctx->sock.addr)->sin_port;
-        break;
-    case AF_INET6:
-        ctx->sock.port = &((struct sockaddr_in6 *)&ctx->sock.addr)->sin6_port;
-        break;
-    default:
-        assert(!"unexpected address family");
-        break;
+    setup_quic_socket(ctx, &ctx->sock, sock);
+    if (sock_alt_family != NULL) {
+        setup_quic_socket(ctx, &ctx->sock_alt_family, sock_alt_family);
     }
-
-    h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
 void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
@@ -1040,6 +1105,8 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
     assert(kh_size(ctx->conns_accepting) == 0);
 
     h2o_socket_close(ctx->sock.sock);
+    if (ctx->sock_alt_family.sock != NULL)
+        h2o_socket_close(ctx->sock_alt_family.sock);
     kh_destroy_h2o_quic_idmap(ctx->conns_by_id);
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
