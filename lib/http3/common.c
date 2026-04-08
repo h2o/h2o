@@ -168,18 +168,14 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #endif
 
     if (ecn != 0) {
+        int tos = ecn; /* IPV6_TCLASS uses int, and draft-ietf-tsvwg-udp-ecn-05 says IP_TOS assumes int too, on all platforms */
         switch (dest->sa.sa_family) {
-        case AF_INET: {
-            int tos = ecn;
+        case AF_INET:
             PUSH_CMSG(IPPROTO_IP, IP_TOS, tos);
-        }
             break;
         case AF_INET6:
 #ifdef IPV6_TCLASS
-        {
-            int tclass = ecn;
-            PUSH_CMSG(IPPROTO_IPV6, IPV6_TCLASS, tclass);
-        }
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_TCLASS, tos);
 #endif
             break;
         default:
