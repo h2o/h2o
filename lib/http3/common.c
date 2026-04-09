@@ -962,8 +962,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
 static void setup_quic_socket(h2o_quic_ctx_t *ctx, h2o_quic_socket_t *qsock, h2o_socket_t *sock)
 {
     *qsock = (h2o_quic_socket_t){.sock = sock};
-    qsock->addrlen = h2o_socket_getsockname(qsock->sock, (void *)&qsock->addr);
-    assert(qsock->addrlen != 0);
+    h2o_socket_getsockname(qsock->sock, (void *)&qsock->addr);
     switch (qsock->addr.ss_family) {
     case AF_INET:
         qsock->port = &((struct sockaddr_in *)&qsock->addr)->sin_port;
