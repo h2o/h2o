@@ -782,8 +782,11 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
 
+    /* If the socket is either ctx->sock or ctx->sock_alt_family, the destination port is that of the socket. Otherwise, the
+     * preprocess_packet callback takes care, therefore the value can be bogus. */
+    in_port_t dst_port = ctx->sock_alt_family.sock == sock ? *ctx->sock_alt_family.port : *ctx->sock.port;
+
     int fd = h2o_socket_get_fd(sock);
-    h2o_quic_socket_t *qsock = ctx->sock_alt_family.sock == sock ? &ctx->sock_alt_family : &ctx->sock;
     size_t dgram_index, num_dgrams;
 
     /* Read datagrams. Sender should be provided an ACK every fraction of RTT, otherwise its behavior becomes bursty (assuming that
@@ -829,7 +832,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
                            sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *qsock->port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
                     goto DestAddrFound;
                 }
 #endif
@@ -837,7 +840,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
                     dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
                     memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *qsock->port;
+                    dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
                     goto DestAddrFound;
                 }
 #endif
@@ -846,7 +849,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                     dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
                     memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
                            sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = *qsock->port;
+                    dgrams[dgram_index].destaddr.sin6.sin6_port = dst_port;
                     goto DestAddrFound;
                 }
 #endif
