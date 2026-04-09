@@ -716,6 +716,7 @@ h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
     }
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 }
+
 #endif
 
 static void on_sigfatal(int signo)
@@ -782,28 +783,16 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
 #else
     { /* initialize QUIC context */
-        int fd;
-        struct sockaddr_in sin;
-        if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-            perror("failed to create UDP socket");
+        h2o_socket_t *socks[2], **sp = socks;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
+            ++sp;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
+            ++sp;
+        if (sp == socks) {
+            perror("failed to create UDP socket for both IPv4 and v6");
             exit(EXIT_FAILURE);
         }
-#ifdef IP_RECVTOS
-        {
-            int on = 1;
-            if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0) {
-                perror("failed to set IP_RECVTOS option");
-                exit(EXIT_FAILURE);
-            }
-        }
-#endif
-        memset(&sin, 0, sizeof(sin));
-        if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
-            perror("failed to bind bind UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, &h3_next_cid, NULL,
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, socks[0], socks[1], &h3ctx.quic, &h3_next_cid, NULL,
                               h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
     }
 #endif

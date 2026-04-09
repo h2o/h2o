@@ -2912,6 +2912,33 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
         h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
 }
 
+static int quic_socket_is_ecn_enabled(int fd, int family)
+{
+    int tos;
+    socklen_t toslen = sizeof(tos);
+
+    /* this logic mirrors that of set_quic_sockopts */
+    switch (family) {
+    case AF_INET:
+#ifdef IP_RECVTOS
+        if (getsockopt(fd, IPPROTO_IP, IP_RECVTOS, &tos, &toslen) != 0)
+            return 0;
+#endif
+        break;
+    case AF_INET6:
+#ifdef IPV6_RECVTCLASS
+        if (getsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &tos, &toslen) != 0)
+            return 0;
+#endif
+        break;
+    default:
+        h2o_fatal("unexpected ss_family:%d", family);
+        break;
+    }
+
+    return tos != 0;
+}
+
 static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
                                         const char *hostname, const char *servname)
 {
@@ -4513,7 +4540,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
-                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
+                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, NULL, listener_config->quic.ctx,
                                           &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
                                           conf.globalconf.http3.use_gso);
             h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
@@ -4960,7 +4987,8 @@ static int dup_listener(struct listener_config_t *config)
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
-                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
+                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf,
+                                  quic_socket_is_ecn_enabled(config->fds.entries[0], ss.ss_family));
         } else {
             char buf[256];
             h2o_fatal("failed to bind additional listener: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
