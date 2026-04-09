@@ -783,13 +783,16 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
 #else
     { /* initialize QUIC context */
-        h2o_socket_t *sock = h2o_quic_create_client_socket(ctx.loop, AF_INET);
-        h2o_socket_t *sock_v6 = h2o_quic_create_client_socket(ctx.loop, AF_INET6);
-        if (sock == NULL) {
-            perror("failed to create IPv4 UDP socket");
+        h2o_socket_t *socks[2], **sp = socks;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
+            ++sp;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
+            ++sp;
+        if (sp == socks) {
+            perror("failed to create UDP socket for both IPv4 and v6");
             exit(EXIT_FAILURE);
         }
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, sock_v6, &h3ctx.quic, &h3_next_cid, NULL,
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, socks[0], socks[1], &h3ctx.quic, &h3_next_cid, NULL,
                               h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
     }
 #endif

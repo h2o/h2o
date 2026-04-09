@@ -111,14 +111,16 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
                                                                                            directions */
 
     /* h2o server http3 integration */
-    h2o_socket_t *sock = h2o_quic_create_client_socket(ctx->loop, AF_INET);
-    h2o_socket_t *sock_v6 = h2o_quic_create_client_socket(ctx->loop, AF_INET6);
-    if (sock == NULL) {
+    h2o_socket_t *socks[2], **sp = socks;
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
+        ++sp;
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
+        ++sp;
+    if (sp == socks) {
         char buf[256];
-        h2o_fatal("failed to create IPv4 UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        h2o_fatal("failed to create UDP socket for both IPv4 and v6: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
-    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, sock_v6, &h3ctx->quic,
-                                  &ctx->http3.next_cid, NULL,
+    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, socks[0], socks[1], &h3ctx->quic, &ctx->http3.next_cid, NULL,
                                   h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */
