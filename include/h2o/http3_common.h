@@ -80,7 +80,6 @@
 
 #define H2O_HTTP3_DEFAULT_MAX_CONCURRENT_STREAMING_REQUESTS 1
 
-typedef struct st_h2o_quic_socket_t h2o_quic_socket_t;
 typedef struct st_h2o_quic_ctx_t h2o_quic_ctx_t;
 typedef struct st_h2o_quic_conn_t h2o_quic_conn_t;
 typedef struct st_h2o_http3_conn_t h2o_http3_conn_t;
@@ -175,11 +174,11 @@ typedef struct st_h2o_quic_stats_t {
     } quicly;
 } h2o_quic_stats_t;
 
-struct st_h2o_quic_socket_t {
+typedef struct st_h2o_quic_socket_t {
     h2o_socket_t *sock;
     struct sockaddr_storage addr;
     in_port_t *port; /* points to the port number in addr */
-};
+} h2o_quic_socket_t;
 
 struct st_h2o_quic_ctx_t {
     /**
