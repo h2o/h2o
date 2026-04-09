@@ -71,6 +71,7 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
+#if !H2O_USE_LIBUV
 h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 {
     int fd;
@@ -111,6 +112,7 @@ Error: {
 }
     return NULL;
 }
+#endif
 
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                             size_t num_datagrams)
