@@ -140,7 +140,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         .msg_controllen = sizeof(cmsgbuf.buf),
     };
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
-    h2o_quic_socket_t *qsock;
+    h2o_quic_socket_t *sock;
     int ret;
 
 #define PUSH_CMSG(level, type, value)                                                                                              \
@@ -153,9 +153,9 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     } while (0)
 
     if (ctx->sock.addr.ss_family == dest->sa.sa_family) {
-        qsock = &ctx->sock;
+        sock = &ctx->sock;
     } else if (ctx->sock_alt_family.sock != NULL && ctx->sock_alt_family.addr.ss_family == dest->sa.sa_family) {
-        qsock = &ctx->sock_alt_family;
+        sock = &ctx->sock_alt_family;
     } else {
         return 0;
     }
@@ -165,14 +165,14 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
-            if (*qsock->port != src->sin.sin_port)
+            if (*sock->port != src->sin.sin_port)
                 return 0;
             struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
             PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
-            if (*qsock->port != src->sin.sin_port)
+            if (*sock->port != src->sin.sin_port)
                 return 0;
-            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&qsock->addr;
+            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&sock->addr;
             assert(fdaddr->sin_family == AF_INET);
             if (fdaddr->sin_addr.s_addr == INADDR_ANY)
                 PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
@@ -182,7 +182,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         } break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
-            if (*qsock->port != src->sin6.sin6_port)
+            if (*sock->port != src->sin6.sin6_port)
                 return 0;
             struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
             PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
@@ -224,7 +224,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(qsock->sock), &mess, 0)) == -1 && errno == EINTR)
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(sock->sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
