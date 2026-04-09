@@ -304,6 +304,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
 
+    /* TODO implement eyeballing (and on the TCP-side too) */
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
     start_connect(conn, selected->ai_addr);
 }
@@ -372,7 +373,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
 
     conn->getaddr_req = h2o_hostinfo_getaddr(conn->ctx->getaddr_receiver, conn->server.origin_url.host,
                                              h2o_iovec_init(conn->server.named_serv, strlen(conn->server.named_serv)),
-                                             ctx->http3->h3.sock.addr.ss_family, SOCK_DGRAM, IPPROTO_UDP,
+                                             pool->socketpool->address_family, SOCK_DGRAM, IPPROTO_UDP,
                                              AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, conn);
     h2o_timer_link(conn->ctx->loop, conn->ctx->connect_timeout, &conn->timeout);
     conn->timeout.cb = on_connect_timeout;
