@@ -1073,8 +1073,7 @@ Validation_Success:;
 }
 
 void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, h2o_socket_t *sock_alt_family,
-                           quicly_context_t *quic,
-                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+                           quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                            h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
