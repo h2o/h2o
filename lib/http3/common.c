@@ -74,11 +74,7 @@ static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(repor
 h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 {
     int fd;
-    union {
-        struct sockaddr sa;
-        struct sockaddr_in sin;
-        struct sockaddr_in6 sin6;
-    } addr = {.sa = {.sa_family = family}};
+    quicly_address_t addr = {.sa.sa_family = family};
     socklen_t addrlen;
 
     if ((fd = socket(family, SOCK_DGRAM, 0)) == -1)
@@ -108,12 +104,11 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 
-Error:
-    {
-        int saved_errno = errno;
+Error: {
+    int saved_errno = errno;
     close(fd);
-        errno = saved_errno;
-    }
+    errno = saved_errno;
+}
     return NULL;
 }
 
