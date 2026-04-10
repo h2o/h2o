@@ -94,7 +94,7 @@ inline struct addrinfo *h2o_hostinfo_select_one(struct addrinfo *res)
     } while ((ai = ai->ai_next) != NULL);
 
     /* choose one, distributed by rand() :-p */
-    i = rand() % i;
+    i = arc4random_uniform(i);
     for (ai = res; i != 0; ai = ai->ai_next, --i)
         ;
     return ai;
