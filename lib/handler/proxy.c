@@ -111,18 +111,16 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
                                                                                            directions */
 
     /* h2o server http3 integration */
-    int sockfd;
-    if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+    h2o_socket_t *socks[2], **sp = socks;
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
+        ++sp;
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
+        ++sp;
+    if (sp == socks) {
         char buf[256];
-        h2o_fatal("failed to open UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
+        h2o_fatal("failed to create UDP socket for both IPv4 and v6: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
     }
-    struct sockaddr_in sin = {};
-    if (bind(sockfd, (struct sockaddr *)&sin, sizeof(sin)) != 0) {
-        char buf[256];
-        h2o_fatal("failed to bind default address to UDP socket: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-    }
-    h2o_socket_t *sock = h2o_evloop_socket_create(ctx->loop, sockfd, H2O_SOCKET_FLAG_DONT_READ);
-    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, sock, &h3ctx->quic, &ctx->http3.next_cid, NULL,
+    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, socks[0], socks[1], &h3ctx->quic, &ctx->http3.next_cid, NULL,
                                   h2o_httpclient_http3_notify_connection_update, use_gso);
 
     h3ctx->load_session = NULL; /* TODO reuse session? */

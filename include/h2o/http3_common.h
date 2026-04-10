@@ -174,6 +174,12 @@ typedef struct st_h2o_quic_stats_t {
     } quicly;
 } h2o_quic_stats_t;
 
+typedef struct st_h2o_quic_socket_t {
+    h2o_socket_t *sock;
+    struct sockaddr_storage addr;
+    in_port_t *port; /* points to the port number in addr */
+} h2o_quic_socket_t;
+
 struct st_h2o_quic_ctx_t {
     /**
      * the event loop
@@ -182,12 +188,12 @@ struct st_h2o_quic_ctx_t {
     /**
      * underlying unbound socket
      */
-    struct {
-        h2o_socket_t *sock;
-        struct sockaddr_storage addr;
-        socklen_t addrlen;
-        in_port_t *port; /* points to the port number in addr */
-    } sock;
+    h2o_quic_socket_t sock;
+    /**
+     * optional socket used when the client needs to communicate over the alternate address family; if not used,
+     * `sock_alt_family.sock` is set to NULL
+     */
+    h2o_quic_socket_t sock_alt_family;
     /**
      * quic context
      */
@@ -370,11 +376,15 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
                          const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 
 /**
+ * a helper function that opens an unbound UDP socket
+ */
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family);
+/**
  * Initializes the QUIC context, binding the event loop, socket, quic, and other properties. `next_cid` should be a thread-local
  * that contains the CID seed to be used; see `h2o_quic_ctx_t::next_cid` for more information.
  */
-void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, h2o_socket_t *sock_alt_family,
+                           quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                            h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats);
 /**
  *
