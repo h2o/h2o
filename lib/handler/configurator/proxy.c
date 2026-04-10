@@ -594,6 +594,28 @@ static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
+static int on_config_http3_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    if (h2o_configurator_scanf(cmd, node, "%" PRId64, &self->vars->conf.http3.max_concurrent_streams) != 0)
+        return -1;
+    if (self->vars->conf.http3.max_concurrent_streams <= 0) {
+        h2o_configurator_errprintf(cmd, node, "proxy.http3.max-concurrent-streams must be a positive integer");
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_http3_ecn(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret < 0)
+        return -1;
+    self->vars->conf.http3.ecn = !!ret;
+    return 0;
+}
+
 static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
@@ -718,6 +740,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
         .tunnel_enabled = 0, /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
         .max_buffer_size = SIZE_MAX,
         .http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS,
+        .http3.max_concurrent_streams = quicly_spec_context.transport_params.max_streams_bidi,
+        .http3.ecn = 1,
         .protocol_ratio.http2 = -1,
         .keepalive_timeout = h2o_socketpool_get_timeout(&conf->proxy.global_socketpool),
     };
@@ -812,6 +836,11 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_http2_force_cleartext);
     h2o_configurator_define_command(&c->super, "proxy.http2.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http2_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.http3.max-concurrent-streams",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_http3_max_concurrent_streams);
+    h2o_configurator_define_command(&c->super, "proxy.http3.ecn",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ecn);
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
     h2o_configurator_define_command(&c->super, "proxy.expect",

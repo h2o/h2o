@@ -66,7 +66,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     return 0;
 }
 
-static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso)
+static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int64_t max_concurrent_streams,
+                                                   int use_ecn, int use_gso)
 {
 #if H2O_USE_LIBUV
     h2o_fatal("no HTTP/3 support for libuv");
@@ -95,6 +96,7 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
     h3ctx->quic = quicly_spec_context;
     h3ctx->quic.tls = &h3ctx->tls;
     h3ctx->quic.transport_params.max_streams_uni = 10;
+    h3ctx->quic.transport_params.max_streams_bidi = max_concurrent_streams;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
     ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
     h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(
@@ -112,9 +114,9 @@ static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *
 
     /* h2o server http3 integration */
     h2o_socket_t *socks[2], **sp = socks;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET, use_ecn)) != NULL)
         ++sp;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6, use_ecn)) != NULL)
         ++sp;
     if (sp == socks) {
         char buf[256];
@@ -178,7 +180,8 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
                 .max_concurrent_streams = self->config.http2.max_concurrent_streams,
             },
         .http3 = self->config.protocol_ratio.http3 != 0
-                     ? create_http3_context(ctx, self->sockpool->_ssl_ctx, ctx->globalconf->http3.use_gso)
+                     ? create_http3_context(ctx, self->sockpool->_ssl_ctx, self->config.http3.max_concurrent_streams,
+                                            self->config.http3.ecn, ctx->globalconf->http3.use_gso)
                      : NULL,
     };
 

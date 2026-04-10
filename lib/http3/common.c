@@ -73,7 +73,7 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
 #if !H2O_USE_LIBUV
-h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, int ecn)
 {
     int fd;
     quicly_address_t addr = {.sa.sa_family = family};
@@ -85,10 +85,10 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
     switch (family) {
     case AF_INET:
 #ifdef IP_RECVTOS
-    {
-        int on = 1;
-        setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
-    }
+        if (ecn) {
+            int on = 1;
+            setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
+        }
 #endif
         addrlen = sizeof(addr.sin);
         break;
@@ -101,10 +101,10 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
     }
 #endif
 #ifdef IPV6_RECVTCLASS
-    {
-        int on = 1;
-        setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
-    }
+        if (ecn) {
+            int on = 1;
+            setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
+        }
 #endif
         addrlen = sizeof(addr.sin6);
         break;

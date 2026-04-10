@@ -378,7 +378,7 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 /**
  * a helper function that opens an unbound UDP socket
  */
-h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family);
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, int ecn);
 /**
  * Initializes the QUIC context, binding the event loop, socket, quic, and other properties. `next_cid` should be a thread-local
  * that contains the CID seed to be used; see `h2o_quic_ctx_t::next_cid` for more information.
