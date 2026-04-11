@@ -597,7 +597,7 @@ static int on_config_http2_ratio(h2o_configurator_command_t *cmd, h2o_configurat
 static int on_config_http3_max_concurrent_streams(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    if (h2o_configurator_scanf(cmd, node, "%" PRId64, &self->vars->conf.http3.max_concurrent_streams) != 0)
+    if (h2o_configurator_scanf(cmd, node, "%" PRIu64, &self->vars->conf.http3.max_concurrent_streams) != 0)
         return -1;
     if (self->vars->conf.http3.max_concurrent_streams <= 0) {
         h2o_configurator_errprintf(cmd, node, "proxy.http3.max-concurrent-streams must be a positive integer");

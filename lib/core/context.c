@@ -33,7 +33,7 @@
 #include "picotls/fusion.h"
 #endif
 
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int64_t max_concurrent_streams,
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, uint64_t max_concurrent_streams,
                                                       int use_ecn, int use_gso)
 {
 #if H2O_USE_LIBUV
