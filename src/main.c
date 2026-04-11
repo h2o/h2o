@@ -2914,7 +2914,7 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
 
 static int quic_socket_is_ecn_enabled(int fd, int family)
 {
-    int tos;
+    int tos = 0;
     socklen_t toslen = sizeof(tos);
 
     /* this logic mirrors that of set_quic_sockopts */
