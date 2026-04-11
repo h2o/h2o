@@ -1793,6 +1793,14 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
  *
  */
 void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+/**
+ *
+ */
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso);
+/**
+ *
+ */
+void h2o_destroy_proxy_http3_context(h2o_http3client_ctx_t *h3ctx);
 
 /**
  * returns current timestamp
