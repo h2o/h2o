@@ -240,8 +240,12 @@ EOS
                     h2g.read_loop(500)
 EOS
 
-                like $output, qr/':status' => '500'.*?half close.*?RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\s+error_code => 0/s,
-                    "Proxy forwarded headers, the complete body, and then RST_STREAM (NO_ERROR) in strict order";
+                like $output,
+                    qr/':status' => '500'.*?DATA frame <length=10, flags=0x01, stream_id=1>.*?RST_STREAM frame <length=4, flags=0x00, stream_id=1>\n\s+error_code => 0/s,
+                    "Proxy forwarded headers, END_STREAM DATA, and then RST_STREAM (NO_ERROR) in strict order";
+                # h2get's DATA renderer writes the payload hexdump with printf rather than appending it to Frame#to_s, so the payload
+                # dump can be reordered against subsequent "puts f.to_s" output. Check DATA frame ordering and content separately.
+                like $output, qr/half close/, "Proxy forwarded the complete response body";
             };
 
             subtest "rst-delay=0" => sub {
@@ -567,4 +571,3 @@ sub close {
     $self->{sock}->close if $self->{sock};
     $self->{sock} = undef;
 }
-

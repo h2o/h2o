@@ -546,6 +546,10 @@ struct st_h2o_globalconf_t {
         struct {
             uint32_t max_concurrent_streams;
         } http2;
+        struct {
+            int64_t max_concurrent_streams;
+            unsigned ecn : 1;
+        } http3;
 
         /**
          * See the documentation of `h2o_httpclient_t::protocol_selector.ratio`.
