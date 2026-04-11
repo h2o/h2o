@@ -24,10 +24,6 @@
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
 
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int64_t max_concurrent_streams,
-                                                      int use_ecn, int use_gso);
-void h2o_destroy_proxy_http3_context(h2o_http3client_ctx_t *h3ctx);
-
 struct rp_handler_t {
     h2o_handler_t super;
     h2o_socketpool_t *sockpool;
