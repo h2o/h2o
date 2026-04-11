@@ -908,9 +908,11 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                         break;
 #endif
 #ifdef IPV6_TCLASS
-                    case IPV6_TCLASS:
-                        dgrams[dgram_index].ecn = *(int *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
-                        break;
+                    case IPV6_TCLASS: {
+                        int optval;
+                        memcpy(&optval, CMSG_DATA(cmsg), sizeof(optval));
+                        dgrams[dgram_index].ecn = optval & IPTOS_ECN_MASK;
+                    } break;
 #endif
                     default:
                         break;
