@@ -20,15 +20,12 @@
  * IN THE SOFTWARE.
  */
 #include <sys/un.h>
-#include "picotls.h"
-#include "picotls/openssl.h"
 #include "h2o.h"
 #include "h2o/socketpool.h"
 #include "h2o/balancer.h"
-#include "h2o/http3_server.h"
-#if H2O_USE_FUSION
-#include "picotls/fusion.h"
-#endif
+
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso);
+void h2o_destroy_proxy_http3_context(h2o_http3client_ctx_t *h3ctx);
 
 struct rp_handler_t {
     h2o_handler_t super;
@@ -64,78 +61,6 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_reprocess_request(req, req->method, req->scheme, req->authority, path, overrides, 0);
 
     return 0;
-}
-
-static h2o_http3client_ctx_t *create_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso)
-{
-#if H2O_USE_LIBUV
-    h2o_fatal("no HTTP/3 support for libuv");
-#else
-
-    h2o_http3client_ctx_t *h3ctx = h2o_mem_alloc(sizeof(*h3ctx));
-
-    /* tls (TODO inherit session cache setting of ssl_ctx) */
-    h3ctx->tls = (ptls_context_t){
-        .random_bytes = ptls_openssl_random_bytes,
-        .get_time = &ptls_get_time,
-        .key_exchanges = ptls_openssl_key_exchanges,
-        .cipher_suites = ptls_openssl_cipher_suites,
-    };
-    h3ctx->verify_cert = (ptls_openssl_verify_certificate_t){};
-    if ((SSL_CTX_get_verify_mode(ssl_ctx) & SSL_VERIFY_PEER) != 0) {
-        X509_STORE *store;
-        if ((store = SSL_CTX_get_cert_store(ssl_ctx)) == NULL)
-            h2o_fatal("failed to obtain the store to be used for server certificate verification");
-        ptls_openssl_init_verify_certificate(&h3ctx->verify_cert, store);
-        h3ctx->tls.verify_certificate = &h3ctx->verify_cert.super;
-    }
-    quicly_amend_ptls_context(&h3ctx->tls);
-
-    /* quic */
-    h3ctx->quic = quicly_spec_context;
-    h3ctx->quic.tls = &h3ctx->tls;
-    h3ctx->quic.transport_params.max_streams_uni = 10;
-    uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
-    ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
-    h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(
-#if H2O_USE_FUSION
-        ptls_fusion_is_supported_by_cpu() ? &ptls_fusion_quiclb :
-#endif
-                                          &ptls_openssl_quiclb,
-        &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, sizeof(cid_key)));
-    ptls_clear_memory(cid_key, sizeof(cid_key));
-    h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
-
-    /* http3 client-specific fields */
-    h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
-                                                                                           directions */
-
-    /* h2o server http3 integration */
-    h2o_socket_t *socks[2], **sp = socks;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
-        ++sp;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
-        ++sp;
-    if (sp == socks) {
-        char buf[256];
-        h2o_fatal("failed to create UDP socket for both IPv4 and v6: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
-    }
-    h2o_http3_server_init_context(ctx, &h3ctx->h3, ctx->loop, socks[0], socks[1], &h3ctx->quic, &ctx->http3.next_cid, NULL,
-                                  h2o_httpclient_http3_notify_connection_update, use_gso);
-
-    h3ctx->load_session = NULL; /* TODO reuse session? */
-
-    return h3ctx;
-#endif
-}
-
-static void destroy_http3_context(h2o_http3client_ctx_t *h3ctx)
-{
-    h2o_quic_dispose_context(&h3ctx->h3);
-    quicly_free_default_cid_encryptor(h3ctx->quic.cid_encryptor);
-    if (h3ctx->verify_cert.super.cb != NULL)
-        ptls_openssl_dispose_verify_certificate(&h3ctx->verify_cert);
-    free(h3ctx);
 }
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -178,7 +103,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
                 .max_concurrent_streams = self->config.http2.max_concurrent_streams,
             },
         .http3 = self->config.protocol_ratio.http3 != 0
-                     ? create_http3_context(ctx, self->sockpool->_ssl_ctx, ctx->globalconf->http3.use_gso)
+                     ? h2o_create_proxy_http3_context(ctx, self->sockpool->_ssl_ctx, ctx->globalconf->http3.use_gso)
                      : NULL,
     };
 
@@ -192,7 +117,7 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
 
     if (handler_ctx->client_ctx != NULL) {
         if (handler_ctx->client_ctx->http3 != NULL)
-            destroy_http3_context(handler_ctx->client_ctx->http3);
+            h2o_destroy_proxy_http3_context(handler_ctx->client_ctx->http3);
         free(handler_ctx->client_ctx);
     }
 
