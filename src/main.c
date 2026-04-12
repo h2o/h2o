@@ -2872,7 +2872,7 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
     return fd;
 }
 
-static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf, int ecn)
+static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
     int on = 1;
 
@@ -2887,7 +2887,7 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
 #ifdef IP_RECVTOS
-        if (ecn && setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
 #endif
         break;
@@ -2897,7 +2897,7 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
 #ifdef IPV6_RECVTCLASS
-        if (ecn && setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
 #endif
         break;
@@ -2910,33 +2910,6 @@ static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvb
         h2o_fatal("failed to set SO_SNDBUF:%s", strerror(errno));
     if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
         h2o_fatal("failed to set SO_RCVBUF:%s", strerror(errno));
-}
-
-static int quic_socket_is_ecn_enabled(int fd, int family)
-{
-    int tos = 0;
-    socklen_t toslen = sizeof(tos);
-
-    /* this logic mirrors that of set_quic_sockopts */
-    switch (family) {
-    case AF_INET:
-#ifdef IP_RECVTOS
-        if (getsockopt(fd, IPPROTO_IP, IP_RECVTOS, &tos, &toslen) != 0)
-            return 0;
-#endif
-        break;
-    case AF_INET6:
-#ifdef IPV6_RECVTCLASS
-        if (getsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &tos, &toslen) != 0)
-            return 0;
-#endif
-        break;
-    default:
-        h2o_fatal("unexpected ss_family:%d", family);
-        break;
-    }
-
-    return tos != 0;
 }
 
 static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t *node, int socktype, int protocol,
@@ -3298,8 +3271,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #undef APPLY_RATIO
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
-                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf,
-                                      listener->quic.ctx->enable_ratio.ecn > 0);
+                    set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
                 listener_is_new = 1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
@@ -4987,8 +4959,7 @@ static int dup_listener(struct listener_config_t *config)
         if ((fd = open_listener(ss.ss_family, type, type == SOCK_STREAM ? IPPROTO_TCP : IPPROTO_UDP, (struct sockaddr *)&ss,
                                 sslen)) != -1) {
             if (type == SOCK_DGRAM)
-                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf,
-                                  quic_socket_is_ecn_enabled(config->fds.entries[0], ss.ss_family));
+                set_quic_sockopts(fd, ss.ss_family, config->sndbuf, config->rcvbuf);
         } else {
             char buf[256];
             h2o_fatal("failed to bind additional listener: %s", h2o_strerror_r(errno, buf, sizeof(buf)));

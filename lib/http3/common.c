@@ -73,9 +73,9 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
 #if !H2O_USE_LIBUV
-h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, int ecn)
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 {
-    int fd;
+    int fd, on = 1;
     quicly_address_t addr = {.sa.sa_family = family};
     socklen_t addrlen;
 
@@ -85,26 +85,17 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, int ec
     switch (family) {
     case AF_INET:
 #ifdef IP_RECVTOS
-        if (ecn) {
-            int on = 1;
-            setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
-        }
+        setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
 #endif
         addrlen = sizeof(addr.sin);
         break;
     case AF_INET6:
 #ifdef IPV6_V6ONLY
-    {
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
             goto Error;
-    }
 #endif
 #ifdef IPV6_RECVTCLASS
-        if (ecn) {
-            int on = 1;
-            setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
-        }
+        setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
 #endif
         addrlen = sizeof(addr.sin6);
         break;
@@ -146,7 +137,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
             + CMSG_SPACE(sizeof(int)) /* IP_TOS or IPV6_TCLASS */
-            + CMSG_SPACE(1) /* sentry */
+            + CMSG_SPACE(1)           /* sentry */
         ];
     } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
     struct msghdr mess = {

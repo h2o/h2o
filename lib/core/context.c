@@ -83,9 +83,9 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
 
     /* h2o server http3 integration */
     h2o_socket_t *socks[2], **sp = socks;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET, use_ecn)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
         ++sp;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6, use_ecn)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
         ++sp;
     if (sp == socks) {
         char buf[256];
