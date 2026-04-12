@@ -87,7 +87,6 @@ static h2o_http3client_ctx_t h3ctx = {
     .max_frame_payload_size = 16384,
 };
 static quicly_cid_plaintext_t h3_next_cid;
-static int h3_use_ecn = 1;
 static const char *session_file = NULL;
 static const char *progname; /* refers to argv[0] */
 
@@ -995,7 +994,7 @@ int main(int argc, char **argv)
             *slot = *named;
         } break;
         case OPT_HTTP3_NO_ECN:
-            h3_use_ecn = 0;
+            h3ctx.quic.enable_ratio.ecn = 0;
             break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
@@ -1025,7 +1024,6 @@ int main(int argc, char **argv)
 #endif
         h3_key_exchanges[i++] = &ptls_openssl_secp256r1;
     }
-
 #if H2O_USE_LIBUV
 #else
     { /* initialize QUIC context */
