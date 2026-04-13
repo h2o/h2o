@@ -37,7 +37,7 @@ hosts:
         file.dir: t/assets/doc_root
 EOT
 
-my $resp = `$client_prog -3 100 https://[::1]:$quic_port 2>&1`;
+my $resp = `$client_prog -k -3 100 https://[::1]:$quic_port 2>&1`;
 like $resp, qr{^HTTP/.*\n\nhello\n$}s;
 
 done_testing;
