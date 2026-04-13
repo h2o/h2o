@@ -546,6 +546,9 @@ struct st_h2o_globalconf_t {
         struct {
             uint32_t max_concurrent_streams;
         } http2;
+        struct {
+            unsigned ecn : 1;
+        } http3;
 
         /**
          * See the documentation of `h2o_httpclient_t::protocol_selector.ratio`.
@@ -1796,7 +1799,7 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  *
  */
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_gso);
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso);
 /**
  *
  */
@@ -2302,6 +2305,9 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint32_t max_concurrent_streams;
         unsigned force_cleartext : 1;
     } http2;
+    struct {
+        unsigned ecn : 1;
+    } http3;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
 

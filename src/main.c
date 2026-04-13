@@ -2874,26 +2874,33 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 
 static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
+    int on = 1;
+
     /* set the option for obtaining destination address */
     switch (family) {
-    case AF_INET: {
-#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
-        int on = 1;
+    case AF_INET:
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux and macOS) */
         if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
 #elif defined(IP_RECVDSTADDR) /* *BSD */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
-    } break;
-    case AF_INET6: {
+#ifdef IP_RECVTOS
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
+#endif
+        break;
+    case AF_INET6:
 #ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
-    } break;
+#ifdef IPV6_RECVTCLASS
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
+#endif
+        break;
     default:
         break;
     }
@@ -4345,7 +4352,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                                                   packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }
@@ -4384,7 +4391,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
             }
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }

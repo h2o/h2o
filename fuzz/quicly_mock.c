@@ -466,6 +466,11 @@ Exit:
     return ret;
 }
 
+uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn)
+{
+    return 0;
+}
+
 int64_t quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int64_t (*cb)(void *thunk, quicly_stream_t *stream))
 {
     assert(0 && "unimplemented");

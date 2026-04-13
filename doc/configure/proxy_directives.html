@@ -155,6 +155,9 @@ Following sections describe the configuration directives defined for the module.
 <li><a href="configure/proxy_directives.html#proxy.http2.ratio">
 <code>proxy.http2.ratio</code>
 </a></li>
+<li><a href="configure/proxy_directives.html#proxy.http3.ecn">
+<code>proxy.http3.ecn</code>
+</a></li>
 <li><a href="configure/proxy_directives.html#proxy.http3.ratio">
 <code>proxy.http3.ratio</code>
 </a></li>
@@ -797,6 +800,29 @@ When the backend protocol is cleartext HTTP, this directive has impact only when
 <dt>Default:</dt>
 <dd><code><pre>proxy.http2.ratio: 0</pre></code>
 </dl>
+
+<div id="proxy.http3.ecn" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/proxy_directives.html#proxy.http3.ecn"><code>"proxy.http3.ecn"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+If ECN should be used to detect congestion.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.http3.ecn: ON</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/http3_directives.html#quic-attributes">Fine-tuning QUIC Behavior</a>
+</dd>
+</dl>
+
 
 <div id="proxy.http3.ratio" class="directive-head">
 <div class="directive-since">experimental</div>
