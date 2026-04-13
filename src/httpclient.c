@@ -467,6 +467,23 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
         } else {
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            X509_STORE *store = X509_STORE_new();
+            if (store == NULL) {
+                on_error(ctx, pool, "failed to allocate X509 store");
+                return;
+            }
+            if (X509_STORE_load_locations(store, crt_fullpath, NULL) != 1) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to load certificates file:%s", crt_fullpath);
+                return;
+            }
+            if (ptls_openssl_init_verify_certificate(&h3ctx.verify_cert, store) != 0) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to initialize HTTP/3 certificate verifier");
+                return;
+            }
+            X509_STORE_free(store);
+            h3ctx.tls.verify_certificate = &h3ctx.verify_cert.super;
         }
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);

@@ -103,7 +103,7 @@ EOT
 
 sub fetch {
     my $opts = shift;
-    open my $fh, "-|", "$client_prog -3 100 $opts https://127.0.0.1:$quic_port/ 2> /dev/null"
+    open my $fh, "-|", "$client_prog -k -3 100 $opts https://127.0.0.1:$quic_port/ 2> /dev/null"
         or die "failed to spawn $client_prog:$!";
     $fh;
 }
