@@ -33,8 +33,7 @@
 #include "picotls/fusion.h"
 #endif
 
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, uint64_t max_concurrent_streams,
-                                                      int use_ecn, int use_gso)
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso)
 {
 #if H2O_USE_LIBUV
     h2o_fatal("no HTTP/3 support for libuv");
@@ -63,7 +62,6 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic = quicly_spec_context;
     h3ctx->quic.tls = &h3ctx->tls;
     h3ctx->quic.transport_params.max_streams_uni = 10;
-    h3ctx->quic.transport_params.max_streams_bidi = max_concurrent_streams;
     if (!use_ecn)
         h3ctx->quic.enable_ratio.ecn = 0;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
@@ -193,9 +191,9 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     ctx->proxy.client_ctx.protocol_selector.ratio.http2 = ctx->globalconf->proxy.protocol_ratio.http2;
     ctx->proxy.client_ctx.protocol_selector.ratio.http3 = ctx->globalconf->proxy.protocol_ratio.http3;
     if (ctx->globalconf->proxy.protocol_ratio.http3 != 0)
-        ctx->proxy.client_ctx.http3 = h2o_create_proxy_http3_context(
-            ctx, ctx->globalconf->proxy.global_socketpool._ssl_ctx, ctx->globalconf->proxy.http3.max_concurrent_streams,
-            ctx->globalconf->proxy.http3.ecn, ctx->globalconf->http3.use_gso);
+        ctx->proxy.client_ctx.http3 =
+            h2o_create_proxy_http3_context(ctx, ctx->globalconf->proxy.global_socketpool._ssl_ctx, ctx->globalconf->proxy.http3.ecn,
+                                           ctx->globalconf->http3.use_gso);
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
