@@ -816,17 +816,22 @@ static int retain_sendvecs(struct st_h2o_http3_server_stream_t *stream)
 {
     for (; stream->sendbuf.min_index_to_addref != stream->sendbuf.vecs.size; ++stream->sendbuf.min_index_to_addref) {
         struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.min_index_to_addref;
+        /* skip random_read callbacks, as they remain accessible until the generator is closed */
+        if (vec->vec.callbacks->random_read != NULL)
+            continue;
+        /* skip vectors owned ourselves */
         assert(vec->vec.callbacks->read_ == h2o_sendvec_read_raw);
-        if (!(vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)) {
-            size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
-                   newlen = vec->vec.len - off_within_vec;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
-            memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
-            vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
-            if (stream->sendbuf.min_index_to_addref == 0)
-                stream->sendbuf.off_within_first_vec = 0;
-        }
+        if (vec->vec.callbacks == &self_allocated_vec_callbacks || vec->vec.callbacks == &immutable_vec_callbacks)
+            continue;
+        /* convert */
+        size_t off_within_vec = stream->sendbuf.min_index_to_addref == 0 ? stream->sendbuf.off_within_first_vec : 0,
+               newlen = vec->vec.len - off_within_vec;
+        void *newbuf =
+            sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator) : h2o_mem_alloc(newlen);
+        memcpy(newbuf, vec->vec.raw + off_within_vec, newlen);
+        vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+        if (stream->sendbuf.min_index_to_addref == 0)
+            stream->sendbuf.off_within_first_vec = 0;
     }
 
     return 1;
@@ -938,19 +943,32 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         size_t sz = this_vec->vec.len - off;
         if (dst_end - dst < sz)
             sz = dst_end - dst;
-        /* convert vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
-        if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
-            size_t newlen = this_vec->vec.len;
-            void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
-                                                               : h2o_mem_alloc(newlen);
-            if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
-                free(newbuf);
+        /* read payload from the vector (or if it a lazy-read vector without support for random-read, serialize the payload) */
+        if (this_vec->vec.callbacks->random_read != NULL) {
+            switch (this_vec->vec.callbacks->random_read(&this_vec->vec, dst, sz, off)) {
+            case H2O_SENDVEC_RANDOM_READ_SUCCESS:
+                break;
+            case H2O_SENDVEC_RANDOM_READ_BLOCKED:
+                *len = 0;
+                return;
+            default: /* error */
                 goto Error;
             }
-            this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+        } else {
+            /* convert the vector into raw form, the first time it's being sent (TODO use ssl_buffer_recyle) */
+            if (this_vec->vec.callbacks->read_ != h2o_sendvec_read_raw) {
+                size_t newlen = this_vec->vec.len;
+                void *newbuf = sendvec_size_is_for_recycle(newlen) ? h2o_mem_alloc_recycle(&h2o_socket_ssl_buffer_allocator)
+                                                                   : h2o_mem_alloc(newlen);
+                if (!this_vec->vec.callbacks->read_(&this_vec->vec, newbuf, newlen)) {
+                    free(newbuf);
+                    goto Error;
+                }
+                this_vec->vec = (h2o_sendvec_t){&self_allocated_vec_callbacks, newlen, {newbuf}};
+            }
+            /* copy payload */
+            memcpy(dst, this_vec->vec.raw + off, sz);
         }
-        /* copy payload */
-        memcpy(dst, this_vec->vec.raw + off, sz);
         /* adjust offsets */
         if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
             stream->req.bytes_sent = this_vec->entity_offset + off + sz;
@@ -1781,6 +1799,13 @@ Fail:
     h2o_quic_close_connection(&conn->h3.super, err, err_desc);
 }
 
+static void sendvec_read_unblocked(h2o_ostream_t *ostr)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, ostr_final, ostr);
+    quicly_stream_sync_sendbuf(stream->quic, 0);
+    h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
+}
+
 static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t *qs)
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
@@ -1807,8 +1832,11 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->link = (h2o_linklist_t){NULL};
     stream->link_resp_settings_blocked = (h2o_linklist_t){NULL};
     stream->ostr_final = (h2o_ostream_t){
-        NULL, do_send, NULL,
-        conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE ? NULL : do_send_informational};
+        .do_send = do_send,
+        .send_informational =
+            conn->super.ctx->globalconf->send_informational_mode == H2O_SEND_INFORMATIONAL_MODE_NONE ? NULL : do_send_informational,
+        .random_read_unblocked = sendvec_read_unblocked,
+    };
     stream->scheduler.link = (h2o_linklist_t){NULL};
     stream->scheduler.priority = h2o_absprio_default;
     stream->scheduler.call_cnt = 0;
@@ -1901,8 +1929,10 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 continue;
             }
             /* 3. send */
-            if ((ret = quicly_send_stream(stream->quic, s)) != 0)
+            if ((ret = quicly_send_stream(stream->quic, s)) != 0) {
+                assert(ret != QUICLY_ERROR_SEND_EMIT_BLOCKED);
                 goto Exit;
+            }
             /* 4. update scheduler state */
             conn->scheduler.uni.active &= ~(1 << stream->quic->stream_id);
             if (quicly_stream_can_send(stream->quic, 1)) {
@@ -1926,8 +1956,14 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 continue;
             }
             /* 3. send */
-            if ((ret = quicly_send_stream(stream->quic, s)) != 0)
+            if ((ret = quicly_send_stream(stream->quic, s)) != 0) {
+                if (ret == QUICLY_ERROR_SEND_EMIT_BLOCKED) {
+                    req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
+                    ret = 0;
+                    continue;
+                }
                 goto Exit;
+            }
             ++stream->scheduler.call_cnt;
             if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
                 h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {

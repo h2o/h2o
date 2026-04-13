@@ -1337,7 +1337,7 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
     quicly_address_t dest, src;
     struct iovec datagrams[10];
     size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
-    uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
+    uint8_t datagram_buf[1500 * (PTLS_ELEMENTSOF(datagrams) + 2)]; /* has extra space to allow fused invocation of on_send_emit */
 
     quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     switch (ret) {

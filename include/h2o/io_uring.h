@@ -55,14 +55,26 @@ struct st_h2o_io_uring_cmd_t {
     } cb;
     int result;
     struct st_h2o_io_uring_cmd_t *next;
-    struct {
-        int fd_in;
-        int64_t off_in;
-        int fd_out;
-        int64_t off_out;
-        unsigned nbytes;
-        unsigned splice_flags;
-    } splice_;
+    enum {
+        H2O_IO_URING_CMD_SPLICE,
+        H2O_IO_URING_CMD_READ,
+    } cmd_;
+    union {
+        struct {
+            int fd_in;
+            int64_t off_in;
+            int fd_out;
+            int64_t off_out;
+            unsigned nbytes;
+            unsigned splice_flags;
+        } splice_;
+        struct {
+            int fd;
+            void *buf;
+            unsigned nbytes;
+            uint64_t offset;
+        } read_;
+    };
 };
 
 extern size_t h2o_io_uring_batch_size;
@@ -77,5 +89,10 @@ void h2o_io_uring_init(h2o_loop_t *loop);
  */
 void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out, int64_t off_out, unsigned nbytes,
                          unsigned splice_flags, h2o_io_uring_cb cb, void *data);
+/**
+ * Calls read using io_uring. The callback might get called synchronously, depending on the condition (e.g., if data being read is
+ * in page cache and h2o_io_uring_batch_size == 1).
+ */
+void h2o_io_uring_read(h2o_loop_t *loop, int fd, void *buf, unsigned nbytes, uint64_t offset, h2o_io_uring_cb cb, void *data);
 
 #endif

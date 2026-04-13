@@ -890,6 +890,10 @@ struct st_h2o_ostream_t {
      * called by the core via h2o_send_informational
      */
     void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
+    /**
+     * called when the random read is unblocked
+     */
+    void (*random_read_unblocked)(struct st_h2o_ostream_t *self);
 };
 
 /**
