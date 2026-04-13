@@ -69,7 +69,7 @@ EOT
     my ($forwarder, $forwarder_port) = spawn_forwarder($quic_port, 20, $host);
 
     my $body_size = 1200;
-    my $resp = `$client_prog -3 100 -b $body_size -c 20 -i 100 https://127.0.0.1:$forwarder_port/echo 2>$tempdir/client.err`;
+    my $resp = `$client_prog -k -3 100 -b $body_size -c 20 -i 100 https://127.0.0.1:$forwarder_port/echo 2>$tempdir/client.err`;
     is $?, 0, "client exited successfully" or diag path("$tempdir/client.err")->slurp;
     is length($resp), $body_size, "response length matches request body size";
     ok $resp =~ /^a+$/s, "echo response matches request body";

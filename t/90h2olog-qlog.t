@@ -72,7 +72,7 @@ subtest "h2olog to qlog", sub {
   my $h2olog2_output_file = "$qlog_dir/h2olog2.json";
   system("$h2olog_prog -u $tempdir/h2olog.sock > $h2olog2_output_file &");
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/halfdome.jpg");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/halfdome.jpg");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   diag "shutting down h2o and h2olog ...";

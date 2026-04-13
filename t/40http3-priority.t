@@ -64,7 +64,7 @@ subtest "signalling" => sub {
         my ($reqval, $respval) = @_;
         my $opt = $reqval ? "-Hpriority:$reqval" : "";
         my $query = $respval ? "?$respval" : "";
-        my $resp = `$client_prog -3 100 $opt https://127.0.0.1:$quic_port/$query 2>&1`;
+        my $resp = `$client_prog -k -3 100 $opt https://127.0.0.1:$quic_port/$query 2>&1`;
         sleep 0.2;
         ($resp, $get_last_log->());
     };
