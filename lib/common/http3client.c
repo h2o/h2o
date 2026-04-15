@@ -213,21 +213,22 @@ static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *e
     req->proceed_req.cb(&req->super, errstr);
 }
 
-static const char *get_connection_close_error(quicly_error_t err)
+static const char *get_connection_close_error(quicly_conn_t *conn)
 {
-    if (!(PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT || PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT))
-        return h2o_httpclient_error_io;
-
-    switch (PTLS_ERROR_TO_ALERT(err)) {
-    case PTLS_ALERT_BAD_CERTIFICATE:
-        return h2o_socket_error_ssl_cert_invalid;
-    case PTLS_ALERT_UNKNOWN_CA:
-        return h2o_socket_error_ssl_cert_invalid;
-    case PTLS_ALERT_CERTIFICATE_REQUIRED:
-        return h2o_socket_error_ssl_no_cert;
-    default:
-        return h2o_httpclient_error_io;
+    if (quicly_get_state(conn) >= QUICLY_STATE_CLOSING) {
+        quicly_error_t err = quicly_get_close_reason(conn, NULL, NULL, NULL);
+        if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT || PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT) {
+            switch (PTLS_ERROR_TO_ALERT(err)) {
+            case PTLS_ALERT_BAD_CERTIFICATE:
+                return h2o_socket_error_ssl_cert_invalid;
+            case PTLS_ALERT_UNKNOWN_CA:
+                return h2o_socket_error_ssl_cert_invalid;
+            case PTLS_ALERT_CERTIFICATE_REQUIRED:
+                return h2o_socket_error_ssl_no_cert;
+            }
+        }
     }
+    return h2o_httpclient_error_io;
 }
 
 static void report_pending_requests_error(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
@@ -597,13 +598,10 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
 static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3client_req_t *req;
-    const char *errstr = h2o_httpclient_error_io;
 
     if ((req = qs->data) == NULL)
         return;
-    if (quicly_get_state(qs->conn) >= QUICLY_STATE_CLOSING)
-        errstr = get_connection_close_error(quicly_get_close_reason(qs->conn, NULL, NULL, NULL));
-    notify_response_error(req, errstr);
+    notify_response_error(req, get_connection_close_error(qs->conn));
     detach_stream(req);
     destroy_request(req);
 }
@@ -921,8 +919,7 @@ void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic
 
     if (quicly_get_state(conn->super.super.quic) >= QUICLY_STATE_CLOSING) {
         conn->super.state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
-        report_pending_requests_error(
-            conn, get_connection_close_error(quicly_get_close_reason(conn->super.super.quic, NULL, NULL, NULL)));
+        report_pending_requests_error(conn, get_connection_close_error(conn->super.super.quic));
     }
 }
 
