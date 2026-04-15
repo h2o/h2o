@@ -279,19 +279,6 @@ static inline const h2o_http3_conn_callbacks_t *get_callbacks(h2o_http3_conn_t *
     return (const h2o_http3_conn_callbacks_t *)conn->super.callbacks;
 }
 
-static void on_quicly_closed(quicly_closed_t *self, quicly_conn_t *quic)
-{
-    h2o_http3_conn_t *conn = *quicly_get_data(quic);
-
-    if (conn != NULL) {
-        conn->state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
-        if (get_callbacks(conn)->on_connection_close != NULL)
-            get_callbacks(conn)->on_connection_close(conn);
-    }
-}
-
-static quicly_closed_t on_closed = {on_quicly_closed};
-
 static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
@@ -1159,7 +1146,6 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .use_gso = use_gso,
         .quic_stats = quic_stats,
     };
-    quic->closed = &on_closed;
     setup_quic_socket(ctx, &ctx->sock, sock);
     if (sock_alt_family != NULL) {
         setup_quic_socket(ctx, &ctx->sock_alt_family, sock_alt_family);

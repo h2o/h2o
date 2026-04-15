@@ -259,12 +259,6 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
     free(conn);
 }
 
-static void on_connection_close(h2o_http3_conn_t *_conn)
-{
-    struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
-    report_pending_requests_error(conn, get_connection_close_error(quicly_get_close_reason(conn->super.super.quic, NULL, NULL, NULL)));
-}
-
 static void on_connection_destroy(h2o_quic_conn_t *_conn)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
@@ -382,8 +376,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     if (!h2o_socketpool_is_global(pool->socketpool))
         origin = &pool->socketpool->targets.entries[0]->url;
 
-    static const h2o_http3_conn_callbacks_t callbacks = {
-        {on_connection_destroy}, on_connection_close, handle_control_stream_frame};
+    static const h2o_http3_conn_callbacks_t callbacks = {{on_connection_destroy}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
@@ -924,6 +917,12 @@ void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic
     if (h2o_timer_is_linked(&conn->timeout) && conn->timeout.cb == on_connect_timeout) {
         /* TODO check connection state? */
         h2o_timer_unlink(&conn->timeout);
+    }
+
+    if (quicly_get_state(conn->super.super.quic) >= QUICLY_STATE_CLOSING) {
+        conn->super.state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
+        report_pending_requests_error(conn,
+                                      get_connection_close_error(quicly_get_close_reason(conn->super.super.quic, NULL, NULL, NULL)));
     }
 }
 
