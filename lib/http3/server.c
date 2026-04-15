@@ -2337,4 +2337,4 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
     return 0;
 }
 
-const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {{on_h3_destroy}, handle_control_stream_frame};
+const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {{on_h3_destroy}, NULL, handle_control_stream_frame};
