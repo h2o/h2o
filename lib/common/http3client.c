@@ -259,7 +259,7 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
     free(conn);
 }
 
-static void on_connection_destroy(h2o_quic_conn_t *_conn)
+static void destroy_connection_on_transport_close(h2o_quic_conn_t *_conn)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
     destroy_connection(conn, h2o_httpclient_error_io);
@@ -376,7 +376,7 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
     if (!h2o_socketpool_is_global(pool->socketpool))
         origin = &pool->socketpool->targets.entries[0]->url;
 
-    static const h2o_http3_conn_callbacks_t callbacks = {{on_connection_destroy}, handle_control_stream_frame};
+    static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
     static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
