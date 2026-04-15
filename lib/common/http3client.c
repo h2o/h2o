@@ -917,6 +917,8 @@ void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic
         h2o_timer_unlink(&conn->timeout);
     }
 
+    /* close requests that have not yet been started; the ones already started will have their stream destroy callback
+     * called immediately afterwards */
     if (quicly_get_state(conn->super.super.quic) >= QUICLY_STATE_CLOSING) {
         conn->super.state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
         report_pending_requests_error(conn, get_connection_close_error(conn->super.super.quic));
