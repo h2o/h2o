@@ -220,11 +220,17 @@ static const char *get_connection_close_error(quicly_conn_t *conn)
         if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT || PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT) {
             switch (PTLS_ERROR_TO_ALERT(err)) {
             case PTLS_ALERT_BAD_CERTIFICATE:
-                return h2o_socket_error_ssl_cert_invalid;
+            case PTLS_ALERT_CERTIFICATE_REVOKED:
+            case PTLS_ALERT_CERTIFICATE_EXPIRED:
+            case PTLS_ALERT_CERTIFICATE_UNKNOWN:
             case PTLS_ALERT_UNKNOWN_CA:
                 return h2o_socket_error_ssl_cert_invalid;
             case PTLS_ALERT_CERTIFICATE_REQUIRED:
                 return h2o_socket_error_ssl_no_cert;
+            case 0: /* error-close with a no-error is not a handshake failure -> map to generic error */
+                break;
+            default:
+                return h2o_socket_error_ssl_handshake;
             }
         }
     }
