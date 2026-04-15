@@ -219,14 +219,14 @@ static const char *get_connection_close_error(quicly_error_t err)
         return h2o_httpclient_error_io;
 
     switch (PTLS_ERROR_TO_ALERT(err)) {
-        case PTLS_ALERT_BAD_CERTIFICATE:
-            return h2o_socket_error_ssl_cert_invalid;
-        case PTLS_ALERT_UNKNOWN_CA:
-            return h2o_socket_error_ssl_cert_invalid;
-        case PTLS_ALERT_CERTIFICATE_REQUIRED:
-            return h2o_socket_error_ssl_no_cert;
-        default:
-            return h2o_httpclient_error_io;
+    case PTLS_ALERT_BAD_CERTIFICATE:
+        return h2o_socket_error_ssl_cert_invalid;
+    case PTLS_ALERT_UNKNOWN_CA:
+        return h2o_socket_error_ssl_cert_invalid;
+    case PTLS_ALERT_CERTIFICATE_REQUIRED:
+        return h2o_socket_error_ssl_no_cert;
+    default:
+        return h2o_httpclient_error_io;
     }
 }
 
@@ -921,8 +921,8 @@ void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic
 
     if (quicly_get_state(conn->super.super.quic) >= QUICLY_STATE_CLOSING) {
         conn->super.state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
-        report_pending_requests_error(conn,
-                                      get_connection_close_error(quicly_get_close_reason(conn->super.super.quic, NULL, NULL, NULL)));
+        report_pending_requests_error(
+            conn, get_connection_close_error(quicly_get_close_reason(conn->super.super.quic, NULL, NULL, NULL)));
     }
 }
 
