@@ -296,11 +296,11 @@ subtest "0-rtt-vs-hrr" => sub {
 subtest "alpn" => sub {
     my $guard = spawn_server(qw(-a hq-23));
     my $resp = `$cli -p /12 127.0.0.1 $port 2>&1`;
-    like $resp, qr/transport close:code=0x178;/, "no ALPN";
+    like $resp, qr/TLS alert:code=120/, "no ALPN";
     $resp = `$cli -a hq-23 -p /12 127.0.0.1 $port 2>&1`;
     like $resp, qr/^hello world$/m, "ALPN match";
     $resp = `$cli -a hX-23 -p /12 127.0.0.1 $port 2>&1`;
-    like $resp, qr/transport close:code=0x178;/, "ALPN mismatch";
+    like $resp, qr/TLS alert:code=120/, "ALPN mismatch";
 };
 
 subtest "key-update" => sub {

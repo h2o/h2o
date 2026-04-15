@@ -459,21 +459,22 @@ static void test_reset_during_loss(void)
     quic_ctx.transport_params.max_stream_data = max_stream_data_orig;
 }
 
-static uint64_t test_close_error_code;
-
-static void test_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type,
-                                  const char *reason, size_t reason_len)
+static void test_closed(quicly_closed_t *self, quicly_conn_t *conn)
 {
-    ok(QUICLY_ERROR_IS_QUIC_APPLICATION(err));
-    test_close_error_code = QUICLY_ERROR_GET_ERROR_CODE(err);
+    uint64_t frame_type;
+    const char *reason;
+    int is_remote;
+
+    quicly_error_t err = quicly_get_close_reason(conn, &frame_type, &reason, &is_remote);
+    ok(err == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567));
     ok(frame_type == UINT64_MAX);
-    ok(reason_len == 8);
-    ok(memcmp(reason, "good bye", 8) == 0);
+    ok(strcmp(reason, "good bye") == 0);
+    ok(is_remote == (conn == server));
 }
 
 static void test_close(void)
 {
-    quicly_closed_by_remote_t closed_by_remote = {test_closed_by_remote}, *orig_closed_by_remote = quic_ctx.closed_by_remote;
+    quicly_closed_t closed = {test_closed}, *orig_closed = quic_ctx.closed;
     quicly_address_t dest, src;
     struct iovec datagram;
     uint8_t datagram_buf[quic_ctx.transport_params.max_udp_payload_size];
@@ -481,7 +482,7 @@ static void test_close(void)
     int64_t client_timeout, server_timeout;
     quicly_error_t ret;
 
-    quic_ctx.closed_by_remote = &closed_by_remote;
+    quic_ctx.closed = &closed;
 
     /* client sends close */
     ret = quicly_close(client, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(1234567), "good bye");
@@ -499,7 +500,6 @@ static void test_close(void)
         decode_packets(&decoded, &datagram, 1);
         ret = quicly_receive(server, NULL, &fake_address.sa, &decoded);
         ok(ret == 0);
-        ok(test_close_error_code == 1234567);
         ok(quicly_get_state(server) == QUICLY_STATE_DRAINING);
         server_timeout = quicly_get_first_timeout(server);
         ok(quic_now < server_timeout && server_timeout < quic_now + 1000); /* 3 pto or something */
@@ -524,7 +524,7 @@ static void test_close(void)
 
     client = NULL;
     server = NULL;
-    quic_ctx.closed_by_remote = orig_closed_by_remote;
+    quic_ctx.closed = orig_closed;
 }
 
 static void tiny_connection_window(void)
