@@ -133,10 +133,11 @@ QUICLY_CALLBACK_TYPE(quicly_error_t, stream_open, quicly_stream_t *stream);
  */
 QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iovec_t payload);
 /**
- * called when the connection is closed by remote peer
+ * Called when the connection is closed (i.e., when entering the closing or draining state). Otherwise the callback is not called;
+ * e.g., when `quicly_free` is called directly while the connection is in the connected state. Call `quicly_get_close_reason` to
+ * obtain the details of the closure.
  */
-QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, const char *reason,
-                     size_t reason_len);
+QUICLY_CALLBACK_TYPE(void, closed, quicly_conn_t *conn);
 /**
  * Returns current time in milliseconds. The returned value MUST monotonically increase (i.e., it is the responsibility of the
  * callback implementation to guarantee that the returned value never goes back to the past).
@@ -400,9 +401,9 @@ struct st_quicly_context_t {
      */
     quicly_receive_datagram_frame_t *receive_datagram_frame;
     /**
-     * callback called when a connection is closed by remote peer
+     * callback called when a connection enters closing or draining
      */
-    quicly_closed_by_remote_t *closed_by_remote;
+    quicly_closed_t *closed;
     /**
      * returns current time in milliseconds
      */
@@ -1209,6 +1210,12 @@ static const quicly_transport_parameters_t *quicly_get_remote_transport_paramete
  *
  */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
+/**
+ * Returns the error code and other information regarding the closure of the connection. The out parameters may be NULL. This
+ * function must only be called after the the state transitions to QUICLY_STATE_CLOSING or QUICLY_STATE_DRAINING.
+ */
+quicly_error_t quicly_get_close_reason(quicly_conn_t *conn, uint64_t *offending_frame_type, const char **reason_phrase,
+                                       int *is_remote);
 /**
  *
  */

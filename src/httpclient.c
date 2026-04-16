@@ -467,6 +467,23 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
         } else {
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            X509_STORE *store = X509_STORE_new();
+            if (store == NULL) {
+                on_error(ctx, pool, "failed to allocate X509 store");
+                return;
+            }
+            if (X509_STORE_load_locations(store, crt_fullpath, NULL) != 1) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to load certificates file:%s", crt_fullpath);
+                return;
+            }
+            if (ptls_openssl_init_verify_certificate(&h3ctx.verify_cert, store) != 0) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to initialize HTTP/3 certificate verifier");
+                return;
+            }
+            X509_STORE_free(store);
+            h3ctx.tls.verify_certificate = &h3ctx.verify_cert.super;
         }
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
@@ -780,23 +797,6 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-#if H2O_USE_LIBUV
-#else
-    { /* initialize QUIC context */
-        h2o_socket_t *socks[2], **sp = socks;
-        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
-            ++sp;
-        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
-            ++sp;
-        if (sp == socks) {
-            perror("failed to create UDP socket for both IPv4 and v6");
-            exit(EXIT_FAILURE);
-        }
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, socks[0], socks[1], &h3ctx.quic, &h3_next_cid, NULL,
-                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
-    }
-#endif
-
     enum {
         OPT_INITIAL_UDP_PAYLOAD_SIZE = 0x100,
         OPT_MAX_UDP_PAYLOAD_SIZE,
@@ -805,6 +805,7 @@ int main(int argc, char **argv)
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_HTTP3_KEY_EXCHANGE,
+        OPT_HTTP3_NO_ECN,
         OPT_UPGRADE,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
@@ -814,6 +815,7 @@ int main(int argc, char **argv)
                                 {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
                                 {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
                                 {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
+                                {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
@@ -1008,6 +1010,9 @@ int main(int argc, char **argv)
                 ;
             *slot = *named;
         } break;
+        case OPT_HTTP3_NO_ECN:
+            h3ctx.quic.enable_ratio.ecn = 0;
+            break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
             break;
@@ -1036,6 +1041,22 @@ int main(int argc, char **argv)
 #endif
         h3_key_exchanges[i++] = &ptls_openssl_secp256r1;
     }
+#if H2O_USE_LIBUV
+#else
+    { /* initialize QUIC context */
+        h2o_socket_t *socks[2], **sp = socks;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
+            ++sp;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
+            ++sp;
+        if (sp == socks) {
+            perror("failed to create UDP socket for both IPv4 and v6");
+            exit(EXIT_FAILURE);
+        }
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, socks[0], socks[1], &h3ctx.quic, &h3_next_cid, NULL,
+                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
+    }
+#endif
 
     int is_connect = 0;
     if ((strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL) || strcmp(req.method, "CONNECT-UDP") == 0) {

@@ -37,6 +37,12 @@ struct st_quicly_conn_t {
     struct {
         quicly_address_t local, remote;
     } address;
+    struct {
+        quicly_error_t err;
+        uint64_t frame_type;
+        char *reason_phrase;
+        int is_remote;
+    } connection_close;
 };
 
 struct st_quicly_send_context_t {
@@ -63,6 +69,8 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, int is_client, st
 
     conn->address.local.sa = *local_addr;
     conn->address.remote.sa = *remote_addr;
+
+    memset(&conn->connection_close, 0, sizeof(conn->connection_close));
 
     return conn;
 }
@@ -219,6 +227,18 @@ UpdateState:
     return 0;
 }
 
+quicly_error_t quicly_get_close_reason(quicly_conn_t *conn, uint64_t *frame_type, const char **reason_phrase, int *is_remote)
+{
+    assert(conn->super.state >= QUICLY_STATE_CLOSING);
+    if (frame_type != NULL)
+        *frame_type = conn->connection_close.frame_type;
+    if (reason_phrase != NULL)
+        *reason_phrase = conn->connection_close.reason_phrase;
+    if (is_remote != NULL)
+        *is_remote = conn->connection_close.is_remote;
+    return conn->connection_close.err;
+}
+
 static quicly_stream_t *open_stream(quicly_conn_t *conn, quicly_stream_id_t stream_id)
 {
     quicly_stream_t *stream;
@@ -306,13 +326,20 @@ static void destroy_all_streams(quicly_conn_t *conn, int err)
     assert(quicly_num_streams(conn) == 0);
 }
 
-int mquicly_closed_by_remote(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase)
+void mquicly_closed(quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, ptls_iovec_t reason_phrase, int is_remote)
 {
-    /* TODO: invoke conn->super.ctx->closed_by_remote->cb() but h2o does not use it so far */
-    assert(conn->super.ctx->closed_by_remote == NULL);
-    conn->super.state = QUICLY_STATE_DRAINING;
+    /* TODO: invoke conn->super.ctx->closed->cb() but h2o does not use it so far */
+    assert(conn->super.ctx->closed == NULL);
+
+    conn->connection_close.err = err;
+    conn->connection_close.frame_type = frame_type;
+    conn->connection_close.reason_phrase = malloc(reason_phrase.len + 1);
+    memcpy(conn->connection_close.reason_phrase, reason_phrase.base, reason_phrase.len);
+    conn->connection_close.reason_phrase[reason_phrase.len] = '\0';
+    conn->connection_close.is_remote = is_remote;
+
+    conn->super.state = is_remote ? QUICLY_STATE_DRAINING : QUICLY_STATE_CLOSING;
     destroy_all_streams(conn, err);
-    return 0;
 }
 
 quicly_error_t quicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int unidirectional)
@@ -447,6 +474,7 @@ void quicly_free(quicly_conn_t *conn)
 {
     destroy_all_streams(conn, 0);
     kh_destroy(quicly_stream_t, conn->streams);
+    free(conn->connection_close.reason_phrase);
     free(conn);
 }
 
@@ -464,6 +492,11 @@ quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_a
 Exit:
     *num_datagrams = 0;
     return ret;
+}
+
+uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn)
+{
+    return 0;
 }
 
 int64_t quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int64_t (*cb)(void *thunk, quicly_stream_t *stream))

@@ -402,25 +402,33 @@ static quicly_error_t on_stream_open(quicly_stream_open_t *self, quicly_stream_t
 
 static quicly_stream_open_t stream_open = {&on_stream_open};
 
-static void on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type,
-                                const char *reason, size_t reason_len)
+static void on_closed(quicly_closed_t *self, quicly_conn_t *conn)
 {
+    uint64_t frame_type;
+    const char *reason;
+    int is_remote;
+    quicly_error_t err = quicly_get_close_reason(conn, &frame_type, &reason, &is_remote);
+
+    if (!is_remote)
+        return;
+
     if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
-        fprintf(stderr, "transport close:code=0x%" PRIx64 ";frame=%" PRIu64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
-                frame_type, (int)reason_len, reason);
+        fprintf(stderr, "transport close:code=0x%" PRIx64 ";frame=%" PRIu64 ";reason=%s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
+                frame_type, reason);
     } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
-        fprintf(stderr, "application close:code=0x%" PRIx64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err), (int)reason_len,
-                reason);
+        fprintf(stderr, "application close:code=0x%" PRIx64 ";reason=%s\n", QUICLY_ERROR_GET_ERROR_CODE(err), reason);
     } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
         fprintf(stderr, "stateless reset\n");
     } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
         fprintf(stderr, "no compatible version\n");
+    } else if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT) {
+        fprintf(stderr, "TLS alert:code=%d\n", (int)PTLS_ERROR_TO_ALERT(err));
     } else {
         fprintf(stderr, "unexpected close:code=%" PRId64 "\n", err);
     }
 }
 
-static quicly_closed_by_remote_t closed_by_remote = {&on_closed_by_remote};
+static quicly_closed_t closed = {&on_closed};
 
 static quicly_error_t on_generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn,
                                                    ptls_buffer_t *buf, quicly_address_token_plaintext_t *token)
@@ -1505,7 +1513,7 @@ int main(int argc, char **argv)
     ctx = quicly_spec_context;
     ctx.tls = &tlsctx;
     ctx.stream_open = &stream_open;
-    ctx.closed_by_remote = &closed_by_remote;
+    ctx.closed = &closed;
     ctx.save_resumption_token = &save_resumption_token;
     ctx.generate_resumption_token = &generate_resumption_token;
     stream_scheduler = quicly_default_stream_scheduler;

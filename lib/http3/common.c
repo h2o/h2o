@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
@@ -74,7 +75,7 @@ static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(repor
 #if !H2O_USE_LIBUV
 h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 {
-    int fd;
+    int fd, on = 1;
     quicly_address_t addr = {.sa.sa_family = family};
     socklen_t addrlen;
 
@@ -83,15 +84,18 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 
     switch (family) {
     case AF_INET:
+#ifdef IP_RECVTOS
+        setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
+#endif
         addrlen = sizeof(addr.sin);
         break;
     case AF_INET6:
 #ifdef IPV6_V6ONLY
-    {
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
             goto Error;
-    }
+#endif
+#ifdef IPV6_RECVTCLASS
+        setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
 #endif
         addrlen = sizeof(addr.sin6);
         break;
@@ -115,7 +119,7 @@ Error: {
 #endif
 
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
-                            size_t num_datagrams)
+                            size_t num_datagrams, uint8_t ecn)
 {
     union {
         struct cmsghdr hdr;
@@ -132,7 +136,8 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef UDP_SEGMENT
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
-            + CMSG_SPACE(1) /* sentry */
+            + CMSG_SPACE(sizeof(int)) /* IP_TOS or IPV6_TCLASS */
+            + CMSG_SPACE(1)           /* sentry */
         ];
     } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
     struct msghdr mess = {
@@ -217,6 +222,22 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         num_datagrams = 1;
     }
 #endif
+
+    if (ecn != 0) {
+        int tos = ecn; /* IPV6_TCLASS uses int, and draft-ietf-tsvwg-udp-ecn-05 says IP_TOS assumes int too, on all platforms */
+        switch (dest->sa.sa_family) {
+        case AF_INET:
+            PUSH_CMSG(IPPROTO_IP, IP_TOS, tos);
+            break;
+        case AF_INET6:
+#ifdef IPV6_TCLASS
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_TCLASS, tos);
+#endif
+            break;
+        default:
+            break;
+        }
+    }
 
     /* commit CMSG length */
     if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
@@ -562,7 +583,7 @@ static void send_version_negotiation(h2o_quic_ctx_t *ctx, quicly_address_t *dest
     size_t payload_size = quicly_send_version_negotiation(ctx->quic, dest_cid, src_cid, versions, payload);
     assert(payload_size != SIZE_MAX);
     struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-    h2o_quic_send_datagrams(ctx, destaddr, srcaddr, &vec, 1);
+    h2o_quic_send_datagrams(ctx, destaddr, srcaddr, &vec, 1, 0);
     return;
 }
 
@@ -608,7 +629,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 size_t payload_size = quicly_send_stateless_reset(ctx->quic, packets[0].cid.dest.encrypted.base, payload);
                 if (payload_size != SIZE_MAX) {
                     struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-                    h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+                    h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1, 0);
                 }
             }
             return;
@@ -745,6 +766,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         quicly_address_t destaddr, srcaddr;
         struct iovec vec;
         uint8_t ttl;
+        uint8_t ecn;
         union {
             struct cmsghdr _align; /* natrually align the contents of controlbuf (which are of type cmsghdr) */
             char controlbuf[
@@ -756,6 +778,9 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 CMSG_SPACE(sizeof(struct in_addr))
 #else
                 CMSG_SPACE(1)
+#endif
+#if defined(IPV6_TCLASS) || defined(IP_TOS) || defined(IP_RECVTOS)
+                + CMSG_SPACE(sizeof(int)) /* IPv6 uses int, which is bigger than uint8_t used by IPv4 */
 #endif
             ];
         };
@@ -825,39 +850,67 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 
     /* normalize and store the obtained data into `dgrams` */
     for (dgram_index = 0; dgram_index < num_dgrams; ++dgram_index) {
+        dgrams[dgram_index].ecn = 0;
+        dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
         { /* fetch destination address */
             struct cmsghdr *cmsg;
             for (cmsg = CMSG_FIRSTHDR(&mess[dgram_index].msg_hdr); cmsg != NULL;
                  cmsg = CMSG_NXTHDR(&mess[dgram_index].msg_hdr, cmsg)) {
+                switch (cmsg->cmsg_level) {
+                case IPPROTO_IP:
+                    switch (cmsg->cmsg_type) {
 #ifdef IP_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
-                           sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
-                    goto DestAddrFound;
-                }
+                    case IP_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                               sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
+                        break;
 #endif
 #ifdef IP_RECVDSTADDR
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
-                    goto DestAddrFound;
-                }
+                    case IP_RECVDSTADDR:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
+                        break;
 #endif
+#ifdef IP_RECVTOS
+#ifdef __APPLE__
+                    case IP_RECVTOS:
+#else
+                    case IP_TOS:
+#endif
+                        /* draft-ietf-tsvwg-udp-ecn-05 recommends using a byte on all platforms */
+                        dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
+                        break;
+#endif
+                    default:
+                        break;
+                    }
+                    break;
+                case IPPROTO_IPV6:
+                    switch (cmsg->cmsg_type) {
 #ifdef IPV6_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
-                           sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = dst_port;
-                    goto DestAddrFound;
-                }
+                    case IPV6_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
+                        memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr,
+                               CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr), sizeof(struct in6_addr));
+                        dgrams[dgram_index].destaddr.sin6.sin6_port = dst_port;
+                        break;
 #endif
+#ifdef IPV6_TCLASS
+                    case IPV6_TCLASS: {
+                        int optval;
+                        memcpy(&optval, CMSG_DATA(cmsg), sizeof(optval));
+                        dgrams[dgram_index].ecn = optval & IPTOS_ECN_MASK;
+                    } break;
+#endif
+                    default:
+                        break;
+                    }
+                    break;
+                }
             }
-            dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
-        DestAddrFound:;
         }
         dgrams[dgram_index].ttl = ctx->default_ttl;
         /* preprocess (and drop the packet if it failed) */
@@ -908,6 +961,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             ++dgram_index;
             goto ProcessPackets;
         }
+        packets[packet_index].ecn = dgrams[dgram_index].ecn;
         /* dispatch packets in `packets` if the DCID is different, setting the `has_decoded` flag */
         if (packet_index != 0) {
             const ptls_iovec_t *prev_dcid = &packets[packet_index - 1].cid.dest.encrypted,
@@ -924,6 +978,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
                                      dgrams[dgram_index].vec.iov_len, &payload_off) == SIZE_MAX)
                 break;
+            packets[packet_index].ecn = dgrams[dgram_index].ecn;
             ++packet_index;
         }
         ++dgram_index;
@@ -1287,7 +1342,8 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
     quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     switch (ret) {
     case 0:
-        if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+        if (num_datagrams != 0 &&
+            !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams, quicly_send_get_ecn_bits(conn->quic))) {
             /* FIXME close the connection immediately */
             break;
         }

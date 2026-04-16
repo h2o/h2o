@@ -213,7 +213,31 @@ static void call_proceed_req(struct st_h2o_http3client_req_t *req, const char *e
     req->proceed_req.cb(&req->super, errstr);
 }
 
-static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
+static const char *get_connection_close_error(quicly_conn_t *conn)
+{
+    if (quicly_get_state(conn) >= QUICLY_STATE_CLOSING) {
+        quicly_error_t err = quicly_get_close_reason(conn, NULL, NULL, NULL);
+        if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_SELF_ALERT || PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT) {
+            switch (PTLS_ERROR_TO_ALERT(err)) {
+            case PTLS_ALERT_BAD_CERTIFICATE:
+            case PTLS_ALERT_CERTIFICATE_REVOKED:
+            case PTLS_ALERT_CERTIFICATE_EXPIRED:
+            case PTLS_ALERT_CERTIFICATE_UNKNOWN:
+            case PTLS_ALERT_UNKNOWN_CA:
+                return h2o_socket_error_ssl_cert_invalid;
+            case PTLS_ALERT_CERTIFICATE_REQUIRED:
+                return h2o_socket_error_ssl_no_cert;
+            case 0: /* error-close with a no-error is not a handshake failure -> map to generic error */
+                break;
+            default:
+                return h2o_socket_error_ssl_handshake;
+            }
+        }
+    }
+    return h2o_httpclient_error_io;
+}
+
+static void report_pending_requests_error(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
 {
     assert(errstr != NULL);
     if (h2o_linklist_is_linked(&conn->link))
@@ -226,6 +250,12 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
         destroy_request(req);
     }
     assert(h2o_linklist_is_empty(&conn->pending_requests));
+}
+
+static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const char *errstr)
+{
+    assert(errstr != NULL);
+    report_pending_requests_error(conn, errstr);
     if (conn->getaddr_req != NULL)
         h2o_hostinfo_getaddr_cancel(conn->getaddr_req);
     h2o_timer_unlink(&conn->timeout);
@@ -239,9 +269,6 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
 static void destroy_connection_on_transport_close(h2o_quic_conn_t *_conn)
 {
     struct st_h2o_httpclient__h3_conn_t *conn = (void *)_conn;
-
-    /* When a connection gets closed while request is inflight, the most probable cause is some error in the transport (or at the
-     * application protocol layer). But as we do not know the exact cause, we use a generic error here. */
     destroy_connection(conn, h2o_httpclient_error_io);
 }
 
@@ -580,7 +607,7 @@ static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 
     if ((req = qs->data) == NULL)
         return;
-    notify_response_error(req, h2o_httpclient_error_io);
+    notify_response_error(req, get_connection_close_error(qs->conn));
     detach_stream(req);
     destroy_request(req);
 }
@@ -894,6 +921,13 @@ void h2o_httpclient_http3_notify_connection_update(h2o_quic_ctx_t *ctx, h2o_quic
     if (h2o_timer_is_linked(&conn->timeout) && conn->timeout.cb == on_connect_timeout) {
         /* TODO check connection state? */
         h2o_timer_unlink(&conn->timeout);
+    }
+
+    /* close requests that have not yet been started; the ones already started will have their stream destroy callback
+     * called immediately afterwards */
+    if (quicly_get_state(conn->super.super.quic) >= QUICLY_STATE_CLOSING) {
+        conn->super.state = H2O_HTTP3_CONN_STATE_IS_CLOSING;
+        report_pending_requests_error(conn, get_connection_close_error(conn->super.super.quic));
     }
 }
 

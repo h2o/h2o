@@ -1243,34 +1243,12 @@ static void test_setup_send_context(quicly_conn_t *conn, quicly_send_context_t *
     setup_send_space(conn, QUICLY_EPOCH_1RTT, s);
 }
 
-static struct {
-    quicly_conn_t *conn;
-    quicly_error_t err;
-    char reason[64];
-} test_state_exhaustion_closed_by_remote;
-
-static void test_state_exhaustion_on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err,
-                                                      uint64_t frame_type, const char *reason, size_t reason_len)
-{
-    if (test_state_exhaustion_closed_by_remote.conn == NULL) {
-        test_state_exhaustion_closed_by_remote.conn = conn;
-        test_state_exhaustion_closed_by_remote.err = err;
-        memcpy(test_state_exhaustion_closed_by_remote.reason, reason, reason_len);
-        test_state_exhaustion_closed_by_remote.reason[reason_len] = '\0';
-    }
-}
-
 /**
  * This test checks STATE_EXHAUSTION error is correctly returned to the application, and if the application supplies the error code
  * to quicly, quicly sends a PROTCOL_VIOLATION error with the special reason phrase.
  */
 static void test_state_exhaustion(void)
 {
-    static quicly_closed_by_remote_t closed_by_remote = {test_state_exhaustion_on_closed_by_remote};
-
-    assert(quic_ctx.closed_by_remote == NULL);
-    quic_ctx.closed_by_remote = &closed_by_remote;
-    memset(&test_state_exhaustion_closed_by_remote, 0, sizeof(test_state_exhaustion_closed_by_remote));
     uint64_t orig_max_stream_data_bidi_remote = quic_ctx.transport_params.max_stream_data.bidi_remote;
     quic_ctx.transport_params.max_stream_data.bidi_remote = 65536; /* shrink to reduce # of gaps permitted */
 
@@ -1316,14 +1294,17 @@ static void test_state_exhaustion(void)
     ok(quicly_get_state(client) == QUICLY_STATE_DRAINING);
 
     /* sender should have received PROTOCOL_VIOLATION with the special reason phrase */
-    ok(test_state_exhaustion_closed_by_remote.conn == client);
-    ok(test_state_exhaustion_closed_by_remote.err == QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
-    ok(strcmp(test_state_exhaustion_closed_by_remote.reason, "state exhaustion") == 0);
+    uint64_t offending_frame_type;
+    const char *reason;
+    int is_remote;
+    ret = quicly_get_close_reason(client, &offending_frame_type, &reason, &is_remote);
+    ok(ret == QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
+    ok(strcmp(reason, "state exhaustion") == 0);
+    ok(is_remote);
 
     quicly_free(client);
     quicly_free(server);
 
-    quic_ctx.closed_by_remote = NULL;
     quic_ctx.transport_params.max_stream_data.bidi_remote = orig_max_stream_data_bidi_remote;
 }
 

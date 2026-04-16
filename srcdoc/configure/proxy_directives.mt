@@ -329,6 +329,19 @@ When the backend protocol is cleartext HTTP, this directive has impact only when
 
 <?
 $ctx->{directive}->(
+    name         => "proxy.http3.ecn",
+    levels       => [ qw(global host path extension) ],
+    desc         => q{If ECN should be used to detect congestion.},
+    default      => "proxy.http3.ecn: ON",
+    experimental => 1,
+    see_also     => render_mt(<<EOT),
+<a href="configure/http3_directives.html#quic-attributes">Fine-tuning QUIC Behavior</a>
+EOT
+)->(sub {})
+?>
+
+<?
+$ctx->{directive}->(
     name         => "proxy.http3.ratio",
     levels       => [ qw(global host path extension) ],
     desc         => q{Ratio of forwarded HTTP requests with which use of HTTP/3 should be attempted.},
