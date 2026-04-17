@@ -484,11 +484,22 @@ static void dispose_thread_data(void *_thdata)
     free(thdata);
 }
 
+static pthread_mutex_t get_thread_data_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 static struct st_neverbleed_thread_data_t *get_thread_data(neverbleed_t *nb)
 {
     struct st_neverbleed_thread_data_t *thdata;
     pid_t self_pid = getpid();
     ssize_t r;
+
+    if (!nb->thread_key_initialized) {
+        pthread_mutex_lock(&get_thread_data_mutex);
+        if (!nb->thread_key_initialized) {
+            pthread_key_create(&nb->thread_key, dispose_thread_data);
+            nb->thread_key_initialized = 1;
+        }
+        pthread_mutex_unlock(&get_thread_data_mutex);
+    }
 
     if ((thdata = pthread_getspecific(nb->thread_key)) != NULL) {
         if (thdata->self_pid == self_pid)
@@ -2247,7 +2258,7 @@ int neverbleed_init(neverbleed_t *nb, char *errbuf)
 #endif
 
     /* setup thread key */
-    pthread_key_create(&nb->thread_key, dispose_thread_data);
+    nb->thread_key_initialized = 0;
 
     free(tempdir);
     return 0;

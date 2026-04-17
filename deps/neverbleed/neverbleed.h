@@ -50,6 +50,7 @@ typedef struct st_neverbleed_t {
     pid_t daemon_pid;
     struct sockaddr_un sun_;
     pthread_key_t thread_key;
+    int thread_key_initialized;
     unsigned char auth_token[NEVERBLEED_AUTH_TOKEN_SIZE];
 } neverbleed_t;
 
