@@ -59,7 +59,11 @@ static int resolve_address(struct sockaddr *sa, socklen_t *salen, const char *ho
     hints.ai_family = family;
     hints.ai_socktype = type;
     hints.ai_protocol = proto;
+#ifdef __OpenBSD__
+    hints.ai_flags = AI_NUMERICSERV | AI_PASSIVE;
+#else
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+#endif
     if ((err = getaddrinfo(host, port, &hints, &res)) != 0 || res == NULL) {
         fprintf(stderr, "failed to resolve address:%s:%s:%s\n", host, port,
                 err != 0 ? gai_strerror(err) : "getaddrinfo returned NULL");

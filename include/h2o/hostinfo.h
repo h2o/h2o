@@ -31,6 +31,11 @@
 #include <sys/types.h>
 #include "h2o/multithread.h"
 
+#if defined(__OpenBSD__)
+# undef AI_ADDRCONFIG
+# define AI_ADDRCONFIG 0
+#endif
+
 /* generic errors (https://tools.ietf.org/html/rfc8499#section-3) */
 extern const char h2o_hostinfo_error_nxdomain[];
 extern const char h2o_hostinfo_error_nodata[];

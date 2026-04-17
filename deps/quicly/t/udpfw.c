@@ -422,7 +422,11 @@ int main(int argc, char **argv)
         hints.ai_family = AF_INET;
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_protocol = IPPROTO_UDP;
+#ifdef __OpenBSD__
+        hints.ai_flags = AI_NUMERICSERV | AI_PASSIVE;
+#else
         hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+#endif
         if ((err = getaddrinfo(argv[0], argv[1], &hints, &server_addr)) != 0 || server_addr == NULL) {
             fprintf(stderr, "failed to resolve server address:%s:%s:%s\n", argv[0], argv[1], err != 0 ? gai_strerror(err) : "null");
             exit(1);
