@@ -32,7 +32,12 @@ static yrmcds_error connect_to_server(const char* node, uint16_t port, int* serv
     memset(&hint, 0, sizeof(hint));
     hint.ai_family = AF_INET;  // prefer IPv4
     hint.ai_socktype = SOCK_STREAM;
+#ifdef __OpenBSD__
+    hint.ai_flags = AI_NUMERICSERV;
+#else
     hint.ai_flags = AI_NUMERICSERV|AI_ADDRCONFIG;
+#endif
+
     int e = getaddrinfo(node, sport, &hint, &res);
     if( e == EAI_FAMILY || e == EAI_NONAME
 #ifdef EAI_ADDRFAMILY
