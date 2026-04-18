@@ -1,0 +1,3 @@
+- [x] The `getentropy` function is strongly referenced in `main.c` under `__OpenBSD__` conditional block.
+- [x] Code compiles without errors under OpenBSD configuration.
+- [x] The `getentropy` call ensures the static linker extracts the object from `libc.a`.
