@@ -2118,7 +2118,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
 
     h2o_iovec_t *http2_origin_frame = NULL;
     long ssl_options = SSL_OP_ALL;
-    int use_neverbleed = 1, use_picotls = 1; /* enabled by default */
+#if defined(__OpenBSD__)
+    int use_neverbleed = 0; /* disabled on OpenBSD */
+#else
+    int use_neverbleed = 1; /* enabled by default */
+#endif
+    int use_picotls = 1;
     ptls_key_exchange_algorithm_t **key_exchange_tls13 = NULL;
     ptls_cipher_suite_t **cipher_suite_tls13 = NULL;
     struct {
@@ -2236,6 +2241,12 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
     }
     if (neverbleed_node != NULL && (use_neverbleed = (int)h2o_configurator_get_one_of(cmd, *neverbleed_node, "off,on")) == -1)
         return -1;
+#if defined(__OpenBSD__)
+    if (use_neverbleed) {
+        h2o_configurator_errprintf(cmd, *neverbleed_node, "neverbleed is not supported on OpenBSD");
+        return -1;
+    }
+#endif
     if (http2_origin_frame_node != NULL) {
         switch ((*http2_origin_frame_node)->type) {
         case YOML_TYPE_SCALAR:
