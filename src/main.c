@@ -51,6 +51,18 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+
+#if defined(__OpenBSD__)
+/* 
+ * Dummy references to ensure weak symbols used by OpenSSL (like pthread_once) 
+ * are properly resolved by the dynamic linker on OpenBSD when neverbleed is disabled.
+ * Otherwise, OpenSSL RAND_poll/RAND_add may jump to a NULL pointer.
+ */
+volatile void *dummy_clock_gettime = &clock_gettime;
+volatile void *dummy_pthread_once = &pthread_once;
+volatile void *dummy_pthread_mutex_lock = &pthread_mutex_lock;
+#endif
+
 #include <openssl/opensslv.h>
 
 /* OS-specific header files */
