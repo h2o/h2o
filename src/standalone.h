@@ -32,6 +32,7 @@
 #endif
 
 void init_openssl(void);
+void setup_openssl_threads(void);
 
 struct st_h2o_quic_resumption_args_t {
     int is_clustered;
