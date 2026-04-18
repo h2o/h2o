@@ -4995,6 +4995,30 @@ static void create_per_thread_listeners(void)
     }
 }
 
+#if defined(__OpenBSD__)
+/* 
+ * Provide dummy implementations for weak symbols used by OpenSSL/BoringSSL.
+ * On OpenBSD, libc lacks `getauxval` and `getrandom`, causing these weak symbols to be NULL.
+ * During static linking, aggressive compiler optimization (like DCE/VRP) may remove the 
+ * `if (getauxval != NULL)` check, leading to a SIGSEGV at 0x0.
+ * Providing strong symbols here guarantees they have a valid address.
+ */
+unsigned long getauxval(unsigned long type)
+{
+    (void)type;
+    return 0;
+}
+
+int getrandom(void *buf, size_t buflen, unsigned int flags)
+{
+    (void)buf;
+    (void)buflen;
+    (void)flags;
+    errno = ENOSYS;
+    return -1;
+}
+#endif
+
 int main(int argc, char **argv)
 {
 #if defined(__OpenBSD__)
