@@ -5060,6 +5060,7 @@ int main(int argc, char **argv)
         pthread_cond_signal(NULL);
         pthread_cond_broadcast(NULL);
         pthread_cond_destroy(NULL);
+        getentropy(NULL, 0);
     }
 #endif
 
