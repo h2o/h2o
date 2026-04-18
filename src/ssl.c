@@ -1168,7 +1168,7 @@ static int add_lock_callback(int *num, int amount, int type, const char *file, i
     return __sync_add_and_fetch(num, amount);
 }
 
-void init_openssl(void)
+void setup_openssl_threads(void)
 {
     int nlocks = CRYPTO_num_locks(), i;
     mutexes = h2o_mem_alloc(sizeof(*mutexes) * nlocks);
@@ -1177,7 +1177,10 @@ void init_openssl(void)
     CRYPTO_set_locking_callback(lock_callback);
     CRYPTO_set_id_callback(thread_id_callback);
     CRYPTO_set_add_lock_callback(add_lock_callback);
+}
 
+void init_openssl(void)
+{
     /* Dynamic locks are only used by the CHIL engine at this time */
 
     SSL_load_error_strings();
