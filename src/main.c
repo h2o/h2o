@@ -2528,13 +2528,10 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         if (ocsp_stapling != NULL && (identity->ptls.ctx == NULL || !identity->ptls.ctx->use_raw_public_keys)) {
             identity->ocsp_stapling = ocsp_stapling;
             switch (conf.run_mode) {
-            case RUN_MODE_WORKER: {
-                pthread_t tid;
-                h2o_multithread_create_thread(&tid, NULL, ocsp_updater_thread, identity);
-            } break;
+            case RUN_MODE_WORKER:
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
-                /* nothing to do */
+                /* delayed to main loop start */
                 break;
             case RUN_MODE_TEST: {
                 h2o_buffer_t *respbuf;
@@ -5004,7 +5001,6 @@ int main(int argc, char **argv)
     conf.quic.conn_callbacks.super.destroy_connection = on_http3_conn_destroy;
     conf.tfo_queues = H2O_DEFAULT_LENGTH_TCP_FASTOPEN_QUEUE;
     conf.launch_time = time(NULL);
-    h2o_sem_init(&conf.ocsp_updater.semaphore, 0); /* raised after unsetenv is called, as the updater thread refers to `environ` */
 
     h2o_hostinfo_max_threads = H2O_DEFAULT_NUM_NAME_RESOLUTION_THREADS;
 
@@ -5358,8 +5354,10 @@ int main(int argc, char **argv)
     h2o_barrier_init(&conf.startup_sync_barrier_init, conf.thread_map.size);
     h2o_barrier_init(&conf.startup_sync_barrier_post, conf.thread_map.size);
 
+    setup_openssl_threads();
+
     /* launch threads that fetch OCSP responses for stapling */
-    h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
+    h2o_sem_init(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
          purpose) */
@@ -5427,6 +5425,20 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        if (conf.listeners[i]->ssl.entries != NULL) {
+            for (size_t j = 0; j != conf.listeners[i]->ssl.size; ++j) {
+                struct listener_ssl_config_t *ssl_conf = conf.listeners[i]->ssl.entries[j];
+                for (struct listener_ssl_identity_t *identity = ssl_conf->identities; identity->certificate_file != NULL; ++identity) {
+                    if (identity->ocsp_stapling != NULL) {
+                        pthread_t tid;
+                        h2o_multithread_create_thread(&tid, NULL, ocsp_updater_thread, identity);
+                    }
+                }
+            }
+        }
+    }
+
     conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
