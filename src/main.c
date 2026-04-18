@@ -5007,8 +5007,11 @@ int main(int argc, char **argv)
      * and puts -lpthread in CMAKE_EXE_LINKER_FLAGS (which puts it at the front),
      * the static linker will discard the pthread objects.
      * This unreachable block creates strong references to all necessary pthread functions.
+     * We use a volatile variable to defeat compiler's Value Range Propagation (VRP)
+     * and Dead Code Elimination (DCE) which would otherwise completely remove this block.
      */
-    if (argc < 0) {
+    volatile int dummy_zero = 0;
+    if (dummy_zero != 0) {
         pthread_once(NULL, NULL);
         pthread_atfork(NULL, NULL, NULL);
         pthread_mutex_init(NULL, NULL);
