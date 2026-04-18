@@ -4985,6 +4985,11 @@ static void create_per_thread_listeners(void)
 
 int main(int argc, char **argv)
 {
+#if defined(__OpenBSD__)
+    /* Trigger librthread initialization before any fork() to prevent SIGSEGV in child processes */
+    pthread_self();
+#endif
+
     close_acme_loader_pipe();
 
     cmd_argc = argc;
