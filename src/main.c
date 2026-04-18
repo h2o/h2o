@@ -5017,6 +5017,23 @@ int getrandom(void *buf, size_t buflen, unsigned int flags)
     errno = ENOSYS;
     return -1;
 }
+
+/* 
+ * Provide a dummy implementation for pthread_atfork.
+ * BoringSSL relies on pthread_atfork for fork-safety detection. It declares the symbol as weak.
+ * However, OpenBSD libc lacks a weak stub for pthread_atfork (unlike mutex/rwlock functions).
+ * If a static linker does not extract libpthread.a (e.g. because -lpthread was passed before objects),
+ * pthread_atfork resolves to 0x0. The compiler's dead code elimination (DCE) removes the 
+ * `if (pthread_atfork != NULL)` check because it sees the strong declaration from <pthread.h>,
+ * causing a SIGSEGV at 0x0 when RAND_bytes is called.
+ */
+int pthread_atfork(void (*prepare)(void), void (*parent)(void), void (*child)(void))
+{
+    (void)prepare;
+    (void)parent;
+    (void)child;
+    return 0;
+}
 #endif
 
 int main(int argc, char **argv)
