@@ -54,13 +54,37 @@
 
 #if defined(__OpenBSD__)
 /* 
- * Dummy references to ensure weak symbols used by OpenSSL (like pthread_once) 
- * are properly resolved by the dynamic linker on OpenBSD when neverbleed is disabled.
+ * Dummy references to ensure weak symbols used by OpenSSL/BoringSSL (like pthread_once, 
+ * pthread_atfork, pthread_rwlock_*) are properly resolved by the dynamic linker on OpenBSD 
+ * when neverbleed is disabled, or by the static linker when statically linked.
  * Otherwise, OpenSSL RAND_poll/RAND_add may jump to a NULL pointer.
  */
 volatile void *dummy_clock_gettime = &clock_gettime;
 volatile void *dummy_pthread_once = &pthread_once;
+volatile void *dummy_pthread_mutex_init = &pthread_mutex_init;
 volatile void *dummy_pthread_mutex_lock = &pthread_mutex_lock;
+volatile void *dummy_pthread_mutex_unlock = &pthread_mutex_unlock;
+volatile void *dummy_pthread_mutex_destroy = &pthread_mutex_destroy;
+volatile void *dummy_pthread_atfork = &pthread_atfork;
+volatile void *dummy_pthread_rwlock_init = &pthread_rwlock_init;
+volatile void *dummy_pthread_rwlock_rdlock = &pthread_rwlock_rdlock;
+volatile void *dummy_pthread_rwlock_wrlock = &pthread_rwlock_wrlock;
+volatile void *dummy_pthread_rwlock_unlock = &pthread_rwlock_unlock;
+volatile void *dummy_pthread_rwlock_destroy = &pthread_rwlock_destroy;
+volatile void *dummy_pthread_key_create = &pthread_key_create;
+volatile void *dummy_pthread_key_delete = &pthread_key_delete;
+volatile void *dummy_pthread_setspecific = &pthread_setspecific;
+volatile void *dummy_pthread_getspecific = &pthread_getspecific;
+volatile void *dummy_pthread_create = &pthread_create;
+volatile void *dummy_pthread_join = &pthread_join;
+volatile void *dummy_pthread_detach = &pthread_detach;
+volatile void *dummy_pthread_self = &pthread_self;
+volatile void *dummy_pthread_equal = &pthread_equal;
+volatile void *dummy_pthread_cond_init = &pthread_cond_init;
+volatile void *dummy_pthread_cond_wait = &pthread_cond_wait;
+volatile void *dummy_pthread_cond_signal = &pthread_cond_signal;
+volatile void *dummy_pthread_cond_broadcast = &pthread_cond_broadcast;
+volatile void *dummy_pthread_cond_destroy = &pthread_cond_destroy;
 #endif
 
 #include <openssl/opensslv.h>
