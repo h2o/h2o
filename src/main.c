@@ -5079,6 +5079,20 @@ int main(int argc, char **argv)
         pthread_cond_destroy(NULL);
         getentropy(NULL, 0);
     }
+
+    /* 
+     * Force librthread initialization on OpenBSD to populate _thread_cb.
+     * When linking with -static, __isthreaded is 1 from the start, but 
+     * the libc mutex callbacks (_thread_cb) remain NULL until _rthread_init() 
+     * is called by librthread. 
+     * Calling pthread_attr_init at runtime safely triggers this initialization,
+     * preventing SIGSEGV in early libc calls (e.g. asr_check_reload -> clock_gettime).
+     */
+    {
+        pthread_attr_t dummy_attr;
+        pthread_attr_init(&dummy_attr);
+        pthread_attr_destroy(&dummy_attr);
+    }
 #endif
 
     close_acme_loader_pipe();
