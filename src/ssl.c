@@ -273,6 +273,13 @@ static struct st_session_ticket_t *find_ticket_for_encryption(session_ticket_vec
 
 static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx, int enc)
 {
+/* We will try to stick to using `SSL_CTX_set_tlsext_ticket_key_cb` (that uses `HMAC_CTX`) until we can drop support for OpenSSL
+ * 1.1. The new API (SSL_CTX_set_tlsext_ticket_key_cb) is supported only by 3.0 and above and we do not want to support both. */
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
     int ret;
     pthread_rwlock_rdlock(&session_tickets.rwlock);
 
@@ -319,6 +326,10 @@ static int ticket_key_callback(unsigned char *key_name, unsigned char *iv, EVP_C
 Exit:
     pthread_rwlock_unlock(&session_tickets.rwlock);
     return ret;
+
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#pragma GCC diagnostic pop
+#endif
 }
 
 static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned char *iv, EVP_CIPHER_CTX *ctx, HMAC_CTX *hctx,
