@@ -1389,9 +1389,19 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
 
     /* parse the headers, and ack */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
+                                       (h2o_hpack_request_t){
+                                           .method = &stream->req.input.method,
+                                           .scheme = &stream->req.input.scheme,
+                                           .authority = &stream->req.input.authority,
+                                           .path = &stream->req.input.path,
+                                           .protocol = &stream->req.upgrade,
+                                           .headers = &stream->req.headers,
+                                           .pseudo_header_exists_map = &header_exists_map,
+                                           .content_length = &stream->req.content_length,
+                                           .expect = &expect,
+                                           .digests = NULL /* TODO cache-digests */,
+                                           .datagram_flow_id = &datagram_flow_id_field,
+                                       },
                                        header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
