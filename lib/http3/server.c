@@ -1690,9 +1690,11 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     switch (send_state) {
     case H2O_SEND_STATE_IN_PROGRESS:
         break;
-    case H2O_SEND_STATE_FINAL:
     case H2O_SEND_STATE_ERROR:
-        /* TODO consider how to forward error, pending resolution of https://github.com/quicwg/base-drafts/issues/3300 */
+        /* send a reset once the data stream, TODO delay reset: https://github.com/quicwg/base-drafts/issues/3300 */
+        quicly_reset_stream(stream->quic, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0));
+        break;
+    case H2O_SEND_STATE_FINAL:
         shutdown_by_generator(stream);
         break;
     }
