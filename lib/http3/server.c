@@ -1830,6 +1830,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->received_priority_update = 0;
     stream->req_disposed = 0;
     stream->req_streaming = 0;
+    stream->req_streaming_eos_delivered = 0;
     stream->req_body = NULL;
 
     h2o_init_request(&stream->req, &conn->super, NULL);
