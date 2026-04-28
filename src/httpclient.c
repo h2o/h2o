@@ -1111,8 +1111,6 @@ int main(int argc, char **argv)
             fprintf(stderr, "failed to open file:%s:%s\n", input_path, strerror(errno));
             exit(EXIT_FAILURE);
         }
-    }
-    if (input_path != NULL) {
 #if H2O_USE_LIBUV
         input.sock = h2o_uv__poll_create(ctx.loop, input_fd, (uv_close_cb)free);
 #else
