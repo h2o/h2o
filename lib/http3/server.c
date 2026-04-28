@@ -246,6 +246,10 @@ struct st_h2o_http3_server_stream_t {
      */
     uint8_t req_streaming : 1;
     /**
+     * if request streaming EOS has been delivered to the handler by calling write_req with is_end_stream set
+     */
+    uint8_t req_streaming_eos_delivered : 1;
+    /**
      * buffer to hold the request body (or a chunk of, if in streaming mode), or CONNECT payload
      */
     h2o_buffer_t *req_body;
@@ -1109,6 +1113,18 @@ static void on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
                     0, 1);
 }
 
+static void close_request_streaming(struct st_h2o_http3_server_stream_t *stream)
+{
+    stream->req.write_req.cb = NULL;
+    stream->req.write_req.ctx = NULL;
+    stream->req.forward_datagram.write_ = NULL;
+    stream->req.proceed_req = NULL;
+    stream->req_streaming = 0;
+    if (!stream->req.is_tunnel_req)
+        --get_conn(stream)->num_streams_req_streaming;
+    check_run_blocked(get_conn(stream));
+}
+
 static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
@@ -1118,23 +1134,11 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    if (errstr != NULL ||
-        (quicly_recvstate_transfer_complete(&stream->quic->recvstate) &&
-         (stream->quic->recvstate.eos == UINT64_MAX || quicly_recvstate_bytes_available(&stream->quic->recvstate) == 0))) {
-        /* tidy up the request streaming */
-        stream->req.write_req.cb = NULL;
-        stream->req.write_req.ctx = NULL;
-        stream->req.forward_datagram.write_ = NULL;
-        stream->req.proceed_req = NULL;
-        stream->req_streaming = 0;
-        if (!stream->req.is_tunnel_req)
-            --conn->num_streams_req_streaming;
-        check_run_blocked(conn);
-        /* close the stream if an error occurred */
-        if (errstr != NULL || stream->quic->recvstate.eos == UINT64_MAX) {
-            shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
-            return;
-        }
+    int reset_received = quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX;
+    if (errstr != NULL || reset_received) {
+        close_request_streaming(stream);
+        shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
+        return;
     }
 
     /* remove the bytes from the request body buffer */
@@ -1144,6 +1148,11 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
 
     /* unblock read until the next invocation of write_req, or after the final invocation */
     stream->read_blocked = 0;
+
+    if (stream->req_streaming_eos_delivered) {
+        close_request_streaming(stream);
+        return;
+    }
 
     /* handle input in the receive buffer */
     handle_buffered_input(stream, 1);
@@ -1197,6 +1206,8 @@ static void run_delayed(h2o_timer_t *timer)
             assert(!stream->read_blocked);
             h2o_linklist_unlink(&stream->link);
             stream->read_blocked = 1;
+            if (is_end_stream)
+                stream->req_streaming_eos_delivered = 1;
             made_progress = 1;
             assert(stream->req.entity.len == stream->req_body->size &&
                    (stream->req.entity.len == 0 || stream->req.entity.base == stream->req_body->bytes));
