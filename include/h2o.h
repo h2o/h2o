@@ -1175,16 +1175,16 @@ typedef struct st_h2o_filereq_t {
 } h2o_filereq_t;
 
 /**
- * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is called. At
- * the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we should
- * consider delegating the responsibility of retaining the buffer to the caller.
+ * Called by the protocol handler to submit a chunk of request body to the generator. The callback returns 0 if successful,
+ * otherwise a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is
+ * called. At the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we
+ * should consider delegating the responsibility of retaining the buffer to the caller.
  */
 typedef int (*h2o_write_req_cb)(void *ctx, int is_end_stream);
 /**
- * Called by the generator, in response to `h2o_write_req_cb` to indicate to the protocol handler that new chunk can be submitted,
- * or to notify that an error has occurred. In the latter case, write might not be inflight. Note that `errstr` will be NULL (rather
- * than an error code indicating EOS) when called in response to `h2o_write_req_cb` with `is_end_stream` set to 1.
+ * Called by the generator to notify either of the following:
+ * * errstr == NULL: More data can be supplied by `h2o_write_req_cb`, or the processing of `h2o_write_req_cb(..., 1)` has completed.
+ * * errstr != NULL: An error has occurred. Note that the error might be reported at any moment outside the submit-consume cycle.
  */
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, const char *errstr);
 /**

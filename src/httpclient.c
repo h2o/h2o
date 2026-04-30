@@ -25,6 +25,7 @@
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
+#include <fcntl.h>
 #include <getopt.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -64,11 +65,13 @@ static h2o_iovec_t iov_filler;
 static struct {
     h2o_socket_t *sock;
     int closed;
-} std_in;
+} input;
 static int io_interval = 0, req_interval = 0;
 static uint64_t io_timeout = DEFAULT_IO_TIMEOUT;
 static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
+static const char *input_file = NULL;
+static int input_fd = 0;
 static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
 static const char *upgrade_token = NULL;
@@ -283,27 +286,27 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     free(pool);
 }
 
-static void stdin_on_read(h2o_socket_t *_sock, const char *err)
+static void input_on_read(h2o_socket_t *_sock, const char *err)
 {
-    assert(std_in.sock == _sock);
+    assert(input.sock == _sock);
 
-    h2o_socket_read_stop(std_in.sock);
+    h2o_socket_read_stop(input.sock);
     if (err != NULL)
-        std_in.closed = 1;
+        input.closed = 1;
     if (udp_sock != NULL)
         h2o_socket_read_stop(udp_sock);
 
-    h2o_httpclient_t *client = std_in.sock->data;
+    h2o_httpclient_t *client = input.sock->data;
 
     /* bail out if the client is not yet ready to receive data */
     if (client == NULL || client->write_req == NULL)
         return;
 
-    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
+    if (client->write_req(client, h2o_iovec_init(input.sock->input->bytes, input.sock->input->size), input.closed) != 0) {
         fprintf(stderr, "write_req error\n");
         exit(1);
     }
-    h2o_buffer_consume(&std_in.sock->input, std_in.sock->input->size);
+    h2o_buffer_consume(&input.sock->input, input.sock->input->size);
 }
 
 static size_t build_capsule_header(uint8_t *header_buf, size_t payload_len)
@@ -342,7 +345,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     if (rret == -1)
         return;
 
-    h2o_httpclient_t *client = std_in.sock->data;
+    h2o_httpclient_t *client = input.sock->data;
 
     /* drop datagram if the connection is not ready */
     if (client == NULL || client->write_req == NULL)
@@ -353,12 +356,12 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
         h2o_iovec_t datagram = h2o_iovec_init(buf, context_id_len + rret);
         udp_write(client, &datagram, 1);
     } else {
-        /* append UDP chunk to the input buffer of stdin read socket! */
+        /* append UDP chunk to the input buffer */
         uint8_t header_buf[3];
-        h2o_buffer_append(&std_in.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
-        h2o_buffer_append(&std_in.sock->input, buf, context_id_len + rret);
-        /* pretend as if we read from stdin */
-        stdin_on_read(std_in.sock, NULL);
+        h2o_buffer_append(&input.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
+        h2o_buffer_append(&input.sock->input, buf, context_id_len + rret);
+        /* pretend as if we read from the input */
+        input_on_read(input.sock, NULL);
     }
 }
 
@@ -396,10 +399,10 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     }
 }
 
-static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
+static void input_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
-    if (errstr == NULL && !std_in.closed) {
-        h2o_socket_read_start(std_in.sock, stdin_on_read);
+    if (errstr == NULL && !input.closed) {
+        h2o_socket_read_start(input.sock, input_on_read);
         if (udp_sock != NULL)
             h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
     }
@@ -488,7 +491,7 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, target_uri, ctx, connpool,
+    h2o_httpclient_connect(input.sock != NULL ? (h2o_httpclient_t **)&input.sock->data : NULL, pool, target_uri, ctx, connpool,
                            target_uri, upgrade_to, on_connect);
 }
 
@@ -647,13 +650,17 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (client->upgrade_to != NULL) {
-        *proceed_req_cb = stdin_proceed_request;
-        if (std_in.sock->input->size != 0) {
-            body->len = std_in.sock->input->size;
+    if (client->upgrade_to != NULL || input_file != NULL) {
+        if (client->upgrade_to == NULL && props->chunked != NULL) {
+            *props->chunked = 1;
+            h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+        }
+        *proceed_req_cb = input_proceed_request;
+        if (input.sock->input->size != 0) {
+            body->len = input.sock->input->size;
             body->base = h2o_mem_alloc_pool(client->pool, char, body->len);
-            memcpy(body->base, std_in.sock->input->bytes, body->len);
-            h2o_buffer_consume(&std_in.sock->input, body->len);
+            memcpy(body->base, input.sock->input->bytes, body->len);
+            h2o_buffer_consume(&input.sock->input, body->len);
         }
     } else if (req.body_size > 0) {
         *filler_remaining_bytes(client) = req.body_size;
@@ -688,7 +695,8 @@ static void usage(const char *progname)
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET). When method is CONNECT,\n"
             "               \"host:port\" should be specified in place of URL.\n"
-            "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -o, --output <path>\n"
+            "               file to which the response body is written (default: stdout)\n"
             "  -s <session-file>\n"
             "               file to read / write session information (atm HTTP/3 only)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
@@ -709,6 +717,8 @@ static void usage(const char *progname)
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
             " --http3-key-exchange <name>\n"
             "               overrides the TLS/1.3 key exchanges to be used\n"
+            " --input <path>\n"
+            "               file from which the request body is read\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
@@ -807,6 +817,7 @@ int main(int argc, char **argv)
         OPT_HTTP3_KEY_EXCHANGE,
         OPT_HTTP3_NO_ECN,
         OPT_UPGRADE,
+        OPT_INPUT,
     };
     struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
                                 {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
@@ -817,6 +828,8 @@ int main(int argc, char **argv)
                                 {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
                                 {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
+                                {"output", required_argument, NULL, 'o'},
+                                {"input", required_argument, NULL, OPT_INPUT},
                                 {"help", no_argument, NULL, 'h'},
                                 {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
@@ -1016,6 +1029,9 @@ int main(int argc, char **argv)
         case OPT_UPGRADE:
             upgrade_token = optarg;
             break;
+        case OPT_INPUT:
+            input_file = optarg;
+            break;
         default:
             exit(EXIT_FAILURE);
             break;
@@ -1031,6 +1047,10 @@ int main(int argc, char **argv)
 
     if (ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 > 100) {
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
+        exit(EXIT_FAILURE);
+    }
+    if (input_file != NULL && req.body_size != 0) {
+        fprintf(stderr, "--input cannot be used with -b\n");
         exit(EXIT_FAILURE);
     }
 
@@ -1083,13 +1103,20 @@ int main(int argc, char **argv)
         }
         is_connect = 1;
     }
-    if (is_connect) {
+    const char *input_path = input_file;
+    if (is_connect && input_path == NULL)
+        input_path = "/dev/stdin";
+    if (input_path != NULL) {
+        if ((input_fd = open(input_path, O_RDONLY)) == -1) {
+            fprintf(stderr, "failed to open file:%s:%s\n", input_path, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 #if H2O_USE_LIBUV
-        std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
+        input.sock = h2o_uv__poll_create(ctx.loop, input_fd, (uv_close_cb)free);
 #else
-        std_in.sock = h2o_evloop_socket_create(ctx.loop, 0, 0);
+        input.sock = h2o_evloop_socket_create(ctx.loop, input_fd, 0);
 #endif
-        h2o_socket_read_start(std_in.sock, stdin_on_read);
+        h2o_socket_read_start(input.sock, input_on_read);
     }
 
     if (argc < 1) {

@@ -854,7 +854,8 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
         return 1;
     }
 
-    emit_data(req, chunk);
+    if (chunk.len != 0)
+        emit_data(req, chunk);
 
     /* shutdown if we've written all request body */
     if (is_end_stream) {
