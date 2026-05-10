@@ -354,7 +354,7 @@ static socklen_t parse_hostport(h2o_mem_pool_t *pool, h2o_iovec_t host, h2o_iove
     hostname[host.len] = '\0';
     char *servname = h2o_mem_alloc_pool(pool, char, port.len + 1);
     memcpy(servname, port.base, port.len);
-    hostname[port.len] = '\0';
+    servname[port.len] = '\0';
 
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_UNSPEC;
