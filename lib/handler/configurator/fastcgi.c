@@ -150,15 +150,15 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
     }
 
     /* create socket */
-    if ((listen_fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+    if ((listen_fd = h2o_sysfn(socket, AF_UNIX, SOCK_STREAM, 0)) == -1) {
         h2o_configurator_errprintf(cmd, node, "socket(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (bind(listen_fd, (void *)sa, sizeof(*sa)) != 0) {
+    if (h2o_sysfn(bind, listen_fd, (void *)sa, sizeof(*sa)) != 0) {
         h2o_configurator_errprintf(cmd, node, "bind(2) failed: %s", strerror(errno));
         goto Error;
     }
-    if (listen(listen_fd, H2O_SOMAXCONN) != 0) {
+    if (h2o_sysfn(listen, listen_fd, H2O_SOMAXCONN) != 0) {
         h2o_configurator_errprintf(cmd, node, "listen(2) failed: %s", strerror(errno));
         goto Error;
     }
