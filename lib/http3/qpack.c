@@ -790,7 +790,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
-        if (qpack->blocked_streams.list.size + 1 >= qpack->max_blocked)
+        if (qpack->blocked_streams.list.size >= qpack->max_blocked)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         decoder_link_blocked(qpack, stream_id, ctx->req_insert_count);
         return H2O_HTTP3_ERROR_INCOMPLETE;
