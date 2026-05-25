@@ -8,8 +8,6 @@ my $qif_dir = "deps/qifs";
 my $sort_qif = "$qif_dir/bin/sort-qif.pl";
 my $t_qif = bindir() . "/t-qif";
 
-die "$qif_dir is not initialized"
-    unless -e "$qif_dir/qifs/fb-req-hq.qif" && -x $sort_qif;
 plan skip_all => "$t_qif not found"
     unless -x $t_qif;
 
@@ -71,7 +69,7 @@ sub build_cases {
 
 subtest "qpackers qpack-05 dynamic table decode" => sub {
     my @cases = build_cases();
-    plan skip_all => "no qpackers qpack-05 dynamic table cases found"
+    die "no qpackers qpack-05 dynamic table cases found"
         unless @cases;
 
     for my $case (@cases) {
