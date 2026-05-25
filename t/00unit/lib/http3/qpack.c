@@ -664,6 +664,74 @@ static void test_decode_errors(void)
     }
 }
 
+static void test_decode_edge_cases(void)
+{
+    note("partial encoder stream instruction");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        int64_t *unblocked_stream_ids;
+        size_t num_unblocked;
+        static const uint8_t input[] = {
+            0xc0, 5, 'a', /* Insert With Name Reference, Static Table, Index=0, partial value */
+        };
+        const uint8_t *src = input;
+        const char *err_desc = NULL;
+        int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, input + sizeof(input),
+                                                 &err_desc);
+        ok(ret == 0);
+        ok(err_desc == NULL);
+        ok(src == input);
+        ok(num_unblocked == 0);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("dynamic table exact-capacity insertion and eviction");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(42, 10);
+        static const uint8_t input[] = {
+            0x3f, 0x0b, /* Set Dynamic Table Capacity=42 */
+            0xc0, 0,    /* Insert :authority with empty value; size = 10 + 0 + 32 */
+            0xc0, 0,    /* Insert another exact-size entry, evicting the first */
+        };
+        feed_encoder_stream(dec, input, sizeof(input));
+        ok(dec->table.num_bytes == 42);
+        ok(dec->table.last - dec->table.first == 1);
+        ok(dec->table.base_offset == 2);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("required insert count reconstruction across full range");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(32, 10);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input[] = {1, 0}; /* MaxEntries=1, FullRange=2, reconstructed RIC=2 */
+        const uint8_t *src = input;
+
+        dec->total_inserts = 2;
+        dec->table.base_offset = 3;
+
+        ok(parse_decode_context(dec, &ctx, 0, &src, input + sizeof(input)) == 0);
+        ok(ctx.req_insert_count == 2);
+        ok(ctx.base_index == 2);
+        ok(src == input + sizeof(input));
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("blocked stream limit boundary");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input[] = {2, 0}; /* RIC=1, Base=1, blocked until first insert arrives */
+        const uint8_t *src = input;
+
+        ok(parse_decode_context(dec, &ctx, 0, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(dec->blocked_streams.list.size == 1);
+        ok(dec->blocked_streams.list.entries[0].stream_id == 0);
+        ok(dec->blocked_streams.list.entries[0].largest_ref == 1);
+        h2o_qpack_destroy_decoder(dec);
+    }
+}
+
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
@@ -672,4 +740,5 @@ void test_lib__http3_qpack(void)
     subtest("decode-referred", test_decode_referred);
     subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
     subtest("decode-errors", test_decode_errors);
+    subtest("decode-edge-cases", test_decode_edge_cases);
 }
