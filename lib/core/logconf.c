@@ -301,6 +301,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
                     MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
                     MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
+                    MAP_EXT_TO_PROTO("http3.qpack-blocked", http3.qpack_blocked);
                     MAP_EXT_TO_PROTO("cc.name", transport.cc_name);
                     MAP_EXT_TO_PROTO("delivery-rate", transport.delivery_rate);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
