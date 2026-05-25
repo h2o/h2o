@@ -5,8 +5,8 @@ use IO::Socket::INET;
 use Socket qw(SOCK_DGRAM IPPROTO_UDP);
 use Test::More;
 use Time::HiRes qw(sleep time);
-use lib "deps/quicly/t";
-use RawConnection;
+use lib "deps/quicly";
+use t::RawConnection;
 use t::Util;
 
 my $cli = bindir() . "/quicly/cli";
@@ -61,7 +61,7 @@ subtest "dynamic table, blocked" => sub {
 done_testing;
 
 sub new_conn {
-    RawConnection->new("127.0.0.1", $quic_port, cli => $cli, alpn => ["h3"]);
+    t::RawConnection->new("127.0.0.1", $quic_port, cli => $cli, alpn => ["h3"]);
 }
 
 sub empty_udp_port {
