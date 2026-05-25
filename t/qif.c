@@ -105,10 +105,10 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             assert(message.scheme != NULL);                                                                                        \
             assert(message.authority.base != NULL);                                                                                \
             assert(message.path.base != NULL);                                                                                     \
-            headers_payload = get_headers_payload(h2o_qpack_flatten_request(                                                       \
-                enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, message.method, message.scheme,                   \
-                message.authority, message.path, message.protocol, message.headers.entries, message.headers.size,                  \
-                h2o_iovec_init(NULL, 0)));                                                                                         \
+            headers_payload = get_headers_payload(                                                                                 \
+                h2o_qpack_flatten_request(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, message.method,         \
+                                          message.scheme, message.authority, message.path, message.protocol,                       \
+                                          message.headers.entries, message.headers.size, h2o_iovec_init(NULL, 0)));                \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
             headers_payload = get_headers_payload(h2o_qpack_flatten_response(                                                      \
@@ -302,8 +302,8 @@ static int retry_blocked(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *o
             return 1;
         }
 
-        int ret = decode_header_block(dec, pool, outp, blocked->entries[j].stream_id, blocked->entries[j].buf, blocked->entries[j].len,
-                                      is_resp);
+        int ret = decode_header_block(dec, pool, outp, blocked->entries[j].stream_id, blocked->entries[j].buf,
+                                      blocked->entries[j].len, is_resp);
         if (ret != 0) {
             fprintf(stderr, "failed to retry stream %" PRIu64 "\n", blocked->entries[j].stream_id);
             return 1;

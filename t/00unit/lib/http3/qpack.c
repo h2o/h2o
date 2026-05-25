@@ -459,8 +459,8 @@ static void test_rfc9204_appendix_b(void)
     note("B.1. Literal Field Line with Name Reference");
     {
         static const uint8_t input[] = {
-            0x00, 0x00,                                                 /* Required Insert Count = 0, Base = 0 */
-            0x51, 0x0b, '/',  'i',  'n',  'd',  'e', 'x', '.', 'h', 't', 'm', 'l' /* :path=/index.html */
+            0x00, 0x00,                                                       /* Required Insert Count = 0, Base = 0 */
+            0x51, 0x0b, '/', 'i', 'n', 'd', 'e', 'x', '.', 'h', 't', 'm', 'l' /* :path=/index.html */
         };
         static const h2o_header_t expected[] = {
             {.name = &H2O_TOKEN_PATH->buf, .value = {H2O_STRLIT("/index.html")}},
@@ -472,16 +472,15 @@ static void test_rfc9204_appendix_b(void)
     note("B.2. Dynamic Table");
     {
         static const uint8_t encoder[] = {
-            0x3f, 0xbd, 0x01,                                           /* Set Dynamic Table Capacity=220 */
-            0xc0, 0x0f, 'w',  'w',  'w',  '.',  'e',  'x', 'a', 'm', 'p',
-            'l',  'e',  '.',  'c',  'o',  'm',                          /* :authority=www.example.com */
-            0xc1, 0x0c, '/',  's',  'a',  'm',  'p',  'l', 'e', '/', 'p',
-            'a',  't',  'h'                                             /* :path=/sample/path */
+            0x3f, 0xbd, 0x01, /* Set Dynamic Table Capacity=220 */
+            0xc0, 0x0f, 'w',  'w', 'w', '.', 'e', 'x', 'a', 'm', 'p', 'l', 'e', '.', 'c', 'o', 'm', /* :authority=www.example.com */
+            0xc1, 0x0c, '/',  's', 'a', 'm', 'p', 'l', 'e', '/', 'p', 'a', 't', 'h'                 /* :path=/sample/path */
         };
         static const uint8_t input[] = {
-            0x03, 0x81,                                                 /* Required Insert Count = 2, Base = 0 */
-            0x10,                                                       /* :authority=www.example.com */
-            0x11,                                                       /* :path=/sample/path */
+            0x03,
+            0x81, /* Required Insert Count = 2, Base = 0 */
+            0x10, /* :authority=www.example.com */
+            0x11, /* :path=/sample/path */
         };
         static const h2o_header_t expected[] = {
             {.name = &H2O_TOKEN_AUTHORITY->buf, .value = {H2O_STRLIT("www.example.com")}},
@@ -497,8 +496,8 @@ static void test_rfc9204_appendix_b(void)
     note("B.3. Speculative Insert");
     {
         static const uint8_t encoder[] = {
-            0x4a, 'c', 'u', 's', 't', 'o', 'm', '-', 'k', 'e', 'y',
-            0x0c, 'c', 'u', 's', 't', 'o', 'm', '-', 'v', 'a', 'l', 'u', 'e',
+            0x4a, 'c', 'u', 's', 't', 'o', 'm', '-', 'k', 'e', 'y', 0x0c,
+            'c',  'u', 's', 't', 'o', 'm', '-', 'v', 'a', 'l', 'u', 'e',
         };
         static const uint8_t expected_state_sync[] = {0x01};
         uint8_t state_sync[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
@@ -616,7 +615,7 @@ static void test_decode_errors(void)
          * Section 3.2.2: adding an entry larger than the dynamic table capacity is invalid.
          */
         static const uint8_t input[] = {
-            0x3f, 0x09, /* Set Dynamic Table Capacity=40 */
+            0x3f, 0x09,                                              /* Set Dynamic Table Capacity=40 */
             0xc0, 9,    't', 'o', 'o', '-', 'l', 'a', 'r', 'g', 'e', /* :authority value; 10 + 9 + 32 > 40 */
         };
         do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_header_exceeds_table_size);
@@ -645,8 +644,10 @@ static void test_decode_errors(void)
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
         /* RFC 9204 Appendix A defines static table indices 0..98; Section 3.1 forbids invalid static indices. */
         static const uint8_t input[] = {
-            0,    0,      /* Required Insert Count=0, Base=0 */
-            0xff, 0x24,   /* Indexed Field Line, Static Table, Index=99 */
+            0,
+            0, /* Required Insert Count=0, Base=0 */
+            0xff,
+            0x24, /* Indexed Field Line, Static Table, Index=99 */
         };
         do_test_decode_header_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_static_reference);
         h2o_qpack_destroy_decoder(dec);
@@ -656,8 +657,9 @@ static void test_decode_errors(void)
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
         /* RFC 9204 Section 2.2.3 forbids dynamic references with absolute index >= Required Insert Count. */
         static const uint8_t input[] = {
-            0,    1,      /* Required Insert Count=0, Base=1 */
-            0x80,         /* Indexed Field Line, Dynamic Table, Relative Index=0 */
+            0,
+            1,    /* Required Insert Count=0, Base=1 */
+            0x80, /* Indexed Field Line, Dynamic Table, Relative Index=0 */
         };
         do_test_decode_header_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_dynamic_reference);
         h2o_qpack_destroy_decoder(dec);
@@ -672,12 +674,14 @@ static void test_decode_edge_cases(void)
         int64_t *unblocked_stream_ids;
         size_t num_unblocked;
         static const uint8_t input[] = {
-            0xc0, 5, 'a', /* Insert With Name Reference, Static Table, Index=0, partial value */
+            0xc0,
+            5,
+            'a', /* Insert With Name Reference, Static Table, Index=0, partial value */
         };
         const uint8_t *src = input;
         const char *err_desc = NULL;
-        int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, input + sizeof(input),
-                                                 &err_desc);
+        int ret =
+            h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, input + sizeof(input), &err_desc);
         ok(ret == 0);
         ok(err_desc == NULL);
         ok(src == input);
