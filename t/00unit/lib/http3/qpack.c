@@ -409,10 +409,139 @@ static void test_decode_referred(void)
     h2o_qpack_destroy_decoder(dec);
 }
 
+static void feed_encoder_stream(h2o_qpack_decoder_t *dec, const uint8_t *input, size_t len)
+{
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
+    const uint8_t *p = input;
+    const char *err_desc = NULL;
+    int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &p, p + len, &err_desc);
+
+    ok(ret == 0);
+    ok(err_desc == NULL);
+    ok(p == input + len);
+    ok(num_unblocked == 0);
+}
+
+static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t stream_id, h2o_iovec_t input,
+                                         const h2o_header_t *expected_headers, size_t expected_num_headers,
+                                         h2o_iovec_t expected_header_ack)
+{
+    h2o_mem_pool_t pool;
+    struct st_h2o_qpack_decode_header_ctx_t ctx;
+    const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    const char *err_desc = NULL;
+    uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+
+    h2o_mem_init_pool(&pool);
+
+    ok(parse_decode_context(dec, &ctx, stream_id, &src, src_end) == 0);
+    for (size_t i = 0; i < expected_num_headers; ++i) {
+        h2o_iovec_t *name = NULL, value = {};
+        ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == 0);
+        ok(err_desc == NULL);
+        ok(h2o_iovec_is_token(name) == h2o_iovec_is_token(expected_headers[i].name));
+        ok(h2o_memis(name->base, name->len, expected_headers[i].name->base, expected_headers[i].name->len));
+        ok(h2o_memis(value.base, value.len, expected_headers[i].value.base, expected_headers[i].value.len));
+    }
+    ok(src == src_end);
+
+    size_t header_ack_len = send_header_ack(dec, &ctx, header_ack, stream_id);
+    ok(h2o_memis(header_ack, header_ack_len, expected_header_ack.base, expected_header_ack.len));
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_rfc9204_appendix_b(void)
+{
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(220, 10);
+
+    note("B.1. Literal Field Line with Name Reference");
+    {
+        static const uint8_t input[] = {
+            0x00, 0x00,                                                 /* Required Insert Count = 0, Base = 0 */
+            0x51, 0x0b, '/',  'i',  'n',  'd',  'e', 'x', '.', 'h', 't', 'm', 'l' /* :path=/index.html */
+        };
+        static const h2o_header_t expected[] = {
+            {.name = &H2O_TOKEN_PATH->buf, .value = {H2O_STRLIT("/index.html")}},
+        };
+        do_test_decode_field_section(dec, 0, h2o_iovec_init(input, sizeof(input)), expected, PTLS_ELEMENTSOF(expected),
+                                     h2o_iovec_init(NULL, 0));
+    }
+
+    note("B.2. Dynamic Table");
+    {
+        static const uint8_t encoder[] = {
+            0x3f, 0xbd, 0x01,                                           /* Set Dynamic Table Capacity=220 */
+            0xc0, 0x0f, 'w',  'w',  'w',  '.',  'e',  'x', 'a', 'm', 'p',
+            'l',  'e',  '.',  'c',  'o',  'm',                          /* :authority=www.example.com */
+            0xc1, 0x0c, '/',  's',  'a',  'm',  'p',  'l', 'e', '/', 'p',
+            'a',  't',  'h'                                             /* :path=/sample/path */
+        };
+        static const uint8_t input[] = {
+            0x03, 0x81,                                                 /* Required Insert Count = 2, Base = 0 */
+            0x10,                                                       /* :authority=www.example.com */
+            0x11,                                                       /* :path=/sample/path */
+        };
+        static const h2o_header_t expected[] = {
+            {.name = &H2O_TOKEN_AUTHORITY->buf, .value = {H2O_STRLIT("www.example.com")}},
+            {.name = &H2O_TOKEN_PATH->buf, .value = {H2O_STRLIT("/sample/path")}},
+        };
+        static const uint8_t expected_ack[] = {0x84};
+        feed_encoder_stream(dec, encoder, sizeof(encoder));
+        do_test_decode_field_section(dec, 4, h2o_iovec_init(input, sizeof(input)), expected, PTLS_ELEMENTSOF(expected),
+                                     h2o_iovec_init(expected_ack, sizeof(expected_ack)));
+        dec->insert_count = 0; /* The Section Acknowledgment above implies receipt of the referenced inserts. */
+    }
+
+    note("B.3. Speculative Insert");
+    {
+        static const uint8_t encoder[] = {
+            0x4a, 'c', 'u', 's', 't', 'o', 'm', '-', 'k', 'e', 'y',
+            0x0c, 'c', 'u', 's', 't', 'o', 'm', '-', 'v', 'a', 'l', 'u', 'e',
+        };
+        static const uint8_t expected_state_sync[] = {0x01};
+        uint8_t state_sync[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        feed_encoder_stream(dec, encoder, sizeof(encoder));
+        size_t state_sync_len = h2o_qpack_decoder_send_state_sync(dec, state_sync);
+        ok(h2o_memis(state_sync, state_sync_len, expected_state_sync, sizeof(expected_state_sync)));
+    }
+
+    note("B.4. Duplicate Instruction, Stream Cancellation");
+    {
+        static const uint8_t encoder[] = {0x02}; /* Duplicate (Relative Index = 2) */
+        static const uint8_t expected_cancel[] = {0x48};
+        uint8_t cancel[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        feed_encoder_stream(dec, encoder, sizeof(encoder));
+        ok(dec->table.last - dec->table.first == 4);
+        ok(h2o_memis(dec->table.first[3]->name->base, dec->table.first[3]->name->len, H2O_STRLIT(":authority")));
+        ok(h2o_memis(dec->table.first[3]->value, dec->table.first[3]->value_len, H2O_STRLIT("www.example.com")));
+        size_t cancel_len = h2o_qpack_decoder_send_stream_cancel(dec, cancel, 8);
+        ok(h2o_memis(cancel, cancel_len, expected_cancel, sizeof(expected_cancel)));
+    }
+
+    note("B.5. Dynamic Table Insert, Eviction");
+    {
+        static const uint8_t encoder[] = {
+            0x81, 0x0d, 'c', 'u', 's', 't', 'o', 'm', '-', 'v', 'a', 'l', 'u', 'e', '2',
+        };
+        feed_encoder_stream(dec, encoder, sizeof(encoder));
+        ok(dec->table.num_bytes == 215);
+        ok(dec->table.last - dec->table.first == 4);
+        ok(h2o_memis(dec->table.first[0]->name->base, dec->table.first[0]->name->len, H2O_STRLIT(":path")));
+        ok(h2o_memis(dec->table.first[0]->value, dec->table.first[0]->value_len, H2O_STRLIT("/sample/path")));
+        ok(h2o_memis(dec->table.first[3]->name->base, dec->table.first[3]->name->len, H2O_STRLIT("custom-key")));
+        ok(h2o_memis(dec->table.first[3]->value, dec->table.first[3]->value_len, H2O_STRLIT("custom-value2")));
+    }
+
+    h2o_qpack_destroy_decoder(dec);
+}
+
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
+    subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
 }
