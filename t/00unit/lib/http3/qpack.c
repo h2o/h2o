@@ -537,6 +537,133 @@ static void test_rfc9204_appendix_b(void)
     h2o_qpack_destroy_decoder(dec);
 }
 
+static void do_test_decoder_stream_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input, const char *expected_err_desc)
+{
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
+    const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    const char *err_desc = NULL;
+    int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, src_end, &err_desc);
+
+    ok(ret == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+    ok(err_desc == expected_err_desc);
+}
+
+static void do_test_decode_context_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input)
+{
+    struct st_h2o_qpack_decode_header_ctx_t ctx;
+    const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+
+    ok(parse_decode_context(dec, &ctx, 0, &src, src_end) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+}
+
+static void do_test_decode_header_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input, const char *expected_err_desc)
+{
+    h2o_mem_pool_t pool;
+    struct st_h2o_qpack_decode_header_ctx_t ctx;
+    h2o_iovec_t *name = NULL, value = {};
+    const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    ok(parse_decode_context(dec, &ctx, 0, &src, src_end) == 0);
+    ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+    ok(err_desc == expected_err_desc);
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_decode_errors(void)
+{
+    note("encoder stream errors");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(31, 10);
+        /* RFC 9204 Section 4.3.1: capacity greater than the decoder's maximum dynamic table capacity is invalid. */
+        static const uint8_t input[] = {0x3f, 0x01}; /* Set Dynamic Table Capacity=32 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_max_size);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Appendix A defines static table indices 0..98; Section 3.1 forbids invalid static indices. */
+        static const uint8_t input[] = {0xff, 0x24, 0}; /* Insert With Name Reference, Static Table, Index=99 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_static_reference);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Section 2.2.3: an encoder-stream reference to an evicted dynamic entry is invalid. */
+        static const uint8_t input[] = {0x80, 0}; /* Insert With Name Reference, Dynamic Table, Index=0 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_dynamic_reference);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Section 4.3.4 duplicates an existing entry; index 0 is invalid when the table is empty. */
+        static const uint8_t input[] = {0}; /* Duplicate, Relative Index=0 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_duplicate);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(40, 10);
+        /*
+         * RFC 9204 Section 3.2.1: entry size is name length + value length + 32.
+         * Section 3.2.2: adding an entry larger than the dynamic table capacity is invalid.
+         */
+        static const uint8_t input[] = {
+            0x3f, 0x09, /* Set Dynamic Table Capacity=40 */
+            0xc0, 9,    't', 'o', 'o', '-', 'l', 'a', 'r', 'g', 'e', /* :authority value; 10 + 9 + 32 > 40 */
+        };
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_header_exceeds_table_size);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("field section prefix errors");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(32, 10);
+        /* RFC 9204 Section 4.5.1.1: EncodedInsertCount greater than FullRange=2*MaxEntries is invalid. */
+        static const uint8_t input[] = {3, 0}; /* MaxEntries=1, FullRange=2, EncodedInsertCount=3 */
+        do_test_decode_context_error(dec, h2o_iovec_init(input, sizeof(input)));
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Section 4.5.1.2: Base MUST NOT be negative; RIC <= DeltaBase with Sign=1 is invalid. */
+        static const uint8_t input[] = {0, 0x80}; /* negative Base */
+        do_test_decode_context_error(dec, h2o_iovec_init(input, sizeof(input)));
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("field line reference errors");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Appendix A defines static table indices 0..98; Section 3.1 forbids invalid static indices. */
+        static const uint8_t input[] = {
+            0,    0,      /* Required Insert Count=0, Base=0 */
+            0xff, 0x24,   /* Indexed Field Line, Static Table, Index=99 */
+        };
+        do_test_decode_header_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_static_reference);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Section 2.2.3 forbids dynamic references with absolute index >= Required Insert Count. */
+        static const uint8_t input[] = {
+            0,    1,      /* Required Insert Count=0, Base=1 */
+            0x80,         /* Indexed Field Line, Dynamic Table, Relative Index=0 */
+        };
+        do_test_decode_header_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_invalid_dynamic_reference);
+        h2o_qpack_destroy_decoder(dec);
+    }
+}
+
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
@@ -544,4 +671,5 @@ void test_lib__http3_qpack(void)
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
     subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
+    subtest("decode-errors", test_decode_errors);
 }
