@@ -16,3 +16,6 @@
 [submodule "deps/theft"]
 	path = deps/theft
 	url = https://github.com/silentbicycle/theft
+[submodule "deps/qifs"]
+	path = deps/qifs
+	url = https://github.com/qpackers/qifs
