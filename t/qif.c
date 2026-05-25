@@ -308,7 +308,6 @@ static int retry_blocked(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *o
             fprintf(stderr, "failed to retry stream %" PRIu64 "\n", blocked->entries[j].stream_id);
             return 1;
         }
-        h2o_mem_clear_pool(pool);
 
         free(blocked->entries[j].buf);
         --blocked->size;

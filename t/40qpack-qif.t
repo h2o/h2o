@@ -8,7 +8,7 @@ my $qif_dir = "deps/qifs";
 my $sort_qif = "$qif_dir/bin/sort-qif.pl";
 my $t_qif = bindir() . "/t-qif";
 
-plan skip_all => "$qif_dir is not initialized"
+die "$qif_dir is not initialized"
     unless -e "$qif_dir/qifs/fb-req-hq.qif" && -x $sort_qif;
 plan skip_all => "$t_qif not found"
     unless -x $t_qif;

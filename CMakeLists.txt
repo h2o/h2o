@@ -665,7 +665,8 @@ ADD_CUSTOM_COMMAND(
 
 ADD_EXECUTABLE(t-qif t/qif.c)
 SET_TARGET_PROPERTIES(t-qif PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0")
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
+    EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
@@ -889,7 +890,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t t-qif ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
