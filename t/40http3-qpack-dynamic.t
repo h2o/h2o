@@ -5,7 +5,6 @@ use IO::Socket::INET;
 use Socket qw(SOCK_DGRAM IPPROTO_UDP);
 use Test::More;
 use Time::HiRes qw(sleep time);
-use lib "deps/quicly";
 use t::RawConnection;
 use t::Util;
 
