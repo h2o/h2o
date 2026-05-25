@@ -272,6 +272,18 @@ static void decoder_link_blocked(h2o_qpack_decoder_t *qpack, int64_t stream_id, 
 {
     size_t i;
 
+    for (i = qpack->blocked_streams.num_unblocked; i != qpack->blocked_streams.list.size; ++i) {
+        if (qpack->blocked_streams.list.entries[i].stream_id != stream_id)
+            continue;
+        if (largest_ref <= qpack->blocked_streams.list.entries[i].largest_ref)
+            return;
+        --qpack->blocked_streams.list.size;
+        if (i != qpack->blocked_streams.list.size)
+            memmove(qpack->blocked_streams.list.entries + i, qpack->blocked_streams.list.entries + i + 1,
+                    sizeof(qpack->blocked_streams.list.entries[0]) * (qpack->blocked_streams.list.size - i));
+        break;
+    }
+
     h2o_vector_reserve(NULL, &qpack->blocked_streams.list, qpack->blocked_streams.list.size + 1);
     for (i = qpack->blocked_streams.list.size; i != 0; --i)
         if (qpack->blocked_streams.list.entries[i - 1].largest_ref <= largest_ref)
@@ -281,6 +293,37 @@ static void decoder_link_blocked(h2o_qpack_decoder_t *qpack, int64_t stream_id, 
                 sizeof(qpack->blocked_streams.list.entries[0]) * (qpack->blocked_streams.list.size - i));
     qpack->blocked_streams.list.entries[i] = (struct st_h2o_qpack_blocked_streams_t){stream_id, largest_ref};
     ++qpack->blocked_streams.list.size;
+}
+
+static int decoder_is_blocked(h2o_qpack_decoder_t *qpack, int64_t stream_id)
+{
+    for (size_t i = qpack->blocked_streams.num_unblocked; i != qpack->blocked_streams.list.size; ++i)
+        if (qpack->blocked_streams.list.entries[i].stream_id == stream_id)
+            return 1;
+    return 0;
+}
+
+static size_t decoder_num_blocked(h2o_qpack_decoder_t *qpack)
+{
+    assert(qpack->blocked_streams.num_unblocked <= qpack->blocked_streams.list.size);
+    return qpack->blocked_streams.list.size - qpack->blocked_streams.num_unblocked;
+}
+
+void h2o_qpack_decoder_cancel_stream(h2o_qpack_decoder_t *qpack, int64_t stream_id)
+{
+    size_t src, dst = 0;
+
+    for (src = 0; src != qpack->blocked_streams.list.size; ++src) {
+        if (qpack->blocked_streams.list.entries[src].stream_id == stream_id) {
+            if (src < qpack->blocked_streams.num_unblocked)
+                --qpack->blocked_streams.num_unblocked;
+            continue;
+        }
+        if (dst != src)
+            qpack->blocked_streams.list.entries[dst] = qpack->blocked_streams.list.entries[src];
+        ++dst;
+    }
+    qpack->blocked_streams.list.size = dst;
 }
 
 static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *added)
@@ -420,7 +463,8 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, int64_t **unblock
     if (qpack->blocked_streams.num_unblocked != 0) {
         size_t remaining = qpack->blocked_streams.list.size - qpack->blocked_streams.num_unblocked;
         if (remaining != 0)
-            memmove(qpack->blocked_streams.list.entries, qpack->blocked_streams.list.entries + remaining,
+            memmove(qpack->blocked_streams.list.entries,
+                    qpack->blocked_streams.list.entries + qpack->blocked_streams.num_unblocked,
                     sizeof(qpack->blocked_streams.list.entries[0]) * remaining);
         qpack->blocked_streams.list.size = remaining;
         qpack->blocked_streams.num_unblocked = 0;
@@ -790,7 +834,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 
     /* is the stream blocked? */
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
-        if (qpack->blocked_streams.list.size >= qpack->max_blocked)
+        if (decoder_num_blocked(qpack) >= qpack->max_blocked && !decoder_is_blocked(qpack, stream_id))
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         decoder_link_blocked(qpack, stream_id, ctx->req_insert_count);
         return H2O_HTTP3_ERROR_INCOMPLETE;

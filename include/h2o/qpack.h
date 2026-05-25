@@ -38,6 +38,7 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint16_t max_blocked);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
+void h2o_qpack_decoder_cancel_stream(h2o_qpack_decoder_t *qpack, int64_t stream_id);
 /**
  * This function processes a stream of QPACK encoder instructions provided in [*src, src_end), and updates `*src` to point to the
  * beginning of the first partial instruction being found.

@@ -734,6 +734,79 @@ static void test_decode_edge_cases(void)
         ok(dec->blocked_streams.list.entries[0].largest_ref == 1);
         h2o_qpack_destroy_decoder(dec);
     }
+
+    note("cancelled blocked stream frees blocked stream budget");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input[] = {2, 0}; /* RIC=1, Base=1 */
+        const uint8_t *src = input;
+
+        ok(parse_decode_context(dec, &ctx, 0, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(dec->blocked_streams.list.size == 1);
+        h2o_qpack_decoder_cancel_stream(dec, 0);
+        ok(dec->blocked_streams.list.size == 0);
+
+        src = input;
+        ok(parse_decode_context(dec, &ctx, 4, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(dec->blocked_streams.list.size == 1);
+        ok(dec->blocked_streams.list.entries[0].stream_id == 4);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("multiple blocked field sections on one stream consume one blocked stream slot");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
+        static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
+        const uint8_t *src = input1;
+
+        ok(parse_decode_context(dec, &ctx, 0, &src, input1 + sizeof(input1)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        src = input2;
+        ok(parse_decode_context(dec, &ctx, 0, &src, input2 + sizeof(input2)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(dec->blocked_streams.list.size == 1);
+        ok(dec->blocked_streams.list.entries[0].stream_id == 0);
+        ok(dec->blocked_streams.list.entries[0].largest_ref == 2);
+
+        src = input1;
+        ok(parse_decode_context(dec, &ctx, 4, &src, input1 + sizeof(input1)) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("unblocked streams are removed from blocked stream budget immediately");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 2);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
+        static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
+        static const uint8_t inserts[] = {
+            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+        };
+        const uint8_t *src = input1;
+
+        ok(parse_decode_context(dec, &ctx, 4, &src, input1 + sizeof(input1)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        src = input2;
+        ok(parse_decode_context(dec, &ctx, 8, &src, input2 + sizeof(input2)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(dec->blocked_streams.list.size == 2);
+
+        int64_t *unblocked_stream_ids;
+        size_t num_unblocked;
+        const char *err_desc = NULL;
+        src = inserts;
+        ok(h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, inserts + sizeof(inserts),
+                                          &err_desc) == 0);
+        ok(err_desc == NULL);
+        ok(src == inserts + sizeof(inserts));
+        ok(num_unblocked == 2);
+        ok(unblocked_stream_ids[0] == 4);
+        ok(unblocked_stream_ids[1] == 8);
+        ok(decoder_num_blocked(dec) == 0);
+        ok(dec->blocked_streams.list.size == 2);
+        ok(dec->blocked_streams.num_unblocked == 2);
+        h2o_qpack_destroy_decoder(dec);
+    }
 }
 
 void test_lib__http3_qpack(void)
