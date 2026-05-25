@@ -14,6 +14,7 @@ plan skip_all => "$t_qif not found"
     unless -x $t_qif;
 
 my $tmpdir = tempdir(CLEANUP => 1);
+my $test_index = 0;
 
 sub run_to_file {
     my ($out, @cmd) = @_;
@@ -41,33 +42,44 @@ sub normalize_qif {
     is $ret, 0, "normalize $in";
 }
 
+sub build_cases {
+    my @cases;
+    for my $encoded (sort glob "$qif_dir/encoded/qpack-05/*/*-hq.out.*") {
+        my ($impl, $basename, $table_size, $max_blocked, $ack_mode) =
+            $encoded =~ m{encoded/qpack-05/([^/]+)/([^/]+)\.out\.(\d+)\.(\d+)\.(\d+)$}
+            or die "unexpected qif filename:$encoded";
+        next if $table_size == 0;
+
+        my $qif = "$qif_dir/qifs/$basename.qif";
+        die "missing source qif:$qif"
+            unless -e $qif;
+
+        my @args = ("-s", $table_size, "-b", $max_blocked);
+        push @args, "-r"
+            if $basename =~ /resp/;
+        push @args, "-d";
+
+        push @cases, {
+            name    => "$impl $basename table=$table_size blocked=$max_blocked ack=$ack_mode",
+            qif     => $qif,
+            encoded => $encoded,
+            args    => \@args,
+        };
+    }
+    return @cases;
+}
+
 subtest "qpackers qpack-05 dynamic table decode" => sub {
-    my @cases = (
-        {
-            name    => "nghttp3 fb requests",
-            qif     => "$qif_dir/qifs/fb-req-hq.qif",
-            encoded => "$qif_dir/encoded/qpack-05/nghttp3/fb-req-hq.out.4096.100.0",
-            args    => ["-s", 4096, "-b", 100, "-d"],
-        },
-        {
-            name    => "nghttp3 fb responses",
-            qif     => "$qif_dir/qifs/fb-resp-hq.qif",
-            encoded => "$qif_dir/encoded/qpack-05/nghttp3/fb-resp-hq.out.4096.100.0",
-            args    => ["-s", 4096, "-b", 100, "-r", "-d"],
-        },
-        {
-            name    => "nghttp3 netbsd requests",
-            qif     => "$qif_dir/qifs/netbsd-hq.qif",
-            encoded => "$qif_dir/encoded/qpack-05/nghttp3/netbsd-hq.out.512.100.0",
-            args    => ["-s", 512, "-b", 100, "-d"],
-        },
-    );
+    my @cases = build_cases();
+    plan skip_all => "no qpackers qpack-05 dynamic table cases found"
+        unless @cases;
 
     for my $case (@cases) {
         subtest $case->{name} => sub {
-            my $decoded = "$tmpdir/$case->{name}.decoded.qif";
-            my $expected = "$tmpdir/$case->{name}.expected.qif";
-            my $actual = "$tmpdir/$case->{name}.actual.qif";
+            ++$test_index;
+            my $decoded = "$tmpdir/$test_index.decoded.qif";
+            my $expected = "$tmpdir/$test_index.expected.qif";
+            my $actual = "$tmpdir/$test_index.actual.qif";
 
             my $ret = run_to_file($decoded, $t_qif, @{$case->{args}}, $case->{encoded});
             is $ret, 0, "decode $case->{encoded}";

@@ -206,11 +206,125 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 #undef CLEAR
 }
 
+struct blocked_header_t {
+    uint64_t stream_id;
+    uint8_t *buf;
+    size_t len;
+};
+
+typedef H2O_VECTOR(struct blocked_header_t) blocked_headers_t;
+
+static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *outp, uint64_t stream_id, const uint8_t *buf,
+                               size_t chunk_size, int is_resp)
+{
+    int ret;
+
+    if (!is_resp) {
+        /* request */
+        h2o_iovec_t method = {NULL}, authority = {NULL}, path = {NULL}, protocol = {NULL}, expect = {NULL},
+                    datagram_flow_id = {NULL};
+        const h2o_url_scheme_t *scheme = NULL;
+        h2o_headers_t headers = {NULL};
+        int pseudo_header_exists_map = 0;
+        size_t content_length = SIZE_MAX, header_ack_len, i;
+        uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        const char *err_desc = NULL;
+        if ((ret = h2o_qpack_parse_request(pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
+                                           &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, header_ack,
+                                           &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+                return ret;
+            fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
+            return ret;
+        }
+#define REQUIRED_PSEUDO_HEADERS                                                                                                    \
+    (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |    \
+     H2O_HPACK_PARSE_HEADERS_PATH_EXISTS)
+        if ((pseudo_header_exists_map & REQUIRED_PSEUDO_HEADERS) != REQUIRED_PSEUDO_HEADERS) {
+            fprintf(stderr, "some of the required pseudo headers are missing in stream id %" PRIu64 "\n", stream_id);
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        }
+#undef REQUIRED_PSEUDO_HEADERS
+        fprintf(outp, "#stream\t%" PRIu64 "\n:method\t%.*s\n:scheme\t%.*s\n:authority\t%.*s\n:path\t%.*s\n", stream_id,
+                (int)method.len, method.base, (int)scheme->name.len, scheme->name.base, (int)authority.len, authority.base,
+                (int)path.len, path.base);
+        if (protocol.base != NULL)
+            fprintf(outp, ":protocol\t%.*s\n", (int)protocol.len, protocol.base);
+        if (content_length != SIZE_MAX)
+            fprintf(outp, "content-length\t%zu\n", content_length);
+        if (datagram_flow_id.base != NULL)
+            fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
+        for (i = 0; i != headers.size; ++i) {
+            const h2o_header_t *header = headers.entries + i;
+            fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len, header->value.base);
+        }
+        fputc('\n', outp);
+    } else {
+        /* response */
+        int status;
+        h2o_headers_t headers = {NULL};
+        h2o_iovec_t datagram_flow_id = {NULL};
+        uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t header_ack_len, i;
+        const char *err_desc = NULL;
+        if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, header_ack, &header_ack_len,
+                                            buf, chunk_size, &err_desc)) != 0) {
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+                return ret;
+            fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
+            return ret;
+        }
+        fprintf(outp, "#stream\t%" PRIu64 "\n:status\t%d\n", stream_id, status);
+        if (datagram_flow_id.base != NULL)
+            fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
+        for (i = 0; i != headers.size; ++i) {
+            const h2o_header_t *header = headers.entries + i;
+            fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len, header->value.base);
+        }
+        fputc('\n', outp);
+    }
+
+    return 0;
+}
+
+static int retry_blocked(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *outp, blocked_headers_t *blocked,
+                         const int64_t *unblocked_streams, size_t num_unblocked, int is_resp)
+{
+    size_t i;
+
+    for (i = 0; i != num_unblocked; ++i) {
+        size_t j;
+        for (j = 0; j != blocked->size; ++j)
+            if (blocked->entries[j].stream_id == unblocked_streams[i])
+                break;
+        if (j == blocked->size) {
+            fprintf(stderr, "stream %" PRId64 " was unblocked but is not pending\n", unblocked_streams[i]);
+            return 1;
+        }
+
+        int ret = decode_header_block(dec, pool, outp, blocked->entries[j].stream_id, blocked->entries[j].buf, blocked->entries[j].len,
+                                      is_resp);
+        if (ret != 0) {
+            fprintf(stderr, "failed to retry stream %" PRIu64 "\n", blocked->entries[j].stream_id);
+            return 1;
+        }
+        h2o_mem_clear_pool(pool);
+
+        free(blocked->entries[j].buf);
+        --blocked->size;
+        if (j != blocked->size)
+            memmove(blocked->entries + j, blocked->entries + j + 1, sizeof(blocked->entries[0]) * (blocked->size - j));
+    }
+
+    return 0;
+}
+
 static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(header_table_size, max_blocked);
     uint64_t stream_id;
     h2o_byte_vector_t encoder_stream_buf = {NULL}; /* NOT governed by the memory pool */
+    blocked_headers_t blocked = {NULL};
     h2o_mem_pool_t pool;
     int ret;
 
@@ -238,74 +352,31 @@ static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
                 fprintf(stderr, "failed to decode stream 0:%s\n", err_desc);
                 return 1;
             }
-            assert(num_unblocked == 0 || !"blocking not supported (yet)");
+            if (retry_blocked(dec, &pool, outp, &blocked, unblocked_streams, num_unblocked, is_resp) != 0)
+                return 1;
             size_t remaining = encoder_stream_buf.entries + encoder_stream_buf.size - p;
             if (remaining != 0)
                 memmove(encoder_stream_buf.entries, p, remaining);
             encoder_stream_buf.size = remaining;
-        } else if (!is_resp) {
-            /* request */
-            h2o_iovec_t method = {NULL}, authority = {NULL}, path = {NULL}, protocol = {NULL}, expect = {NULL},
-                        datagram_flow_id = {NULL};
-            const h2o_url_scheme_t *scheme = NULL;
-            h2o_headers_t headers = {NULL};
-            int pseudo_header_exists_map = 0;
-            size_t content_length = SIZE_MAX, header_ack_len, i;
-            uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
-            const char *err_desc = NULL;
-            if ((ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                               &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id,
-                                               header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
-                fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
-                return 1;
-            }
-#define REQUIRED_PSEUDO_HEADERS                                                                                                    \
-    (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |    \
-     H2O_HPACK_PARSE_HEADERS_PATH_EXISTS)
-            if ((pseudo_header_exists_map & REQUIRED_PSEUDO_HEADERS) != REQUIRED_PSEUDO_HEADERS) {
-                fprintf(stderr, "some of the required pseudo headers are missing in stream id %" PRIu64 "\n", stream_id);
-                return 1;
-            }
-#undef REQUIRED_PSEUDO_HEADERS
-            fprintf(outp, "#stream\t%" PRIu64 "\n:method\t%.*s\n:scheme\t%.*s\n:authority\t%.*s\n:path\t%.*s\n", stream_id,
-                    (int)method.len, method.base, (int)scheme->name.len, scheme->name.base, (int)authority.len, authority.base,
-                    (int)path.len, path.base);
-            if (protocol.base != NULL)
-                fprintf(outp, ":protocol\t%.*s\n", (int)protocol.len, protocol.base);
-            if (content_length != SIZE_MAX)
-                fprintf(outp, "content-length\t%zu\n", content_length);
-            if (datagram_flow_id.base != NULL)
-                fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
-            for (i = 0; i != headers.size; ++i) {
-                const h2o_header_t *header = headers.entries + i;
-                fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
-                        header->value.base);
-            }
-            fputc('\n', outp);
         } else {
-            /* response */
-            int status;
-            h2o_headers_t headers = {NULL};
-            h2o_iovec_t datagram_flow_id = {NULL};
-            uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
-            size_t header_ack_len, i;
-            const char *err_desc = NULL;
-            if ((ret = h2o_qpack_parse_response(&pool, dec, stream_id, &status, &headers, &datagram_flow_id, header_ack,
-                                                &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
-                fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
+            ret = decode_header_block(dec, &pool, outp, stream_id, buf, chunk_size, is_resp);
+            if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
+                h2o_vector_reserve(NULL, &blocked, blocked.size + 1);
+                blocked.entries[blocked.size].stream_id = stream_id;
+                blocked.entries[blocked.size].buf = h2o_mem_alloc(chunk_size);
+                memcpy(blocked.entries[blocked.size].buf, buf, chunk_size);
+                blocked.entries[blocked.size].len = chunk_size;
+                ++blocked.size;
+            } else if (ret != 0) {
                 return 1;
             }
-            fprintf(outp, "#stream\t%" PRIu64 "\n:status\t%d\n", stream_id, status);
-            if (datagram_flow_id.base != NULL)
-                fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
-            for (i = 0; i != headers.size; ++i) {
-                const h2o_header_t *header = headers.entries + i;
-                fprintf(outp, "%.*s\t%.*s\n", (int)header->name->len, header->name->base, (int)header->value.len,
-                        header->value.base);
-            }
-            fputc('\n', outp);
         }
         h2o_mem_clear_pool(&pool);
+    }
+
+    if (blocked.size != 0) {
+        fprintf(stderr, "%zu streams remain blocked\n", blocked.size);
+        return 1;
     }
 
     return 0;
