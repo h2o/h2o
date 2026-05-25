@@ -9,6 +9,7 @@ use IO::Socket::INET;
 use JSON;
 use Net::EmptyPort qw(empty_port);
 use POSIX ":sys_wait_h";
+use t::RawConnection;
 use Test::More;
 use Time::HiRes qw(sleep time);
 
@@ -566,7 +567,7 @@ subtest "trasport-parameters" => sub {
 
 subtest "reset-stream-overflow" => sub {
     my $server = spawn_server();
-    my $conn = RawConnection->new("127.0.0.1", $port);
+    my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
     $conn->send("\x04\x00\x00\xff\xff\xff\xff\xff\xff\xff\xff"); # reset stream with final_size=QUICINT_MAX
     sleep 0.5;
     ok !$server->is_dead(), "server process must be alive";
@@ -576,7 +577,7 @@ subtest "reset-stream-overflow" => sub {
 
 subtest "stream-open-after-connection-close" => sub {
     my $server = spawn_server(qw(-e /dev/stderr));
-    my $conn = RawConnection->new("127.0.0.1", $port);
+    my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
     $conn->send("\x1c\x00\x00\x00" . "\x0a\x00\x05hello"); # CONNECTION_CLOSE -> STREAM
     sleep 0.5;
     ok !$server->is_dead(), "server process must be alive";
@@ -586,7 +587,7 @@ subtest "stream-open-after-connection-close" => sub {
 subtest "invalid-ack" => sub {
     my $server = spawn_server();
     subtest "gap" => sub {
-        my $conn = RawConnection->new("127.0.0.1", $port);
+        my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
         my $pn = $conn->largest_pn_received;
         $conn->send("\x02" . chr($pn) . "\x00\x00" . chr($pn)); # ACK all PNs up to largest_pn_received
         sleep 0.5;
@@ -595,7 +596,7 @@ subtest "invalid-ack" => sub {
         like $received, qr/^\x1c\x0a\x02/, "responds with CONNECTION_CLOSE(PROTOCOL_VIOLATION) for ACK";
     };
     subtest "too large" => sub {
-        my $conn = RawConnection->new("127.0.0.1", $port);
+        my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
         $conn->send("\x02\x3f\x00\x00\x00"); # ACK pn=63, server would not have sent so many packets
         sleep 0.5;
         ok !$server->is_dead(), "server is alive";
@@ -747,103 +748,6 @@ sub slurp_file {
         local $/;
         <$fh>;
     };
-}
-
-package RawConnection {
-    use Fcntl qw(F_GETFD F_SETFD FD_CLOEXEC);
-    use JSON qw(decode_json);
-    use Socket qw(SOCK_DGRAM IPPROTO_UDP inet_aton pack_sockaddr_in);
-
-    sub new {
-        my ($klass, $host, $port) = @_;
-
-        my $self = bless {
-            sock     => do {
-                IO::Socket::INET->new(
-                    Type   => SOCK_DGRAM,
-                    Proto  => IPPROTO_UDP,
-                ) or die "failed to open socket:$!";
-            },
-            peeraddr => pack_sockaddr_in($port, inet_aton($host)),
-            pn       => 256,   # whatever large enough to avoid collision with those used during the handshake
-            largest_pn_received => -1,
-        }, $klass;
-
-        # perform handshake and obtain connection parameters
-        fcntl($self->{sock}, F_SETFD, 0)
-            or die "failed to drop FD_CLOEXEC:$!";
-        open(
-            my $fh,
-            "-|",
-            $cli, "--sockfd", fileno($self->{sock}), qw(-y aes128gcmsha256 -e /dev/stdout --exit-after-handshake),
-            $host, $port,
-        ) or die "failed to spawn $cli:$!";
-        fcntl($self->{sock}, F_SETFD, FD_CLOEXEC)
-            or die "failed to re-add FD_CLOEXEC:$!";
-        while (my $line = <$fh>) {
-            chomp $line;
-            my $event = decode_json $line;
-            if ($event->{type} eq 'receive') {
-                if (!defined $self->{server_cid}) {
-                    $event->{bytes} =~ /^..000000010008(.{16})/
-                        or die "invalid CID lengths found in packet:$event->{bytes}";
-                    $self->{server_cid} = pack "H*", $1;
-                }
-            } elsif ($event->{type} eq 'crypto_update_secret' && $event->{epoch} == 3) {
-                ($event->{is_enc} ? $self->{enc_secret} : $self->{dec_secret}) = $event->{secret};
-            } elsif ($event->{type} eq 'packet_received') {
-                $self->{largest_pn_received} = $event->{pn}
-                    if $self->{largest_pn_received} < $event->{pn};
-            }
-        }
-        close $fh
-            or die "$cli failed with exit status:$?";
-
-        $self;
-    }
-
-    sub largest_pn_received {
-        my $self = shift;
-        $self->{largest_pn_received};
-    }
-
-    sub send {
-        my ($self, $payload) = @_;
-
-        my $cleartext = join("",
-            "\x41",                    # first byte (pnlen=2)
-            $self->{server_cid},
-            pack("n", ++$self->{pn}),
-            $payload,
-            "\0" x 20,                 # space enough for header protection entropy and AEAD tag,
-        );
-        my $encrypted = $self->transform_packet(1, $cleartext);
-        $self->{sock}->send($encrypted, 0, $self->{peeraddr});
-    }
-
-    sub receive {
-        my $self = shift;
-
-        recv($self->{sock}, my $encrypted, 1500, 0)
-            or return;
-        $self->transform_packet(0, $encrypted);
-    }
-
-    sub transform_packet {
-        my ($self, $is_enc, $input) = @_;
-        my $tmpfh = File::Temp->new();
-
-        print $tmpfh $input;
-        $tmpfh->flush();
-
-        my $mode = $is_enc ? "enc" : "dec";
-        my $dcid_len = $is_enc ? 8 : 0;
-        open my $fh, "$cli --${mode}rypt-packet @{[$self->{$mode . '_secret'}]}:$dcid_len < $tmpfh |"
-            or die "failed to run $cli:$!";
-        local $/;
-        <$fh>;
-    }
-
 }
 
 1;

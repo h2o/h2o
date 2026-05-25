@@ -162,6 +162,6 @@ void quicly_remote_cid_shift_retired(quicly_remote_cid_set_t *set, size_t count)
     assert(count <= set->retired.count);
 
     set->retired.count -= count;
-    for (size_t i = 0; i < count; ++i)
+    for (size_t i = 0; i < set->retired.count; ++i)
         set->retired.cids[i] = set->retired.cids[i + count];
 }
