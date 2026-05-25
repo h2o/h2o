@@ -287,8 +287,6 @@ static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_heade
 {
     ++qpack->insert_count;
     ++qpack->total_inserts;
-    fprintf(stderr, "#%s:%" PRIu64 ":%.*s\t%.*s\n", __FUNCTION__, qpack->total_inserts, (int)added->name->len, added->name->base,
-            (int)added->value_len, added->value);
     header_table_insert(&qpack->table, added);
 }
 
