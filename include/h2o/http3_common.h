@@ -289,10 +289,9 @@ typedef struct st_h2o_http3_qpack_context_t {
      */
     uint32_t encoder_table_capacity;
     /**
-     * Table capacity and blocked stream count we advertise to the peer for its encoder.
+     * Table capacity we advertise to the peer for its encoder.
      */
     uint32_t decoder_table_capacity;
-    uint16_t max_blocked_streams;
 } h2o_http3_qpack_context_t;
 
 typedef struct st_h2o_http3_conn_callbacks_t {

@@ -1263,10 +1263,18 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
+{
+    if (conn->qpack.ctx->decoder_table_capacity == 0)
+        return 0;
+    return quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+}
+
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
 {
     ptls_buffer_t buf;
     int ret = 0;
+    uint64_t max_blocked_streams = calc_max_blocked_streams(conn);
 
     ptls_buffer_init(&buf, bytebuf, capacity);
 
@@ -1288,9 +1296,9 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
             ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder_table_capacity);
         }
-        if (conn->qpack.ctx->max_blocked_streams != 0) {
+        if (max_blocked_streams != 0) {
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS);
-            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->max_blocked_streams);
+            ptls_buffer_push_quicint(&buf, max_blocked_streams);
         }
         ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
         ptls_buffer_push_quicint(&buf, 1);
@@ -1314,7 +1322,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, conn->qpack.ctx->max_blocked_streams);
+    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];

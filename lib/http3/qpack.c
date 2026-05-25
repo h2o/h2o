@@ -91,7 +91,7 @@ struct st_h2o_qpack_decoder_t {
     /**
      *
      */
-    uint16_t max_blocked;
+    uint64_t max_blocked;
     struct {
         /**
          * contains list of blocked streams (sorted in the ascending order of largest_ref)
@@ -116,12 +116,12 @@ struct st_h2o_qpack_encoder_t {
     /**
      * SETTINGS_QPACK_BLOCKED_STREAMS
      */
-    uint16_t max_blocked;
+    uint64_t max_blocked;
     /**
      * number of potentially blocked HEADERS (not streams, sorry!) We count header blocks rather than streams because it is easier.
      * Hopefully it would work well.
      */
-    uint16_t num_blocked;
+    size_t num_blocked;
     /**
      * list of unacked streams
      */
@@ -246,7 +246,7 @@ static size_t decode_value(char *outbuf, unsigned *soft_errors, int is_huff, con
     return outlen;
 }
 
-h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint16_t max_blocked)
+h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64_t max_blocked)
 {
     h2o_qpack_decoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
 
@@ -893,7 +893,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint16_t max_blocked)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked)
 {
     h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
     header_table_init(&qpack->table, header_table_size);
