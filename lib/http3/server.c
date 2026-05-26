@@ -124,8 +124,6 @@ struct st_h2o_http3_server_conn_t {
         h2o_linklist_t pending;
         /**
          * holds streams in RECV_HEADERS state whose header blocks are blocked by QPACK dynamic table references.
-         * This use of st_h2o_http3_server_stream_t::link cannot overlap with other delayed_streams lists because
-         * QPACK-blocked streams have not advanced beyond request header parsing.
          */
         h2o_linklist_t qpack_blocked;
     } delayed_streams;
