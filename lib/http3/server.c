@@ -1424,6 +1424,9 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     size_t header_ack_len;
     quicly_error_t ret;
 
+    if (h2o_timeval_is_null(&stream->req.timestamps.request_begin_at))
+        stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
+
     /* read the HEADERS frame (or a frame that precedes that) */
     const uint8_t *frame_start = *src;
     if ((ret = h2o_http3_read_frame(&frame, 0, H2O_HTTP3_STREAM_TYPE_REQUEST, get_conn(stream)->h3.max_frame_payload_size, src,
@@ -1444,7 +1447,6 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
         }
         return 0;
     }
-    stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     /* parse the headers */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
