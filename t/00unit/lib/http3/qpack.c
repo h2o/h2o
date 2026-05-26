@@ -429,11 +429,10 @@ static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t strea
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
     const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
-    uint64_t blocked_ref;
 
     h2o_mem_init_pool(&pool);
 
-    ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, src_end) == 0);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == 0);
     for (size_t i = 0; i < expected_num_headers; ++i) {
         h2o_iovec_t *name = NULL, value = {};
         ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == 0);
@@ -549,9 +548,8 @@ static void do_test_decode_context_error(h2o_qpack_decoder_t *dec, h2o_iovec_t i
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
-    uint64_t blocked_ref;
 
-    ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, src_end) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
 }
 
 static void do_test_decode_header_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input, const char *expected_err_desc)
@@ -561,11 +559,10 @@ static void do_test_decode_header_error(h2o_qpack_decoder_t *dec, h2o_iovec_t in
     h2o_iovec_t *name = NULL, value = {};
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
     const char *err_desc = NULL;
-    uint64_t blocked_ref;
 
     h2o_mem_init_pool(&pool);
 
-    ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, src_end) == 0);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == 0);
     ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
     ok(err_desc == expected_err_desc);
 
@@ -707,12 +704,11 @@ static void test_decode_edge_cases(void)
         struct st_h2o_qpack_decode_header_ctx_t ctx;
         static const uint8_t input[] = {1, 0}; /* MaxEntries=1, FullRange=2, reconstructed RIC=2 */
         const uint8_t *src = input;
-        uint64_t blocked_ref;
 
         dec->total_inserts = 2;
         dec->table.base_offset = 3;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
         ok(ctx.req_insert_count == 2);
         ok(ctx.base_index == 2);
         ok(src == input + sizeof(input));
@@ -727,7 +723,8 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         ok(blocked_ref == 1);
         ok(dec->num_blocked == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
@@ -743,14 +740,16 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         ok(dec->num_blocked == 1);
         h2o_qpack_decoder_update_num_blocked(dec, -1);
         ok(dec->num_blocked == 0);
 
         src = input;
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         ok(blocked_ref == 1);
         h2o_qpack_destroy_decoder(dec);
     }
@@ -763,12 +762,13 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input1;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
 
         src = input1;
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) ==
-           H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
         h2o_qpack_destroy_decoder(dec);
     }
 
@@ -785,10 +785,12 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input1;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         src = input2;
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input2 + sizeof(input2)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input2 + sizeof(input2)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         ok(dec->num_blocked == 2);
 
