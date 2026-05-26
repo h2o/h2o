@@ -403,8 +403,8 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
     return 0;
 }
 
-int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **_src,
-                                   const uint8_t *src_end, const char **err_desc)
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **_src, const uint8_t *src_end,
+                                   const char **err_desc)
 {
     const uint8_t *src = *_src;
     uint64_t old_total_inserts = qpack->total_inserts;

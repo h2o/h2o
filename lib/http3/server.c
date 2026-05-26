@@ -511,8 +511,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
     H2O_PROBE_CONN(H3S_STREAM_SET_STATE, &conn->super, stream->quic->stream_id, (unsigned)state);
 
-    assert(stream->qpack_blocked_ref == 0 &&
-           "QPACK-blocked streams must be unblocked or cancelled before changing stream state");
+    assert(stream->qpack_blocked_ref == 0 && "QPACK-blocked streams must be unblocked or cancelled before changing stream state");
 
     --*get_state_counter(conn, old_state);
     stream->state = state;
@@ -820,10 +819,10 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    /* Unless the stream is closed as part of connection teardown, it is already in CLOSE_WAIT when destroyed; state cleanup has already
-     * been performed. In contrast, when the QUIC connection is closed, streams can be destroyed in any state. In that case, consistency
-     * within the connection itself does not need to be preserved, as the connection is being discarded; however, state external to the
-     * connection still needs to be maintained. */
+    /* Unless the stream is closed as part of connection teardown, it is already in CLOSE_WAIT when destroyed; state cleanup has
+     * already been performed. In contrast, when the QUIC connection is closed, streams can be destroyed in any state. In that case,
+     * consistency within the connection itself does not need to be preserved, as the connection is being discarded; however, state
+     * external to the connection still needs to be maintained. */
     --*get_state_counter(conn, stream->state);
 
     req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);

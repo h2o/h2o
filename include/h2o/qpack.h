@@ -45,8 +45,8 @@ void h2o_qpack_decoder_update_num_blocked(h2o_qpack_decoder_t *qpack, int delta)
  * This decoder does not enforce its own limits to the instruction size. Instead, it relies on the caller's flow control to block
  * encoder instructions that exceed the flow control size. That is how we protect us from memory exhaustion attacks.
  */
-int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **src,
-                                   const uint8_t *src_end, const char **err_desc);
+int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **src, const uint8_t *src_end,
+                                   const char **err_desc);
 size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *outbuf);
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id);
 
