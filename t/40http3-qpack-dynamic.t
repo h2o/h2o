@@ -57,6 +57,31 @@ subtest "dynamic table, blocked" => sub {
     is wait_log(), "/qpack-dynamic abcdefghij 1", "blocked dynamic header block is resumed";
 };
 
+subtest "dynamic table, connection closed while blocked" => sub {
+    my $conn = new_conn();
+    $conn->send(stream_frame(2, h3_control_stream()) . stream_frame(0, h3_request_headers(), 1));
+
+    is wait_log(0.2), undef, "request remains parked while QPACK-blocked";
+
+    $conn->send(connection_close_frame());
+    is wait_log(0.2), undef, "no log entry for stream destroyed while QPACK-blocked";
+
+    # Subsequent subtest will fail if the server crashed during teardown of the blocked stream.
+};
+
+subtest "dynamic table, stream reset while blocked" => sub {
+    my $conn = new_conn();
+    my $headers = h3_request_headers();
+    $conn->send(stream_frame(2, h3_control_stream()) . stream_frame(0, $headers, 1));
+
+    is wait_log(0.2), undef, "request remains parked while QPACK-blocked";
+
+    $conn->send(reset_stream_frame(0, 0, length $headers));
+    is wait_log(0.2), undef, "no log entry for reset blocked stream";
+
+    $conn->send(connection_close_frame());
+};
+
 done_testing;
 
 sub new_conn {
@@ -95,6 +120,11 @@ sub stream_frame {
 
 sub connection_close_frame {
     return "\x1c\x00\x00\x00";
+}
+
+sub reset_stream_frame {
+    my ($stream_id, $err_code, $final_size) = @_;
+    return chr(0x04) . quicint($stream_id) . quicint($err_code) . quicint($final_size);
 }
 
 sub quicint {
