@@ -496,6 +496,8 @@ static void cancel_qpack_decoder_stream(struct st_h2o_http3_server_stream_t *str
     int is_blocked = stream->qpack_blocked_ref != 0;
     if (!is_blocked && stream->state != H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS)
         return;
+    /* RFC 9204 requires Stream Cancellation when a stream is reset before all encoded field sections have been processed, or when
+     * reading is abandoned. If `is_blocked` is set, release our local blocked-stream budget as well. */
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     stream->qpack_blocked_ref = 0;
