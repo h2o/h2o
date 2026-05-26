@@ -51,9 +51,10 @@ size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *ou
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id);
 
 /**
- * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. If `blocked_ref` is non-NULL and the
- * field section is blocked, returns success with `*blocked_ref` set to the Required Insert Count. If `blocked_ref` is NULL, the
- * decoder treats a blocked field section as a decompression error.
+ * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. If the decoder allows blocked streams,
+ * `blocked_ref` must be non-NULL; when the field section is blocked, returns success with `*blocked_ref` set to the Required
+ * Insert Count. When the decoder does not allow blocked streams, `blocked_ref` may be NULL and a blocked field section is treated
+ * as a decompression error.
  */
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,

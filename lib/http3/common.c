@@ -1263,7 +1263,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
 
 static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
 {
-    if (conn->qpack.ctx->decoder_table_capacity == 0)
+    if (conn->qpack.ctx->decoder_table_capacity == 0 || conn->super.callbacks->qpack_unblock_streams == NULL)
         return 0;
     return quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
 }

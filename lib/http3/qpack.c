@@ -793,6 +793,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
+    assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, blocked_ref, &src, src_end)) != 0)
         return ret;
     if (blocked_ref != NULL && *blocked_ref != 0)
@@ -817,6 +818,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
+    assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, blocked_ref, &src, src_end)) != 0)
         return ret;
     if (blocked_ref != NULL && *blocked_ref != 0)
