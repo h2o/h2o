@@ -21,6 +21,8 @@ listen:
   type: quic
   host: 127.0.0.1
   port: $quic_port
+  quic:
+    qpack-decoder-table-capacity: 4096
   ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
