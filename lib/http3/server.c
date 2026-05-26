@@ -1436,8 +1436,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     }
     stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
-    /* parse the headers, and ack */
-    stream->qpack_blocked_ref = 0;
+    /* parse the headers */
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
@@ -1447,6 +1446,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
         return ret;
     }
+
+    /* if the decoding of the frame is blocked by QPACK, return, preserving the HEADERS frame in the receive buffer */
     if (stream->qpack_blocked_ref != 0) {
         stream->qpack_blocked_ever = 1;
         h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, 1);
@@ -1455,6 +1456,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
         return 0;
     }
 
+    /* now that the header section have been read and decoded, update the receiver callback and emit an ACK */
     stream->recvbuf.handle_input = handle_input_expect_data;
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
