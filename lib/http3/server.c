@@ -1412,7 +1412,6 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     h2o_iovec_t expect = h2o_iovec_init(NULL, 0);
     h2o_iovec_t datagram_flow_id_field = {};
     uint64_t datagram_flow_id = UINT64_MAX;
-    uint64_t qpack_blocked_ref = 0;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
     size_t header_ack_len;
     quicly_error_t ret;
@@ -1440,16 +1439,17 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
 
     /* parse the headers, and ack */
+    stream->qpack_blocked_ref = 0;
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       &qpack_blocked_ref, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
+                                       &stream->qpack_blocked_ref, header_ack, &header_ack_len, frame.payload, frame.length,
+                                       err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
         return ret;
     }
-    if (qpack_blocked_ref != 0) {
-        stream->qpack_blocked_ref = qpack_blocked_ref;
+    if (stream->qpack_blocked_ref != 0) {
         stream->qpack_blocked_ever = 1;
         h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, 1);
         h2o_linklist_insert(&conn->delayed_streams.qpack_blocked, &stream->link);
