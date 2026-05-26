@@ -823,8 +823,8 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 
     /* Unless the stream is closed as part of connection teardown, it is already in CLOSE_WAIT when destroyed; state cleanup has
      * already been performed. In contrast, when the QUIC connection is closed, streams can be destroyed in any state. In that case,
-     * consistency within the connection itself does not need to be preserved, as the connection is being discarded; however, state
-     * external to the connection still needs to be maintained. */
+     * consistency within the connection itself does not always need to be preserved, as the connection is being discarded; however,
+     * state external to the connection still needs to be maintained. */
     --*get_state_counter(conn, stream->state);
 
     req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
