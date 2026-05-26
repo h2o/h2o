@@ -332,6 +332,38 @@ static void test_decode_referred(void)
                                &invalid_header, 1, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
     }
 
+    note("dynamic reference beyond required insert count");
+    {
+        static const uint8_t input[] = {
+            2,    1,      /* required_insert_count=1, base=2 */
+            0xd1,         /* :method: GET */
+            0xd7,         /* :scheme: https */
+            0x50, 1, 'a', /* :authority: a */
+            0xc1,         /* :path: / */
+            0x80          /* dynamic entry = 1 */
+        };
+        static const uint8_t expected_ack[] = {};
+        do_test_decode_request(dec, 16, h2o_iovec_init(input, sizeof(input)), H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED,
+                               h2o_qpack_err_invalid_dynamic_reference, h2o_iovec_init(NULL, 0), NULL, h2o_iovec_init(NULL, 0),
+                               h2o_iovec_init(NULL, 0), SIZE_MAX, NULL, 0, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
+    }
+
+    note("post-base dynamic reference beyond required insert count");
+    {
+        static const uint8_t input[] = {
+            2,    0x80,      /* required_insert_count=1, base=0 */
+            0xd1,            /* :method: GET */
+            0xd7,            /* :scheme: https */
+            0x50, 1,    'a', /* :authority: a */
+            0xc1,            /* :path: / */
+            0x11             /* dynamic entry = 1 */
+        };
+        static const uint8_t expected_ack[] = {};
+        do_test_decode_request(dec, 16, h2o_iovec_init(input, sizeof(input)), H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED,
+                               h2o_qpack_err_invalid_dynamic_reference, h2o_iovec_init(NULL, 0), NULL, h2o_iovec_init(NULL, 0),
+                               h2o_iovec_init(NULL, 0), SIZE_MAX, NULL, 0, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
+    }
+
     note("use name-ref(0)");
     {
         static const uint8_t input[] = {
