@@ -1265,7 +1265,10 @@ static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
 {
     if (conn->qpack.ctx->decoder_table_capacity == 0)
         return 0;
-    return quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+    uint64_t max_blocked = quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+    assert(max_blocked == 0 || get_callbacks(conn)->qpack_unblock_streams != NULL ||
+           !"connection enables QPACK blocked-stream support but provides no qpack_unblock_streams callback");
+    return max_blocked;
 }
 
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
