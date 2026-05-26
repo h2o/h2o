@@ -820,18 +820,14 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
     struct st_h2o_http3_server_stream_t *stream = qs->data;
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    /* Normal stream teardown transitions to CLOSE_WAIT before destruction. In contrast, quicly destroys remaining application
-     * streams directly from connection-level teardown (e.g., after receiving CONNECTION_CLOSE). It is hard to call
-     * `update_conn_state` here, because the number returned by `quicly_num_streams_by_group` is decremented only after returning
-     * from this function. */
+    /* Unless the stream is closed as part of connection teardown, it is already in CLOSE_WAIT when destroyed; state cleanup has already
+     * been performed. In contrast, when the QUIC connection is closed, streams can be destroyed in any state. In that case, consistency
+     * within the connection itself does not need to be preserved, as the connection is being discarded; however, state external to the
+     * connection still needs to be maintained. */
     --*get_state_counter(conn, stream->state);
 
     req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
 
-    if (stream->qpack_blocked_ref != 0) {
-        h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, -1);
-        stream->qpack_blocked_ref = 0;
-    }
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     if (h2o_linklist_is_linked(&stream->link_resp_settings_blocked))
