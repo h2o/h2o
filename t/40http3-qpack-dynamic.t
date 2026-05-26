@@ -1,8 +1,7 @@
 use strict;
 use warnings;
+use Fcntl qw(SEEK_CUR);
 use File::Temp qw(tempdir);
-use IO::Socket::INET;
-use Socket qw(SOCK_DGRAM IPPROTO_UDP);
 use Test::More;
 use Time::HiRes qw(sleep time);
 use t::RawConnection;
@@ -13,9 +12,9 @@ plan skip_all => "$cli not found"
     unless -e $cli;
 
 my $tempdir = tempdir(CLEANUP => 1);
-my $quic_port = empty_udp_port();
+my $quic_port = empty_port({ host => "127.0.0.1", proto => "udp" });
 my $access_log = "$tempdir/access.log";
-my $access_log_pos = 0;
+my $access_log_fh;
 
 my $server = spawn_h2o(<< "EOT");
 listen:
@@ -88,18 +87,6 @@ sub new_conn {
     t::RawConnection->new("127.0.0.1", $quic_port, cli => $cli, alpn => ["h3"]);
 }
 
-sub empty_udp_port {
-    my $sock = IO::Socket::INET->new(
-        LocalHost => "127.0.0.1",
-        LocalPort => 0,
-        Proto     => IPPROTO_UDP,
-        Type      => SOCK_DGRAM,
-    ) or die "failed to bind UDP socket:$!";
-    my $port = $sock->sockport;
-    close $sock;
-    return $port;
-}
-
 sub h3_control_stream {
     return quicint(0) . quicint(4) . quicint(0); # control stream, empty SETTINGS
 }
@@ -146,16 +133,14 @@ sub wait_log {
 
     my $end = time() + $timeout;
     while (time() < $end) {
-        if (open my $fh, "<", $access_log) {
-            seek $fh, $access_log_pos, 0
-                or die "failed to seek $access_log:$!";
-            my @lines = grep { /\S/ } <$fh>;
-            $access_log_pos = tell($fh);
-            if (@lines) {
-                chomp(my $line = shift @lines);
-                close $fh;
-                return $line;
-            }
+        if (!defined $access_log_fh) {
+            open $access_log_fh, "<", $access_log
+                or do { sleep 0.05; next; };
+        }
+        seek $access_log_fh, 0, SEEK_CUR; # clear EOF so newly-appended lines become visible
+        while (defined(my $line = <$access_log_fh>)) {
+            chomp $line;
+            return $line if $line =~ /\S/;
         }
         sleep 0.05;
     }
