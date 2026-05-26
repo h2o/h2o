@@ -1452,12 +1452,9 @@ Malformed:
     return H2O_HTTP3_ERROR_FRAME;
 }
 
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id, int is_blocked)
+void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
 {
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
-
-    if (is_blocked)
-        h2o_qpack_decoder_update_num_blocked(conn->qpack.dec, -1);
 
     /* allocate and write */
     h2o_iovec_t buf = h2o_buffer_reserve(&stream->sendbuf, stream->sendbuf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);

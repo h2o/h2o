@@ -501,7 +501,9 @@ static void cancel_qpack_decoder_stream(struct st_h2o_http3_server_stream_t *str
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     stream->qpack_blocked_ref = 0;
-    h2o_http3_send_qpack_stream_cancel(&get_conn(stream)->h3, stream->quic->stream_id, is_blocked);
+    if (is_blocked)
+        h2o_qpack_decoder_update_num_blocked(get_conn(stream)->h3.qpack.dec, -1);
+    h2o_http3_send_qpack_stream_cancel(&get_conn(stream)->h3, stream->quic->stream_id);
 }
 
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
