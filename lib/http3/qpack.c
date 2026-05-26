@@ -506,9 +506,9 @@ Fail:
     return NULL;
 }
 
-static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_table_t *table, int64_t base_index,
-                                                     const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
-                                                     const char **err_desc)
+static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_table_t *table, int64_t req_insert_count,
+                                                     int64_t base_index, const uint8_t **src, const uint8_t *src_end,
+                                                     unsigned prefix_bits, const char **err_desc)
 {
     int64_t off;
 
@@ -516,12 +516,17 @@ static struct st_h2o_qpack_header_t *resolve_dynamic(struct st_h2o_qpack_header_
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
-    return resolve_dynamic_abs(table, base_index - off, err_desc);
+    int64_t index = base_index - off;
+    if (req_insert_count < index) {
+        *err_desc = h2o_qpack_err_invalid_dynamic_reference;
+        return NULL;
+    }
+    return resolve_dynamic_abs(table, index, err_desc);
 }
 
-static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpack_header_table_t *table, int64_t base_index,
-                                                              const uint8_t **src, const uint8_t *src_end, unsigned prefix_bits,
-                                                              const char **err_desc)
+static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpack_header_table_t *table, int64_t req_insert_count,
+                                                              int64_t base_index, const uint8_t **src, const uint8_t *src_end,
+                                                              unsigned prefix_bits, const char **err_desc)
 {
     int64_t off;
 
@@ -529,7 +534,12 @@ static struct st_h2o_qpack_header_t *resolve_dynamic_postbase(struct st_h2o_qpac
         *err_desc = h2o_qpack_err_invalid_dynamic_reference;
         return NULL;
     }
-    return resolve_dynamic_abs(table, base_index + off + 1, err_desc);
+    int64_t index = base_index + off + 1;
+    if (req_insert_count < index) {
+        *err_desc = h2o_qpack_err_invalid_dynamic_reference;
+        return NULL;
+    }
+    return resolve_dynamic_abs(table, index, err_desc);
 }
 
 static h2o_iovec_t *decode_header_name_literal(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src,
@@ -644,7 +654,8 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 10:
     case 11: /* indexed dynamic header field */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 6, err_desc)) == NULL)
+        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->req_insert_count, ctx->base_index, src, src_end, 6, err_desc)) ==
+            NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -664,7 +675,8 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     case 4:
     case 6: /* literal header field with dynamic name reference */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->base_index, src, src_end, 4, err_desc)) == NULL)
+        if ((entry = resolve_dynamic(&ctx->qpack->table, ctx->req_insert_count, ctx->base_index, src, src_end, 4, err_desc)) ==
+            NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -682,7 +694,8 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 1: /* indexed header field with post-base index */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->base_index, src, src_end, 4, err_desc)) == NULL)
+        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->req_insert_count, ctx->base_index, src, src_end, 4,
+                                              err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
@@ -691,7 +704,8 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     } break;
     case 0: /* literal header field with post-base name reference */ {
         struct st_h2o_qpack_header_t *entry;
-        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->base_index, src, src_end, 3, err_desc)) == NULL)
+        if ((entry = resolve_dynamic_postbase(&ctx->qpack->table, ctx->req_insert_count, ctx->base_index, src, src_end, 3,
+                                              err_desc)) == NULL)
             goto Fail;
         h2o_mem_link_shared(pool, entry);
         *name = entry->name;
