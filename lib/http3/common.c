@@ -1452,7 +1452,7 @@ Malformed:
     return H2O_HTTP3_ERROR_FRAME;
 }
 
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id, int is_blocked)
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id, int is_blocked)
 {
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
