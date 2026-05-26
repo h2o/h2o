@@ -76,6 +76,7 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
 
     /* http3 client-specific fields */
+    h3ctx->qpack = (h2o_http3_qpack_context_t){0}; /* TODO: expose proxy.http3.qpack-* knobs and consider enabling by default */
     h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
                                                                                            directions */
 

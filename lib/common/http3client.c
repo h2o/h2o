@@ -384,11 +384,10 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         origin = &pool->socketpool->targets.entries[0]->url;
 
     static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
-    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &ctx->http3->qpack, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
