@@ -491,19 +491,6 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         --get_conn(stream)->num_streams_tunnelling;
 }
 
-static void cancel_qpack_decoder_stream(struct st_h2o_http3_server_stream_t *stream)
-{
-    int is_blocked = stream->qpack_blocked_ref != 0;
-    if (!is_blocked && stream->state != H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS)
-        return;
-    /* RFC 9204 requires Stream Cancellation when a stream is reset before all encoded field sections have been processed, or when
-     * reading is abandoned. If `is_blocked` is set, release our local blocked-stream budget as well. */
-    if (h2o_linklist_is_linked(&stream->link))
-        h2o_linklist_unlink(&stream->link);
-    stream->qpack_blocked_ref = 0;
-    h2o_http3_qpack_cancel_stream(&get_conn(stream)->h3, stream->quic->stream_id, is_blocked);
-}
-
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -551,12 +538,16 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
                             quicly_error_t reset_code, int in_generator, int reset_only_if_open)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-    cancel_qpack_decoder_stream(stream);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
         /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
          * as it is allowed and might be beneficial in case ACKs are lost */
         if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
             quicly_request_stop(stream->quic, stop_sending_code);
+        /* cancel the stream on the QPACK side, as we will not be processing all the bytes sent from the peer (RFC 9204 2.2.2.2) */
+        int is_blocked = stream->qpack_blocked_ref != 0;
+        stream->qpack_blocked_ref = 0;
+        h2o_http3_qpack_cancel_stream(&get_conn(stream)->h3, stream->quic->stream_id, is_blocked);
+        /* as we advance to a new state, unlink the multi-modal link */
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
     }
