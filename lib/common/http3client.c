@@ -539,15 +539,9 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
             return 0;
         }
     }
-    uint64_t qpack_blocked_ref;
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
-                                        &datagram_flow_id, &qpack_blocked_ref, header_ack, &header_ack_len, frame.payload,
-                                        frame.length, err_desc)) != 0) {
-        if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
-            /* the request is blocked by the QPACK stream */
-            req->handle_input = NULL; /* FIXME */
-            return 0;
-        }
+                                        &datagram_flow_id, NULL, header_ack, &header_ack_len, frame.payload, frame.length,
+                                        err_desc)) != 0) {
         if (*err_desc == NULL)
             *err_desc = "qpack error";
         notify_response_error(req, *err_desc);

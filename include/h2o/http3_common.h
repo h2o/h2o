@@ -297,7 +297,7 @@ typedef struct st_h2o_http3_qpack_context_t {
 typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
-    void (*handle_qpack_unblocked_streams)(h2o_http3_conn_t *conn, uint64_t insert_count);
+    void (*qpack_unblock_streams)(h2o_http3_conn_t *conn, uint64_t insert_count);
 } h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
@@ -463,7 +463,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
 /**
  *
  */
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id);
+void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id, int is_blocked);
 /**
  *
  */

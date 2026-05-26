@@ -727,7 +727,7 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
         ok(blocked_ref == 1);
         ok(dec->num_blocked == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
@@ -743,14 +743,14 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         ok(dec->num_blocked == 1);
         h2o_qpack_decoder_update_num_blocked(dec, -1);
         ok(dec->num_blocked == 0);
 
         src = input;
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input + sizeof(input)) == 0);
         ok(blocked_ref == 1);
         h2o_qpack_destroy_decoder(dec);
     }
@@ -763,7 +763,7 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input1;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
 
         src = input1;
@@ -785,10 +785,10 @@ static void test_decode_edge_cases(void)
         const uint8_t *src = input1;
         uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input1 + sizeof(input1)) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         src = input2;
-        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input2 + sizeof(input2)) == H2O_HTTP3_ERROR_INCOMPLETE);
+        ok(parse_decode_context(dec, &ctx, &blocked_ref, &src, input2 + sizeof(input2)) == 0);
         h2o_qpack_decoder_update_num_blocked(dec, 1);
         ok(dec->num_blocked == 2);
 

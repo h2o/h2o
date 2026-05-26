@@ -123,7 +123,9 @@ struct st_h2o_http3_server_conn_t {
          */
         h2o_linklist_t pending;
         /**
-         * holds streams whose header blocks are blocked by QPACK dynamic table references.
+         * holds streams in RECV_HEADERS state whose header blocks are blocked by QPACK dynamic table references.
+         * This use of st_h2o_http3_server_stream_t::link cannot overlap with other delayed_streams lists because
+         * QPACK-blocked streams have not advanced beyond request header parsing.
          */
         h2o_linklist_t qpack_blocked;
     } delayed_streams;
@@ -220,6 +222,10 @@ struct st_h2o_http3_server_stream_t {
         uint8_t data_frame_header_buf[9];
     } sendbuf;
     enum h2o_http3_server_stream_state state;
+    /**
+     * Non-zero if the stream is in RECV_HEADERS state waiting for the QPACK decoder's insert count to reach this value.
+     */
+    uint64_t qpack_blocked_ref;
     h2o_linklist_t link;
     h2o_linklist_t link_resp_settings_blocked;
     h2o_ostream_t ostr_final;
@@ -249,7 +255,6 @@ struct st_h2o_http3_server_stream_t {
      * indicates if the request is in streaming mode
      */
     uint8_t req_streaming : 1;
-    uint64_t qpack_blocked_ref;
     /**
      * indicates if the request has ever been QPACK-blocked.
      */
@@ -488,15 +493,15 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
         --get_conn(stream)->num_streams_tunnelling;
 }
 
-static void cancel_qpack_blocked_stream(struct st_h2o_http3_server_stream_t *stream)
+static void cancel_qpack_decoder_stream(struct st_h2o_http3_server_stream_t *stream)
 {
-    if (stream->qpack_blocked_ref == 0)
+    int is_blocked = stream->qpack_blocked_ref != 0;
+    if (!is_blocked && stream->state != H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS)
         return;
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     stream->qpack_blocked_ref = 0;
-    h2o_qpack_decoder_update_num_blocked(get_conn(stream)->h3.qpack.dec, -1);
-    h2o_http3_send_qpack_stream_cancel(&get_conn(stream)->h3, stream->quic->stream_id);
+    h2o_http3_send_qpack_stream_cancel(&get_conn(stream)->h3, stream->quic->stream_id, is_blocked);
 }
 
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
@@ -506,7 +511,8 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
     H2O_PROBE_CONN(H3S_STREAM_SET_STATE, &conn->super, stream->quic->stream_id, (unsigned)state);
 
-    assert(stream->qpack_blocked_ref == 0);
+    assert(stream->qpack_blocked_ref == 0 &&
+           "QPACK-blocked streams must be unblocked or cancelled before changing stream state");
 
     --*get_state_counter(conn, old_state);
     stream->state = state;
@@ -546,7 +552,7 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
                             quicly_error_t reset_code, int in_generator, int reset_only_if_open)
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
-    cancel_qpack_blocked_stream(stream);
+    cancel_qpack_decoder_stream(stream);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
         /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
          * as it is allowed and might be beneficial in case ACKs are lost */
@@ -821,7 +827,6 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 
     req_scheduler_deactivate(&conn->scheduler.reqs, &stream->scheduler);
 
-    assert(stream->qpack_blocked_ref == 0);
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
     if (h2o_linklist_is_linked(&stream->link_resp_settings_blocked))
@@ -1430,28 +1435,27 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
         return 0;
     }
     stream->req.timestamps.request_begin_at = h2o_gettimeofday(conn->super.ctx->loop);
-    stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
-    uint64_t qpack_blocked_ref;
+    stream->qpack_blocked_ref = 0;
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       &qpack_blocked_ref, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
+                                       &stream->qpack_blocked_ref, header_ack, &header_ack_len, frame.payload, frame.length,
+                                       err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-        if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
-            assert(qpack_blocked_ref != 0);
-            stream->recvbuf.handle_input = handle_input_expect_headers;
-            stream->qpack_blocked_ref = qpack_blocked_ref;
-            stream->qpack_blocked_ever = 1;
-            h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, 1);
-            h2o_linklist_insert(&conn->delayed_streams.qpack_blocked, &stream->link);
-            *src = frame_start;
-            return 0;
-        }
         return ret;
     }
+    if (stream->qpack_blocked_ref != 0) {
+        stream->qpack_blocked_ever = 1;
+        h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, 1);
+        h2o_linklist_insert(&conn->delayed_streams.qpack_blocked, &stream->link);
+        *src = frame_start;
+        return 0;
+    }
+
+    stream->recvbuf.handle_input = handle_input_expect_data;
     if (header_ack_len != 0)
         h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
 
@@ -1838,7 +1842,7 @@ Fail:
     h2o_quic_close_connection(&conn->h3.super, err, err_desc);
 }
 
-static void handle_qpack_unblocked_streams(h2o_http3_conn_t *_conn, uint64_t insert_count)
+static void qpack_unblock_streams(h2o_http3_conn_t *_conn, uint64_t insert_count)
 {
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, _conn);
 
@@ -2420,5 +2424,5 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
 const h2o_http3_conn_callbacks_t H2O_HTTP3_CONN_CALLBACKS = {
     {on_h3_destroy},
     handle_control_stream_frame,
-    handle_qpack_unblocked_streams,
+    qpack_unblock_streams,
 };

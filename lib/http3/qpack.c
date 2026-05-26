@@ -720,7 +720,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
                                 const uint8_t **src, const uint8_t *src_end)
 {
     ctx->qpack = qpack;
-    *blocked_ref = 0;
+    if (blocked_ref != NULL)
+        *blocked_ref = 0;
 
     /* largest reference */
     if (decode_int(&ctx->req_insert_count, src, src_end, 8) != 0)
@@ -765,8 +766,10 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
     if (ctx->req_insert_count >= qpack_table_total_inserts(&qpack->table)) {
         if (qpack->num_blocked >= qpack->max_blocked)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        if (blocked_ref == NULL)
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         *blocked_ref = ctx->req_insert_count;
-        return H2O_HTTP3_ERROR_INCOMPLETE;
+        return 0;
     }
 
     return 0;
@@ -792,6 +795,8 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
 
     if ((ret = parse_decode_context(qpack, &ctx, blocked_ref, &src, src_end)) != 0)
         return ret;
+    if (blocked_ref != NULL && *blocked_ref != 0)
+        return 0;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, protocol, headers,
                                        pseudo_header_exists_map, content_length, expect, digests, datagram_flow_id, src,
                                        src_end - src, err_desc)) != 0) {
@@ -814,6 +819,8 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 
     if ((ret = parse_decode_context(qpack, &ctx, blocked_ref, &src, src_end)) != 0)
         return ret;
+    if (blocked_ref != NULL && *blocked_ref != 0)
+        return 0;
     if ((ret = h2o_hpack_parse_response(pool, decode_header, &ctx, status, headers, datagram_flow_id, src, src_end - src,
                                         err_desc)) != 0)
         return normalize_error_code(ret);

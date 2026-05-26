@@ -233,11 +233,11 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         if ((ret = h2o_qpack_parse_request(pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
                                            &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, blocked_ref,
                                            header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
-            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-                return ret;
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
             return ret;
         }
+        if (*blocked_ref != 0)
+            return H2O_HTTP3_ERROR_INCOMPLETE;
 #define REQUIRED_PSEUDO_HEADERS                                                                                                    \
     (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |    \
      H2O_HPACK_PARSE_HEADERS_PATH_EXISTS)
@@ -270,11 +270,11 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         const char *err_desc = NULL;
         if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, blocked_ref, header_ack,
                                             &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
-            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-                return ret;
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
             return ret;
         }
+        if (*blocked_ref != 0)
+            return H2O_HTTP3_ERROR_INCOMPLETE;
         fprintf(outp, "#stream\t%" PRIu64 "\n:status\t%d\n", stream_id, status);
         if (datagram_flow_id.base != NULL)
             fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
