@@ -529,6 +529,12 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
     }
 }
 
+static void cancel_qpack_decoder(struct st_h2o_http3_server_stream_t *stream)
+{
+    h2o_http3_qpack_cancel_stream(&get_conn(stream)->h3, stream->quic->stream_id, stream->qpack_blocked_ref != 0);
+    stream->qpack_blocked_ref = 0;
+}
+
 /**
  * Shutdowns a stream. Note that a request stream should not be shut down until receiving some QUIC frame that refers to that
  * stream, but we might might have created stream state due to receiving a PRIORITY_UPDATE frame prior to that (see
@@ -543,11 +549,7 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
          * as it is allowed and might be beneficial in case ACKs are lost */
         if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
             quicly_request_stop(stream->quic, stop_sending_code);
-        /* cancel the stream on the QPACK side, as we will not be processing all the bytes sent from the peer (RFC 9204 2.2.2.2) */
-        int is_blocked = stream->qpack_blocked_ref != 0;
-        stream->qpack_blocked_ref = 0;
-        h2o_http3_qpack_cancel_stream(&get_conn(stream)->h3, stream->quic->stream_id, is_blocked);
-        /* as we advance to a new state, unlink the multi-modal link */
+        cancel_qpack_decoder(stream);
         if (h2o_linklist_is_linked(&stream->link))
             h2o_linklist_unlink(&stream->link);
     }
@@ -933,8 +935,10 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
                    stream->proceed_requested);
         } else {
             collect_quic_performance_metrics(stream);
-            if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
+            if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+                cancel_qpack_decoder(stream);
+            }
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 0);
         }
     }
@@ -1352,8 +1356,10 @@ static int handle_input_expect_headers_send_http_error(struct st_h2o_http3_serve
                                                        void (*sendfn)(h2o_req_t *, const char *, const char *, int),
                                                        const char *reason, const char *body, const char **err_desc)
 {
-    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
         quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+        cancel_qpack_decoder(stream);
+    }
 
     set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
     sendfn(&stream->req, reason, body, 0);
@@ -1602,8 +1608,10 @@ static void shutdown_by_generator(struct st_h2o_http3_server_stream_t *stream)
 {
     quicly_sendstate_shutdown(&stream->quic->sendstate, stream->sendbuf.final_size);
     if (stream->sendbuf.vecs.size == 0) {
-        if (quicly_stream_has_receive_side(0, stream->quic->stream_id))
+        if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
             quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
+            cancel_qpack_decoder(stream);
+        }
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, 1);
     }
 }
