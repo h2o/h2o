@@ -764,6 +764,9 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 static int check_decode_context_blocked(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx,
                                         uint64_t num_blocked, uint64_t *blocked_ref)
 {
+    assert(blocked_ref != NULL || qpack->max_blocked == 0 ||
+           !"blocked_ref may be NULL only when the decoder permits no blocked sections");
+
     if (ctx->req_insert_count < qpack_table_total_inserts(&qpack->table)) {
         /* not blocked */
         if (blocked_ref != NULL)
@@ -775,7 +778,6 @@ static int check_decode_context_blocked(h2o_qpack_decoder_t *qpack, struct st_h2
     if (num_blocked >= qpack->max_blocked)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 
-    assert(blocked_ref != NULL);
     *blocked_ref = ctx->req_insert_count;
     return 0;
 }
@@ -799,7 +801,6 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
-    assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, &src, src_end)) != 0)
         return ret;
     if ((ret = check_decode_context_blocked(qpack, &ctx, num_blocked, blocked_ref)) != 0)
@@ -826,7 +827,6 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
-    assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, &src, src_end)) != 0)
         return ret;
     if ((ret = check_decode_context_blocked(qpack, &ctx, num_blocked, blocked_ref)) != 0)
