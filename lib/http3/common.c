@@ -329,17 +329,15 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     int ret;
     const char *err_desc = NULL;
-    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
-        0) {
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &insert_count, src, src_end, &err_desc)) != 0) {
         h2o_quic_close_connection(&conn->super, ret, err_desc);
         return;
     }
-    if (num_unblocked != 0 && get_callbacks(conn)->handle_qpack_unblocked_streams != NULL)
-        get_callbacks(conn)->handle_qpack_unblocked_streams(conn, unblocked_stream_ids, num_unblocked);
+    if (insert_count != 0)
+        get_callbacks(conn)->handle_qpack_unblocked_streams(conn, insert_count);
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
