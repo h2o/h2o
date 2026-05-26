@@ -92,10 +92,6 @@ struct st_h2o_qpack_decoder_t {
      *
      */
     uint64_t max_blocked;
-    /**
-     * number of header blocks blocked by dynamic table references, maintained by the H3 layer that owns the stream list.
-     */
-    uint64_t num_blocked;
 };
 
 struct st_h2o_qpack_encoder_t {
@@ -249,7 +245,6 @@ h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64
     qpack->max_entries = header_table_size / 32;
     qpack->total_inserts = 0;
     qpack->max_blocked = max_blocked;
-    qpack->num_blocked = 0;
     header_table_init(&qpack->table, qpack->header_table_size);
 
     return qpack;
@@ -259,17 +254,6 @@ void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack)
 {
     header_table_dispose(&qpack->table);
     free(qpack);
-}
-
-void h2o_qpack_decoder_update_num_blocked(h2o_qpack_decoder_t *qpack, int delta)
-{
-    if (delta > 0) {
-        assert(qpack->num_blocked + (uint64_t)delta <= qpack->max_blocked);
-        qpack->num_blocked += (uint64_t)delta;
-    } else if (delta < 0) {
-        assert(qpack->num_blocked >= (uint64_t)-delta);
-        qpack->num_blocked -= (uint64_t)-delta;
-    }
 }
 
 static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *added)
@@ -778,7 +762,7 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
 }
 
 static int check_decode_context_blocked(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx,
-                                        uint64_t *blocked_ref)
+                                        uint64_t num_blocked, uint64_t *blocked_ref)
 {
     if (ctx->req_insert_count < qpack_table_total_inserts(&qpack->table)) {
         /* not blocked */
@@ -788,9 +772,10 @@ static int check_decode_context_blocked(h2o_qpack_decoder_t *qpack, struct st_h2
     }
 
     /* if blocked but all the slots are already occupied, then it is an error */
-    if (qpack->num_blocked >= qpack->max_blocked)
+    if (num_blocked >= qpack->max_blocked)
         return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 
+    assert(blocked_ref != NULL);
     *blocked_ref = ctx->req_insert_count;
     return 0;
 }
@@ -806,8 +791,9 @@ static int normalize_error_code(int err)
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint64_t *blocked_ref, uint8_t *outbuf,
-                            size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint64_t num_blocked,
+                            uint64_t *blocked_ref, uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len,
+                            const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
@@ -816,7 +802,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
     assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, &src, src_end)) != 0)
         return ret;
-    if ((ret = check_decode_context_blocked(qpack, &ctx, blocked_ref)) != 0)
+    if ((ret = check_decode_context_blocked(qpack, &ctx, num_blocked, blocked_ref)) != 0)
         return ret;
     if (blocked_ref != NULL && *blocked_ref != 0)
         return 0;
@@ -833,8 +819,8 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
 }
 
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, uint64_t *blocked_ref, uint8_t *outbuf,
-                             size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, uint64_t num_blocked, uint64_t *blocked_ref,
+                             uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
@@ -843,7 +829,7 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     assert(blocked_ref != NULL || qpack->max_blocked == 0);
     if ((ret = parse_decode_context(qpack, &ctx, &src, src_end)) != 0)
         return ret;
-    if ((ret = check_decode_context_blocked(qpack, &ctx, blocked_ref)) != 0)
+    if ((ret = check_decode_context_blocked(qpack, &ctx, num_blocked, blocked_ref)) != 0)
         return ret;
     if (blocked_ref != NULL && *blocked_ref != 0)
         return 0;

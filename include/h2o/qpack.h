@@ -38,7 +38,6 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64_t max_blocked);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
-void h2o_qpack_decoder_update_num_blocked(h2o_qpack_decoder_t *qpack, int delta);
 /**
  * This function processes a stream of QPACK encoder instructions provided in [*src, src_end), and updates `*src` to point to the
  * beginning of the first partial instruction being found.
@@ -51,23 +50,25 @@ size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *ou
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id);
 
 /**
- * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. If the decoder allows blocked streams,
- * `blocked_ref` must be non-NULL; when the field section is blocked, returns success with `*blocked_ref` set to the Required
- * Insert Count. When the decoder does not allow blocked streams, `blocked_ref` may be NULL and a blocked field section is treated
- * as a decompression error.
+ * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. `num_blocked` is the caller's current
+ * count of header sections that are blocked on dynamic-table references; it is compared against the decoder's negotiated
+ * max_blocked to decide whether one more may be parked. If the decoder allows blocked streams, `blocked_ref` must be non-NULL;
+ * when the field section is blocked, returns success with `*blocked_ref` set to the Required Insert Count. When the decoder
+ * does not allow blocked streams, `blocked_ref` may be NULL and a blocked field section is treated as a decompression error.
  */
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint64_t *blocked_ref, uint8_t *outbuf,
-                            size_t *outbufsize, const uint8_t *src, size_t len, const char **err_desc);
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint64_t num_blocked,
+                            uint64_t *blocked_ref, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len,
+                            const char **err_desc);
 /**
  * Parses a QPACK response. The input should be the *payload* of the HTTP/3 HEADERS frame. `outbuf` should be at least
- * H2O_HPACK_ENCODE_INT_MAX_LENGTH long. `blocked_ref` follows the same rules as `h2o_qpack_parse_request`.
+ * H2O_HPACK_ENCODE_INT_MAX_LENGTH long. `num_blocked` and `blocked_ref` follow the same rules as `h2o_qpack_parse_request`.
  */
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, uint64_t *blocked_ref, uint8_t *outbuf,
-                             size_t *outbufsize, const uint8_t *src, size_t len, const char **err_desc);
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, uint64_t num_blocked, uint64_t *blocked_ref,
+                             uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len, const char **err_desc);
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);

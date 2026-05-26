@@ -128,6 +128,10 @@ struct st_h2o_http3_server_conn_t {
         h2o_linklist_t qpack_blocked;
     } delayed_streams;
     /**
+     * number of streams currently on `delayed_streams.qpack_blocked`; checked against the decoder's max_blocked.
+     */
+    uint64_t num_qpack_blocked;
+    /**
      * responses blocked by SETTINGS frame yet to arrive (e.g., CONNECT-UDP requests waiting for SETTINGS to see if
      * datagram-flow-id can be sent). There is no separate state for streams linked here, because these streams are techincally
      * indifferent from those that are currently queued by the filters after `h2o_send` is called.
@@ -531,8 +535,13 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
 
 static void cancel_qpack_decoder(struct st_h2o_http3_server_stream_t *stream)
 {
-    h2o_http3_qpack_cancel_stream(&get_conn(stream)->h3, stream->quic->stream_id, stream->qpack_blocked_ref != 0);
-    stream->qpack_blocked_ref = 0;
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+    if (stream->qpack_blocked_ref != 0) {
+        assert(conn->num_qpack_blocked > 0);
+        --conn->num_qpack_blocked;
+        stream->qpack_blocked_ref = 0;
+    }
+    h2o_http3_qpack_cancel_stream(&conn->h3, stream->quic->stream_id);
 }
 
 /**
@@ -822,6 +831,10 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 
     if (h2o_linklist_is_linked(&stream->link))
         h2o_linklist_unlink(&stream->link);
+    if (stream->qpack_blocked_ref != 0) {
+        assert(conn->num_qpack_blocked > 0);
+        --conn->num_qpack_blocked;
+    }
     if (h2o_linklist_is_linked(&stream->link_resp_settings_blocked))
         h2o_linklist_unlink(&stream->link_resp_settings_blocked);
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
@@ -1438,8 +1451,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       &stream->qpack_blocked_ref, header_ack, &header_ack_len, frame.payload, frame.length,
-                                       err_desc)) != 0 &&
+                                       conn->num_qpack_blocked, &stream->qpack_blocked_ref, header_ack, &header_ack_len,
+                                       frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
         return ret;
     }
@@ -1447,7 +1460,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     /* if the decoding of the frame is blocked by QPACK, return, preserving the HEADERS frame in the receive buffer */
     if (stream->qpack_blocked_ref != 0) {
         stream->qpack_blocked_ever = 1;
-        h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, 1);
+        ++conn->num_qpack_blocked;
         h2o_linklist_insert(&conn->delayed_streams.qpack_blocked, &stream->link);
         *src = frame_start;
         return 0;
@@ -1855,7 +1868,8 @@ static void qpack_unblock_streams(h2o_http3_conn_t *_conn, uint64_t insert_count
             continue;
         h2o_linklist_unlink(&stream->link);
         stream->qpack_blocked_ref = 0;
-        h2o_qpack_decoder_update_num_blocked(conn->h3.qpack.dec, -1);
+        assert(conn->num_qpack_blocked > 0);
+        --conn->num_qpack_blocked;
         handle_buffered_input(stream, 0);
     }
 }
@@ -2180,6 +2194,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     assert(h2o_linklist_is_empty(&conn->delayed_streams.req_streaming));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.pending));
     assert(h2o_linklist_is_empty(&conn->delayed_streams.qpack_blocked));
+    assert(conn->num_qpack_blocked == 0);
     assert(h2o_linklist_is_empty(&conn->streams_resp_settings_blocked));
     assert(conn->scheduler.reqs.active.smallest_urgency >= H2O_ABSPRIO_NUM_URGENCY_LEVELS);
     assert(h2o_linklist_is_empty(&conn->scheduler.reqs.conn_blocked));

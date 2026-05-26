@@ -540,8 +540,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         }
     }
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
-                                        &datagram_flow_id, NULL, header_ack, &header_ack_len, frame.payload, frame.length,
-                                        err_desc)) != 0) {
+                                        &datagram_flow_id, 0 /* client has no blocked-streams budget */, NULL, header_ack,
+                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
         if (*err_desc == NULL)
             *err_desc = "qpack error";
         notify_response_error(req, *err_desc);

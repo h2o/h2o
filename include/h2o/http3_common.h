@@ -463,7 +463,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
 /**
  *
  */
-void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id, int is_blocked);
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id);
 /**
  *
  */

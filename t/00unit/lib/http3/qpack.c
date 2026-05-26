@@ -85,7 +85,7 @@ static void do_test_simple(int use_enc_stream)
         h2o_iovec_t expect = {NULL};
         uint64_t blocked_ref;
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, &blocked_ref, header_ack,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, header_ack,
                                       &header_ack_len, (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
@@ -137,7 +137,7 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
 
     uint64_t blocked_ref;
     int ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, &blocked_ref, header_ack,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, header_ack,
                                       &header_ack_len, (const uint8_t *)input.base, input.len, &err_desc);
 
     ok(ret == expected_ret);
@@ -756,11 +756,8 @@ static void test_decode_edge_cases(void)
         uint64_t blocked_ref;
 
         ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
         ok(blocked_ref == 1);
-        ok(dec->num_blocked == 0);
-        h2o_qpack_decoder_update_num_blocked(dec, 1);
-        ok(dec->num_blocked == 1);
         h2o_qpack_destroy_decoder(dec);
     }
 
@@ -773,20 +770,16 @@ static void test_decode_edge_cases(void)
         uint64_t blocked_ref;
 
         ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
-        h2o_qpack_decoder_update_num_blocked(dec, 1);
-        ok(dec->num_blocked == 1);
-        h2o_qpack_decoder_update_num_blocked(dec, -1);
-        ok(dec->num_blocked == 0);
-
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+        /* caller-tracked counter goes 0 -> 1 -> 0; next blocked section is admissible again */
         src = input;
         ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
         ok(blocked_ref == 1);
         h2o_qpack_destroy_decoder(dec);
     }
 
-    note("blocked stream budget is enforced from H3-maintained counter");
+    note("blocked stream budget is enforced from caller-supplied num_blocked");
     {
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
         struct st_h2o_qpack_decode_header_ctx_t ctx;
@@ -795,12 +788,11 @@ static void test_decode_edge_cases(void)
         uint64_t blocked_ref;
 
         ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
-        h2o_qpack_decoder_update_num_blocked(dec, 1);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
 
         src = input1;
         ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+        ok(check_decode_context_blocked(dec, &ctx, 1, &blocked_ref) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
         h2o_qpack_destroy_decoder(dec);
     }
 
@@ -818,13 +810,10 @@ static void test_decode_edge_cases(void)
         uint64_t blocked_ref;
 
         ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
-        h2o_qpack_decoder_update_num_blocked(dec, 1);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
         src = input2;
         ok(parse_decode_context(dec, &ctx, &src, input2 + sizeof(input2)) == 0);
-        ok(check_decode_context_blocked(dec, &ctx, &blocked_ref) == 0);
-        h2o_qpack_decoder_update_num_blocked(dec, 1);
-        ok(dec->num_blocked == 2);
+        ok(check_decode_context_blocked(dec, &ctx, 1, &blocked_ref) == 0);
 
         uint64_t insert_count;
         const char *err_desc = NULL;
@@ -833,9 +822,6 @@ static void test_decode_edge_cases(void)
         ok(err_desc == NULL);
         ok(src == inserts + sizeof(inserts));
         ok(insert_count == 2);
-        h2o_qpack_decoder_update_num_blocked(dec, -1);
-        h2o_qpack_decoder_update_num_blocked(dec, -1);
-        ok(dec->num_blocked == 0);
         h2o_qpack_destroy_decoder(dec);
     }
 }
