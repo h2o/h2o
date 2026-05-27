@@ -175,7 +175,6 @@ OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -250,6 +249,25 @@ IF (PKG_CONFIG_FOUND)
     ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
 
+IF (NOT BROTLI_FOUND)
+    FIND_LIBRARY(BROTLI_DEC_LIBRARY NAMES brotlidec)
+    FIND_LIBRARY(BROTLI_ENC_LIBRARY NAMES brotlienc)
+    FIND_LIBRARY(BROTLI_COMMON_LIBRARY NAMES brotlicommon)
+    FIND_PATH(BROTLI_INCLUDE_DIR NAMES brotli/decode.h)
+    IF (BROTLI_DEC_LIBRARY AND BROTLI_ENC_LIBRARY AND BROTLI_COMMON_LIBRARY AND BROTLI_INCLUDE_DIR)
+        SET(BROTLI_FOUND TRUE)
+        SET(BROTLI_DEC_LIBRARIES ${BROTLI_DEC_LIBRARY} ${BROTLI_COMMON_LIBRARY})
+        SET(BROTLI_ENC_LIBRARIES ${BROTLI_ENC_LIBRARY} ${BROTLI_COMMON_LIBRARY})
+        INCLUDE_DIRECTORIES(${BROTLI_INCLUDE_DIR})
+    ENDIF ()
+ENDIF (NOT BROTLI_FOUND)
+
+IF (NOT BROTLI_FOUND)
+    MESSAGE(FATAL_ERROR "brotli library not found. Please install libbrotli-dev.")
+ENDIF (NOT BROTLI_FOUND)
+
+LIST(APPEND EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)
     IF (LIBCAP_FOUND)
@@ -314,31 +332,6 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/reader.c
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
-
-SET(BROTLI_SOURCE_FILES
-    deps/brotli/c/common/dictionary.c
-    deps/brotli/c/dec/bit_reader.c
-    deps/brotli/c/dec/decode.c
-    deps/brotli/c/dec/huffman.c
-    deps/brotli/c/dec/state.c
-    deps/brotli/c/enc/backward_references.c
-    deps/brotli/c/enc/backward_references_hq.c
-    deps/brotli/c/enc/bit_cost.c
-    deps/brotli/c/enc/block_splitter.c
-    deps/brotli/c/enc/brotli_bit_stream.c
-    deps/brotli/c/enc/cluster.c
-    deps/brotli/c/enc/compress_fragment.c
-    deps/brotli/c/enc/compress_fragment_two_pass.c
-    deps/brotli/c/enc/dictionary_hash.c
-    deps/brotli/c/enc/encode.c
-    deps/brotli/c/enc/entropy_encode.c
-    deps/brotli/c/enc/histogram.c
-    deps/brotli/c/enc/literal_cost.c
-    deps/brotli/c/enc/memory.c
-    deps/brotli/c/enc/metablock.c
-    deps/brotli/c/enc/static_dict.c
-    deps/brotli/c/enc/utf8_util.c
-    lib/handler/compress/brotli.c)
 
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
@@ -425,6 +418,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
+    lib/handler/compress/brotli.c
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -502,7 +496,6 @@ ENDIF ()
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
@@ -579,8 +572,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES})
+    ${LIBYAML_SOURCE_FILES})
 
 # Remove some of quicly files for fuzzing to allow the mockup library to come in
 LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
@@ -746,7 +738,6 @@ ENDIF()
 SET(STANDALONE_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
