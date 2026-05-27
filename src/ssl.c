@@ -106,7 +106,11 @@ H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
     while (1) {
         size_t i;
         for (i = 0; contexts[i] != NULL; ++i)
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30400000L
+            SSL_CTX_flush_sessions_ex(contexts[i], time(NULL));
+#else
             SSL_CTX_flush_sessions(contexts[i], time(NULL));
+#endif
         sleep(conf.lifetime / 4);
     }
 }
