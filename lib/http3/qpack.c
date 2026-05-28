@@ -136,6 +136,11 @@ struct st_h2o_qpack_flatten_context_t {
     h2o_byte_vector_t headers_buf;
     int64_t base_index;
     int64_t largest_ref;
+    /**
+     * Caller-owned stats output, accumulated as each header is emitted. Always non-NULL — public entry points point this at
+     * the caller-supplied stats struct (flatten_response) or at a local discard (flatten_request).
+     */
+    h2o_qpack_header_stats_t *stats;
 };
 
 const char *h2o_qpack_err_header_name_too_long = "header name too long";
@@ -640,6 +645,11 @@ struct st_h2o_qpack_decode_header_ctx_t {
      * These values are non-negative.
      */
     int64_t req_insert_count, base_index;
+    /**
+     * Caller-owned stats output, accumulated into by decode_header. Always non-NULL — public entry points point this at the
+     * caller-supplied stats struct (parse_request) or at a local discard (parse_response).
+     */
+    h2o_qpack_header_stats_t *stats;
 };
 
 static size_t send_header_ack(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx, uint8_t *outbuf,
@@ -735,6 +745,9 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
         break;
     }
 
+    ++ctx->stats->count;
+    ctx->stats->text_bytes += (*name)->len + value->len;
+
     if (soft_errors != 0) {
         *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
                         ? h2o_hpack_soft_err_found_invalid_char_in_header_name
@@ -812,15 +825,18 @@ static int normalize_error_code(int err)
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint8_t *outbuf, size_t *outbufsize,
-                            const uint8_t *_src, size_t len, const char **err_desc)
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats,
+                            uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
+    *stats = (h2o_qpack_header_stats_t){0};
+
     if ((ret = parse_decode_context(qpack, &ctx, stream_id, &src, src_end)) != 0)
         return ret;
+    ctx.stats = stats;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, protocol, headers,
                                        pseudo_header_exists_map, content_length, expect, digests, datagram_flow_id, src,
                                        src_end - src, err_desc)) != 0) {
@@ -834,15 +850,18 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
 }
 
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, uint8_t *outbuf, size_t *outbufsize,
-                             const uint8_t *_src, size_t len, const char **err_desc)
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats,
+                             uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
     int ret;
 
+    *stats = (h2o_qpack_header_stats_t){0};
+
     if ((ret = parse_decode_context(qpack, &ctx, stream_id, &src, src_end)) != 0)
         return ret;
+    ctx.stats = stats;
     if ((ret = h2o_hpack_parse_response(pool, decode_header, &ctx, status, headers, datagram_flow_id, src, src_end - src,
                                         err_desc)) != 0)
         return normalize_error_code(ret);
@@ -1055,6 +1074,9 @@ static void emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool
 
 static void flatten_static_indexed(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index)
 {
+    ++ctx->stats->count;
+    ctx->stats->text_bytes += h2o_qpack_static_table[index].name->buf.len + h2o_qpack_static_table[index].value.len;
+
     h2o_vector_reserve(ctx->pool, &ctx->headers_buf, ctx->headers_buf.size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
     ctx->headers_buf.entries[ctx->headers_buf.size] = 0xc0;
     flatten_int(&ctx->headers_buf, index, 6);
@@ -1118,9 +1140,13 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
     int64_t dynamic_index;
 
     if (static_index >= 0 && is_exact) {
-        flatten_static_indexed(ctx, static_index);
+        flatten_static_indexed(ctx, static_index); /* accounted by flatten_static_indexed */
         return;
     }
+
+    /* count this header; the static-exact-match early return above counted via flatten_static_indexed */
+    ++ctx->stats->count;
+    ctx->stats->text_bytes += name->len + value.len;
 
     if (ctx->qpack != NULL) {
         /* try dynamic indexed */
@@ -1206,7 +1232,7 @@ static const size_t PREFIX_CAPACITY =
     1 /* frame header */ + 8 /* frame payload len */ + H2O_HPACK_ENCODE_INT_MAX_LENGTH + H2O_HPACK_ENCODE_INT_MAX_LENGTH;
 
 static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
-                            int64_t stream_id, h2o_byte_vector_t *encoder_buf)
+                            int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_qpack_header_stats_t *stats)
 {
     ctx->qpack = qpack;
     ctx->pool = pool;
@@ -1215,6 +1241,8 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->headers_buf = (h2o_byte_vector_t){NULL};
     ctx->base_index = qpack != NULL ? qpack_table_total_inserts(&qpack->table) - 1 : 0;
     ctx->largest_ref = 0;
+    ctx->stats = stats;
+    *stats = (h2o_qpack_header_stats_t){0};
 
     /* allocate some space, hoping to avoid realloc, but not wasting too much */
     h2o_vector_reserve(ctx->pool, &ctx->headers_buf, PREFIX_CAPACITY + 100);
@@ -1275,11 +1303,11 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
 h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                       h2o_byte_vector_t *_encoder_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
                                       h2o_iovec_t authority, h2o_iovec_t path, h2o_iovec_t protocol, const h2o_header_t *headers,
-                                      size_t num_headers, h2o_iovec_t datagram_flow_id)
+                                      size_t num_headers, h2o_iovec_t datagram_flow_id, h2o_qpack_header_stats_t *stats)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
-    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf);
+    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf, stats);
 
     /* pseudo headers */
     flatten_known_header_with_static_lookup(&ctx, h2o_qpack_lookup_method, H2O_TOKEN_METHOD, method);
@@ -1315,11 +1343,11 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
                                        const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
-                                       size_t *serialized_header_len)
+                                       h2o_qpack_header_stats_t *stats, size_t *serialized_header_len)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
-    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf);
+    prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf, stats);
 
     /* pseudo headers */
     switch (status) {

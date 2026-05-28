@@ -258,6 +258,23 @@ struct st_h2o_http3_server_stream_t {
      */
     uint64_t datagram_flow_id;
     /**
+     * per-stream byte counters, for access log.
+     */
+    struct {
+        /* H3 frame payload bytes */
+        uint64_t headers_recv;
+        uint64_t headers_sent;
+        uint64_t data_recv;
+        uint64_t data_sent;
+        /* QUIC stream payload bytes (sum of all H3 frames + their framing) */
+        uint64_t stream_recv;
+        uint64_t stream_sent;
+        /* uncompressed/wire counts over the request HEADERS section */
+        h2o_qpack_header_stats_t headers_recv_stats;
+        /* same for the response HEADERS section */
+        h2o_qpack_header_stats_t headers_sent_stats;
+    } bytes;
+    /**
      * the request. Placed at the end, as it holds the pool.
      */
     h2o_req_t req;
@@ -780,6 +797,27 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
     return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
 }
 
+#define DEFINE_H3_BYTES_LOG(name, accessor)                                                                                        \
+    static h2o_iovec_t log_##name(h2o_req_t *_req)                                                                                 \
+    {                                                                                                                              \
+        struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);      \
+        char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));                                   \
+        return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, (uint64_t)(accessor)));                                                \
+    }
+
+DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->bytes.headers_recv)
+DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->bytes.headers_sent)
+DEFINE_H3_BYTES_LOG(data_bytes_recv, stream->bytes.data_recv)
+DEFINE_H3_BYTES_LOG(data_bytes_sent, stream->bytes.data_sent)
+DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->bytes.stream_recv)
+DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->bytes.stream_sent)
+DEFINE_H3_BYTES_LOG(headers_text_recv, stream->bytes.headers_recv_stats.text_bytes)
+DEFINE_H3_BYTES_LOG(headers_text_sent, stream->bytes.headers_sent_stats.text_bytes)
+DEFINE_H3_BYTES_LOG(headers_count_recv, stream->bytes.headers_recv_stats.count)
+DEFINE_H3_BYTES_LOG(headers_count_sent, stream->bytes.headers_sent_stats.count)
+
+#undef DEFINE_H3_BYTES_LOG
+
 void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
@@ -956,8 +994,12 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         /* copy payload */
         memcpy(dst, this_vec->vec.raw + off, sz);
         /* adjust offsets */
-        if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
-            stream->req.bytes_sent = this_vec->entity_offset + off + sz;
+        if (this_vec->entity_offset != UINT64_MAX) {
+            if (stream->req.bytes_sent < this_vec->entity_offset + off + sz)
+                stream->req.bytes_sent = this_vec->entity_offset + off + sz;
+            stream->bytes.data_sent += sz;
+        }
+        stream->bytes.stream_sent += sz;
         dst += sz;
         off += sz;
         /* when reaching the end of the current vector, update vec_index, wrote_all */
@@ -1029,6 +1071,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
             } while (src != src_end && !stream->read_blocked && !quicly_stop_requested(stream->quic));
             /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
             size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
+            stream->bytes.stream_recv += bytes_consumed;
             h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
             quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
             if (stream->read_blocked)
@@ -1266,6 +1309,7 @@ static quicly_error_t handle_input_expect_data_payload(struct st_h2o_http3_serve
         return H2O_HTTP3_ERROR_INTERNAL;
     stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
     stream->req.req_body_bytes_received += bytes_avail;
+    stream->bytes.data_recv += bytes_avail;
     stream->recvbuf.bytes_left_in_data_frame -= bytes_avail;
     *src += bytes_avail;
 
@@ -1399,11 +1443,13 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
+    stream->bytes.headers_recv += frame.length;
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
+                                       &stream->bytes.headers_recv_stats, header_ack, &header_ack_len, frame.payload, frame.length,
+                                       err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
     if (header_ack_len != 0)
@@ -1528,8 +1574,9 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
     h2o_iovec_t frame = h2o_qpack_flatten_response(
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
-        stream->req.res.content_length, datagram_flow_id, &serialized_header_len);
+        stream->req.res.content_length, datagram_flow_id, &stream->bytes.headers_sent_stats, &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
+    stream->bytes.headers_sent += serialized_header_len;
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
@@ -2162,11 +2209,21 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .ech_cipher = log_ech_cipher,
                     .ech_cipher_bits = log_ech_cipher_bits,
                 },
+            .headers_uncompressed_bytes_recv = log_headers_text_recv,
+            .headers_uncompressed_bytes_sent = log_headers_text_sent,
+            .headers_count_recv = log_headers_count_recv,
+            .headers_count_sent = log_headers_count_sent,
             .http3 =
                 {
                     .stream_id = log_stream_id,
                     .quic_stats = log_quic_stats,
                     .quic_version = log_quic_version,
+                    .headers_bytes_recv = log_headers_bytes_recv,
+                    .headers_bytes_sent = log_headers_bytes_sent,
+                    .data_bytes_recv = log_data_bytes_recv,
+                    .data_bytes_sent = log_data_bytes_sent,
+                    .stream_bytes_recv = log_stream_bytes_recv,
+                    .stream_bytes_sent = log_stream_bytes_sent,
                 },
         }},
     };
