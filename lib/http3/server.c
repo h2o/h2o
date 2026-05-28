@@ -266,8 +266,6 @@ struct st_h2o_http3_server_stream_t {
             struct {
                 uint64_t headers;
             } frame;
-            /* QUIC stream payload bytes (sum of all H3 frames + their framing) */
-            uint64_t stream;
             /* uncompressed/wire counts over the QPACK HEADERS section */
             h2o_qpack_header_stats_t qpack;
         } received, sent;
@@ -805,8 +803,8 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
 
 DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->stats.received.frame.headers)
 DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->stats.sent.frame.headers)
-DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->stats.received.stream)
-DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->stats.sent.stream)
+DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->quic->recvstate.data_off)
+DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->quic->sendstate.size_inflight)
 DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
 DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
 DEFINE_H3_BYTES_LOG(request_header_count, stream->stats.received.qpack.count)
@@ -995,7 +993,6 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
             if (stream->req.bytes_sent < this_vec->entity_offset + off + sz)
                 stream->req.bytes_sent = this_vec->entity_offset + off + sz;
         }
-        stream->stats.sent.stream += sz;
         dst += sz;
         off += sz;
         /* when reaching the end of the current vector, update vec_index, wrote_all */
@@ -1067,7 +1064,6 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
             } while (src != src_end && !stream->read_blocked && !quicly_stop_requested(stream->quic));
             /* Processed zero or more bytes without noticing an error; shift the bytes that have been processed as frames. */
             size_t bytes_consumed = src - (const uint8_t *)stream->recvbuf.buf->bytes;
-            stream->stats.received.stream += bytes_consumed;
             h2o_buffer_consume(&stream->recvbuf.buf, bytes_consumed);
             quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
             if (stream->read_blocked)
