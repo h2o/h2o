@@ -42,22 +42,6 @@
 h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
 h2o_http3_conn_t h2o_http3_accept_conn_closed;
 
-struct st_h2o_http3_ingress_unistream_t {
-    /**
-     * back pointer
-     */
-    quicly_stream_t *quic;
-    /**
-     *
-     */
-    h2o_buffer_t *recvbuf;
-    /**
-     * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
-     */
-    void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
-                         const uint8_t *src_end, int is_eos);
-};
-
 const char h2o_http3_err_frame_too_large[] = "HTTP/3 frame is too large";
 
 const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
@@ -295,13 +279,14 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     h2o_http3_update_recvbuf(&stream->recvbuf, off, input, len);
 
     /* determine bytes that can be handled */
-    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes,
-                  *src_end = src + quicly_recvstate_bytes_available(&stream->quic->recvstate);
-    if (src == src_end && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+    size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
+    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes;
+    if (bytes_available == 0 && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
         return;
+    stream->bytes_received = stream->quic->recvstate.data_off + bytes_available;
 
     /* handle the bytes */
-    stream->handle_input(conn, stream, &src, src_end, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    stream->handle_input(conn, stream, &src, src + bytes_available, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
         return;
 
@@ -453,6 +438,9 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
         *wrote_all = 0;
     }
     memcpy(dst, stream->sendbuf->bytes + off, *len);
+    uint64_t end = qs->sendstate.acked.ranges[0].end + off + *len;
+    if (stream->bytes_sent < end)
+        stream->bytes_sent = end;
 }
 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -471,6 +459,7 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->data = stream;
         qs->callbacks = &callbacks;
         stream->quic = qs;
+        stream->bytes_sent = 0;
         h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
     } else {
         /* create ingress unistream */
@@ -481,6 +470,7 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->callbacks = &callbacks;
         stream->quic = qs;
         h2o_buffer_init(&stream->recvbuf, &h2o_socket_buffer_prototype);
+        stream->bytes_received = 0;
         stream->handle_input = unknown_type_handle_input;
     }
 }

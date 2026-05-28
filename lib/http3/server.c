@@ -2178,12 +2178,27 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
     quicly_stats_t stats;
 
+    uint64_t control_stream_bytes_received =
+        h3->_control_streams.ingress.control != NULL ? h3->_control_streams.ingress.control->bytes_received : 0;
+    uint64_t qpack_encoder_stream_bytes_received =
+        h3->_control_streams.ingress.qpack_encoder != NULL ? h3->_control_streams.ingress.qpack_encoder->bytes_received : 0;
+    uint64_t qpack_decoder_stream_bytes_received =
+        h3->_control_streams.ingress.qpack_decoder != NULL ? h3->_control_streams.ingress.qpack_decoder->bytes_received : 0;
+    uint64_t control_stream_bytes_sent =
+        h3->_control_streams.egress.control != NULL ? h3->_control_streams.egress.control->bytes_sent : 0;
+    uint64_t qpack_encoder_stream_bytes_sent =
+        h3->_control_streams.egress.qpack_encoder != NULL ? h3->_control_streams.egress.qpack_encoder->bytes_sent : 0;
+    uint64_t qpack_decoder_stream_bytes_sent =
+        h3->_control_streams.egress.qpack_decoder != NULL ? h3->_control_streams.egress.qpack_decoder->bytes_sent : 0;
+
     H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stream_stats.request_stream_bytes,
                    conn->stream_stats.request_headers_frame_bytes, conn->stream_stats.request_body_bytes,
                    conn->stream_stats.request_header_count, conn->stream_stats.request_header_text_bytes,
                    conn->stream_stats.response_stream_bytes, conn->stream_stats.response_headers_frame_bytes,
                    conn->stream_stats.response_body_bytes, conn->stream_stats.response_header_count,
-                   conn->stream_stats.response_header_text_bytes);
+                   conn->stream_stats.response_header_text_bytes, control_stream_bytes_received,
+                   qpack_encoder_stream_bytes_received, qpack_decoder_stream_bytes_received, control_stream_bytes_sent,
+                   qpack_encoder_stream_bytes_sent, qpack_decoder_stream_bytes_sent);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.request_stream_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, conn->stream_stats.request_headers_frame_bytes);
@@ -2195,6 +2210,12 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
         PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, conn->stream_stats.response_body_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, conn->stream_stats.response_header_count);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, conn->stream_stats.response_header_text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(control_stream_bytes_received, control_stream_bytes_received);
+        PTLS_LOG_ELEMENT_UNSIGNED(qpack_encoder_stream_bytes_received, qpack_encoder_stream_bytes_received);
+        PTLS_LOG_ELEMENT_UNSIGNED(qpack_decoder_stream_bytes_received, qpack_decoder_stream_bytes_received);
+        PTLS_LOG_ELEMENT_UNSIGNED(control_stream_bytes_sent, control_stream_bytes_sent);
+        PTLS_LOG_ELEMENT_UNSIGNED(qpack_encoder_stream_bytes_sent, qpack_encoder_stream_bytes_sent);
+        PTLS_LOG_ELEMENT_UNSIGNED(qpack_decoder_stream_bytes_sent, qpack_decoder_stream_bytes_sent);
     });
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {

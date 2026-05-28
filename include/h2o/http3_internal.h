@@ -29,6 +29,23 @@
 KHASH_MAP_INIT_INT(h2o_quic_idmap, h2o_quic_conn_t *);
 KHASH_MAP_INIT_INT64(h2o_quic_acceptmap, h2o_quic_conn_t *);
 
+struct st_h2o_http3_ingress_unistream_t {
+    /**
+     * back pointer
+     */
+    quicly_stream_t *quic;
+    /**
+     *
+     */
+    h2o_buffer_t *recvbuf;
+    uint64_t bytes_received;
+    /**
+     * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
+     */
+    void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
+                         const uint8_t *src_end, int is_eos);
+};
+
 struct st_h2o_http3_egress_unistream_t {
     /**
      * back pointer
@@ -38,6 +55,7 @@ struct st_h2o_http3_egress_unistream_t {
      *
      */
     h2o_buffer_t *sendbuf;
+    uint64_t bytes_sent;
 };
 
 #endif

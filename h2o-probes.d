@@ -102,7 +102,10 @@ provider h2o {
     probe h3s_destroy(uint64_t conn_id, uint64_t request_stream_bytes, uint64_t request_headers_frame_bytes,
                       uint64_t request_body_bytes, uint64_t request_header_count, uint64_t request_header_text_bytes,
                       uint64_t response_stream_bytes, uint64_t response_headers_frame_bytes, uint64_t response_body_bytes,
-                      uint64_t response_header_count, uint64_t response_header_text_bytes);
+                      uint64_t response_header_count, uint64_t response_header_text_bytes,
+                      uint64_t control_stream_bytes_received, uint64_t qpack_encoder_stream_bytes_received,
+                      uint64_t qpack_decoder_stream_bytes_received, uint64_t control_stream_bytes_sent,
+                      uint64_t qpack_encoder_stream_bytes_sent, uint64_t qpack_decoder_stream_bytes_sent);
     /**
      * HTTP/3 server-level event, indicating that a state of a request stream has been altered
      */
