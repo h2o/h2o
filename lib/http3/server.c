@@ -638,10 +638,10 @@ static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
         return h2o_iovec_init(buf, sprintf(buf, fmt, value));                                                                      \
     }
 
-DEFINE_NUMERIC_LOGGER(request_bytes, "%zu", stream->stats.req.qpack.text_bytes + stream->req.req_body_bytes_received)
-DEFINE_NUMERIC_LOGGER(request_bytes_header, "%zu", stream->stats.req.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(request_header_bytes, "%" PRIu64, stream->stats.req.headers_frame_bytes)
+DEFINE_NUMERIC_LOGGER(request_header_text_bytes, "%zu", stream->stats.req.qpack.text_bytes)
 DEFINE_NUMERIC_LOGGER(request_header_count, "%zu", stream->stats.req.qpack.count)
-DEFINE_NUMERIC_LOGGER(response_bytes_header, "%zu", stream->stats.resp.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(response_header_text_bytes, "%zu", stream->stats.resp.qpack.text_bytes)
 DEFINE_NUMERIC_LOGGER(response_header_count, "%zu", stream->stats.resp.qpack.count)
 
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
@@ -807,9 +807,6 @@ Redo:
 
 DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn))
 
-DEFINE_NUMERIC_LOGGER(request_headers_frame_bytes, "%" PRIu64, stream->stats.req.headers_frame_bytes)
-DEFINE_NUMERIC_LOGGER(response_headers_frame_bytes, "%" PRIu64, stream->stats.resp.headers_frame_bytes)
-
 static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
 {
     if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
@@ -823,8 +820,6 @@ static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *str
     return stream->quic->recvstate.eos;
 }
 
-/* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
- * byte count. */
 DEFINE_NUMERIC_LOGGER(request_stream_bytes, "%" PRIu64, get_request_stream_size(stream))
 DEFINE_NUMERIC_LOGGER(response_stream_bytes, "%" PRIu64, stream->quic->sendstate.size_inflight)
 
@@ -2273,10 +2268,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_tracer = get_tracer,
         .log_ = {{
             .extensible_priorities = log_extensible_priorities,
-            .request_bytes = log_request_bytes,
-            .request_bytes_header = log_request_bytes_header,
+            .request_header_bytes = log_request_header_bytes,
+            .request_header_text_bytes = log_request_header_text_bytes,
             .request_header_count = log_request_header_count,
-            .response_bytes_header = log_response_bytes_header,
+            .response_header_text_bytes = log_response_header_text_bytes,
             .response_header_count = log_response_header_count,
             .transport =
                 {
@@ -2301,8 +2296,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .stream_id = log_stream_id,
                     .quic_stats = log_quic_stats,
                     .quic_version = log_quic_version,
-                    .request_headers_frame_bytes = log_request_headers_frame_bytes,
-                    .response_headers_frame_bytes = log_response_headers_frame_bytes,
                     .request_stream_bytes = log_request_stream_bytes,
                     .response_stream_bytes = log_response_stream_bytes,
                 },

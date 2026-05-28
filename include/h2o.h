@@ -1015,11 +1015,11 @@ typedef struct st_h2o_conn_callbacks_t {
     union {
         struct {
             h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
-            /* protocol-agnostic per-request byte metrics; only h3 implements these initially */
-            h2o_iovec_t (*request_bytes)(h2o_req_t *req);
-            h2o_iovec_t (*request_bytes_header)(h2o_req_t *req);
+            /* protocol-agnostic per-message metrics; only h3 implements the new ones initially */
+            h2o_iovec_t (*request_header_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_text_bytes)(h2o_req_t *req);
             h2o_iovec_t (*request_header_count)(h2o_req_t *req);
-            h2o_iovec_t (*response_bytes_header)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_text_bytes)(h2o_req_t *req);
             h2o_iovec_t (*response_header_count)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
@@ -1055,9 +1055,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
-                /* per-request H3-frame and QUIC-stream byte counters */
-                h2o_iovec_t (*request_headers_frame_bytes)(h2o_req_t *req);
-                h2o_iovec_t (*response_headers_frame_bytes)(h2o_req_t *req);
+                /* per-request QUIC-stream byte counters */
                 h2o_iovec_t (*request_stream_bytes)(h2o_req_t *req);
                 h2o_iovec_t (*response_stream_bytes)(h2o_req_t *req);
             } http3;
