@@ -1043,10 +1043,8 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         /* copy payload */
         memcpy(dst, this_vec->vec.raw + off, sz);
         /* adjust offsets */
-        if (this_vec->entity_offset != UINT64_MAX) {
-            if (stream->req.bytes_sent < this_vec->entity_offset + off + sz)
-                stream->req.bytes_sent = this_vec->entity_offset + off + sz;
-        }
+        if (this_vec->entity_offset != UINT64_MAX && stream->req.bytes_sent < this_vec->entity_offset + off + sz)
+            stream->req.bytes_sent = this_vec->entity_offset + off + sz;
         dst += sz;
         off += sz;
         /* when reaching the end of the current vector, update vec_index, wrote_all */
