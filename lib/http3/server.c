@@ -161,16 +161,12 @@ struct st_h2o_http3_server_conn_t {
      * aggregate of per-request stream statistics
      */
     struct {
-        uint64_t request_stream_bytes;
-        uint64_t request_headers_frame_bytes;
-        uint64_t request_body_bytes;
-        uint64_t request_header_count;
-        uint64_t request_header_text_bytes;
-        uint64_t response_stream_bytes;
-        uint64_t response_headers_frame_bytes;
-        uint64_t response_body_bytes;
-        uint64_t response_header_count;
-        uint64_t response_header_text_bytes;
+        struct {
+            uint64_t stream_bytes;
+            uint64_t headers_frame_bytes;
+            uint64_t body_bytes;
+            h2o_qpack_section_stats_t qpack;
+        } req, resp;
     } stream_stats;
     /**
      * scheduler
@@ -277,13 +273,10 @@ struct st_h2o_http3_server_stream_t {
      */
     struct {
         struct {
-            /* H3 frame payload bytes */
-            struct {
-                uint64_t headers;
-            } frame;
-            /* uncompressed/wire counts over the QPACK HEADERS section */
-            h2o_qpack_header_stats_t qpack;
-        } received, sent;
+            uint64_t headers_frame_bytes;
+            /* uncompressed counts over the HTTP/3 HEADERS frame payload */
+            h2o_qpack_section_stats_t qpack;
+        } req, resp;
     } stats;
     /**
      * the request. Placed at the end, as it holds the pool.
@@ -645,11 +638,11 @@ static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
         return h2o_iovec_init(buf, sprintf(buf, fmt, value));                                                                      \
     }
 
-DEFINE_NUMERIC_LOGGER(request_bytes, "%zu", stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
-DEFINE_NUMERIC_LOGGER(request_bytes_header, "%zu", stream->stats.received.qpack.text_bytes)
-DEFINE_NUMERIC_LOGGER(request_header_count, "%zu", stream->stats.received.qpack.count)
-DEFINE_NUMERIC_LOGGER(response_bytes_header, "%zu", stream->stats.sent.qpack.text_bytes)
-DEFINE_NUMERIC_LOGGER(response_header_count, "%zu", stream->stats.sent.qpack.count)
+DEFINE_NUMERIC_LOGGER(request_bytes, "%zu", stream->stats.req.qpack.text_bytes + stream->req.req_body_bytes_received)
+DEFINE_NUMERIC_LOGGER(request_bytes_header, "%zu", stream->stats.req.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(request_header_count, "%zu", stream->stats.req.qpack.count)
+DEFINE_NUMERIC_LOGGER(response_bytes_header, "%zu", stream->stats.resp.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(response_header_count, "%zu", stream->stats.resp.qpack.count)
 
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
@@ -814,8 +807,8 @@ Redo:
 
 DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn))
 
-DEFINE_NUMERIC_LOGGER(request_headers_frame_bytes, "%" PRIu64, stream->stats.received.frame.headers)
-DEFINE_NUMERIC_LOGGER(response_headers_frame_bytes, "%" PRIu64, stream->stats.sent.frame.headers)
+DEFINE_NUMERIC_LOGGER(request_headers_frame_bytes, "%" PRIu64, stream->stats.req.headers_frame_bytes)
+DEFINE_NUMERIC_LOGGER(response_headers_frame_bytes, "%" PRIu64, stream->stats.resp.headers_frame_bytes)
 
 static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
 {
@@ -842,33 +835,33 @@ static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream)
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     uint64_t request_stream_bytes = get_request_stream_size(stream);
 
-    conn->stream_stats.request_stream_bytes += request_stream_bytes;
-    conn->stream_stats.request_headers_frame_bytes += stream->stats.received.frame.headers;
-    conn->stream_stats.request_body_bytes += stream->req.req_body_bytes_received;
-    conn->stream_stats.request_header_count += stream->stats.received.qpack.count;
-    conn->stream_stats.request_header_text_bytes += stream->stats.received.qpack.text_bytes;
-    conn->stream_stats.response_stream_bytes += stream->quic->sendstate.size_inflight;
-    conn->stream_stats.response_headers_frame_bytes += stream->stats.sent.frame.headers;
-    conn->stream_stats.response_body_bytes += stream->req.bytes_sent;
-    conn->stream_stats.response_header_count += stream->stats.sent.qpack.count;
-    conn->stream_stats.response_header_text_bytes += stream->stats.sent.qpack.text_bytes;
+    conn->stream_stats.req.stream_bytes += request_stream_bytes;
+    conn->stream_stats.req.headers_frame_bytes += stream->stats.req.headers_frame_bytes;
+    conn->stream_stats.req.body_bytes += stream->req.req_body_bytes_received;
+    conn->stream_stats.req.qpack.count += stream->stats.req.qpack.count;
+    conn->stream_stats.req.qpack.text_bytes += stream->stats.req.qpack.text_bytes;
+    conn->stream_stats.resp.stream_bytes += stream->quic->sendstate.size_inflight;
+    conn->stream_stats.resp.headers_frame_bytes += stream->stats.resp.headers_frame_bytes;
+    conn->stream_stats.resp.body_bytes += stream->req.bytes_sent;
+    conn->stream_stats.resp.qpack.count += stream->stats.resp.qpack.count;
+    conn->stream_stats.resp.qpack.text_bytes += stream->stats.resp.qpack.text_bytes;
 
     H2O_PROBE_CONN(H3S_STREAM_STATS, &conn->super, stream->quic->stream_id, request_stream_bytes,
-                   stream->stats.received.frame.headers, stream->req.req_body_bytes_received, stream->stats.received.qpack.count,
-                   stream->stats.received.qpack.text_bytes, stream->quic->sendstate.size_inflight, stream->stats.sent.frame.headers,
-                   stream->req.bytes_sent, stream->stats.sent.qpack.count, stream->stats.sent.qpack.text_bytes);
+                   stream->stats.req.headers_frame_bytes, stream->req.req_body_bytes_received, stream->stats.req.qpack.count,
+                   stream->stats.req.qpack.text_bytes, stream->quic->sendstate.size_inflight, stream->stats.resp.headers_frame_bytes,
+                   stream->req.bytes_sent, stream->stats.resp.qpack.count, stream->stats.resp.qpack.text_bytes);
     H2O_LOG_CONN(h3s_stream_stats, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(stream_id, stream->quic->stream_id);
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, request_stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, stream->stats.received.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, stream->stats.req.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, stream->req.req_body_bytes_received);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, stream->stats.received.qpack.count);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, stream->stats.received.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, stream->stats.req.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, stream->stats.req.qpack.text_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, stream->quic->sendstate.size_inflight);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, stream->stats.sent.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, stream->stats.resp.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, stream->req.bytes_sent);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, stream->stats.sent.qpack.count);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, stream->stats.sent.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, stream->stats.resp.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, stream->stats.resp.qpack.text_bytes);
     });
 }
 
@@ -1495,12 +1488,12 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     stream->recvbuf.handle_input = handle_input_expect_data;
 
     /* parse the headers, and ack */
-    stream->stats.received.frame.headers += frame.length;
+    stream->stats.req.headers_frame_bytes += frame.length;
     if ((ret = h2o_qpack_parse_request(&stream->req.pool, get_conn(stream)->h3.qpack.dec, stream->quic->stream_id,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       &stream->stats.received.qpack, header_ack, &header_ack_len, frame.payload, frame.length,
+                                       &stream->stats.req.qpack, header_ack, &header_ack_len, frame.payload, frame.length,
                                        err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
         return ret;
@@ -1626,9 +1619,9 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
     h2o_iovec_t frame = h2o_qpack_flatten_response(
         get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
-        stream->req.res.content_length, datagram_flow_id, &stream->stats.sent.qpack, &serialized_header_len);
+        stream->req.res.content_length, datagram_flow_id, &stream->stats.resp.qpack, &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
-    stream->stats.sent.frame.headers += serialized_header_len;
+    stream->stats.resp.headers_frame_bytes += serialized_header_len;
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;
@@ -2191,25 +2184,25 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     uint64_t qpack_decoder_stream_bytes_sent =
         h3->_control_streams.egress.qpack_decoder != NULL ? h3->_control_streams.egress.qpack_decoder->bytes_sent : 0;
 
-    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stream_stats.request_stream_bytes,
-                   conn->stream_stats.request_headers_frame_bytes, conn->stream_stats.request_body_bytes,
-                   conn->stream_stats.request_header_count, conn->stream_stats.request_header_text_bytes,
-                   conn->stream_stats.response_stream_bytes, conn->stream_stats.response_headers_frame_bytes,
-                   conn->stream_stats.response_body_bytes, conn->stream_stats.response_header_count,
-                   conn->stream_stats.response_header_text_bytes, control_stream_bytes_received,
+    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stream_stats.req.stream_bytes,
+                   conn->stream_stats.req.headers_frame_bytes, conn->stream_stats.req.body_bytes,
+                   conn->stream_stats.req.qpack.count, conn->stream_stats.req.qpack.text_bytes,
+                   conn->stream_stats.resp.stream_bytes, conn->stream_stats.resp.headers_frame_bytes,
+                   conn->stream_stats.resp.body_bytes, conn->stream_stats.resp.qpack.count,
+                   conn->stream_stats.resp.qpack.text_bytes, control_stream_bytes_received,
                    qpack_encoder_stream_bytes_received, qpack_decoder_stream_bytes_received, control_stream_bytes_sent,
                    qpack_encoder_stream_bytes_sent, qpack_decoder_stream_bytes_sent);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
-        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.request_stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, conn->stream_stats.request_headers_frame_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, conn->stream_stats.request_body_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, conn->stream_stats.request_header_count);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, conn->stream_stats.request_header_text_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, conn->stream_stats.response_stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, conn->stream_stats.response_headers_frame_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, conn->stream_stats.response_body_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, conn->stream_stats.response_header_count);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, conn->stream_stats.response_header_text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.req.stream_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, conn->stream_stats.req.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, conn->stream_stats.req.body_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, conn->stream_stats.req.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, conn->stream_stats.req.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, conn->stream_stats.resp.stream_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, conn->stream_stats.resp.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, conn->stream_stats.resp.body_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, conn->stream_stats.resp.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, conn->stream_stats.resp.qpack.text_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(control_stream_bytes_received, control_stream_bytes_received);
         PTLS_LOG_ELEMENT_UNSIGNED(qpack_encoder_stream_bytes_received, qpack_encoder_stream_bytes_received);
         PTLS_LOG_ELEMENT_UNSIGNED(qpack_decoder_stream_bytes_received, qpack_decoder_stream_bytes_received);

@@ -539,7 +539,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
             return 0;
         }
     }
-    h2o_qpack_header_stats_t unused = {0};
+    h2o_qpack_section_stats_t unused = {0};
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
                                         &datagram_flow_id, &unused, header_ack, &header_ack_len, frame.payload, frame.length,
                                         err_desc)) != 0) {
@@ -788,7 +788,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     } else if (req->super.upgrade_to != NULL && req->super.upgrade_to != h2o_httpclient_upgrade_to_connect) {
         protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
-    h2o_qpack_header_stats_t unused = {0};
+    h2o_qpack_section_stats_t unused = {0};
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
                                   url.authority, url.path, protocol, headers, num_headers, datagram_flow_id, &unused);

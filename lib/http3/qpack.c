@@ -140,7 +140,7 @@ struct st_h2o_qpack_flatten_context_t {
      * Caller-owned stats accumulator, updated as each header is emitted. Always non-NULL; public entry points point this at
      * the caller-supplied stats struct.
      */
-    h2o_qpack_header_stats_t *stats;
+    h2o_qpack_section_stats_t *stats;
 };
 
 const char *h2o_qpack_err_header_name_too_long = "header name too long";
@@ -649,7 +649,7 @@ struct st_h2o_qpack_decode_header_ctx_t {
      * Caller-owned stats accumulator, updated by decode_header. Always non-NULL; public entry points point this at the
      * caller-supplied stats struct.
      */
-    h2o_qpack_header_stats_t *stats;
+    h2o_qpack_section_stats_t *stats;
 };
 
 static size_t send_header_ack(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_decode_header_ctx_t *ctx, uint8_t *outbuf,
@@ -825,7 +825,7 @@ static int normalize_error_code(int err)
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats_updated,
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, h2o_qpack_section_stats_t *stats_updated,
                             uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
@@ -848,7 +848,7 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
 }
 
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats_updated,
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, h2o_qpack_section_stats_t *stats_updated,
                              uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src, size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
@@ -1228,7 +1228,7 @@ static const size_t PREFIX_CAPACITY =
     1 /* frame header */ + 8 /* frame payload len */ + H2O_HPACK_ENCODE_INT_MAX_LENGTH + H2O_HPACK_ENCODE_INT_MAX_LENGTH;
 
 static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
-                            int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_qpack_header_stats_t *stats_updated)
+                            int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_qpack_section_stats_t *stats_updated)
 {
     ctx->qpack = qpack;
     ctx->pool = pool;
@@ -1298,7 +1298,7 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
 h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                       h2o_byte_vector_t *_encoder_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
                                       h2o_iovec_t authority, h2o_iovec_t path, h2o_iovec_t protocol, const h2o_header_t *headers,
-                                      size_t num_headers, h2o_iovec_t datagram_flow_id, h2o_qpack_header_stats_t *stats_updated)
+                                      size_t num_headers, h2o_iovec_t datagram_flow_id, h2o_qpack_section_stats_t *stats_updated)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
@@ -1338,7 +1338,7 @@ h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool_t *_pool, int64_t _stream_id,
                                        h2o_byte_vector_t *_encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
                                        const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
-                                       h2o_qpack_header_stats_t *stats_updated, size_t *serialized_header_len)
+                                       h2o_qpack_section_stats_t *stats_updated, size_t *serialized_header_len)
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
