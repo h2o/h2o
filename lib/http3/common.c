@@ -1308,8 +1308,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
         size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
-                                         &conn->stats.bytes_sent.control_stream,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, &conn->stats.bytes_sent.control_stream,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
@@ -1317,11 +1316,9 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     { /* open QPACK encoder & decoder streams */
         static const uint8_t encoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER};
         static const uint8_t decoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_DECODER};
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder,
-                                         &conn->stats.bytes_sent.qpack_encoder,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder, &conn->stats.bytes_sent.qpack_encoder,
                                          h2o_iovec_init(encoder_first_flight, sizeof(encoder_first_flight)))) != 0 ||
-            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder,
-                                         &conn->stats.bytes_sent.qpack_decoder,
+            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder, &conn->stats.bytes_sent.qpack_decoder,
                                          h2o_iovec_init(decoder_first_flight, sizeof(decoder_first_flight)))) != 0)
             return ret;
     }

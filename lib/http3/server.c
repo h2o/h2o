@@ -842,8 +842,9 @@ static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream)
 
     H2O_PROBE_CONN(H3S_STREAM_STATS, &conn->super, stream->quic->stream_id, request_stream_bytes,
                    stream->stats.req.headers_frame_bytes, stream->req.req_body_bytes_received, stream->stats.req.qpack.count,
-                   stream->stats.req.qpack.text_bytes, stream->quic->sendstate.size_inflight, stream->stats.resp.headers_frame_bytes,
-                   stream->req.bytes_sent, stream->stats.resp.qpack.count, stream->stats.resp.qpack.text_bytes);
+                   stream->stats.req.qpack.text_bytes, stream->quic->sendstate.size_inflight,
+                   stream->stats.resp.headers_frame_bytes, stream->req.bytes_sent, stream->stats.resp.qpack.count,
+                   stream->stats.resp.qpack.text_bytes);
     H2O_LOG_CONN(h3s_stream_stats, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(stream_id, stream->quic->stream_id);
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, request_stream_bytes);
@@ -2165,12 +2166,10 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
     quicly_stats_t stats;
 
-    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stats.req.stream_bytes,
-                   conn->stats.req.headers_frame_bytes, conn->stats.req.body_bytes,
-                   conn->stats.req.qpack.count, conn->stats.req.qpack.text_bytes,
-                   conn->stats.resp.stream_bytes, conn->stats.resp.headers_frame_bytes,
-                   conn->stats.resp.body_bytes, conn->stats.resp.qpack.count,
-                   conn->stats.resp.qpack.text_bytes);
+    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stats.req.stream_bytes, conn->stats.req.headers_frame_bytes,
+                   conn->stats.req.body_bytes, conn->stats.req.qpack.count, conn->stats.req.qpack.text_bytes,
+                   conn->stats.resp.stream_bytes, conn->stats.resp.headers_frame_bytes, conn->stats.resp.body_bytes,
+                   conn->stats.resp.qpack.count, conn->stats.resp.qpack.text_bytes);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stats.req.stream_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_bytes, conn->stats.req.headers_frame_bytes);

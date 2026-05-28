@@ -39,8 +39,8 @@ struct st_h2o_http3_ingress_unistream_t {
      */
     h2o_buffer_t *recvbuf;
     /**
-     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a stream
-     * type is identified.
+     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a
+     * stream type is identified.
      */
     uint64_t *bytes_received;
     /**
