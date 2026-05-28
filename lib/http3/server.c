@@ -642,7 +642,7 @@ static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
     {                                                                                                                              \
         struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);      \
         char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_INT64_LONGEST_STR));                                    \
-        return h2o_iovec_init(buf, sprintf(buf, fmt, value));                                                                       \
+        return h2o_iovec_init(buf, sprintf(buf, fmt, value));                                                                      \
     }
 
 DEFINE_NUMERIC_LOGGER(request_bytes, "%zu", stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
