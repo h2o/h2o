@@ -848,12 +848,12 @@ static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream)
     H2O_LOG_CONN(h3s_stream_stats, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(stream_id, stream->quic->stream_id);
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, request_stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, stream->stats.req.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_bytes, stream->stats.req.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, stream->req.req_body_bytes_received);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, stream->stats.req.qpack.count);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, stream->stats.req.qpack.text_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, stream->quic->sendstate.size_inflight);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, stream->stats.resp.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_bytes, stream->stats.resp.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, stream->req.bytes_sent);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, stream->stats.resp.qpack.count);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, stream->stats.resp.qpack.text_bytes);
@@ -2189,12 +2189,12 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
                    qpack_encoder_bytes_sent, qpack_decoder_bytes_sent);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.req.stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, conn->stream_stats.req.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_bytes, conn->stream_stats.req.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, conn->stream_stats.req.body_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, conn->stream_stats.req.qpack.count);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, conn->stream_stats.req.qpack.text_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, conn->stream_stats.resp.stream_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, conn->stream_stats.resp.headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_bytes, conn->stream_stats.resp.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, conn->stream_stats.resp.body_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, conn->stream_stats.resp.qpack.count);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, conn->stream_stats.resp.qpack.text_bytes);
