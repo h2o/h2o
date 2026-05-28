@@ -265,7 +265,6 @@ struct st_h2o_http3_server_stream_t {
             /* H3 frame payload bytes */
             struct {
                 uint64_t headers;
-                uint64_t data;
             } frame;
             /* QUIC stream payload bytes (sum of all H3 frames + their framing) */
             uint64_t stream;
@@ -806,8 +805,6 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
 
 DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->stats.received.frame.headers)
 DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->stats.sent.frame.headers)
-DEFINE_H3_BYTES_LOG(data_bytes_recv, stream->stats.received.frame.data)
-DEFINE_H3_BYTES_LOG(data_bytes_sent, stream->stats.sent.frame.data)
 DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->stats.received.stream)
 DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->stats.sent.stream)
 DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
@@ -997,7 +994,6 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
         if (this_vec->entity_offset != UINT64_MAX) {
             if (stream->req.bytes_sent < this_vec->entity_offset + off + sz)
                 stream->req.bytes_sent = this_vec->entity_offset + off + sz;
-            stream->stats.sent.frame.data += sz;
         }
         stream->stats.sent.stream += sz;
         dst += sz;
@@ -1309,7 +1305,6 @@ static quicly_error_t handle_input_expect_data_payload(struct st_h2o_http3_serve
         return H2O_HTTP3_ERROR_INTERNAL;
     stream->req.entity = h2o_iovec_init(stream->req_body->bytes, stream->req_body->size);
     stream->req.req_body_bytes_received += bytes_avail;
-    stream->stats.received.frame.data += bytes_avail;
     stream->recvbuf.bytes_left_in_data_frame -= bytes_avail;
     *src += bytes_avail;
 
@@ -2221,8 +2216,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .quic_version = log_quic_version,
                     .headers_bytes_recv = log_headers_bytes_recv,
                     .headers_bytes_sent = log_headers_bytes_sent,
-                    .data_bytes_recv = log_data_bytes_recv,
-                    .data_bytes_sent = log_data_bytes_sent,
                     .stream_bytes_recv = log_stream_bytes_recv,
                     .stream_bytes_sent = log_stream_bytes_sent,
                 },
