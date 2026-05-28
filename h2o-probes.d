@@ -99,7 +99,7 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating that a connection has been destroyed
      */
-    probe h3s_destroy(uint64_t conn_id, uint64_t request_stream_bytes, uint64_t request_header_bytes,
+    probe h3s_destroy(uint64_t conn_id, uint64_t num_requests, uint64_t request_stream_bytes, uint64_t request_header_bytes,
                       uint64_t request_body_bytes, uint64_t request_header_count, uint64_t request_header_text_bytes,
                       uint64_t response_stream_bytes, uint64_t response_header_bytes, uint64_t response_body_bytes,
                       uint64_t response_header_count, uint64_t response_header_text_bytes);

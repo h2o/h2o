@@ -161,6 +161,10 @@ struct st_h2o_http3_server_conn_t {
      * aggregate of request stream statistics
      */
     struct {
+        /**
+         * number of request streams handled on this connection
+         */
+        uint64_t num_requests;
         struct {
             uint64_t stream_bytes;
             uint64_t headers_frame_bytes;
@@ -829,6 +833,7 @@ static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream)
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
     uint64_t request_stream_bytes = get_request_stream_size(stream);
 
+    ++conn->stats.num_requests;
     conn->stats.req.stream_bytes += request_stream_bytes;
     conn->stats.req.headers_frame_bytes += stream->stats.req.headers_frame_bytes;
     conn->stats.req.body_bytes += stream->req.req_body_bytes_received;
@@ -2167,11 +2172,12 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     quicly_stats_t stats;
 
     /* some attributes are available only via h2olog, as DTrace probes have an upper limit on the number of arguments */
-    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stats.req.stream_bytes, conn->stats.req.headers_frame_bytes,
-                   conn->stats.req.body_bytes, conn->stats.req.qpack.count, conn->stats.req.qpack.text_bytes,
-                   conn->stats.resp.stream_bytes, conn->stats.resp.headers_frame_bytes, conn->stats.resp.body_bytes,
-                   conn->stats.resp.qpack.count, conn->stats.resp.qpack.text_bytes);
+    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stats.num_requests, conn->stats.req.stream_bytes,
+                   conn->stats.req.headers_frame_bytes, conn->stats.req.body_bytes, conn->stats.req.qpack.count,
+                   conn->stats.req.qpack.text_bytes, conn->stats.resp.stream_bytes, conn->stats.resp.headers_frame_bytes,
+                   conn->stats.resp.body_bytes, conn->stats.resp.qpack.count, conn->stats.resp.qpack.text_bytes);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
+        PTLS_LOG_ELEMENT_UNSIGNED(num_requests, conn->stats.num_requests);
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stats.req.stream_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_bytes, conn->stats.req.headers_frame_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, conn->stats.req.body_bytes);
