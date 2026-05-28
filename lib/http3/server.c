@@ -620,19 +620,19 @@ static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
     return h2o_iovec_init(buf, len);
 }
 
-#define DEFINE_H3_BYTES_LOG(name, accessor)                                                                                        \
+#define DEFINE_NUMERIC_LOGGER(name, fmt, value)                                                                                    \
     static h2o_iovec_t log_##name(h2o_req_t *_req)                                                                                 \
     {                                                                                                                              \
         struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);      \
-        char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));                                   \
-        return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, (uint64_t)(accessor)));                                                \
+        char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_INT64_LONGEST_STR));                                    \
+        return h2o_iovec_init(buf, sprintf(buf, fmt, value));                                                                       \
     }
 
-DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
-DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
-DEFINE_H3_BYTES_LOG(request_header_count, stream->stats.received.qpack.count)
-DEFINE_H3_BYTES_LOG(response_bytes_header, stream->stats.sent.qpack.text_bytes)
-DEFINE_H3_BYTES_LOG(response_header_count, stream->stats.sent.qpack.count)
+DEFINE_NUMERIC_LOGGER(request_bytes, "%zu", stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
+DEFINE_NUMERIC_LOGGER(request_bytes_header, "%zu", stream->stats.received.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(request_header_count, "%zu", stream->stats.received.qpack.count)
+DEFINE_NUMERIC_LOGGER(response_bytes_header, "%zu", stream->stats.sent.qpack.text_bytes)
+DEFINE_NUMERIC_LOGGER(response_header_count, "%zu", stream->stats.sent.qpack.count)
 
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
@@ -761,12 +761,7 @@ static h2o_iovec_t log_ech_cipher_bits(h2o_req_t *req)
     }
 }
 
-static h2o_iovec_t log_stream_id(h2o_req_t *_req)
-{
-    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
-    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));
-    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, stream->quic->stream_id));
-}
+DEFINE_NUMERIC_LOGGER(stream_id, "%" PRIu64, stream->quic->stream_id)
 
 static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 {
@@ -800,24 +795,20 @@ Redo:
 #undef PUSH_FIELD
 }
 
-static h2o_iovec_t log_quic_version(h2o_req_t *_req)
-{
-    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
-    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT32_LONGEST_STR));
-    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
-}
+DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn))
 
-DEFINE_H3_BYTES_LOG(request_headers_frame_bytes, stream->stats.received.frame.headers)
-DEFINE_H3_BYTES_LOG(response_headers_frame_bytes, stream->stats.sent.frame.headers)
+DEFINE_NUMERIC_LOGGER(request_headers_frame_bytes, "%" PRIu64, stream->stats.received.frame.headers)
+DEFINE_NUMERIC_LOGGER(response_headers_frame_bytes, "%" PRIu64, stream->stats.sent.frame.headers)
 /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
  * byte count. */
-DEFINE_H3_BYTES_LOG(request_stream_bytes, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
-                                              ? (stream->quic->recvstate.eos == UINT64_MAX ? stream->quic->recvstate.data_off
-                                                                                           : stream->quic->recvstate.eos)
-                                              : stream->quic->recvstate.received.ranges[0].end)
-DEFINE_H3_BYTES_LOG(response_stream_bytes, stream->quic->sendstate.size_inflight)
+DEFINE_NUMERIC_LOGGER(request_stream_bytes, "%" PRIu64, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
+                                                             ? (stream->quic->recvstate.eos == UINT64_MAX
+                                                                    ? stream->quic->recvstate.data_off
+                                                                    : stream->quic->recvstate.eos)
+                                                             : stream->quic->recvstate.received.ranges[0].end)
+DEFINE_NUMERIC_LOGGER(response_stream_bytes, "%" PRIu64, stream->quic->sendstate.size_inflight)
 
-#undef DEFINE_H3_BYTES_LOG
+#undef DEFINE_NUMERIC_LOGGER
 
 void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
