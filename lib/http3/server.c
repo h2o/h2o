@@ -2166,6 +2166,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
     quicly_stats_t stats;
 
+    /* some attributes are available only via h2olog, as DTrace probes have an upper limit on the number of arguments */
     H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stats.req.stream_bytes, conn->stats.req.headers_frame_bytes,
                    conn->stats.req.body_bytes, conn->stats.req.qpack.count, conn->stats.req.qpack.text_bytes,
                    conn->stats.resp.stream_bytes, conn->stats.resp.headers_frame_bytes, conn->stats.resp.body_bytes,
