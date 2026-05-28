@@ -2534,6 +2534,17 @@ durationsum of request-total-time, process-time, response-time
 total-timesame as duration (since v2.3)
 
 
+HTTP Message Sizes
+NameDescription
+request-header-bytesnumber of bytes used to receive request headers in the protocol-specific encoded form
+response-header-bytesnumber of bytes used to send response headers in the protocol-specific encoded form
+request-header-text-bytessum of request header name and value lengths after decoding
+response-header-text-bytessum of response header name and value lengths before encoding
+request-header-countnumber of request header fields
+response-header-countnumber of response header fields
+request-body-bytesnumber of request body bytes received
+
+
 Proxy Timings (since v2.3)
 NameDescription
 proxy.idle-timetime spent after receiving request, before starting to connect to the upstream
