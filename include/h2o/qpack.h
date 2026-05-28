@@ -37,9 +37,10 @@ extern const char *h2o_qpack_err_invalid_duplicate;
 extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 /**
- * Per-section header statistics emitted by `h2o_qpack_parse_request` and `h2o_qpack_flatten_response`. Counts and byte sums
- * cover every header field on the wire, including pseudo-headers (`:method`, `:status` etc.) and any synthesized fields the
- * encoder adds (`server`, `content-length`).
+ * Header statistics accumulated by QPACK parse and flatten functions. Callers are responsible for initializing or resetting the
+ * struct; QPACK functions only add the stats for the header section being processed. Counts and byte sums cover every header field
+ * in the header section, including pseudo-headers (`:method`, `:status` etc.) and any synthesized fields the encoder adds
+ * (`server`, `content-length`).
  */
 typedef struct st_h2o_qpack_header_stats_t {
     /**
@@ -66,21 +67,21 @@ size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *ou
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id);
 
 /**
- * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. `stats` must be non-NULL; on success
- * (including the H2 invalid-header-char soft-fail) the function populates it with the wire header-count and the sum of
- * (name.len + value.len) over all header fields.
+ * Parses a QPACK request. The input should be the *payload* of the HTTP/3 HEADERS frame. `stats_updated` must be non-NULL; on
+ * success (including the H2 invalid-header-char soft-fail) the function adds the header-count and the sum of
+ * (name.len + value.len) over all header fields to it.
  */
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats,
+                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats_updated,
                             uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len, const char **err_desc);
 /**
  * Parses a QPACK response. The input should be the *payload* of the HTTP/3 HEADERS frame. `outbuf` should be at least
- * H2O_HPACK_ENCODE_INT_MAX_LENGTH long. `stats` must be non-NULL; see `h2o_qpack_parse_request`.
+ * H2O_HPACK_ENCODE_INT_MAX_LENGTH long. `stats_updated` must be non-NULL; see `h2o_qpack_parse_request`.
  */
 int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats,
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, h2o_qpack_header_stats_t *stats_updated,
                              uint8_t *outbuf, size_t *outbufsize, const uint8_t *src, size_t len, const char **err_desc);
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint16_t max_blocked);
@@ -93,20 +94,20 @@ int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **s
 /**
  * Flattens a QPACK request. The output includes the HTTP/3 frame header.
  * @param encoder_buf optional parameter pointing to buffer to store encoder stream data. Set to NULL to avoid blocking.
- * @param stats must be non-NULL; see `h2o_qpack_flatten_response`.
+ * @param stats_updated must be non-NULL; see `h2o_qpack_flatten_response`.
  */
 h2o_iovec_t h2o_qpack_flatten_request(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id,
                                       h2o_byte_vector_t *encoder_buf, h2o_iovec_t method, const h2o_url_scheme_t *scheme,
                                       h2o_iovec_t authority, h2o_iovec_t path, h2o_iovec_t protocol, const h2o_header_t *headers,
-                                      size_t num_headers, h2o_iovec_t datagram_flow_id, h2o_qpack_header_stats_t *stats);
+                                      size_t num_headers, h2o_iovec_t datagram_flow_id, h2o_qpack_header_stats_t *stats_updated);
 /**
- * Flattens a QPACK response. The output includes the HTTP/3 frame header. `stats` must be non-NULL; the function populates it
- * with the wire header-count and the sum of (name.len + value.len) over all header fields, including pseudo-headers and
- * synthesized fields such as `server` and `content-length`.
+ * Flattens a QPACK response. The output includes the HTTP/3 frame header. `stats_updated` must be non-NULL; the function adds the
+ * header-count and the sum of (name.len + value.len) over all header fields, including pseudo-headers and synthesized fields
+ * such as `server` and `content-length`, to it.
  */
 h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, int64_t stream_id,
                                        h2o_byte_vector_t *encoder_buf, int status, const h2o_header_t *headers, size_t num_headers,
                                        const h2o_iovec_t *server_name, size_t content_length, h2o_iovec_t datagram_flow_id,
-                                       h2o_qpack_header_stats_t *stats, size_t *serialized_header_len);
+                                       h2o_qpack_header_stats_t *stats_updated, size_t *serialized_header_len);
 
 #endif
