@@ -1056,10 +1056,10 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
                 /* per-request H3-frame and QUIC-stream byte counters */
-                h2o_iovec_t (*headers_bytes_recv)(h2o_req_t *req);
-                h2o_iovec_t (*headers_bytes_sent)(h2o_req_t *req);
-                h2o_iovec_t (*stream_bytes_recv)(h2o_req_t *req);
-                h2o_iovec_t (*stream_bytes_sent)(h2o_req_t *req);
+                h2o_iovec_t (*request_headers_frame_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*response_headers_frame_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*request_stream_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*response_stream_bytes)(h2o_req_t *req);
             } http3;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);

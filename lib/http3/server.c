@@ -807,15 +807,15 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
     return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
 }
 
-DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->stats.received.frame.headers)
-DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->stats.sent.frame.headers)
+DEFINE_H3_BYTES_LOG(request_headers_frame_bytes, stream->stats.received.frame.headers)
+DEFINE_H3_BYTES_LOG(response_headers_frame_bytes, stream->stats.sent.frame.headers)
 /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
  * byte count. */
-DEFINE_H3_BYTES_LOG(stream_bytes_recv, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
-                                           ? (stream->quic->recvstate.eos == UINT64_MAX ? stream->quic->recvstate.data_off
-                                                                                        : stream->quic->recvstate.eos)
-                                           : stream->quic->recvstate.received.ranges[0].end)
-DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->quic->sendstate.size_inflight)
+DEFINE_H3_BYTES_LOG(request_stream_bytes, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
+                                              ? (stream->quic->recvstate.eos == UINT64_MAX ? stream->quic->recvstate.data_off
+                                                                                           : stream->quic->recvstate.eos)
+                                              : stream->quic->recvstate.received.ranges[0].end)
+DEFINE_H3_BYTES_LOG(response_stream_bytes, stream->quic->sendstate.size_inflight)
 
 #undef DEFINE_H3_BYTES_LOG
 
@@ -2216,10 +2216,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .stream_id = log_stream_id,
                     .quic_stats = log_quic_stats,
                     .quic_version = log_quic_version,
-                    .headers_bytes_recv = log_headers_bytes_recv,
-                    .headers_bytes_sent = log_headers_bytes_sent,
-                    .stream_bytes_recv = log_stream_bytes_recv,
-                    .stream_bytes_sent = log_stream_bytes_sent,
+                    .request_headers_frame_bytes = log_request_headers_frame_bytes,
+                    .response_headers_frame_bytes = log_response_headers_frame_bytes,
+                    .request_stream_bytes = log_request_stream_bytes,
+                    .response_stream_bytes = log_response_stream_bytes,
                 },
         }},
     };
