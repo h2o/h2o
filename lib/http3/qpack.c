@@ -136,10 +136,6 @@ struct st_h2o_qpack_flatten_context_t {
     h2o_byte_vector_t headers_buf;
     int64_t base_index;
     int64_t largest_ref;
-    /**
-     * Caller-owned stats accumulator, updated as each header is emitted. Always non-NULL; public entry points point this at
-     * the caller-supplied stats struct.
-     */
     h2o_qpack_section_stats_t *stats;
 };
 
@@ -646,8 +642,7 @@ struct st_h2o_qpack_decode_header_ctx_t {
      */
     int64_t req_insert_count, base_index;
     /**
-     * Caller-owned stats accumulator, updated by decode_header. Always non-NULL; public entry points point this at the
-     * caller-supplied stats struct.
+     *
      */
     h2o_qpack_section_stats_t *stats;
 };
