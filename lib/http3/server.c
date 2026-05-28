@@ -158,6 +158,21 @@ struct st_h2o_http3_server_conn_t {
      */
     uint32_t num_streams_tunnelling;
     /**
+     * aggregate of per-request stream statistics
+     */
+    struct {
+        uint64_t request_stream_bytes;
+        uint64_t request_headers_frame_bytes;
+        uint64_t request_body_bytes;
+        uint64_t request_header_count;
+        uint64_t request_header_text_bytes;
+        uint64_t response_stream_bytes;
+        uint64_t response_headers_frame_bytes;
+        uint64_t response_body_bytes;
+        uint64_t response_header_count;
+        uint64_t response_header_text_bytes;
+    } stream_stats;
+    /**
      * scheduler
      */
     struct {
@@ -280,7 +295,7 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
 static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_idle_connection(h2o_conn_t *_conn);
 static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err);
-static void log_stream_stats(struct st_h2o_http3_server_stream_t *stream);
+static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream);
 static quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
                                                  const uint8_t *src_end, int in_generator, const char **err_desc);
 static quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
@@ -513,7 +528,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
             h2o_linklist_unlink(&stream->link);
         pre_dispose_request(stream);
         if (!in_generator) {
-            log_stream_stats(stream);
+            record_stream_stats(stream);
             h2o_dispose_request(&stream->req);
             stream->req_disposed = 1;
         }
@@ -822,26 +837,38 @@ DEFINE_NUMERIC_LOGGER(response_stream_bytes, "%" PRIu64, stream->quic->sendstate
 
 #undef DEFINE_NUMERIC_LOGGER
 
-static void log_stream_stats(struct st_h2o_http3_server_stream_t *stream)
+static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream)
 {
-    H2O_PROBE_CONN(H3S_STREAM_STATS, &get_conn(stream)->super, stream->quic->stream_id, get_request_stream_size(stream),
+    struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
+    uint64_t request_stream_bytes = get_request_stream_size(stream);
+
+    conn->stream_stats.request_stream_bytes += request_stream_bytes;
+    conn->stream_stats.request_headers_frame_bytes += stream->stats.received.frame.headers;
+    conn->stream_stats.request_body_bytes += stream->req.req_body_bytes_received;
+    conn->stream_stats.request_header_count += stream->stats.received.qpack.count;
+    conn->stream_stats.request_header_text_bytes += stream->stats.received.qpack.text_bytes;
+    conn->stream_stats.response_stream_bytes += stream->quic->sendstate.size_inflight;
+    conn->stream_stats.response_headers_frame_bytes += stream->stats.sent.frame.headers;
+    conn->stream_stats.response_body_bytes += stream->req.bytes_sent;
+    conn->stream_stats.response_header_count += stream->stats.sent.qpack.count;
+    conn->stream_stats.response_header_text_bytes += stream->stats.sent.qpack.text_bytes;
+
+    H2O_PROBE_CONN(H3S_STREAM_STATS, &conn->super, stream->quic->stream_id, request_stream_bytes,
                    stream->stats.received.frame.headers, stream->req.req_body_bytes_received, stream->stats.received.qpack.count,
                    stream->stats.received.qpack.text_bytes, stream->quic->sendstate.size_inflight, stream->stats.sent.frame.headers,
                    stream->req.bytes_sent, stream->stats.sent.qpack.count, stream->stats.sent.qpack.text_bytes);
-    H2O_LOG_CONN(h3s_stream_stats, &get_conn(stream)->super, {
-        uint64_t request_stream_size = get_request_stream_size(stream);
-        uint64_t response_stream_size = stream->quic->sendstate.size_inflight;
+    H2O_LOG_CONN(h3s_stream_stats, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(stream_id, stream->quic->stream_id);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_size, request_stream_size);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_size, stream->stats.received.frame.headers);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_body_size, stream->req.req_body_bytes_received);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, request_stream_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, stream->stats.received.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, stream->req.req_body_bytes_received);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, stream->stats.received.qpack.count);
-        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_size, stream->stats.received.qpack.text_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_size, response_stream_size);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_size, stream->stats.sent.frame.headers);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_body_size, stream->req.bytes_sent);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, stream->stats.received.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, stream->quic->sendstate.size_inflight);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, stream->stats.sent.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, stream->req.bytes_sent);
         PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, stream->stats.sent.qpack.count);
-        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_size, stream->stats.sent.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, stream->stats.sent.qpack.text_bytes);
     });
 }
 
@@ -864,7 +891,7 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
         pre_dispose_request(stream);
     if (!stream->req_disposed) {
-        log_stream_stats(stream);
+        record_stream_stats(stream);
         h2o_dispose_request(&stream->req);
     }
     /* in case the stream is destroyed before the buffer is fully consumed */
@@ -2151,8 +2178,24 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     struct st_h2o_http3_server_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, h3);
     quicly_stats_t stats;
 
-    H2O_PROBE_CONN0(H3S_DESTROY, &conn->super);
-    H2O_LOG_CONN(h3s_destroy, &conn->super, {});
+    H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stream_stats.request_stream_bytes,
+                   conn->stream_stats.request_headers_frame_bytes, conn->stream_stats.request_body_bytes,
+                   conn->stream_stats.request_header_count, conn->stream_stats.request_header_text_bytes,
+                   conn->stream_stats.response_stream_bytes, conn->stream_stats.response_headers_frame_bytes,
+                   conn->stream_stats.response_body_bytes, conn->stream_stats.response_header_count,
+                   conn->stream_stats.response_header_text_bytes);
+    H2O_LOG_CONN(h3s_destroy, &conn->super, {
+        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.request_stream_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_bytes, conn->stream_stats.request_headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_body_bytes, conn->stream_stats.request_body_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, conn->stream_stats.request_header_count);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_bytes, conn->stream_stats.request_header_text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_bytes, conn->stream_stats.response_stream_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_bytes, conn->stream_stats.response_headers_frame_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_body_bytes, conn->stream_stats.response_body_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, conn->stream_stats.response_header_count);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_bytes, conn->stream_stats.response_header_text_bytes);
+    });
 
     if (quicly_get_stats(h3_->quic, &stats) == 0) {
 #define ACC(fld, _unused) conn->super.ctx->quic_stats.quicly.fld += stats.fld;

@@ -99,7 +99,10 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating that a connection has been destroyed
      */
-    probe h3s_destroy(uint64_t conn_id);
+    probe h3s_destroy(uint64_t conn_id, uint64_t request_stream_bytes, uint64_t request_headers_frame_bytes,
+                      uint64_t request_body_bytes, uint64_t request_header_count, uint64_t request_header_text_bytes,
+                      uint64_t response_stream_bytes, uint64_t response_headers_frame_bytes, uint64_t response_body_bytes,
+                      uint64_t response_header_count, uint64_t response_header_text_bytes);
     /**
      * HTTP/3 server-level event, indicating that a state of a request stream has been altered
      */
@@ -107,11 +110,11 @@ provider h2o {
     /**
      * HTTP/3 server-level event, indicating final per-request stream statistics
      */
-    probe h3s_stream_stats(uint64_t conn_id, uint64_t stream_id, uint64_t request_stream_size,
-                           uint64_t request_headers_frame_size, uint64_t request_body_size, uint64_t request_header_count,
-                           uint64_t request_header_text_size, uint64_t response_stream_size,
-                           uint64_t response_headers_frame_size, uint64_t response_body_size, uint64_t response_header_count,
-                           uint64_t response_header_text_size);
+    probe h3s_stream_stats(uint64_t conn_id, uint64_t stream_id, uint64_t request_stream_bytes,
+                           uint64_t request_headers_frame_bytes, uint64_t request_body_bytes, uint64_t request_header_count,
+                           uint64_t request_header_text_bytes, uint64_t response_stream_bytes,
+                           uint64_t response_headers_frame_bytes, uint64_t response_body_bytes, uint64_t response_header_count,
+                           uint64_t response_header_text_bytes);
 
     /**
      * HTTP/3 event, indicating that a H3 frame has been received. `bytes` is available except when frame_type is DATA.
