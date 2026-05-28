@@ -803,7 +803,12 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
 
 DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->stats.received.frame.headers)
 DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->stats.sent.frame.headers)
-DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->quic->recvstate.data_off)
+/* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
+ * byte count. */
+DEFINE_H3_BYTES_LOG(stream_bytes_recv, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
+                                           ? (stream->quic->recvstate.eos == UINT64_MAX ? stream->quic->recvstate.data_off
+                                                                                        : stream->quic->recvstate.eos)
+                                           : stream->quic->recvstate.received.ranges[0].end)
 DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->quic->sendstate.size_inflight)
 DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
 DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
