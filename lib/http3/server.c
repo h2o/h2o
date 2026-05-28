@@ -2185,9 +2185,7 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
                    conn->stream_stats.req.qpack.count, conn->stream_stats.req.qpack.text_bytes,
                    conn->stream_stats.resp.stream_bytes, conn->stream_stats.resp.headers_frame_bytes,
                    conn->stream_stats.resp.body_bytes, conn->stream_stats.resp.qpack.count,
-                   conn->stream_stats.resp.qpack.text_bytes, control_stream_bytes_received,
-                   qpack_encoder_bytes_received, qpack_decoder_bytes_received, control_stream_bytes_sent,
-                   qpack_encoder_bytes_sent, qpack_decoder_bytes_sent);
+                   conn->stream_stats.resp.qpack.text_bytes);
     H2O_LOG_CONN(h3s_destroy, &conn->super, {
         PTLS_LOG_ELEMENT_UNSIGNED(request_stream_bytes, conn->stream_stats.req.stream_bytes);
         PTLS_LOG_ELEMENT_UNSIGNED(request_header_bytes, conn->stream_stats.req.headers_frame_bytes);
