@@ -280,6 +280,7 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
 static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_idle_connection(h2o_conn_t *_conn);
 static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err);
+static void log_stream_stats(struct st_h2o_http3_server_stream_t *stream);
 static quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
                                                  const uint8_t *src_end, int in_generator, const char **err_desc);
 static quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
@@ -512,6 +513,7 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
             h2o_linklist_unlink(&stream->link);
         pre_dispose_request(stream);
         if (!in_generator) {
+            log_stream_stats(stream);
             h2o_dispose_request(&stream->req);
             stream->req_disposed = 1;
         }
@@ -799,16 +801,49 @@ DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stre
 
 DEFINE_NUMERIC_LOGGER(request_headers_frame_bytes, "%" PRIu64, stream->stats.received.frame.headers)
 DEFINE_NUMERIC_LOGGER(response_headers_frame_bytes, "%" PRIu64, stream->stats.sent.frame.headers)
+
+static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
+{
+    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+        return stream->quic->recvstate.received.ranges[0].end;
+
+    /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
+     * byte count. */
+    if (stream->quic->recvstate.eos == UINT64_MAX)
+        return stream->quic->recvstate.data_off;
+
+    return stream->quic->recvstate.eos;
+}
+
 /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
  * byte count. */
-DEFINE_NUMERIC_LOGGER(request_stream_bytes, "%" PRIu64, quicly_recvstate_transfer_complete(&stream->quic->recvstate)
-                                                             ? (stream->quic->recvstate.eos == UINT64_MAX
-                                                                    ? stream->quic->recvstate.data_off
-                                                                    : stream->quic->recvstate.eos)
-                                                             : stream->quic->recvstate.received.ranges[0].end)
+DEFINE_NUMERIC_LOGGER(request_stream_bytes, "%" PRIu64, get_request_stream_size(stream))
 DEFINE_NUMERIC_LOGGER(response_stream_bytes, "%" PRIu64, stream->quic->sendstate.size_inflight)
 
 #undef DEFINE_NUMERIC_LOGGER
+
+static void log_stream_stats(struct st_h2o_http3_server_stream_t *stream)
+{
+    H2O_PROBE_CONN(H3S_STREAM_STATS, &get_conn(stream)->super, stream->quic->stream_id, get_request_stream_size(stream),
+                   stream->stats.received.frame.headers, stream->req.req_body_bytes_received, stream->stats.received.qpack.count,
+                   stream->stats.received.qpack.text_bytes, stream->quic->sendstate.size_inflight, stream->stats.sent.frame.headers,
+                   stream->req.bytes_sent, stream->stats.sent.qpack.count, stream->stats.sent.qpack.text_bytes);
+    H2O_LOG_CONN(h3s_stream_stats, &get_conn(stream)->super, {
+        uint64_t request_stream_size = get_request_stream_size(stream);
+        uint64_t response_stream_size = stream->quic->sendstate.size_inflight;
+        PTLS_LOG_ELEMENT_UNSIGNED(stream_id, stream->quic->stream_id);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_stream_size, request_stream_size);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_headers_frame_size, stream->stats.received.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_body_size, stream->req.req_body_bytes_received);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_count, stream->stats.received.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(request_header_text_size, stream->stats.received.qpack.text_bytes);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_stream_size, response_stream_size);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_headers_frame_size, stream->stats.sent.frame.headers);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_body_size, stream->req.bytes_sent);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_count, stream->stats.sent.qpack.count);
+        PTLS_LOG_ELEMENT_UNSIGNED(response_header_text_size, stream->stats.sent.qpack.text_bytes);
+    });
+}
 
 void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 {
@@ -828,8 +863,10 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
         h2o_linklist_unlink(&stream->link_resp_settings_blocked);
     if (stream->state != H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
         pre_dispose_request(stream);
-    if (!stream->req_disposed)
+    if (!stream->req_disposed) {
+        log_stream_stats(stream);
         h2o_dispose_request(&stream->req);
+    }
     /* in case the stream is destroyed before the buffer is fully consumed */
     h2o_buffer_dispose(&stream->recvbuf.buf);
 

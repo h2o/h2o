@@ -104,6 +104,14 @@ provider h2o {
      * HTTP/3 server-level event, indicating that a state of a request stream has been altered
      */
     probe h3s_stream_set_state(uint64_t conn_id, uint64_t req_id, unsigned state);
+    /**
+     * HTTP/3 server-level event, indicating final per-request stream statistics
+     */
+    probe h3s_stream_stats(uint64_t conn_id, uint64_t stream_id, uint64_t request_stream_size,
+                           uint64_t request_headers_frame_size, uint64_t request_body_size, uint64_t request_header_count,
+                           uint64_t request_header_text_size, uint64_t response_stream_size,
+                           uint64_t response_headers_frame_size, uint64_t response_body_size, uint64_t response_header_count,
+                           uint64_t response_header_text_size);
 
     /**
      * HTTP/3 event, indicating that a H3 frame has been received. `bytes` is available except when frame_type is DATA.
