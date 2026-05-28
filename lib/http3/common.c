@@ -438,9 +438,6 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
         *wrote_all = 0;
     }
     memcpy(dst, stream->sendbuf->bytes + off, *len);
-    uint64_t end = qs->sendstate.acked.ranges[0].end + off + *len;
-    if (stream->bytes_sent < end)
-        stream->bytes_sent = end;
 }
 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -459,7 +456,6 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->data = stream;
         qs->callbacks = &callbacks;
         stream->quic = qs;
-        stream->bytes_sent = 0;
         h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
     } else {
         /* create ingress unistream */

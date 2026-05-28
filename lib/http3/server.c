@@ -2173,11 +2173,13 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     uint64_t qpack_decoder_bytes_received =
         h3->_control_streams.ingress.qpack_decoder != NULL ? h3->_control_streams.ingress.qpack_decoder->bytes_received : 0;
     uint64_t control_stream_bytes_sent =
-        h3->_control_streams.egress.control != NULL ? h3->_control_streams.egress.control->bytes_sent : 0;
+        h3->_control_streams.egress.control != NULL ? h3->_control_streams.egress.control->quic->sendstate.size_inflight : 0;
     uint64_t qpack_encoder_bytes_sent =
-        h3->_control_streams.egress.qpack_encoder != NULL ? h3->_control_streams.egress.qpack_encoder->bytes_sent : 0;
+        h3->_control_streams.egress.qpack_encoder != NULL ? h3->_control_streams.egress.qpack_encoder->quic->sendstate.size_inflight
+                                                          : 0;
     uint64_t qpack_decoder_bytes_sent =
-        h3->_control_streams.egress.qpack_decoder != NULL ? h3->_control_streams.egress.qpack_decoder->bytes_sent : 0;
+        h3->_control_streams.egress.qpack_decoder != NULL ? h3->_control_streams.egress.qpack_decoder->quic->sendstate.size_inflight
+                                                          : 0;
 
     H2O_PROBE_CONN(H3S_DESTROY, &conn->super, conn->stream_stats.req.stream_bytes,
                    conn->stream_stats.req.headers_frame_bytes, conn->stream_stats.req.body_bytes,
