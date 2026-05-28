@@ -309,6 +309,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.data-bytes-sent", http3.data_bytes_sent);
                     MAP_EXT_TO_PROTO("http3.stream-bytes-recv", http3.stream_bytes_recv);
                     MAP_EXT_TO_PROTO("http3.stream-bytes-sent", http3.stream_bytes_sent);
+                    MAP_EXT_TO_PROTO("request-bytes", request_bytes);
                     MAP_EXT_TO_PROTO("request-bytes-header", request_bytes_header);
                     MAP_EXT_TO_PROTO("response-bytes-header", response_bytes_header);
                     MAP_EXT_TO_PROTO("request-header-count", request_header_count);

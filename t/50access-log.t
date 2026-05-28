@@ -418,6 +418,37 @@ subtest 'request-body-size' => sub {
     );
 };
 
+subtest 'h3-request-size' => sub {
+    my @expected = (
+        sub {
+            my $log = shift;
+            my @cols = split / +/, $log;
+            is $cols[0], "GET", "method";
+            cmp_ok $cols[1], '==', $cols[2], "request size equals header size";
+            is $cols[3], 0, "body size";
+            cmp_ok $cols[2], '>', 0, "header size";
+        },
+        sub {
+            my $log = shift;
+            my @cols = split / +/, $log;
+            is $cols[0], "POST", "method";
+            cmp_ok $cols[1], '==', $cols[2] + $cols[3], "request size equals header plus body size";
+            is $cols[3], 5, "body size";
+            cmp_ok $cols[2], '>', 0, "header size";
+        },
+    );
+    doit(
+        sub {
+            my $server = shift;
+            is system("$client_prog -3 100 -k https://127.0.0.1:$server->{quic_port}/ > /dev/null"), 0, "run h2o-httpclient";
+            is system("$client_prog -3 100 -k -m POST -b 5 https://127.0.0.1:$server->{quic_port}/ > /dev/null"), 0,
+                "run h2o-httpclient";
+        },
+        '%m %{request-bytes}x %{request-bytes-header}x %{request-bytes-body}x',
+        \@expected,
+    );
+};
+
 subtest 'header-bytes' => sub {
     my @expected;
     my $push_expected = sub {

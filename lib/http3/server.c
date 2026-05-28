@@ -810,6 +810,7 @@ DEFINE_H3_BYTES_LOG(data_bytes_recv, stream->stats.received.frame.data)
 DEFINE_H3_BYTES_LOG(data_bytes_sent, stream->stats.sent.frame.data)
 DEFINE_H3_BYTES_LOG(stream_bytes_recv, stream->stats.received.stream)
 DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->stats.sent.stream)
+DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
 DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
 DEFINE_H3_BYTES_LOG(request_header_count, stream->stats.received.qpack.count)
 DEFINE_H3_BYTES_LOG(response_bytes_header, stream->stats.sent.qpack.text_bytes)
@@ -2208,6 +2209,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .ech_cipher = log_ech_cipher,
                     .ech_cipher_bits = log_ech_cipher_bits,
                 },
+            .request_bytes = log_request_bytes,
             .request_bytes_header = log_request_bytes_header,
             .request_header_count = log_request_header_count,
             .response_bytes_header = log_response_bytes_header,
