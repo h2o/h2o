@@ -307,10 +307,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.data-bytes-sent", http3.data_bytes_sent);
                     MAP_EXT_TO_PROTO("http3.stream-bytes-recv", http3.stream_bytes_recv);
                     MAP_EXT_TO_PROTO("http3.stream-bytes-sent", http3.stream_bytes_sent);
-                    MAP_EXT_TO_PROTO("headers-uncompressed-bytes-recv", headers_uncompressed_bytes_recv);
-                    MAP_EXT_TO_PROTO("headers-uncompressed-bytes-sent", headers_uncompressed_bytes_sent);
-                    MAP_EXT_TO_PROTO("headers-count-recv", headers_count_recv);
-                    MAP_EXT_TO_PROTO("headers-count-sent", headers_count_sent);
+                    MAP_EXT_TO_PROTO("request-bytes-header", request_bytes_header);
+                    MAP_EXT_TO_PROTO("response-bytes-header", response_bytes_header);
+                    MAP_EXT_TO_PROTO("request-header-count", request_header_count);
+                    MAP_EXT_TO_PROTO("response-header-count", response_header_count);
                     MAP_EXT_TO_PROTO("cc.name", transport.cc_name);
                     MAP_EXT_TO_PROTO("delivery-rate", transport.delivery_rate);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);

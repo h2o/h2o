@@ -1016,10 +1016,10 @@ typedef struct st_h2o_conn_callbacks_t {
         struct {
             h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
             /* protocol-agnostic per-request header metrics; only h3 implements these initially */
-            h2o_iovec_t (*headers_uncompressed_bytes_recv)(h2o_req_t *req);
-            h2o_iovec_t (*headers_uncompressed_bytes_sent)(h2o_req_t *req);
-            h2o_iovec_t (*headers_count_recv)(h2o_req_t *req);
-            h2o_iovec_t (*headers_count_sent)(h2o_req_t *req);
+            h2o_iovec_t (*request_bytes_header)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_count)(h2o_req_t *req);
+            h2o_iovec_t (*response_bytes_header)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_count)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
