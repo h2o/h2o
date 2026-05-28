@@ -331,11 +331,11 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
-    /**
-     * Byte counters for control and QPACK unidirectional streams. Kept on the connection because H3S_DESTROY is emitted after
-     * quicly_stream_t and the unistream wrappers might already have been destroyed.
-     */
     struct {
+        /**
+         * Byte counters for control and QPACK unidirectional streams. Kept on the connection because H3S_DESTROY is emitted after
+         * quicly_stream_t and the unistream wrappers might already have been destroyed.
+         */
         struct {
             uint64_t control_stream;
             uint64_t qpack_encoder;
