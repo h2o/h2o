@@ -620,6 +620,20 @@ static h2o_iovec_t log_extensible_priorities(h2o_req_t *_req)
     return h2o_iovec_init(buf, len);
 }
 
+#define DEFINE_H3_BYTES_LOG(name, accessor)                                                                                        \
+    static h2o_iovec_t log_##name(h2o_req_t *_req)                                                                                 \
+    {                                                                                                                              \
+        struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);      \
+        char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));                                   \
+        return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, (uint64_t)(accessor)));                                                \
+    }
+
+DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
+DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
+DEFINE_H3_BYTES_LOG(request_header_count, stream->stats.received.qpack.count)
+DEFINE_H3_BYTES_LOG(response_bytes_header, stream->stats.sent.qpack.text_bytes)
+DEFINE_H3_BYTES_LOG(response_header_count, stream->stats.sent.qpack.count)
+
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
@@ -793,14 +807,6 @@ static h2o_iovec_t log_quic_version(h2o_req_t *_req)
     return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
 }
 
-#define DEFINE_H3_BYTES_LOG(name, accessor)                                                                                        \
-    static h2o_iovec_t log_##name(h2o_req_t *_req)                                                                                 \
-    {                                                                                                                              \
-        struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);      \
-        char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT64_LONGEST_STR));                                   \
-        return h2o_iovec_init(buf, sprintf(buf, "%" PRIu64, (uint64_t)(accessor)));                                                \
-    }
-
 DEFINE_H3_BYTES_LOG(headers_bytes_recv, stream->stats.received.frame.headers)
 DEFINE_H3_BYTES_LOG(headers_bytes_sent, stream->stats.sent.frame.headers)
 /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
@@ -810,11 +816,6 @@ DEFINE_H3_BYTES_LOG(stream_bytes_recv, quicly_recvstate_transfer_complete(&strea
                                                                                         : stream->quic->recvstate.eos)
                                            : stream->quic->recvstate.received.ranges[0].end)
 DEFINE_H3_BYTES_LOG(stream_bytes_sent, stream->quic->sendstate.size_inflight)
-DEFINE_H3_BYTES_LOG(request_bytes, stream->stats.received.qpack.text_bytes + stream->req.req_body_bytes_received)
-DEFINE_H3_BYTES_LOG(request_bytes_header, stream->stats.received.qpack.text_bytes)
-DEFINE_H3_BYTES_LOG(request_header_count, stream->stats.received.qpack.count)
-DEFINE_H3_BYTES_LOG(response_bytes_header, stream->stats.sent.qpack.text_bytes)
-DEFINE_H3_BYTES_LOG(response_header_count, stream->stats.sent.qpack.count)
 
 #undef DEFINE_H3_BYTES_LOG
 
@@ -2187,6 +2188,11 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         .get_tracer = get_tracer,
         .log_ = {{
             .extensible_priorities = log_extensible_priorities,
+            .request_bytes = log_request_bytes,
+            .request_bytes_header = log_request_bytes_header,
+            .request_header_count = log_request_header_count,
+            .response_bytes_header = log_response_bytes_header,
+            .response_header_count = log_response_header_count,
             .transport =
                 {
                     .cc_name = log_cc_name,
@@ -2205,11 +2211,6 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .ech_cipher = log_ech_cipher,
                     .ech_cipher_bits = log_ech_cipher_bits,
                 },
-            .request_bytes = log_request_bytes,
-            .request_bytes_header = log_request_bytes_header,
-            .request_header_count = log_request_header_count,
-            .response_bytes_header = log_response_bytes_header,
-            .response_header_count = log_response_header_count,
             .http3 =
                 {
                     .stream_id = log_stream_id,
