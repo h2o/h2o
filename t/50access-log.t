@@ -396,6 +396,28 @@ subtest 'compressed-body-size' => sub {
     };
 };
 
+subtest 'request-body-size' => sub {
+    my @expected;
+    my $push_expected = sub {
+        my ($http_ver) = @_;
+        $http_ver = $http_ver == 257 ? "1.1" : $http_ver / 256; # convert $http_ver to textual notation
+        push @expected, qr{^HTTP/$http_ver GET 0$}, qr{^HTTP/$http_ver POST 5$};
+    };
+    doit(
+        sub {
+            my $server = shift;
+            run_with_curl($server, sub {
+                my ($proto, $port, $cmd, $http_ver) = @_;
+                is system("$cmd --silent $proto://127.0.0.1:${port}/ > /dev/null"), 0, "run curl";
+                is system("$cmd --silent --data-binary hello $proto://127.0.0.1:${port}/ > /dev/null"), 0, "run curl";
+                $push_expected->($http_ver);
+            });
+        },
+        '%H %m %{request-bytes-body}x',
+        \@expected,
+    );
+};
+
 subtest 'header-bytes' => sub {
     my @expected;
     my $push_expected = sub {
