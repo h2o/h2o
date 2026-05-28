@@ -39,10 +39,10 @@ struct st_h2o_http3_ingress_unistream_t {
      */
     h2o_buffer_t *recvbuf;
     /**
-     * Largest byte offset received on the unidirectional stream. Kept for H3S_DESTROY in case quicly's receive state is cleared by
-     * an unexpected stream closure or reset.
+     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a stream
+     * type is identified.
      */
-    uint64_t bytes_received;
+    uint64_t *bytes_received;
     /**
      * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
      */
@@ -55,6 +55,10 @@ struct st_h2o_http3_egress_unistream_t {
      * back pointer
      */
     quicly_stream_t *quic;
+    /**
+     * Points to the counter that records the number of bytes sent on a local control or QPACK stream.
+     */
+    uint64_t *bytes_sent;
     /**
      *
      */

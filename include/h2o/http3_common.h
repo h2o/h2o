@@ -331,6 +331,13 @@ struct st_h2o_http3_conn_t {
             struct st_h2o_http3_egress_unistream_t *qpack_decoder;
         } egress;
     } _control_streams;
+    struct {
+        struct {
+            uint64_t control_stream;
+            uint64_t qpack_encoder;
+            uint64_t qpack_decoder;
+        } bytes_received, bytes_sent;
+    } stats;
     /**
      * Maximum frame payload size (excluding DATA); this property essentially limits the maximum size of HEADERS frame.
      * As `h2o_http3_read_frame` parses the frame inside the receive buffer, stream-level flow control credits specified in
