@@ -269,12 +269,11 @@ struct st_h2o_http3_server_stream_t {
      */
     uint64_t datagram_flow_id;
     /**
-     * per-stream statistics, for access log.
+     * per-stream statistics
      */
     struct {
         struct {
             uint64_t headers_frame_bytes;
-            /* uncompressed counts over the HTTP/3 HEADERS frame payload */
             h2o_qpack_section_stats_t qpack;
         } req, resp;
     } stats;
