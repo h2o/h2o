@@ -385,7 +385,7 @@ static void test_reset_during_loss(void)
     quic_ctx.transport_params.max_stream_data = (quicly_max_stream_data_t){4, 4, 4};
 
     ok(max_data_is_equal(client, server));
-    quicly_get_max_data(client, NULL, &max_data_at_start, NULL);
+    quicly_get_max_data(client, NULL, &max_data_at_start, NULL, NULL);
 
     ret = quicly_open_stream(client, &client_stream, 0);
     ok(ret == 0);
@@ -423,9 +423,9 @@ static void test_reset_during_loss(void)
     ok(!server_streambuf->is_detached);
     ok(quicly_sendstate_transfer_complete(&server_stream->sendstate));
 
-    quicly_get_max_data(client, NULL, &tmp, NULL);
+    quicly_get_max_data(client, NULL, &tmp, NULL, NULL);
     ok(tmp == max_data_at_start + 8);
-    quicly_get_max_data(server, NULL, NULL, &tmp);
+    quicly_get_max_data(server, NULL, NULL, &tmp, NULL);
     ok(tmp == max_data_at_start + 8);
 
     {
@@ -438,7 +438,7 @@ static void test_reset_during_loss(void)
         }
     }
 
-    quicly_get_max_data(server, NULL, NULL, &tmp);
+    quicly_get_max_data(server, NULL, NULL, &tmp, NULL);
     ok(tmp == max_data_at_start + 8);
 
     /* RESET_STREAM for downstream is sent */
@@ -452,7 +452,7 @@ static void test_reset_during_loss(void)
     ok(server_streambuf->is_detached);
     ok(quicly_num_streams(server) == 0);
 
-    quicly_get_max_data(server, NULL, NULL, &tmp);
+    quicly_get_max_data(server, NULL, NULL, &tmp, NULL);
     ok(tmp == max_data_at_start + 8);
     ok(max_data_is_equal(client, server));
 

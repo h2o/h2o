@@ -307,7 +307,7 @@ struct st_quicly_context_t {
     /**
      * maximum number of bytes that can be transmitted on a CRYPTO stream (per each epoch)
      */
-    uint64_t max_crypto_bytes;
+    uint32_t max_crypto_bytes;
     /**
      * initial CWND in terms of packet numbers
      */
@@ -1259,7 +1259,7 @@ quicly_error_t quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *deli
 /**
  *
  */
-void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed);
+void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed, uint64_t *shifted);
 /**
  *
  */

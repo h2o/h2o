@@ -515,8 +515,8 @@ int max_data_is_equal(quicly_conn_t *client, quicly_conn_t *server)
     uint64_t client_sent, client_consumed;
     uint64_t server_sent, server_consumed;
 
-    quicly_get_max_data(client, NULL, &client_sent, &client_consumed);
-    quicly_get_max_data(server, NULL, &server_sent, &server_consumed);
+    quicly_get_max_data(client, NULL, &client_sent, &client_consumed, NULL);
+    quicly_get_max_data(server, NULL, &server_sent, &server_consumed, NULL);
 
     if (client_sent != server_consumed)
         return 0;
