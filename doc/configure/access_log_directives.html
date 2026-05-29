@@ -174,6 +174,17 @@ As an example, it is possible to log timestamps in millisecond resolution using 
 <tr id="total-time"><td><code>total-time</code><td>same as <code>duration</code> (since v2.3)
 </table>
 <table>
+<caption>HTTP Message Sizes</caption>
+<tr><th>Name<th>Description
+<tr id="request-header-bytes"><td><code>request-header-bytes</code><td>number of bytes used to receive request headers in the protocol-specific encoded form
+<tr id="response-header-bytes"><td><code>response-header-bytes</code><td>number of bytes used to send response headers in the protocol-specific encoded form
+<tr id="request-header-text-bytes"><td><code>request-header-text-bytes</code><td>sum of request header name and value lengths after decoding
+<tr id="response-header-text-bytes"><td><code>response-header-text-bytes</code><td>sum of response header name and value lengths before encoding
+<tr id="request-header-count"><td><code>request-header-count</code><td>number of request header fields
+<tr id="response-header-count"><td><code>response-header-count</code><td>number of response header fields
+<tr id="request-body-bytes"><td><code>request-body-bytes</code><td>number of request body bytes received
+</table>
+<table>
 <caption>Proxy Timings (since v2.3)</caption>
 <tr><th>Name<th>Description
 <tr id="proxy.idle-time"><td><code>proxy.idle-time</code><td>time spent after receiving request, before starting to connect to the upstream
