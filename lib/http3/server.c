@@ -1922,6 +1922,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->req_streaming = 0;
     stream->req_streaming_eos_delivered = 0;
     stream->req_body = NULL;
+    memset(&stream->stats, 0, sizeof(stream->stats));
 
     h2o_init_request(&stream->req, &conn->super, NULL);
     stream->req.version = 0x0300;
