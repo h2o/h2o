@@ -292,7 +292,15 @@ struct st_quicly_conn_t {
          *
          */
         struct {
+            /**
+             * sum of max(offset + len) for all the streams; used for checking if the peer stays in its flow control limit
+             */
             uint64_t bytes_consumed;
+            /**
+             * sum of bytes shifted (read out) from the receive buffers, by calling `quicly_stream_sync_recvbuf`; as bytes are
+             * shifted, additional connection-level flow control credits are provided to the peer
+             */
+            uint64_t bytes_shifted;
             quicly_maxsender_t sender;
         } max_data;
         /**
@@ -840,6 +848,8 @@ size_t quicly_decode_packet(quicly_context_t *ctx, quicly_decoded_packet_t *pack
         case QUICLY_PROTOCOL_VERSION_DRAFT29:
         case QUICLY_PROTOCOL_VERSION_DRAFT27:
             /* these are the recognized versions, and they share the same packet header format */
+            if (packet->cid.dest.encrypted.len > QUICLY_MAX_CID_LEN_V1 || packet->cid.src.len > QUICLY_MAX_CID_LEN_V1)
+                goto Error;
             if ((packet->octets.base[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_RETRY) {
                 /* retry */
                 if (src_end - src <= PTLS_AESGCM_TAG_SIZE)
@@ -1045,7 +1055,7 @@ static void resched_stream_data(quicly_stream_t *stream)
 
 static int should_send_max_data(quicly_conn_t *conn)
 {
-    return quicly_maxsender_should_send_max(&conn->ingress.max_data.sender, conn->ingress.max_data.bytes_consumed,
+    return quicly_maxsender_should_send_max(&conn->ingress.max_data.sender, conn->ingress.max_data.bytes_shifted,
                                             (uint32_t)conn->super.ctx->transport_params.max_data, 512);
 }
 
@@ -1073,9 +1083,15 @@ int quicly_stream_sync_sendbuf(quicly_stream_t *stream, int activate)
 void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount)
 {
     stream->recvstate.data_off += shift_amount;
+
+    /* handle flow control unless the given stream is a CRYPTO stream, which are exempt from flow control */
     if (stream->stream_id >= 0) {
         if (should_send_max_stream_data(stream))
             sched_stream_control(stream);
+        quicly_conn_t *conn = stream->conn;
+        conn->ingress.max_data.bytes_shifted += shift_amount;
+        if (should_send_max_data(conn))
+            conn->egress.pending_flows |= QUICLY_PENDING_FLOW_OTHERS_BIT;
     }
 }
 
@@ -1481,7 +1497,7 @@ quicly_stream_id_t quicly_get_ingress_max_streams(quicly_conn_t *conn, int uni)
     return maxsender->max_committed;
 }
 
-void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed)
+void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed, uint64_t *shifted)
 {
     if (send_permitted != NULL)
         *send_permitted = conn->egress.max_data.permitted;
@@ -1489,6 +1505,8 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
         *sent = conn->egress.max_data.sent;
     if (consumed != NULL)
         *consumed = conn->ingress.max_data.bytes_consumed;
+    if (shifted != NULL)
+        *shifted = conn->ingress.max_data.bytes_shifted;
 }
 
 static void update_idle_timeout(quicly_conn_t *conn, int is_in_receive)
@@ -1575,7 +1593,9 @@ static int create_handshake_flow(quicly_conn_t *conn, size_t epoch)
     quicly_stream_t *stream;
     int ret;
 
-    if ((stream = open_stream(conn, -(quicly_stream_id_t)(1 + epoch), 65536, 65536)) == NULL)
+    if ((stream = open_stream(conn, -(quicly_stream_id_t)(1 + epoch), conn->super.ctx->max_crypto_bytes,
+                              16777216 /* CRYPTO streams are not flow controlled; set the remote threshold to a huge value that we'd
+                                        * never hit */)) == NULL)
         return PTLS_ERROR_NO_MEMORY;
     if ((ret = quicly_streambuf_create(stream, sizeof(quicly_streambuf_t))) != 0) {
         destroy_stream(stream, ret);
@@ -2381,7 +2401,7 @@ static quicly_error_t apply_stream_frame(quicly_stream_t *stream, quicly_stream_
             return QUICLY_ERROR_IS_CLOSING;
     }
 
-    if (should_send_max_stream_data(stream))
+    if (stream->stream_id >= 0 && should_send_max_stream_data(stream))
         sched_stream_control(stream);
 
     if (stream_is_destroyable(stream))
@@ -5442,7 +5462,7 @@ static quicly_error_t send_other_control_frames(quicly_conn_t *conn, quicly_send
         quicly_sent_t *sent;
         if ((ret = allocate_ack_eliciting_frame(conn, s, QUICLY_MAX_DATA_FRAME_CAPACITY, &sent, on_ack_max_data)) != 0)
             return ret;
-        uint64_t new_value = conn->ingress.max_data.bytes_consumed + conn->super.ctx->transport_params.max_data;
+        uint64_t new_value = conn->ingress.max_data.bytes_shifted + conn->super.ctx->transport_params.max_data;
         s->dst = quicly_encode_max_data_frame(s->dst, new_value);
         quicly_maxsender_record(&conn->ingress.max_data.sender, new_value, &sent->data.max_data.args);
         ++conn->super.stats.num_frames_sent.max_data;
@@ -6780,7 +6800,7 @@ static int is_stateless_reset(quicly_conn_t *conn, quicly_decoded_packet_t *deco
         return 0;
 
     for (size_t i = 0; i < PTLS_ELEMENTSOF(conn->super.remote.cid_set.cids); ++i) {
-        if (conn->super.remote.cid_set.cids[0].state == QUICLY_REMOTE_CID_UNAVAILABLE)
+        if (conn->super.remote.cid_set.cids[i].state == QUICLY_REMOTE_CID_UNAVAILABLE)
             continue;
         if (memcmp(decoded->octets.base + decoded->octets.len - QUICLY_STATELESS_RESET_TOKEN_LEN,
                    conn->super.remote.cid_set.cids[i].stateless_reset_token, QUICLY_STATELESS_RESET_TOKEN_LEN) == 0)
