@@ -364,7 +364,7 @@ static h2o_socketpool_target_t *parse_backend(h2o_configurator_command_t *cmd, y
         goto Exit;
     }
 
-    result = h2o_socketpool_create_target(&url, &lb_per_target_conf);
+    result = h2o_socketpool_create_target(&url, &lb_per_target_conf, NULL);
 
 Exit:
     h2o_mem_clear_pool(&pool);

@@ -352,6 +352,10 @@ struct st_h2o_httpclient__h3_conn_t {
          */
         h2o_url_t origin_url;
         /**
+         * the server name (SNI), NUL-terminated
+         */
+        h2o_iovec_t server_name;
+        /**
          * port number in C string
          */
         char named_serv[sizeof(H2O_UINT16_LONGEST_STR)];
