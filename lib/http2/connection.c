@@ -623,10 +623,20 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     assert(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS);
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
-                                       &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
-                                       &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
-        0) {
+                                       (h2o_hpack_request_t){
+                                           .method = &stream->req.input.method,
+                                           .scheme = &stream->req.input.scheme,
+                                           .authority = &stream->req.input.authority,
+                                           .path = &stream->req.input.path,
+                                           .protocol = &stream->req.upgrade,
+                                           .headers = &stream->req.headers,
+                                           .pseudo_header_exists_map = &header_exists_map,
+                                           .content_length = &stream->req.content_length,
+                                           .expect = &expect,
+                                           .digests = &stream->cache_digests,
+                                           .datagram_flow_id = NULL,
+                                       },
+                                       src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -745,8 +755,12 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     h2o_iovec_t dummy_expect = h2o_iovec_init(NULL, 0);
     int ret;
 
-    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
-                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, NULL,
+    if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
+                                       (h2o_hpack_request_t){
+                                           .headers = &stream->req.headers,
+                                           .content_length = &dummy_content_length,
+                                           .expect = &dummy_expect,
+                                       },
                                        src, len, err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
