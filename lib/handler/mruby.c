@@ -41,6 +41,13 @@
 #include "h2o/mruby_.h"
 #include "mruby/embedded.c.h"
 
+struct st_h2o_mruby_req_streaming_ctx_t {
+    h2o_mruby_generator_t *generator;
+    h2o_mruby_context_t *ctx;
+    mrb_value args; /* array of [receiver, chunk, is_end_stream] */
+    h2o_timer_t delay_slot;
+};
+
 #define STATUS_FALLTHRU 399
 #define FALLTHRU_SET_PREFIX "x-fallthru-set-"
 
@@ -467,6 +474,79 @@ mrb_value finish_child_fiber_callback(h2o_mruby_context_t *ctx, mrb_value input,
     return mrb_nil_value();
 }
 
+static void write_req_on_delayed(h2o_timer_t *entry)
+{
+    struct st_h2o_mruby_req_streaming_ctx_t *ctx =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_req_streaming_ctx_t, delay_slot, entry);
+
+    if (ctx->generator != NULL)
+        ctx->generator->req_streaming = NULL;
+
+    int gc_arena = mrb_gc_arena_save(ctx->ctx->shared->mrb);
+    mrb_value receiver = mrb_ary_shift(ctx->ctx->shared->mrb, ctx->args);
+    mrb_gc_protect(ctx->ctx->shared->mrb, receiver);
+    h2o_mruby_run_fiber(ctx->ctx, receiver, ctx->args, NULL);
+    mrb_gc_arena_restore(ctx->ctx->shared->mrb, gc_arena);
+
+    mrb_gc_unregister(ctx->ctx->shared->mrb, ctx->args);
+    free(ctx);
+}
+
+static void fetch_req_chunk_on_delayed(h2o_timer_t *entry)
+{
+    struct st_h2o_mruby_req_streaming_ctx_t *ctx =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_mruby_req_streaming_ctx_t, delay_slot, entry);
+
+    if (ctx->generator != NULL) {
+        ctx->generator->req->proceed_req(ctx->generator->req, NULL);
+    } else {
+        write_req_on_delayed(entry);
+    }
+}
+
+static mrb_value fetch_req_chunk_callback(h2o_mruby_context_t *ctx, mrb_value input, mrb_value *receiver, mrb_value args,
+                                          int *run_again)
+{
+    mrb_state *mrb = ctx->shared->mrb;
+    h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_ary_entry(args, 0));
+
+    if (generator->req_streaming != NULL) {
+        *run_again = 1;
+        return mrb_exc_new_lit(mrb, E_RUNTIME_ERROR, "another fiber is already blocked reading request");
+    }
+
+    generator->req_streaming = h2o_mem_alloc(sizeof(*generator->req_streaming));
+    *generator->req_streaming = (struct st_h2o_mruby_req_streaming_ctx_t){
+        .generator = generator,
+        .ctx = ctx,
+        .args = mrb_ary_new_capa(mrb, 3),
+    };
+    mrb_ary_set(mrb, generator->req_streaming->args, 0, *receiver);
+    h2o_timer_init(&generator->req_streaming->delay_slot, fetch_req_chunk_on_delayed);
+    h2o_timer_link(ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
+
+    mrb_gc_register(mrb, generator->req_streaming->args);
+
+    return mrb_nil_value();
+}
+
+static void set_req_streaming_data(struct st_h2o_mruby_req_streaming_ctx_t *ctx, h2o_iovec_t vec, int is_end_stream)
+{
+    mrb_ary_set(ctx->ctx->shared->mrb, ctx->args, 1, mrb_str_new(ctx->ctx->shared->mrb, vec.base, vec.len));
+    mrb_ary_set(ctx->ctx->shared->mrb, ctx->args, 2, mrb_bool_value(is_end_stream));
+}
+
+static int write_req(void *_generator, int is_end_stream)
+{
+    h2o_mruby_generator_t *generator = _generator;
+
+    set_req_streaming_data(generator->req_streaming, generator->req->entity, is_end_stream);
+    generator->req_streaming->delay_slot.cb = write_req_on_delayed;
+    h2o_timer_link(generator->req_streaming->ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
+
+    return 0;
+}
+
 static mrb_value error_stream_write(mrb_state *mrb, mrb_value self)
 {
     h2o_mruby_error_stream_t *error_stream;
@@ -517,6 +597,7 @@ static h2o_mruby_shared_context_t *create_shared_context(h2o_context_t *ctx)
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_blocking_requests", run_blocking_requests_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__run_child_fiber", run_child_fiber_callback);
     h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__finish_child_fiber", finish_child_fiber_callback);
+    h2o_mruby_define_callback(shared_ctx->mrb, "_h2o__fetch_req_chunk", fetch_req_chunk_callback);
 
     h2o_mruby_sender_init_context(shared_ctx);
     h2o_mruby_http_request_init_context(shared_ctx);
@@ -801,14 +882,29 @@ static mrb_value build_env(h2o_mruby_generator_t *generator)
     }
     mrb_hash_set(mrb, env, h2o_mruby_token_env_key(shared, H2O_TOKEN_HOST),
                  h2o_mruby_new_str(mrb, generator->req->authority.base, generator->req->authority.len));
+    generator->req_streaming = NULL;
     if (generator->req->entity.base != NULL) {
-        char buf[32];
-        int l = sprintf(buf, "%zu", generator->req->entity.len);
-        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_CONTENT_LENGTH), h2o_mruby_new_str(mrb, buf, l));
-        generator->rack_input = mrb_input_stream_value(mrb, NULL, 0);
-        mrb_input_stream_set_data(mrb, generator->rack_input, generator->req->entity.base, (mrb_int)generator->req->entity.len, 0,
-                                  on_rack_input_free, &generator->rack_input);
-        mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_INPUT), generator->rack_input);
+        if (generator->req->proceed_req == NULL) {
+            char buf[32];
+            int l = sprintf(buf, "%zu", generator->req->entity.len);
+            mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_CONTENT_LENGTH), h2o_mruby_new_str(mrb, buf, l));
+            generator->rack_input = mrb_input_stream_value(mrb, NULL, 0);
+            mrb_input_stream_set_data(mrb, generator->rack_input, generator->req->entity.base, (mrb_int)generator->req->entity.len,
+                                      0, on_rack_input_free, &generator->rack_input);
+            mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_INPUT), generator->rack_input);
+        } else {
+            /* request streaming; use of string (rather than InputStream) indicates to the ruby-side use of reqeust streaming */
+            if (generator->req->content_length != SIZE_MAX) {
+                char buf[32];
+                int l = sprintf(buf, "%zu", generator->req->content_length);
+                mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_CONTENT_LENGTH),
+                             h2o_mruby_new_str(mrb, buf, l));
+            }
+            mrb_hash_set(mrb, env, mrb_ary_entry(shared->constants, H2O_MRUBY_LIT_RACK_INPUT),
+                         mrb_str_new(mrb, generator->req->entity.base, generator->req->entity.len));
+            generator->req->write_req.cb = write_req;
+            generator->req->write_req.ctx = generator;
+        }
     }
     {
         mrb_value h, p;
@@ -926,8 +1022,17 @@ SetUsingToken:
 
 static void clear_rack_input(h2o_mruby_generator_t *generator)
 {
-    if (!mrb_nil_p(generator->rack_input))
+    if (!mrb_nil_p(generator->rack_input)) {
         mrb_input_stream_set_data(generator->ctx->shared->mrb, generator->rack_input, NULL, -1, 0, NULL, NULL);
+    } else if (generator->req_streaming != NULL) {
+        /* pending request streaming; rearm the timer to fire `write_req_on_delayed` immediately, which would signal EOS to mruby */
+        generator->req_streaming->generator = NULL;
+        if (h2o_timer_is_linked(&generator->req_streaming->delay_slot))
+            h2o_timer_unlink(&generator->req_streaming->delay_slot);
+        set_req_streaming_data(generator->req_streaming, h2o_iovec_init(H2O_STRLIT("")), 1);
+        generator->req_streaming->delay_slot.cb = write_req_on_delayed;
+        h2o_timer_link(generator->req_streaming->ctx->shared->ctx->loop, 0, &generator->req_streaming->delay_slot);
+    }
 }
 
 static void on_generator_dispose(void *_generator)
@@ -1170,6 +1275,7 @@ h2o_mruby_handler_t *h2o_mruby_register(h2o_pathconf_t *pathconf, h2o_mruby_conf
     handler->super.on_context_dispose = on_context_dispose;
     handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
+    handler->super.supports_request_streaming = 1;
     handler->config.source = h2o_strdup(NULL, vars->source.base, vars->source.len);
     if (vars->path != NULL)
         handler->config.path = h2o_strdup(NULL, vars->path, SIZE_MAX).base;
