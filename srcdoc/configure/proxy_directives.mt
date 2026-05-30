@@ -121,6 +121,14 @@ $ctx->{directive}->(
 Supplied argument is an access control list, using the same format as that of <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>.
 </p>
 <p>
+Per RFC 9298, the handler should be registered at path <code>/.well-known/masque/udp/</code> to be compatible with the default URI Template used by clients:
+</p>
+<pre><code>paths:
+  "/.well-known/masque/udp":
+    proxy.connect-udp:
+      - "+0.0.0.0/0"
+</code></pre>
+<p>
 Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see <a href="configure/proxy_directives.html#proxy.connect.masque-draft-03"><code>proxy.connect.masque-draft-03</code></a>.
 </p>
 ? })
