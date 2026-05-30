@@ -1049,6 +1049,7 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
+                h2o_iovec_t (*qpack_blocked)(h2o_req_t *req);
             } http3;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);

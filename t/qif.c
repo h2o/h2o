@@ -208,6 +208,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 
 struct blocked_header_t {
     uint64_t stream_id;
+    uint64_t blocked_ref;
     uint8_t *buf;
     size_t len;
 };
@@ -215,7 +216,7 @@ struct blocked_header_t {
 typedef H2O_VECTOR(struct blocked_header_t) blocked_headers_t;
 
 static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *outp, uint64_t stream_id, const uint8_t *buf,
-                               size_t chunk_size, int is_resp)
+                               size_t chunk_size, uint64_t num_blocked, uint64_t *blocked_ref, int is_resp)
 {
     int ret;
 
@@ -230,13 +231,13 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         const char *err_desc = NULL;
         if ((ret = h2o_qpack_parse_request(pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                           &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, header_ack,
-                                           &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
-            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-                return ret;
+                                           &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, num_blocked,
+                                           blocked_ref, header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
             return ret;
         }
+        if (*blocked_ref != 0)
+            return H2O_HTTP3_ERROR_INCOMPLETE;
 #define REQUIRED_PSEUDO_HEADERS                                                                                                    \
     (H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS | H2O_HPACK_PARSE_HEADERS_SCHEME_EXISTS | H2O_HPACK_PARSE_HEADERS_AUTHORITY_EXISTS |    \
      H2O_HPACK_PARSE_HEADERS_PATH_EXISTS)
@@ -267,13 +268,13 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t header_ack_len, i;
         const char *err_desc = NULL;
-        if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, header_ack, &header_ack_len,
-                                            buf, chunk_size, &err_desc)) != 0) {
-            if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-                return ret;
+        if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, num_blocked, blocked_ref,
+                                            header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
             return ret;
         }
+        if (*blocked_ref != 0)
+            return H2O_HTTP3_ERROR_INCOMPLETE;
         fprintf(outp, "#stream\t%" PRIu64 "\n:status\t%d\n", stream_id, status);
         if (datagram_flow_id.base != NULL)
             fprintf(outp, "datagram-flow-id\t%.*s\n", (int)datagram_flow_id.len, datagram_flow_id.base);
@@ -288,31 +289,30 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
 }
 
 static int retry_blocked(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, FILE *outp, blocked_headers_t *blocked,
-                         const int64_t *unblocked_streams, size_t num_unblocked, int is_resp)
+                         uint64_t insert_count, int is_resp)
 {
-    size_t i;
+    size_t i = 0;
 
-    for (i = 0; i != num_unblocked; ++i) {
-        size_t j;
-        for (j = 0; j != blocked->size; ++j)
-            if (blocked->entries[j].stream_id == unblocked_streams[i])
-                break;
-        if (j == blocked->size) {
-            fprintf(stderr, "stream %" PRId64 " was unblocked but is not pending\n", unblocked_streams[i]);
-            return 1;
+    while (i != blocked->size) {
+        if (blocked->entries[i].blocked_ref > insert_count) {
+            ++i;
+            continue;
         }
 
-        int ret = decode_header_block(dec, pool, outp, blocked->entries[j].stream_id, blocked->entries[j].buf,
-                                      blocked->entries[j].len, is_resp);
+        uint64_t blocked_ref;
+        /* pass blocked->size - 1: this section is about to leave the blocked list, so the caller's "in-flight blocked" count
+         * excluding it is one less */
+        int ret = decode_header_block(dec, pool, outp, blocked->entries[i].stream_id, blocked->entries[i].buf,
+                                      blocked->entries[i].len, blocked->size - 1, &blocked_ref, is_resp);
         if (ret != 0) {
-            fprintf(stderr, "failed to retry stream %" PRIu64 "\n", blocked->entries[j].stream_id);
+            fprintf(stderr, "failed to retry stream %" PRIu64 "\n", blocked->entries[i].stream_id);
             return 1;
         }
 
-        free(blocked->entries[j].buf);
+        free(blocked->entries[i].buf);
         --blocked->size;
-        if (j != blocked->size)
-            memmove(blocked->entries + j, blocked->entries + j + 1, sizeof(blocked->entries[0]) * (blocked->size - j));
+        if (i != blocked->size)
+            memmove(blocked->entries + i, blocked->entries + i + 1, sizeof(blocked->entries[0]) * (blocked->size - i));
     }
 
     return 0;
@@ -342,26 +342,26 @@ static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             h2o_vector_reserve(NULL, &encoder_stream_buf, encoder_stream_buf.size + chunk_size);
             memcpy(encoder_stream_buf.entries + encoder_stream_buf.size, buf, chunk_size);
             encoder_stream_buf.size += chunk_size;
-            int64_t *unblocked_streams;
-            size_t num_unblocked;
+            uint64_t insert_count;
             const uint8_t *p = encoder_stream_buf.entries;
             const char *err_desc = NULL;
-            if ((ret = h2o_qpack_decoder_handle_input(dec, &unblocked_streams, &num_unblocked, &p, p + encoder_stream_buf.size,
-                                                      &err_desc)) != 0) {
+            if ((ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + encoder_stream_buf.size, &err_desc)) != 0) {
                 fprintf(stderr, "failed to decode stream 0:%s\n", err_desc);
                 return 1;
             }
-            if (retry_blocked(dec, &pool, outp, &blocked, unblocked_streams, num_unblocked, is_resp) != 0)
+            if (insert_count != 0 && retry_blocked(dec, &pool, outp, &blocked, insert_count, is_resp) != 0)
                 return 1;
             size_t remaining = encoder_stream_buf.entries + encoder_stream_buf.size - p;
             if (remaining != 0)
                 memmove(encoder_stream_buf.entries, p, remaining);
             encoder_stream_buf.size = remaining;
         } else {
-            ret = decode_header_block(dec, &pool, outp, stream_id, buf, chunk_size, is_resp);
+            uint64_t blocked_ref;
+            ret = decode_header_block(dec, &pool, outp, stream_id, buf, chunk_size, blocked.size, &blocked_ref, is_resp);
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
                 h2o_vector_reserve(NULL, &blocked, blocked.size + 1);
                 blocked.entries[blocked.size].stream_id = stream_id;
+                blocked.entries[blocked.size].blocked_ref = blocked_ref;
                 blocked.entries[blocked.size].buf = h2o_mem_alloc(chunk_size);
                 memcpy(blocked.entries[blocked.size].buf, buf, chunk_size);
                 blocked.entries[blocked.size].len = chunk_size;

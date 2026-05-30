@@ -192,6 +192,7 @@ struct st_h2o_http3client_ctx_t {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
+    h2o_http3_qpack_context_t qpack;
     uint64_t max_frame_payload_size;
     /**
      * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
