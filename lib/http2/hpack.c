@@ -105,6 +105,7 @@ const char h2o_hpack_err_unexpected_connection_specific_header[] = "found an une
 const char h2o_hpack_err_invalid_content_length_header[] = "invalid content-length header";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
+const char h2o_hpack_soft_err_too_many_headers[] = "too many headers";
 
 static int header_value_valid_as_whole(const char *s, size_t len)
 {
@@ -611,9 +612,17 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
-                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_soft_err_too_many_headers;
+                }
             } else {
-                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_soft_err_too_many_headers;
+                }
             }
         }
     Next:;
@@ -625,8 +634,8 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
 }
 
 int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
-                             const char **err_desc)
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src,
+                             size_t len, const char **err_desc)
 {
     if (status != NULL)
         *status = 0;
@@ -706,15 +715,23 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
-                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_soft_err_too_many_headers;
+                }
             } else {
-                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_soft_err_too_many_headers;
+                }
             }
         }
     Next:;
     } while (src != src_end);
 
-    if (*err_desc) {
+    if (*err_desc != NULL) {
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
     }
     return 0;

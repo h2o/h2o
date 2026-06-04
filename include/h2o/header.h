@@ -29,6 +29,13 @@
 extern "C" {
 #endif
 
+#ifndef H2O_MAX_HEADERS
+#define H2O_MAX_HEADERS 100
+#endif
+#ifndef H2O_MAX_REQLEN
+#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
+#endif
+
 typedef struct st_h2o_header_flags_t {
     unsigned char dont_compress : 1;
 } h2o_header_flags_t;
