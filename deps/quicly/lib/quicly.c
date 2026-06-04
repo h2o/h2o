@@ -2740,24 +2740,19 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     if (ctx->transport_params.max_datagram_frame_size != 0)
         assert(ctx->receive_datagram_frame != NULL);
 
-    /* build log state */
-    ptls_log_init_conn_state(&log_state_override, ctx->tls->random_bytes);
-    switch (remote_addr->sa_family) {
-    case AF_INET:
-        ptls_build_v4_mapped_v6_address(&log_state_override.address, &((struct sockaddr_in *)remote_addr)->sin_addr);
-        break;
-    case AF_INET6:
-        memcpy(log_state_override.address, ((struct sockaddr_in6 *)remote_addr)->sin6_addr.s6_addr,
-               sizeof(log_state_override.address));
-        break;
-    default:
-        break;
+    /* build log state and override, unless already set by the caller */
+    if (ptls_log_conn_state_override == NULL) {
+        ptls_log_init_conn_state(&log_state_override, ctx->tls->random_bytes, 0, remote_addr);
+        ptls_log_conn_state_override = &log_state_override;
     }
 
     /* create TLS context */
-    ptls_log_conn_state_override = &log_state_override;
     tls = ptls_new(ctx->tls, server_name == NULL);
-    ptls_log_conn_state_override = NULL;
+
+    /* clear the override if we had set our own */
+    if (ptls_log_conn_state_override == &log_state_override)
+        ptls_log_conn_state_override = NULL;
+
     if (tls == NULL)
         return NULL;
     if (server_name != NULL && ptls_set_server_name(tls, server_name, strlen(server_name)) != 0) {
@@ -6271,6 +6266,7 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
     } largest_newly_acked = {UINT64_MAX, INT64_MAX};
     size_t bytes_acked = 0;
     int includes_ack_eliciting = 0, includes_late_ack = 0;
+    uint64_t largest_late_acked = UINT64_MAX;
     quicly_error_t ret;
 
     /* The flow is considered CC-limited if the packet was sent while `inflight >= 1/2 * CNWD` or acked under the same condition.
@@ -6339,7 +6335,10 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
                 if (sent->cc_bytes_in_flight == 0) {
                     is_late_ack = 1;
                     includes_late_ack = 1;
+                    largest_late_acked = pn_acked;
                     ++conn->super.stats.num_packets.late_acked;
+                    if (conn->egress.pn_path_start <= pn_acked && conn->egress.cc.type->cc_on_late_ack != NULL)
+                        conn->egress.cc.type->cc_on_late_ack(&conn->egress.cc, pn_acked, conn->stash.now);
                 }
             }
             ++conn->super.stats.num_packets.ack_received;
@@ -6394,8 +6393,8 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
 
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
-    quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, state->epoch, conn->stash.now,
-                                largest_newly_acked.sent_at, frame.ack_delay,
+    quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, largest_late_acked, conn->egress.packet_number,
+                                state->epoch, conn->stash.now, largest_newly_acked.sent_at, frame.ack_delay,
                                 includes_ack_eliciting ? includes_late_ack ? QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK
                                                                            : QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING
                                                        : QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING);
