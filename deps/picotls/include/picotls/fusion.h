@@ -99,10 +99,25 @@ int ptls_fusion_aesgcm_decrypt(ptls_fusion_aesgcm_context_t *ctx, void *output, 
  * for these 256-bit instructions will continue using the 128-bit ones, even when this flag is set.
  */
 extern int ptls_fusion_can_aesni256;
+/**
+ * AES-CTR backends. These backends can only handle ciphertext up to 16 bytes long.
+ */
 extern ptls_cipher_algorithm_t ptls_fusion_aes128ctr, ptls_fusion_aes256ctr;
+/**
+ * AES-GCM backends optimized for for QUIC. These engines require sufficient amount of memory to be available; they raise assertion
+ * failure if context memory cannot be allocated.
+ */
 extern ptls_aead_algorithm_t ptls_fusion_aes128gcm, ptls_fusion_aes256gcm;
+/**
+ * AES-GCM backend optimized for TLS. This backend writes ciphertext using non-temporal store instructions to avoid polluting CPU
+ * caches with data that is typically consumed by NIC DMA and not reused by the CPU. This can be beneficial on systems where DMA
+ * reads only from main memory, such as CPUs without Intel DDIO support. Although non-temporal stores have lower throughput than
+ * regular cached stores, that cost is usually hidden by AES-GCM computation.
+ */
 extern ptls_aead_algorithm_t ptls_non_temporal_aes128gcm, ptls_non_temporal_aes256gcm;
-
+/**
+ * Implements the 4-pass Feistel Network backed by AES-ECB, used for encrypting the Connection ID in draft-ietf-quic-load-balancers.
+ */
 extern ptls_cipher_algorithm_t ptls_fusion_quiclb;
 
 /**

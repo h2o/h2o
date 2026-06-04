@@ -890,7 +890,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t t-qif ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()

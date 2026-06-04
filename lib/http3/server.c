@@ -2070,7 +2070,7 @@ Exit:
      * token size of 200 bytes (in reality, one NEW_TOKEN frame will uses 56 bytes). */
     if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
         uint64_t max_data_sent;
-        quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL);
+        quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL, NULL);
         if (max_data_sent >= conn->skip_jumpstart_token_until) {
             quicly_send_resumption_token(conn->h3.super.quic);
             conn->skip_jumpstart_token_until = max_data_sent + 200000;
