@@ -835,6 +835,8 @@ typedef struct st_quicly_stats_t {
     apply(cc.cwnd_minimum, "cc.cwnd-minimum")                                                                                      \
     apply(cc.cwnd_maximum, "cc.cwnd-maximum")                                                                                      \
     apply(cc.num_loss_episodes, "cc.num-loss-episodes")                                                                            \
+    apply(cc.num_loss_episodes_undone, "cc.num-loss-episodes-undone")                                                              \
+    apply(cc.num_loss_episodes_undone_in_startup, "cc.num-loss-episodes-undone-in-startup")                                        \
     apply(cc.num_ecn_loss_episodes, "cc.num-ecn-loss-episodes")                                                                    \
     apply(delivery_rate.latest, "delivery-rate.latest")                                                                            \
     apply(delivery_rate.smoothed, "delivery-rate.smoothed")                                                                        \
@@ -1611,6 +1613,9 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
+            if (conn_state->conn_id != 0) {                                                                                        \
+                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_state->conn_id);                                                           \
+            }                                                                                                                      \
             do {                                                                                                                   \
                 _block                                                                                                             \
             } while (0);                                                                                                           \
