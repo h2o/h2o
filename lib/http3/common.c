@@ -42,6 +42,27 @@
 h2o_quic_conn_t h2o_quic_accept_conn_decryption_failed;
 h2o_http3_conn_t h2o_http3_accept_conn_closed;
 
+struct st_h2o_http3_ingress_unistream_t {
+    /**
+     * back pointer
+     */
+    quicly_stream_t *quic;
+    /**
+     *
+     */
+    h2o_buffer_t *recvbuf;
+    /**
+     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a
+     * stream type is identified.
+     */
+    uint64_t *bytes_received;
+    /**
+     * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
+     */
+    void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
+                         const uint8_t *src_end, int is_eos);
+};
+
 const char h2o_http3_err_frame_too_large[] = "HTTP/3 frame is too large";
 
 const ptls_iovec_t h2o_http3_alpn[3] = {{(void *)H2O_STRLIT("h3")}, {(void *)H2O_STRLIT("h3-29")}, {(void *)H2O_STRLIT("h3-27")}};
