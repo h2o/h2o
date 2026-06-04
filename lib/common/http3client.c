@@ -384,11 +384,10 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         origin = &pool->socketpool->targets.entries[0]->url;
 
     static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
-    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &ctx->http3->qpack, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
@@ -540,13 +539,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         }
     }
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
-                                        &datagram_flow_id, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) !=
-        0) {
-        if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
-            /* the request is blocked by the QPACK stream */
-            req->handle_input = NULL; /* FIXME */
-            return 0;
-        }
+                                        &datagram_flow_id, 0 /* client has no blocked-streams budget */, NULL, header_ack,
+                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
         if (*err_desc == NULL)
             *err_desc = "qpack error";
         notify_response_error(req, *err_desc);

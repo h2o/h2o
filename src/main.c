@@ -3184,18 +3184,20 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
+                        **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
+                        **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing,
+                        **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
                         **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
-                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
+                            "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
-                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
+                            &qpack_decoder_table_capacity, &max_streams_bidi, &max_udp_payload_size,
+                            &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
                             &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
                             &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
@@ -3217,6 +3219,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (qpack_encoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
                                                    &listener->quic.qpack.encoder_table_capacity) != 0)
+                            return -1;
+                    }
+                    if (qpack_decoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.decoder_table_capacity) != 0)
                             return -1;
                     }
                     if (max_streams_bidi != NULL) {
