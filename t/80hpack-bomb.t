@@ -22,7 +22,7 @@ subtest "decoded header count soft limit" => sub {
 
     ($headers, $body) = get_with_headers(101);
     like $headers, qr{^HTTP/2 400\s*$}m, "request exceeding the decoded header limit fails";
-    like $body, qr{too many headers}, "soft error is reported";
+    like $body, qr{headers too long}, "soft error is reported";
 };
 
 done_testing;
