@@ -506,6 +506,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
+    size_t num_headers_decoded = 0;
 
     *content_length = SIZE_MAX;
 
@@ -523,6 +524,11 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                 *err_desc = decode_err;
                 return ret;
             }
+        }
+        ++num_headers_decoded;
+        if (num_headers_decoded > H2O_HPACK_MAX_HEADERS_HARD_LIMIT) {
+            *err_desc = h2o_hpack_soft_err_too_many_headers;
+            return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
@@ -641,6 +647,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         *status = 0;
 
     const uint8_t *src_end = src + len;
+    size_t num_headers_decoded = 0;
 
     /* the response MUST contain a :status header as the first element */
     if (status != NULL && src == src_end) {
@@ -662,6 +669,11 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                 *err_desc = decode_err;
                 return ret;
             }
+        }
+        ++num_headers_decoded;
+        if (num_headers_decoded > H2O_HPACK_MAX_HEADERS_HARD_LIMIT) {
+            *err_desc = h2o_hpack_soft_err_too_many_headers;
+            return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (name->base[0] == ':') {
             if (status == NULL) {
