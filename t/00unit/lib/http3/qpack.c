@@ -437,12 +437,14 @@ static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t strea
     h2o_mem_pool_t pool;
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
 
     h2o_mem_init_pool(&pool);
 
     ok(parse_decode_context(dec, &ctx, stream_id, &src, src_end) == 0);
+    ctx.stats = &stats;
     for (size_t i = 0; i < expected_num_headers; ++i) {
         h2o_iovec_t *name = NULL, value = {};
         ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == 0);
