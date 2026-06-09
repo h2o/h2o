@@ -1466,6 +1466,9 @@ typedef struct st_ptls_log_getsni_t {
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(picotls, name, conn_state, ptls_log_getsni_ptls(_tls), 1, {                                               \
             PTLS_LOG_ELEMENT_PTR(tls, _tls);                                                                                       \
+            if (conn_state->conn_id != 0) {                                                                                        \
+                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_state->conn_id);                                                           \
+            }                                                                                                                      \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
@@ -1550,6 +1553,10 @@ typedef struct st_ptls_log_conn_state_t {
      * represents the peer address using ipv6; ipv4 addresses are stored using the mapped form (::ffff:192.0.2.1)
      */
     uint8_t address[16];
+    /**
+     * application-supplied identifier; emitted as `conn_id` if set to a non-zero value
+     */
+    uint64_t conn_id;
     struct st_ptls_log_state_t state;
 } ptls_log_conn_state_t;
 
@@ -1577,9 +1584,10 @@ extern struct st_ptls_log_t {
 } ptls_log;
 
 /**
- * initializes a ptls_log_conn_state_t
+ * initializes a ptls_log_conn_state_t. `conn_id` and `peeraddr` (of type struct sockaddr) are optional; pass 0 and NULL
+ * respectively when unavailable.
  */
-void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t));
+void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t), uint64_t conn_id, void *peeraddr);
 /**
  * forces recalculation of the log state (should be called when SNI is determined)
  */

@@ -2314,13 +2314,18 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         quicly_cc_calc_initial_cwnd(ctx->super.quic->initcwnd_packets, ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
 
-    /* accept connection */
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
+
+    /* accept connection */
+    ptls_log_conn_state_t log_state_override;
+    ptls_log_init_conn_state(&log_state_override, ctx->super.quic->tls->random_bytes, conn->super.id, &srcaddr->sa);
+    ptls_log_conn_state_override = &log_state_override;
     quicly_conn_t *qconn;
     quicly_error_t accept_ret = quicly_accept(
         &qconn, ctx->super.quic, &destaddr->sa, &srcaddr->sa, packet, address_token, ctx->super.next_cid,
         &conn->handshake_properties,
         &conn->h3 /* back pointer is set up here so that callbacks being called while parsing ClientHello can refer to `conn` */);
+    ptls_log_conn_state_override = NULL;
     if (accept_ret != 0) {
         h2o_http3_conn_t *ret = NULL;
         if (accept_ret == QUICLY_ERROR_DECRYPTION_FAILED)

@@ -5203,7 +5203,7 @@ static ptls_t *new_instance(ptls_context_t *ctx, int is_server)
     if (ptls_log_conn_state_override != NULL) {
         tls->log_state = *ptls_log_conn_state_override;
     } else {
-        ptls_log_init_conn_state(&tls->log_state, ctx->random_bytes);
+        ptls_log_init_conn_state(&tls->log_state, ctx->random_bytes, 0, NULL);
     }
 #endif
 
@@ -7196,15 +7196,29 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
 #endif
 
-void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t))
+void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t), uint64_t conn_id, void *_peeraddr)
 {
+    struct sockaddr *peeraddr = _peeraddr;
     uint32_t r;
     random_bytes(&r, sizeof(r));
 
     *state = (ptls_log_conn_state_t){
         .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
         .address = {0}, /* inaddr6_any */
+        .conn_id = conn_id,
     };
+    if (peeraddr != NULL) {
+        switch (peeraddr->sa_family) {
+        case AF_INET: /* store as v6-mapped v4 address */
+            ptls_build_v4_mapped_v6_address(state->address, &((struct sockaddr_in *)peeraddr)->sin_addr);
+            break;
+        case AF_INET6:
+            memcpy(state->address, ((struct sockaddr_in6 *)peeraddr)->sin6_addr.s6_addr, sizeof(state->address));
+            break;
+        default:
+            break;
+        }
+    }
 }
 
 size_t ptls_log_num_lost(void)

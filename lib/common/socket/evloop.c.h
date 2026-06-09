@@ -728,17 +728,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
      * https://github.com/h2o/h2o/pull/2542#issuecomment-760700859 */
     set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
 
-    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
-    switch (peeraddr.sa.sa_family) {
-    case AF_INET: /* store as v6-mapped v4 address */
-        ptls_build_v4_mapped_v6_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
-        break;
-    case AF_INET6:
-        memcpy(sock->_log_state.address, peeraddr.sin6.sin6_addr.s6_addr, sizeof(sock->_log_state.address));
-        break;
-    default:
-        break;
-    }
+    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes, 0, &peeraddr.sa);
 
     return sock;
 }
