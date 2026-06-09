@@ -100,6 +100,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
     do {                                                                                                                           \
         h2o_byte_vector_t encoder_buf = {NULL};                                                                                    \
         h2o_iovec_t headers_payload;                                                                                               \
+        h2o_qpack_section_stats_t stats = {0};                                                                                     \
         if (!is_resp) {                                                                                                            \
             assert(message.method.base != NULL);                                                                                   \
             assert(message.scheme != NULL);                                                                                        \
@@ -108,12 +109,12 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
             headers_payload = get_headers_payload(                                                                                 \
                 h2o_qpack_flatten_request(enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, message.method,         \
                                           message.scheme, message.authority, message.path, message.protocol,                       \
-                                          message.headers.entries, message.headers.size, h2o_iovec_init(NULL, 0)));                \
+                                          message.headers.entries, message.headers.size, h2o_iovec_init(NULL, 0), &stats));        \
         } else {                                                                                                                   \
             assert(100 <= message.status && message.status <= 999);                                                                \
             headers_payload = get_headers_payload(h2o_qpack_flatten_response(                                                      \
                 enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, message.status, message.headers.entries,          \
-                message.headers.size, NULL, message.content_length, h2o_iovec_init(NULL, 0), NULL));                               \
+                message.headers.size, NULL, message.content_length, h2o_iovec_init(NULL, 0), &stats, NULL));                       \
         }                                                                                                                          \
         if (encoder_buf.size != 0) {                                                                                               \
             write_int(outp, 0, 8);                                                                                                 \
@@ -226,12 +227,13 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         const h2o_url_scheme_t *scheme = NULL;
         h2o_headers_t headers = {NULL};
         int pseudo_header_exists_map = 0;
+        h2o_qpack_section_stats_t stats = {0};
         size_t content_length = SIZE_MAX, header_ack_len, i;
         uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         const char *err_desc = NULL;
         if ((ret = h2o_qpack_parse_request(pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                           &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, header_ack,
-                                           &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
+                                           &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, &stats,
+                                           header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
                 return ret;
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
@@ -264,11 +266,12 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         int status;
         h2o_headers_t headers = {NULL};
         h2o_iovec_t datagram_flow_id = {NULL};
+        h2o_qpack_section_stats_t stats = {0};
         uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t header_ack_len, i;
         const char *err_desc = NULL;
-        if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, header_ack, &header_ack_len,
-                                            buf, chunk_size, &err_desc)) != 0) {
+        if ((ret = h2o_qpack_parse_response(pool, dec, stream_id, &status, &headers, &datagram_flow_id, &stats, header_ack,
+                                            &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
                 return ret;
             fprintf(stderr, "failed to decode stream %" PRIu64 ":%s\n", stream_id, err_desc);
