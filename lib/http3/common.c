@@ -52,6 +52,11 @@ struct st_h2o_http3_ingress_unistream_t {
      */
     h2o_buffer_t *recvbuf;
     /**
+     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a
+     * stream type is identified.
+     */
+    uint64_t *bytes_received;
+    /**
      * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
      */
     void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
@@ -295,13 +300,16 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     h2o_http3_update_recvbuf(&stream->recvbuf, off, input, len);
 
     /* determine bytes that can be handled */
-    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes,
-                  *src_end = src + quicly_recvstate_bytes_available(&stream->quic->recvstate);
-    if (src == src_end && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+    size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
+    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes;
+    if (bytes_available == 0 && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
         return;
+    uint64_t bytes_received = stream->quic->recvstate.data_off + bytes_available;
 
     /* handle the bytes */
-    stream->handle_input(conn, stream, &src, src_end, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    stream->handle_input(conn, stream, &src, src + bytes_available, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    if (stream->bytes_received != NULL && *stream->bytes_received < bytes_received)
+        *stream->bytes_received = bytes_received;
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
         return;
 
@@ -410,14 +418,17 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
         conn->_control_streams.ingress.control = stream;
+        stream->bytes_received = &conn->stats.bytes_received.control_stream;
         stream->handle_input = control_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
         conn->_control_streams.ingress.qpack_encoder = stream;
+        stream->bytes_received = &conn->stats.bytes_received.qpack_encoder;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
         conn->_control_streams.ingress.qpack_decoder = stream;
+        stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
     default:
@@ -453,6 +464,9 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
         *wrote_all = 0;
     }
     memcpy(dst, stream->sendbuf->bytes + off, *len);
+    uint64_t bytes_sent = off + *len;
+    if (stream->bytes_sent != NULL && *stream->bytes_sent < bytes_sent)
+        *stream->bytes_sent = bytes_sent;
 }
 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -471,6 +485,7 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->data = stream;
         qs->callbacks = &callbacks;
         stream->quic = qs;
+        stream->bytes_sent = NULL;
         h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
     } else {
         /* create ingress unistream */
@@ -481,12 +496,13 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->callbacks = &callbacks;
         stream->quic = qs;
         h2o_buffer_init(&stream->recvbuf, &h2o_socket_buffer_prototype);
+        stream->bytes_received = NULL;
         stream->handle_input = unknown_type_handle_input;
     }
 }
 
 static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream,
-                                            h2o_iovec_t initial_bytes)
+                                            uint64_t *bytes_sent, h2o_iovec_t initial_bytes)
 {
     quicly_stream_t *qs;
     quicly_error_t ret;
@@ -495,6 +511,7 @@ static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2
         return ret;
     *stream = qs->data;
     assert((*stream)->quic == qs);
+    (*stream)->bytes_sent = bytes_sent;
 
     h2o_buffer_append(&(*stream)->sendbuf, initial_bytes.base, initial_bytes.len);
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
@@ -1312,7 +1329,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
         size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, &conn->stats.bytes_sent.control_stream,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
@@ -1320,9 +1337,9 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     { /* open QPACK encoder & decoder streams */
         static const uint8_t encoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER};
         static const uint8_t decoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_DECODER};
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder, &conn->stats.bytes_sent.qpack_encoder,
                                          h2o_iovec_init(encoder_first_flight, sizeof(encoder_first_flight)))) != 0 ||
-            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder,
+            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder, &conn->stats.bytes_sent.qpack_decoder,
                                          h2o_iovec_init(decoder_first_flight, sizeof(decoder_first_flight)))) != 0)
             return ret;
     }
