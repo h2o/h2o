@@ -217,7 +217,7 @@ static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int stat
         h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
     } else {
         conn->req.http1_is_persistent = 0;
-        if (conn->_ostr_final.state == OSTREAM_STATE_DONE)
+        if (conn->req.is_tunnel_req || conn->_ostr_final.state == OSTREAM_STATE_DONE)
             cleanup_connection(conn);
     }
 }
