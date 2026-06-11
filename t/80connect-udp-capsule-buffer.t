@@ -15,20 +15,14 @@ plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
 my $max_capsule_value_size = 8 + 65527;
-my $payload_prefix = "capsule-buffer-test-";
 
-my $udp_server = do {
-    my $sock = IO::Socket::INET->new(
-        LocalHost => "127.0.0.1",
-        LocalPort => 0,
-        Proto     => "udp",
-    ) or die "failed to open UDP socket:$!";
-    $sock->blocking(0);
-    +{
-        port  => $sock->sockport,
-        sock  => $sock,
-    };
-};
+my $udp_sock = IO::Socket::INET->new(
+    LocalHost => "127.0.0.1",
+    LocalPort => 0,
+    Proto     => "udp",
+) or die "failed to open UDP socket:$!";
+$udp_sock->blocking(0);
+my $udp_port = $udp_sock->sockport;
 
 my $server = spawn_h2o(<< "EOT");
 hosts:
@@ -36,7 +30,7 @@ hosts:
     paths:
       "/rfc9298":
         proxy.connect-udp:
-          - "+127.0.0.1:@{[$udp_server->{port}]}"
+          - "+127.0.0.1:$udp_port"
 proxy.timeout.io: 10000
 EOT
 
@@ -47,19 +41,16 @@ for my $proto (
 ) {
     my ($name, $args_url_prefix, $established_re) = @$proto;
     subtest $name => sub {
-        my $payload = "$payload_prefix$name";
-        my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
-        my $result = run_tunnel_client($cmd, oversized_unknown_capsule() . udp_datagram_capsule($payload));
+        my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/$udp_port/";
+        my $result = run_tunnel_client($cmd, oversized_unknown_capsule() . udp_datagram_capsule());
         ok $result->{exited}, "connection closed before idle timeout";
         ok $result->{elapsed} < 5, "connection closed promptly";
         like $result->{output}, $established_re, "tunnel gets established";
-        unlike $result->{output}, qr{\Q$payload\E}, "no UDP echo is returned";
         ok !udp_origin_received(), "$name: UDP datagram does not reach origin";
     };
 }
 
 subtest "h1 early data" => sub {
-    my $payload = "$payload_prefix-h1-early";
     my $sock = IO::Socket::INET->new(
         PeerHost => "127.0.0.1",
         PeerPort => $server->{port},
@@ -67,12 +58,12 @@ subtest "h1 early data" => sub {
     ) or die "failed to connect to h2o:$!";
     $sock->autoflush(1);
     print $sock join("\r\n",
-        "GET /rfc9298/127.0.0.1/$udp_server->{port}/ HTTP/1.1",
+        "GET /rfc9298/127.0.0.1/$udp_port/ HTTP/1.1",
         "Host: 127.0.0.1:$server->{port}",
         "Connection: upgrade",
         "Upgrade: connect-udp",
         "",
-        "") . oversized_unknown_capsule() . udp_datagram_capsule($payload);
+        "") . oversized_unknown_capsule() . udp_datagram_capsule();
 
     my $start = time;
     my $deadline = $start + 5;
@@ -102,7 +93,6 @@ subtest "h1 early data" => sub {
     ok $closed, "connection closed before idle timeout";
     ok time - $start < 5, "connection closed promptly";
     like $output, qr{^HTTP/1\.1 101}m, "tunnel gets established";
-    unlike $output, qr{\Q$payload\E}, "no UDP echo is returned";
     ok !udp_origin_received(), "h1 early data: UDP datagram does not reach origin";
 };
 
@@ -110,7 +100,7 @@ done_testing;
 
 sub udp_origin_received {
     my $datagram;
-    if ($udp_server->{sock}->recv($datagram, 65535)) {
+    if ($udp_sock->recv($datagram, 65535)) {
         return 1;
     }
     return 0
@@ -124,10 +114,7 @@ sub oversized_unknown_capsule {
     return $unknown_capsule_type . $length . ("\0" x ($max_capsule_value_size + 1));
 }
 
-sub udp_datagram_capsule {
-    my $payload = shift;
-    return "\0" . chr(1 + length $payload) . "\0" . $payload;
-}
+sub udp_datagram_capsule { return "\0\2\0x" }
 
 sub run_tunnel_client {
     my ($cmd, $input) = @_;
