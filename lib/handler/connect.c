@@ -716,7 +716,7 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip, int *err)
+static size_t udp_get_next_chunk(h2o_iovec_t *datagram, const char *start, size_t len, int *skip)
 {
     const uint8_t *bytes = (const uint8_t *)start;
     const uint8_t *end = bytes + len;
@@ -724,18 +724,16 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
 
     chunk_type = ptls_decode_quicint(&bytes, end);
     if (chunk_type == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
-    if (chunk_length > MAX_CAPSULE_SIZE) {
-        *err = 1;
-        return h2o_iovec_init(NULL, 0);
-    }
+        return 0;
+    if (chunk_length > MAX_CAPSULE_SIZE)
+        return SIZE_MAX;
 
     /* chunk is incomplete */
     if (end - bytes < chunk_length)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
 
     /*
      * https://tools.ietf.org/html/draft-ietf-masque-connect-udp-03#section-6
@@ -743,9 +741,9 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
      * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
      */
     *skip = chunk_type != 0;
-    *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
+    *datagram = h2o_iovec_init(bytes, chunk_length);
 
-    return h2o_iovec_init(bytes, chunk_length);
+    return bytes + chunk_length - (const uint8_t *)start;
 }
 
 static int udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
@@ -796,12 +794,11 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     }
     do {
         int skip = 0;
-        int err = 0;
-        size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip, &err);
-        if (err)
+        h2o_iovec_t datagram;
+        size_t to_consume = udp_get_next_chunk(&datagram, chunk.base + off, chunk.len - off, &skip);
+        if (to_consume == SIZE_MAX)
             return -1;
-        if (datagram.base == NULL)
+        if (to_consume == 0)
             break;
         if (!skip && udp_write_core(self, datagram) != 0)
             return -1;
