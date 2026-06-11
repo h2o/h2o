@@ -746,21 +746,18 @@ static size_t udp_get_next_chunk(h2o_iovec_t *datagram, const char *start, size_
     return bytes + chunk_length - (const uint8_t *)start;
 }
 
-static int udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
+static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
 {
     const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
 
     /* When using RFC 9298, the payload starts with a Context ID; drop anything other than UDP packets.
      * TODO: propagate error when decoding fails? */
     if (!self->udp.is_draft03 && (ptls_decode_quicint(&src, end)) != 0)
-        return 0;
-    if (!self->udp.is_draft03 && (size_t)(end - src) > 65527)
-        return -1;
+        return;
 
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
     while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
         ;
-    return 0;
 }
 
 static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
@@ -800,8 +797,8 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
             return -1;
         if (to_consume == 0)
             break;
-        if (!skip && udp_write_core(self, datagram) != 0)
-            return -1;
+        if (!skip)
+            udp_write_core(self, datagram);
         off += to_consume;
     } while (1);
 
