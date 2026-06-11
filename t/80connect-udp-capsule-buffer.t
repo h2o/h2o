@@ -1,0 +1,111 @@
+use strict;
+use warnings;
+use IO::Handle;
+use IO::Socket::INET;
+use IPC::Open3;
+use Symbol qw(gensym);
+use Test::More;
+use Time::HiRes qw(sleep time);
+use t::Util;
+
+my $client_prog = bindir() . "/h2o-httpclient";
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
+
+my $max_capsule_value_size = 8 + 65527;
+my $payload_prefix = "capsule-buffer-test-";
+
+my $udp_server = do {
+    my $sock = IO::Socket::INET->new(
+        LocalHost => "127.0.0.1",
+        LocalPort => 0,
+        Proto     => "udp",
+    ) or die "failed to open UDP socket:$!";
+    my $guard = spawn_forked(sub {
+        $| = 1;
+        while (my $peer = $sock->recv(my $datagram, 65535)) {
+            print $datagram;
+            $sock->send($datagram, 0, $peer);
+        }
+    });
+    $guard->{port} = $sock->sockport;
+    $guard;
+};
+
+my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      "/rfc9298":
+        proxy.connect-udp:
+          - "+127.0.0.1:@{[$udp_server->{port}]}"
+proxy.timeout.io: 10000
+EOT
+
+for my $proto (
+    ["h1", "-2 0 -m GET http://127.0.0.1:$server->{port}", qr{^HTTP/1\.1 101}m],
+    ["h2", "-2 100 -m CONNECT https://127.0.0.1:$server->{tls_port}", qr{^HTTP/2 200}m],
+    ["h3", "-3 100 -m CONNECT https://127.0.0.1:$server->{quic_port}", qr{^HTTP/3 200}m],
+) {
+    my ($name, $args_url_prefix, $established_re) = @$proto;
+    subtest $name => sub {
+        my $payload = "$payload_prefix$name";
+        my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+        my $result = run_tunnel_client($cmd, oversized_unknown_capsule() . udp_datagram_capsule($payload));
+        ok $result->{exited}, "connection closed before idle timeout";
+        ok $result->{elapsed} < 5, "connection closed promptly";
+        like $result->{output}, $established_re, "tunnel gets established";
+        unlike $result->{output}, qr{\Q$payload\E}, "no UDP echo is returned";
+    };
+}
+
+my ($udp_out) = $udp_server->{kill}->();
+unlike $udp_out, qr{\Q$payload_prefix\E}, "oversized unknown capsule prevents following UDP datagrams from reaching the origin";
+
+done_testing;
+
+sub oversized_unknown_capsule {
+    my $unknown_capsule_type = chr(0x21);
+    my $length = pack("N", 0x80000000 | ($max_capsule_value_size + 1));
+    return $unknown_capsule_type . $length . ("\0" x ($max_capsule_value_size + 1));
+}
+
+sub udp_datagram_capsule {
+    my $payload = shift;
+    return "\0" . chr(1 + length $payload) . "\0" . $payload;
+}
+
+sub run_tunnel_client {
+    my ($cmd, $input) = @_;
+    my ($wfh, $rfh, $efh);
+    $efh = gensym;
+    my $pid = open3($wfh, $rfh, $efh, "exec $cmd");
+    sleep 0.5;
+
+    local $SIG{PIPE} = sub {};
+    print $wfh $input;
+    $wfh->flush;
+
+    my $start = time;
+    my $deadline = $start + 5;
+    my $exited = 0;
+    while (time < $deadline) {
+        if (waitpid($pid, 1) == $pid) {
+            $exited = 1;
+            last;
+        }
+        sleep 0.1;
+    }
+    if (!$exited) {
+        kill 'KILL', $pid;
+        waitpid($pid, 0);
+    }
+    close $wfh;
+
+    local $/;
+    return {
+        elapsed => time - $start,
+        exited  => $exited,
+        output  => join("", <$rfh>, <$efh>),
+    };
+}
