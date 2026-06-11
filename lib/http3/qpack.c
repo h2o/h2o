@@ -370,24 +370,41 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
                                          const uint8_t *qv, int64_t qvlen, const char **err_desc)
 {
     h2o_iovec_t name;
+    char smallbuf[4096];
+    int free_name = 0, ret;
     unsigned soft_errors = 0;
 
     if (qnhuff) {
-        name.base = alloca(qnlen * 2);
-        if ((name.len = h2o_hpack_decode_huffman(name.base, &soft_errors, qn, qnlen, 1, err_desc)) == SIZE_MAX)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        /* allocate buffer large enough to contain the decompressed string (2x of the compressed form) */
+        if (qnlen * 2 < sizeof(smallbuf)) {
+            name.base = smallbuf;
+        } else {
+            name.base = h2o_mem_alloc(qnlen * 2);
+            free_name = 1;
+        }
+        if ((name.len = h2o_hpack_decode_huffman(name.base, &soft_errors, qn, qnlen, 1, err_desc)) == SIZE_MAX) {
+            ret = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+            goto Exit;
+        }
     } else {
-        if (!h2o_hpack_validate_header_name(&soft_errors, (void *)qn, qnlen, err_desc))
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        if (!h2o_hpack_validate_header_name(&soft_errors, (void *)qn, qnlen, err_desc)) {
+            ret = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+            goto Exit;
+        }
         name = h2o_iovec_init(qn, qnlen);
     }
 
     const h2o_token_t *token;
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        return insert_token_header(qpack, token, qvhuff, qv, qvlen, err_desc);
+        ret = insert_token_header(qpack, token, qvhuff, qv, qvlen, err_desc);
     } else {
-        return insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, soft_errors, err_desc);
+        ret = insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, soft_errors, err_desc);
     }
+
+Exit:
+    if (free_name)
+        free(name.base);
+    return ret;
 }
 
 static int duplicate(h2o_qpack_decoder_t *qpack, int64_t index, const char **err_desc)
