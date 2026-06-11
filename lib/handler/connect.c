@@ -805,8 +805,6 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     if (from_buf) {
         h2o_buffer_consume(&self->udp.egress.buf, off);
     } else if (chunk.len != off) {
-        if (chunk.len - off > MAX_CAPSULE_SIZE)
-            return -1;
         h2o_buffer_append(&self->udp.egress.buf, chunk.base + off, chunk.len - off);
     }
 
