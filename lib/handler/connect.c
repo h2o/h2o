@@ -828,14 +828,6 @@ static int udp_write_stream(void *_self, int is_end_stream)
     if (is_end_stream)
         self->write_closed = 1;
 
-    /* if the socket is not yet open, buffer input and return */
-    if (self->sock == NULL) {
-        if (chunk.len > MAX_CAPSULE_SIZE)
-            return 1;
-        h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
-        return 0;
-    }
-
     return udp_do_write_stream(self, chunk) == 0 ? 0 : 1;
 }
 
