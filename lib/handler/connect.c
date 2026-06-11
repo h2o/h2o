@@ -787,9 +787,9 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     if (self->udp.egress.buf->size != 0) {
         from_buf = 1;
         if (chunk.len != 0) {
-            if (self->udp.egress.buf->size > MAX_CAPSULE_SIZE || chunk.len > MAX_CAPSULE_SIZE - self->udp.egress.buf->size ||
-                !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base, chunk.len))
+            if (self->udp.egress.buf->size > MAX_CAPSULE_SIZE || chunk.len > MAX_CAPSULE_SIZE - self->udp.egress.buf->size)
                 return -1;
+            h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
         }
         chunk.base = self->udp.egress.buf->bytes;
         chunk.len = self->udp.egress.buf->size;
@@ -811,8 +811,9 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     if (from_buf) {
         h2o_buffer_consume(&self->udp.egress.buf, off);
     } else if (chunk.len != off) {
-        if (chunk.len - off > MAX_CAPSULE_SIZE || !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base + off, chunk.len - off))
+        if (chunk.len - off > MAX_CAPSULE_SIZE)
             return -1;
+        h2o_buffer_append(&self->udp.egress.buf, chunk.base + off, chunk.len - off);
     }
 
     h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
@@ -837,8 +838,9 @@ static int udp_write_stream(void *_self, int is_end_stream)
 
     /* if the socket is not yet open, buffer input and return */
     if (self->sock == NULL) {
-        if (chunk.len > MAX_CAPSULE_SIZE || !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base, chunk.len))
+        if (chunk.len > MAX_CAPSULE_SIZE)
             return 1;
+        h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
         return 0;
     }
 
