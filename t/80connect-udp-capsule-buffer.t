@@ -1,6 +1,6 @@
 use strict;
 use warnings;
-use Errno qw(ECONNRESET);
+use Errno qw(EAGAIN ECONNRESET EWOULDBLOCK);
 use IO::Handle;
 use IO::Select;
 use IO::Socket::INET;
@@ -23,15 +23,11 @@ my $udp_server = do {
         LocalPort => 0,
         Proto     => "udp",
     ) or die "failed to open UDP socket:$!";
-    my $guard = spawn_forked(sub {
-        $| = 1;
-        while (my $peer = $sock->recv(my $datagram, 65535)) {
-            print $datagram;
-            $sock->send($datagram, 0, $peer);
-        }
-    });
-    $guard->{port} = $sock->sockport;
-    $guard;
+    $sock->blocking(0);
+    +{
+        port  => $sock->sockport,
+        sock  => $sock,
+    };
 };
 
 my $server = spawn_h2o(<< "EOT");
@@ -58,6 +54,7 @@ for my $proto (
         ok $result->{elapsed} < 5, "connection closed promptly";
         like $result->{output}, $established_re, "tunnel gets established";
         unlike $result->{output}, qr{\Q$payload\E}, "no UDP echo is returned";
+        ok !udp_origin_received(), "$name: UDP datagram does not reach origin";
     };
 }
 
@@ -106,12 +103,20 @@ subtest "h1 early data" => sub {
     ok time - $start < 5, "connection closed promptly";
     like $output, qr{^HTTP/1\.1 101}m, "tunnel gets established";
     unlike $output, qr{\Q$payload\E}, "no UDP echo is returned";
+    ok !udp_origin_received(), "h1 early data: UDP datagram does not reach origin";
 };
 
-my ($udp_out) = $udp_server->{kill}->();
-unlike $udp_out, qr{\Q$payload_prefix\E}, "oversized unknown capsule prevents following UDP datagrams from reaching the origin";
-
 done_testing;
+
+sub udp_origin_received {
+    my $datagram;
+    if ($udp_server->{sock}->recv($datagram, 65535)) {
+        return 1;
+    }
+    return 0
+        if $! == EAGAIN || $! == EWOULDBLOCK;
+    die "failed to read from UDP origin:$!";
+}
 
 sub oversized_unknown_capsule {
     my $unknown_capsule_type = chr(0x21);
