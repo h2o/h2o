@@ -27,10 +27,14 @@
 
 #define MODULE_NAME "lib/handler/connect.c"
 
-#define CONNECT_UDP_MAX_PAYLOAD_SIZE 65527 /* RFC 9298, Section 5 */
-#define CONNECT_UDP_MAX_CAPSULE_VALUE_SIZE (8 + CONNECT_UDP_MAX_PAYLOAD_SIZE)
-/* Capsule Type, Capsule Length, and Context ID can each occupy up to 8 bytes. */
-#define CONNECT_UDP_MAX_BUFFERED_CAPSULE_SIZE (8 + 8 + CONNECT_UDP_MAX_CAPSULE_VALUE_SIZE)
+/**
+ * Maximum Capsule Value size accepted on CONNECT-UDP streams.
+ *
+ * The limit is as large as the largest permitted UDP datagram capsule, the only capsule type we handle: up to 8 bytes of Context ID
+ * followed by the 65,527 byte UDP payload limit defined by RFC 9298, Section 5. Though clients are allowed to send capsules of
+ * arbitrary type, we treat capsules exceeding this limit as an error instead of buffering or skipping them.
+ */
+#define MAX_CAPSULE_SIZE (8 + 65527)
 
 struct st_connect_handler_t {
     h2o_handler_t super;
@@ -724,7 +728,7 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
         return h2o_iovec_init(NULL, 0);
-    if (chunk_length > CONNECT_UDP_MAX_CAPSULE_VALUE_SIZE) {
+    if (chunk_length > MAX_CAPSULE_SIZE) {
         *err = 1;
         return h2o_iovec_init(NULL, 0);
     }
@@ -752,7 +756,7 @@ static int udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datag
      * TODO: propagate error when decoding fails? */
     if (!self->udp.is_draft03 && (ptls_decode_quicint(&src, end)) != 0)
         return 0;
-    if (!self->udp.is_draft03 && (size_t)(end - src) > CONNECT_UDP_MAX_PAYLOAD_SIZE)
+    if (!self->udp.is_draft03 && (size_t)(end - src) > 65527)
         return -1;
 
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
@@ -783,8 +787,7 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     if (self->udp.egress.buf->size != 0) {
         from_buf = 1;
         if (chunk.len != 0) {
-            if (self->udp.egress.buf->size > CONNECT_UDP_MAX_BUFFERED_CAPSULE_SIZE ||
-                chunk.len > CONNECT_UDP_MAX_BUFFERED_CAPSULE_SIZE - self->udp.egress.buf->size ||
+            if (self->udp.egress.buf->size > MAX_CAPSULE_SIZE || chunk.len > MAX_CAPSULE_SIZE - self->udp.egress.buf->size ||
                 !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base, chunk.len))
                 return -1;
         }
@@ -808,8 +811,7 @@ static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t 
     if (from_buf) {
         h2o_buffer_consume(&self->udp.egress.buf, off);
     } else if (chunk.len != off) {
-        if (chunk.len - off > CONNECT_UDP_MAX_BUFFERED_CAPSULE_SIZE ||
-            !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base + off, chunk.len - off))
+        if (chunk.len - off > MAX_CAPSULE_SIZE || !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base + off, chunk.len - off))
             return -1;
     }
 
@@ -835,8 +837,7 @@ static int udp_write_stream(void *_self, int is_end_stream)
 
     /* if the socket is not yet open, buffer input and return */
     if (self->sock == NULL) {
-        if (chunk.len > CONNECT_UDP_MAX_BUFFERED_CAPSULE_SIZE ||
-            !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base, chunk.len))
+        if (chunk.len > MAX_CAPSULE_SIZE || !h2o_buffer_try_append(&self->udp.egress.buf, chunk.base, chunk.len))
             return 1;
         return 0;
     }
