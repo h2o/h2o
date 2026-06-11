@@ -1,11 +1,11 @@
 use strict;
 use warnings;
 use Errno qw(EAGAIN ECONNRESET EWOULDBLOCK);
+use File::Temp qw(tempdir);
 use IO::Handle;
 use IO::Select;
 use IO::Socket::INET;
-use IPC::Open3;
-use Symbol qw(gensym);
+use Path::Tiny;
 use Test::More;
 use Time::HiRes qw(sleep time);
 use t::Util;
@@ -14,6 +14,7 @@ my $client_prog = bindir() . "/h2o-httpclient";
 plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
+my $tempdir = tempdir(CLEANUP => 1);
 my $max_capsule_value_size = 8 + 65527;
 
 my $udp_sock = IO::Socket::INET->new(
@@ -42,15 +43,27 @@ for my $proto (
     my ($name, $args_url_prefix, $established_re) = @$proto;
     subtest $name => sub {
         my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/$udp_port/";
-        my $result = run_tunnel_client($cmd, oversized_unknown_capsule() . udp_datagram_capsule());
-        ok $result->{exited}, "connection closed before idle timeout";
-        ok $result->{elapsed} < 5, "connection closed promptly";
-        like $result->{output}, $established_re, "tunnel gets established";
+
+        my $start = time;
+        open my $fh, "|-", "exec $cmd > $tempdir/out 2>&1"
+            or die "spawn error ($?) for command: $cmd";
+        sleep 0.5;
+        local $SIG{PIPE} = sub {};
+        print $fh oversized_unknown_capsule() . udp_datagram_capsule();
+        $fh->flush;
+        close $fh;
+
+        ok time - $start < 5, "connection closed before idle timeout";
+        like path("$tempdir/out")->slurp, $established_re, "tunnel gets established";
         ok !udp_origin_received(), "$name: UDP datagram does not reach origin";
     };
 }
 
 subtest "h1 early data" => sub {
+    # H1 can deliver tunnel bytes already read with the request headers through req.entity when udp_connect invokes write_req
+    # directly. H2 and H3 enter the handler from CONNECT headers with an empty req.entity; any DATA frames are held by the protocol
+    # layer until the handler calls proceed_req after the UDP socket is connected, so their parse failures use the normal streaming
+    # write_req path covered above.
     my $sock = IO::Socket::INET->new(
         PeerHost => "127.0.0.1",
         PeerPort => $server->{port},
@@ -115,38 +128,3 @@ sub oversized_unknown_capsule {
 }
 
 sub udp_datagram_capsule { return "\0\2\0x" }
-
-sub run_tunnel_client {
-    my ($cmd, $input) = @_;
-    my ($wfh, $rfh, $efh);
-    $efh = gensym;
-    my $pid = open3($wfh, $rfh, $efh, "exec $cmd");
-    sleep 0.5;
-
-    local $SIG{PIPE} = sub {};
-    print $wfh $input;
-    $wfh->flush;
-
-    my $start = time;
-    my $deadline = $start + 5;
-    my $exited = 0;
-    while (time < $deadline) {
-        if (waitpid($pid, 1) == $pid) {
-            $exited = 1;
-            last;
-        }
-        sleep 0.1;
-    }
-    if (!$exited) {
-        kill 'KILL', $pid;
-        waitpid($pid, 0);
-    }
-    close $wfh;
-
-    local $/;
-    return {
-        elapsed => time - $start,
-        exited  => $exited,
-        output  => join("", <$rfh>, <$efh>),
-    };
-}
