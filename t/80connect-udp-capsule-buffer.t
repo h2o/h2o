@@ -1,6 +1,8 @@
 use strict;
 use warnings;
+use Errno qw(ECONNRESET);
 use IO::Handle;
+use IO::Select;
 use IO::Socket::INET;
 use IPC::Open3;
 use Symbol qw(gensym);
@@ -58,6 +60,53 @@ for my $proto (
         unlike $result->{output}, qr{\Q$payload\E}, "no UDP echo is returned";
     };
 }
+
+subtest "h1 early data" => sub {
+    my $payload = "$payload_prefix-h1-early";
+    my $sock = IO::Socket::INET->new(
+        PeerHost => "127.0.0.1",
+        PeerPort => $server->{port},
+        Proto    => "tcp",
+    ) or die "failed to connect to h2o:$!";
+    $sock->autoflush(1);
+    print $sock join("\r\n",
+        "GET /rfc9298/127.0.0.1/$udp_server->{port}/ HTTP/1.1",
+        "Host: 127.0.0.1:$server->{port}",
+        "Connection: upgrade",
+        "Upgrade: connect-udp",
+        "",
+        "") . oversized_unknown_capsule() . udp_datagram_capsule($payload);
+
+    my $start = time;
+    my $deadline = $start + 5;
+    my $closed = 0;
+    my $output = "";
+    my $select = IO::Select->new($sock);
+    while (time < $deadline) {
+        if ($select->can_read(0.1)) {
+            my $buf;
+            my $read = sysread($sock, $buf, 65536);
+            if (!defined($read)) {
+                if ($! == ECONNRESET) {
+                    $closed = 1;
+                    last;
+                }
+                die "failed to read from h2o:$!";
+            }
+            if ($read == 0) {
+                $closed = 1;
+                last;
+            }
+            $output .= $buf;
+        }
+    }
+    close $sock;
+
+    ok $closed, "connection closed before idle timeout";
+    ok time - $start < 5, "connection closed promptly";
+    like $output, qr{^HTTP/1\.1 101}m, "tunnel gets established";
+    unlike $output, qr{\Q$payload\E}, "no UDP echo is returned";
+};
 
 my ($udp_out) = $udp_server->{kill}->();
 unlike $udp_out, qr{\Q$payload_prefix\E}, "oversized unknown capsule prevents following UDP datagrams from reaching the origin";

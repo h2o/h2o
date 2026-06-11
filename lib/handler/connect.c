@@ -956,7 +956,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
     /* write any data if provided, or just call the proceed_req callback */
-    self->src_req->write_req.cb(self, self->no_req_streaming);
+    if (self->src_req->write_req.cb(self, self->no_req_streaming) != 0)
+        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io);
 
     return 1;
 }
