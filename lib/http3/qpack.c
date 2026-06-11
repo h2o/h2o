@@ -284,6 +284,12 @@ static void decoder_link_blocked(h2o_qpack_decoder_t *qpack, int64_t stream_id, 
     ++qpack->blocked_streams.list.size;
 }
 
+static void assert_literal_length(size_t len)
+{
+    /* regarding this limit; see the doc-comment on h2o_qpack_decoder_handle_input */
+    assert(len <= h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN));
+}
+
 static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *added)
 {
     ++qpack->insert_count;
@@ -310,6 +316,8 @@ Fail:
 static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *name, int value_is_huff, const uint8_t *value,
                                size_t value_len, const char **err_desc)
 {
+    assert_literal_length(value_len);
+
     struct st_h2o_qpack_header_t *header =
         h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + (value_len * 2) + 1, NULL);
 
@@ -321,6 +329,8 @@ static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *na
 static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, size_t name_len, int value_is_huff,
                                  const uint8_t *value, size_t value_len, unsigned soft_errors, const char **err_desc)
 {
+    assert_literal_length(value_len);
+
     size_t value_capacity = (value_is_huff ? value_len * 2 : value_len) + 1;
     struct st_h2o_qpack_header_t *header =
         h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value_capacity + name_len + 1, NULL);
@@ -373,6 +383,8 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
     char smallbuf[4096];
     int free_name = 0, ret;
     unsigned soft_errors = 0;
+
+    assert_literal_length(qnlen);
 
     if (qnhuff) {
         /* allocate buffer large enough to contain the decompressed string (2x of the compressed form) */
