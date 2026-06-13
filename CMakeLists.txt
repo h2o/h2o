@@ -176,6 +176,7 @@ INCLUDE_DIRECTORIES(
     include
     deps/cloexec
     deps/brotli/c/include
+    deps/zstd/lib
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -192,6 +193,8 @@ INCLUDE_DIRECTORIES(
     deps/yaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
+
+ADD_DEFINITIONS(-DZSTD_DISABLE_ASM)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -340,7 +343,36 @@ SET(BROTLI_SOURCE_FILES
     deps/brotli/c/enc/utf8_util.c
     lib/handler/compress/brotli.c)
 
+SET(ZSTD_SOURCE_FILES
+    deps/zstd/lib/common/debug.c
+    deps/zstd/lib/common/entropy_common.c
+    deps/zstd/lib/common/error_private.c
+    deps/zstd/lib/common/fse_decompress.c
+    deps/zstd/lib/common/pool.c
+    deps/zstd/lib/common/threading.c
+    deps/zstd/lib/common/xxhash.c
+    deps/zstd/lib/common/zstd_common.c
+    deps/zstd/lib/compress/fse_compress.c
+    deps/zstd/lib/compress/hist.c
+    deps/zstd/lib/compress/huf_compress.c
+    deps/zstd/lib/compress/zstd_compress.c
+    deps/zstd/lib/compress/zstd_compress_literals.c
+    deps/zstd/lib/compress/zstd_compress_sequences.c
+    deps/zstd/lib/compress/zstd_compress_superblock.c
+    deps/zstd/lib/compress/zstd_double_fast.c
+    deps/zstd/lib/compress/zstd_fast.c
+    deps/zstd/lib/compress/zstd_lazy.c
+    deps/zstd/lib/compress/zstd_ldm.c
+    deps/zstd/lib/compress/zstdmt_compress.c
+    deps/zstd/lib/compress/zstd_opt.c
+    deps/zstd/lib/compress/zstd_preSplit.c
+    deps/zstd/lib/decompress/huf_decompress.c
+    deps/zstd/lib/decompress/zstd_ddict.c
+    deps/zstd/lib/decompress/zstd_decompress_block.c
+    deps/zstd/lib/decompress/zstd_decompress.c)
+
 SET(LIB_SOURCE_FILES
+    ${ZSTD_SOURCE_FILES}
     deps/cloexec/cloexec.c
     deps/hiredis/async.c
     deps/hiredis/hiredis.c
@@ -425,6 +457,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
+    lib/handler/compress/zstd.c
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -605,7 +638,6 @@ SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
-
 IF (WSLAY_FOUND)
     ADD_LIBRARY(libh2o lib/websocket.c ${LIB_SOURCE_FILES})
     ADD_LIBRARY(libh2o-evloop lib/websocket.c ${LIB_SOURCE_FILES})

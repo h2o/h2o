@@ -49,6 +49,18 @@ run_with_curl($server, sub {
         close $tempfh;
         ($headers, $body);
     };
+    my $fetch_zstd = sub {
+        my ($target, $opts) = @_;
+        my ($tempfh, $tempfn) = tempfile(UNLINK => 1);
+        my $headers = `$curl --silent --dump-header /dev/stderr $opts $proto://127.0.0.1:$port$target 2>&1 > $tempfn`;
+        open my $zf, "-|", "zstd", "-d", "-c", $tempfn
+            or die "failed to launch zstd: $!";
+        my $body = do { local $/; <$zf> };
+        close $zf
+            or die "zstd failed";
+        close $tempfh;
+        ($headers, $body);
+    };
 
     my $expected = md5_file("@{[DOC_ROOT]}/alice.txt");
     my $expected_etag = etag_file("@{[DOC_ROOT]}/alice.txt");
@@ -93,6 +105,22 @@ run_with_curl($server, sub {
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/alice.txt"), "alice.txt";
         $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/compress-jpg/halfdome.jpg | brotli --decompress");
         is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "halfdome.jpg";
+    };
+
+    subtest "zstd-decompress" => sub {
+        plan skip_all => "zstd not found"
+            unless prog_exists("zstd");
+        my ($headers, $body) = $fetch_zstd->("/on/alice.txt", "-H accept-encoding:zstd");
+        like $headers, qr{^content-encoding:\s*zstd\r?$}im, "zstd selected for alice.txt";
+        is md5_hex($body), md5_file("@{[DOC_ROOT]}/alice.txt"), "alice.txt";
+
+        ($headers, $body) = $fetch_zstd->("/on/alice.txt", "-H 'accept-encoding:gzip, zstd'");
+        like $headers, qr{^content-encoding:\s*zstd\r?$}im, "gzip,zstd prefers zstd (alice)";
+        is md5_hex($body), md5_file("@{[DOC_ROOT]}/alice.txt"), "alice.txt with gzip,zstd";
+
+        ($headers, $body) = $fetch_zstd->("/compress-jpg/halfdome.jpg", "-H accept-encoding:zstd");
+        like $headers, qr{^content-encoding:\s*zstd\r?$}im, "zstd selected for halfdome.jpg";
+        is md5_hex($body), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "halfdome.jpg";
     };
 });
 
