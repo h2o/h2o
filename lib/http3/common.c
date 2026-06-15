@@ -1478,6 +1478,15 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }
 
+void h2o_http3_send_qpack_encoder_instructions(h2o_http3_conn_t *conn, const void *bytes, size_t len)
+{
+    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
+
+    assert(stream != NULL);
+    h2o_buffer_append(&stream->sendbuf, bytes, len);
+    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+}
+
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
 {
     /* There is a moment where the transport-level close has been initiated while st_h2o_http3_server_conn_t remains.

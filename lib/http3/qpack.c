@@ -1123,7 +1123,21 @@ static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, 
     flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int is_exact, int likely_to_repeat,
+static int should_insert_dynamic(const h2o_iovec_t *name, h2o_header_flags_t flags)
+{
+    if (flags.dont_compress)
+        return 0;
+    if (h2o_iovec_is_token(name)) {
+        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+        if (token->flags.dont_compress || token == H2O_TOKEN_ETAG)
+            return 0;
+    } else if (h2o_memis(name->base, name->len, H2O_STRLIT("etag"))) {
+        return 0;
+    }
+    return 1;
+}
+
+static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int is_exact,
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
     int64_t dynamic_index;
@@ -1143,16 +1157,16 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
-        /* emit to encoder buf and dynamic index?
-         * At the moment the strategy is dumb; we emit encoder stream data until the table becomes full. Never triggers eviction.
-         */
-        if (likely_to_repeat && ctx->encoder_buf != NULL && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
+        /* Fill the dynamic table while there is room. Never evicts. */
+        if (ctx->encoder_buf != NULL && should_insert_dynamic(name, flags) &&
+            ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
             /* emit instruction to decoder stream */
             if (static_index >= 0) {
                 emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
             } else if (dynamic_index >= 0) {
-                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0, dynamic_index, value);
+                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
+                                         qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
             } else {
                 emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
             }
@@ -1164,8 +1178,9 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             } else {
                 added =
                     h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
+                added->value_len = value.len;
                 added->name = &added->_name_buf;
-                added->_name_buf = h2o_iovec_init(added->value + added->value_len + 1, name->len);
+                added->_name_buf = h2o_iovec_init(added->value + value.len + 1, name->len);
                 memcpy(added->_name_buf.base, name->base, name->len);
                 added->_name_buf.base[name->len] = '\0';
             }
@@ -1193,16 +1208,15 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
 static void flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_header_t *header)
 {
     int32_t static_index = -1;
-    int is_exact = 0, likely_to_repeat = 0;
+    int is_exact = 0;
 
     /* obtain static index if possible */
     if (h2o_iovec_is_token(header->name)) {
         const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, header->name);
         static_index = h2o_qpack_lookup_static[token - h2o__tokens](header->value, &is_exact);
-        likely_to_repeat = token->flags.likely_to_repeat;
     }
 
-    return do_flatten_header(ctx, static_index, is_exact, likely_to_repeat, header->name, header->value, header->flags);
+    return do_flatten_header(ctx, static_index, is_exact, header->name, header->value, header->flags);
 }
 
 static void flatten_known_header_with_static_lookup(struct st_h2o_qpack_flatten_context_t *ctx,
@@ -1213,7 +1227,7 @@ static void flatten_known_header_with_static_lookup(struct st_h2o_qpack_flatten_
     int32_t static_index = lookup_cb(value, &is_exact);
     assert(index >= 0);
 
-    do_flatten_header(ctx, static_index, is_exact, name->flags.likely_to_repeat, &name->buf, value, (h2o_header_flags_t){0});
+    do_flatten_header(ctx, static_index, is_exact, &name->buf, value, (h2o_header_flags_t){0});
 }
 
 /* header of the qpack message that are written afterwards */
@@ -1361,15 +1375,14 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
     default: {
         char status_str[sizeof(H2O_UINT16_LONGEST_STR)];
         sprintf(status_str, "%" PRIu16, (uint16_t)status);
-        do_flatten_header(&ctx, 24, 0, H2O_TOKEN_STATUS->flags.likely_to_repeat, &H2O_TOKEN_STATUS->buf,
-                          h2o_iovec_init(status_str, strlen(status_str)), (h2o_header_flags_t){0});
+        do_flatten_header(&ctx, 24, 0, &H2O_TOKEN_STATUS->buf, h2o_iovec_init(status_str, strlen(status_str)),
+                          (h2o_header_flags_t){0});
     } break;
     }
 
     /* TODO keep some kind of reference to the indexed Server header, and reuse it */
     if (server_name != NULL && server_name->len != 0)
-        do_flatten_header(&ctx, 92, 0, H2O_TOKEN_SERVER->flags.likely_to_repeat, &H2O_TOKEN_SERVER->buf, *server_name,
-                          (h2o_header_flags_t){0});
+        do_flatten_header(&ctx, 92, 0, &H2O_TOKEN_SERVER->buf, *server_name, (h2o_header_flags_t){0});
 
     /* content-length */
     if (content_length != SIZE_MAX) {
@@ -1378,8 +1391,8 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
         } else {
             char cl_str[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t cl_len = (size_t)sprintf(cl_str, "%zu", content_length);
-            do_flatten_header(&ctx, 4, 0, H2O_TOKEN_CONTENT_LENGTH->flags.likely_to_repeat, &H2O_TOKEN_CONTENT_LENGTH->buf,
-                              h2o_iovec_init(cl_str, cl_len), (h2o_header_flags_t){0});
+            do_flatten_header(&ctx, 4, 0, &H2O_TOKEN_CONTENT_LENGTH->buf, h2o_iovec_init(cl_str, cl_len),
+                              (h2o_header_flags_t){0});
         }
     }
 

@@ -1613,13 +1613,16 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
 
 static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iovec_t datagram_flow_id)
 {
+    h2o_byte_vector_t encoder_buf = {NULL};
     size_t serialized_header_len = 0;
     h2o_iovec_t frame = h2o_qpack_flatten_response(
-        get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, NULL, stream->req.res.status,
+        get_conn(stream)->h3.qpack.enc, &stream->req.pool, stream->quic->stream_id, &encoder_buf, stream->req.res.status,
         stream->req.res.headers.entries, stream->req.res.headers.size, &get_conn(stream)->super.ctx->globalconf->server_name,
         stream->req.res.content_length, datagram_flow_id, &stream->stats.resp.qpack, &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
     stream->stats.resp.headers_frame_bytes += serialized_header_len;
+    if (encoder_buf.size != 0)
+        h2o_http3_send_qpack_encoder_instructions(&get_conn(stream)->h3, encoder_buf.entries, encoder_buf.size);
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;

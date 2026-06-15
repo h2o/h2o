@@ -122,6 +122,56 @@ static void test_simple(void)
     do_test_simple(1);
 }
 
+static void test_response_fill_until_full(void)
+{
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    h2o_qpack_section_stats_t stats = {0};
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/foo"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-fill"), 0, NULL, H2O_STRLIT("y"));
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/bar"));
+    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"abc\""));
+    h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=secret"));
+
+    h2o_iovec_t headers_frame =
+        h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
+                                   h2o_iovec_init(NULL, 0), &stats, NULL);
+    ok(headers_frame.len != 0);
+    ok(enc_stream.size != 0);
+    ok(enc->table.last - enc->table.first == 3);
+    ok((*enc->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/foo")));
+    ok(h2o_memis(enc->table.first[1]->name->base, enc->table.first[1]->name->len, H2O_STRLIT("x-fill")));
+    ok(h2o_memis(enc->table.first[1]->value, enc->table.first[1]->value_len, H2O_STRLIT("y")));
+    ok(enc->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("text/bar")));
+
+    int64_t *unblocked_stream_ids;
+    size_t num_unblocked;
+    const uint8_t *p = enc_stream.entries;
+    int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &p, p + enc_stream.size, &err_desc);
+    ok(ret == 0);
+    ok(p == enc_stream.entries + enc_stream.size);
+    ok(dec->table.last - dec->table.first == 3);
+    ok((*dec->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/foo")));
+    ok(h2o_memis(dec->table.first[1]->name->base, dec->table.first[1]->name->len, H2O_STRLIT("x-fill")));
+    ok(h2o_memis(dec->table.first[1]->value, dec->table.first[1]->value_len, H2O_STRLIT("y")));
+    ok(dec->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("text/bar")));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_decoder(dec);
+    h2o_qpack_destroy_encoder(enc);
+}
+
 static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, h2o_iovec_t input, int expected_ret,
                                    const char *expected_err_desc, h2o_iovec_t expected_method,
                                    const h2o_url_scheme_t *expected_scheme, h2o_iovec_t expected_authority,
@@ -748,6 +798,7 @@ static void test_decode_edge_cases(void)
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
+    subtest("response-fill-until-full", test_response_fill_until_full);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
