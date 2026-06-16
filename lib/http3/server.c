@@ -1559,7 +1559,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
     /* now that the header section have been read and decoded, update the receiver callback and emit an ACK */
     stream->recvbuf.handle_input = handle_input_expect_data;
     if (header_ack_len != 0)
-        h2o_http3_send_qpack_header_ack(&conn->h3, header_ack, header_ack_len);
+        h2o_http3_write_unistream(conn->h3._control_streams.egress.qpack_decoder, header_ack, header_ack_len);
 
     h2o_probe_log_request(&stream->req, stream->quic->stream_id);
 
@@ -1685,7 +1685,8 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
     stream->req.header_bytes_sent += serialized_header_len;
     stream->stats.resp.headers_frame_bytes += serialized_header_len;
     if (encoder_buf.size != 0)
-        h2o_http3_send_qpack_encoder_instructions(&get_conn(stream)->h3, encoder_buf.entries, encoder_buf.size);
+        h2o_http3_write_unistream(get_conn(stream)->h3._control_streams.egress.qpack_encoder, encoder_buf.entries,
+                                  encoder_buf.size);
 
     h2o_vector_reserve(&stream->req.pool, &stream->sendbuf.vecs, stream->sendbuf.vecs.size + 1);
     struct st_h2o_http3_server_sendvec_t *vec = stream->sendbuf.vecs.entries + stream->sendbuf.vecs.size++;

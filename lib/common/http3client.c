@@ -553,7 +553,7 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME */
     }
     if (header_ack_len != 0)
-        h2o_http3_send_qpack_header_ack(&req->conn->super, header_ack, header_ack_len);
+        h2o_http3_write_unistream(req->conn->super._control_streams.egress.qpack_decoder, header_ack, header_ack_len);
 
     if (datagram_flow_id.base != NULL) {
         if (!req->offered_datagram_flow_id) {

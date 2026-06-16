@@ -1485,22 +1485,11 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
-void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len)
+void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *data, size_t len)
 {
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
-
     assert(stream != NULL);
-    h2o_buffer_append(&stream->sendbuf, bytes, len);
+    h2o_buffer_append(&stream->sendbuf, data, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
-}
-
-void h2o_http3_send_qpack_encoder_instructions(h2o_http3_conn_t *conn, const void *bytes, size_t len)
-{
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
-
-    assert(stream != NULL);
-    h2o_buffer_append(&stream->sendbuf, bytes, len);
-    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
 }
 
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
