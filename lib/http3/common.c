@@ -337,17 +337,15 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     int ret;
     const char *err_desc = NULL;
-    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
-        0) {
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &insert_count, src, src_end, &err_desc)) != 0) {
         h2o_quic_close_connection(&conn->super, ret, err_desc);
         return;
     }
-
-    /* TODO handle unblocked streams */
+    if (insert_count != 0)
+        get_callbacks(conn)->qpack_unblock_streams(conn, insert_count);
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -1280,10 +1278,21 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
+{
+    if (conn->qpack.ctx->decoder_table_capacity == 0)
+        return 0;
+    uint64_t max_blocked = quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+    assert(max_blocked == 0 || get_callbacks(conn)->qpack_unblock_streams != NULL ||
+           !"connection enables QPACK blocked-stream support but provides no qpack_unblock_streams callback");
+    return max_blocked;
+}
+
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
 {
     ptls_buffer_t buf;
     int ret = 0;
+    uint64_t max_blocked_streams = calc_max_blocked_streams(conn);
 
     ptls_buffer_init(&buf, bytebuf, capacity);
 
@@ -1301,6 +1310,14 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
+        if (conn->qpack.ctx->decoder_table_capacity != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
+            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder_table_capacity);
+        }
+        if (max_blocked_streams != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS);
+            ptls_buffer_push_quicint(&buf, max_blocked_streams);
+        }
         ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
         ptls_buffer_push_quicint(&buf, 1);
     });
@@ -1323,8 +1340,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    /* create decoder with the table size set to zero; see SETTINGS sent below. */
-    conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
+    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
@@ -1456,7 +1472,7 @@ Malformed:
     return H2O_HTTP3_ERROR_FRAME;
 }
 
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
 {
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
@@ -1471,11 +1487,11 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
 
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len)
 {
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
+    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
-    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
 void h2o_http3_send_qpack_encoder_instructions(h2o_http3_conn_t *conn, const void *bytes, size_t len)
