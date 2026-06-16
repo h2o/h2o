@@ -59,11 +59,11 @@ while (my $line = <DATA>) {
     chomp $line;
     last if $line eq '';
     next if $line =~ /^#/;
-    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress, $likely_to_repeat, $name, $value) =
+    my ($hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress, $unused_repeat_hint, $name, $value) =
         split /\s+/, $line, 10;
     die "unexpected input:$line"
         if $name eq '';
-    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress, $likely_to_repeat ]
+    $tokens{$name} = [ $hpack_index, $proxy_should_drop_for_req, $proxy_should_drop_for_res, $is_init_header_special, $is_hpack_special, $copy_for_push_request, $dont_compress ]
         unless defined $tokens{$name};
     if ($hpack_index != 0) {
         $hpack[$hpack_index - 1] = [ $name, $value ];
