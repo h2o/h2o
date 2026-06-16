@@ -102,7 +102,6 @@ static void free_req(h2o_memcached_req_t *req)
     if (__sync_sub_and_fetch(&req->refcnt, 1) != 0)
         return;
 
-    assert(req->refcnt == 0);
     assert(!h2o_linklist_is_linked(&req->pending));
     switch (req->type) {
     case REQ_TYPE_GET:
