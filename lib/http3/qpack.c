@@ -1116,17 +1116,24 @@ static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, 
     flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-static int should_insert_dynamic(const h2o_iovec_t *name, h2o_header_flags_t flags)
+static int calc_effective_dont_compress(const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
-    if (flags.dont_compress)
+    int dont_compress = flags.dont_compress;
+
+    if (!dont_compress && h2o_iovec_is_token(name))
+        dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
+    if (dont_compress)
+        dont_compress = value.len < 20;
+
+    return dont_compress;
+}
+
+static int should_insert_dynamic(const h2o_iovec_t *name, int dont_compress)
+{
+    if (dont_compress)
         return 0;
-    if (h2o_iovec_is_token(name)) {
-        const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
-        if (token->flags.dont_compress || token == H2O_TOKEN_ETAG)
-            return 0;
-    } else if (h2o_memis(name->base, name->len, H2O_STRLIT("etag"))) {
+    if (h2o_iovec_is_token(name) && H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name) == H2O_TOKEN_ETAG)
         return 0;
-    }
     return 1;
 }
 
@@ -1134,11 +1141,14 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
     int64_t dynamic_index;
+    int dont_compress;
 
     if (static_index >= 0 && is_exact) {
         flatten_static_indexed(ctx, static_index); /* accounted by flatten_static_indexed */
         return;
     }
+
+    dont_compress = calc_effective_dont_compress(name, value, flags);
 
     /* count this header; the static-exact-match early return above counted via flatten_static_indexed */
     ++ctx->stats->count;
@@ -1150,8 +1160,11 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
-        /* Fill the dynamic table while there is room. Never evicts. */
-        if (ctx->encoder_buf != NULL && should_insert_dynamic(name, flags) &&
+        /*
+         * Fill the dynamic table while there is room. If a name reference exists, short values are encoded compactly
+         * enough as literals with name reference; short values are inserted only when no name reference is available.
+         */
+        if (ctx->encoder_buf != NULL && should_insert_dynamic(name, dont_compress) &&
             ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
             /* emit instruction to decoder stream */
@@ -1171,7 +1184,6 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             } else {
                 added =
                     h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
-                added->value_len = value.len;
                 added->name = &added->_name_buf;
                 added->_name_buf = h2o_iovec_init(added->value + value.len + 1, name->len);
                 memcpy(added->_name_buf.base, name->base, name->len);
@@ -1190,11 +1202,11 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
     }
 
     if (static_index >= 0) {
-        flatten_static_nameref(ctx, static_index, value, flags.dont_compress);
+        flatten_static_nameref(ctx, static_index, value, dont_compress);
     } else if (dynamic_index >= 0) {
-        flatten_dynamic_nameref(ctx, dynamic_index, value, flags.dont_compress);
+        flatten_dynamic_nameref(ctx, dynamic_index, value, dont_compress);
     } else {
-        flatten_without_nameref(ctx, name, value, flags.dont_compress);
+        flatten_without_nameref(ctx, name, value, dont_compress);
     }
 }
 

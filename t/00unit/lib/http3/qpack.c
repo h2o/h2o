@@ -134,11 +134,11 @@ static void test_response_fill_until_full(void)
 
     h2o_mem_init_pool(&pool);
 
-    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/foo"));
-    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-fill"), 0, NULL, H2O_STRLIT("y"));
-    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/bar"));
-    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"abc\""));
-    h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=secret"));
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-a"));   /* static name */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-fill"), 0, NULL, H2O_STRLIT("y"));      /* no name ref */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-b"));   /* dynamic name */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"etag-not-indexed\""));  /* excluded */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=not-indexed")); /* dont_compress */
 
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
@@ -147,11 +147,11 @@ static void test_response_fill_until_full(void)
     ok(enc_stream.size != 0);
     ok(enc->table.last - enc->table.first == 3);
     ok((*enc->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/foo")));
+    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/fill-a")));
     ok(h2o_memis(enc->table.first[1]->name->base, enc->table.first[1]->name->len, H2O_STRLIT("x-fill")));
     ok(h2o_memis(enc->table.first[1]->value, enc->table.first[1]->value_len, H2O_STRLIT("y")));
     ok(enc->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("text/bar")));
+    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("text/fill-b")));
 
     uint64_t insert_count;
     const uint8_t *p = enc_stream.entries;
@@ -161,15 +161,92 @@ static void test_response_fill_until_full(void)
     ok(p == enc_stream.entries + enc_stream.size);
     ok(dec->table.last - dec->table.first == 3);
     ok((*dec->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/foo")));
+    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/fill-a")));
     ok(h2o_memis(dec->table.first[1]->name->base, dec->table.first[1]->name->len, H2O_STRLIT("x-fill")));
     ok(h2o_memis(dec->table.first[1]->value, dec->table.first[1]->value_len, H2O_STRLIT("y")));
     ok(dec->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("text/bar")));
+    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("text/fill-b")));
 
     h2o_mem_clear_pool(&pool);
     h2o_qpack_destroy_decoder(dec);
     h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_dont_compress(void)
+{
+    h2o_mem_pool_t pool;
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    { /* short cookie / set-cookie use never-indexed, non-Huffman literals and are not inserted */
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        h2o_headers_t headers = {NULL};
+        h2o_byte_vector_t enc_stream = {NULL};
+        h2o_qpack_section_stats_t stats = {0};
+        h2o_add_header(&pool, &headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("sid=mini"));
+        h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=mini"));
+
+        h2o_iovec_t headers_frame =
+            h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
+                                       h2o_iovec_init(NULL, 0), &stats, NULL);
+        h2o_iovec_t payload = get_payload(headers_frame.base, headers_frame.len);
+        const uint8_t *p = (const uint8_t *)payload.base, *end = p + payload.len;
+        int64_t v;
+
+        ok(enc_stream.size == 0);
+        ok(enc->table.last == enc->table.first);
+        ok(decode_int(&v, &p, end, 8) == 0); /* required insert count */
+        ok(v == 0);
+        ok(decode_int(&v, &p, end, 7) == 0); /* delta base */
+        ok(v == 0);
+        ok((*p & 0xc0) == 0xc0); /* static :status */
+        ok(decode_int(&v, &p, end, 6) == 0);
+        for (size_t i = 0; i != 2; ++i) {
+            ok((*p & 0xf0) == 0x70); /* literal with static name reference, N bit set */
+            ok(decode_int(&v, &p, end, 4) == 0);
+            ok((*p & 0x80) == 0); /* non-Huffman value */
+            ok(decode_int(&v, &p, end, 7) == 0);
+            ok(v == strlen("sid=mini"));
+            p += v;
+        }
+        ok(p == end);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    h2o_mem_clear_pool(&pool);
+    h2o_mem_init_pool(&pool);
+
+    { /* long set-cookie follows the normal fill-till-full path */
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        h2o_headers_t headers = {NULL};
+        h2o_byte_vector_t enc_stream = {NULL};
+        h2o_qpack_section_stats_t stats = {0};
+        h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=0123456789abcdef0123456789"));
+
+        h2o_iovec_t headers_frame =
+            h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
+                                       h2o_iovec_init(NULL, 0), &stats, NULL);
+        ok(headers_frame.len != 0);
+        ok(enc_stream.size != 0);
+        ok(enc->table.last - enc->table.first == 1);
+        ok((*enc->table.first)->name == &H2O_TOKEN_SET_COOKIE->buf);
+
+        uint64_t insert_count;
+        const uint8_t *p = enc_stream.entries;
+        int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc);
+        ok(ret == 0);
+        ok(insert_count == 1);
+        ok(dec->table.last - dec->table.first == 1);
+        ok((*dec->table.first)->name == &H2O_TOKEN_SET_COOKIE->buf);
+
+        h2o_qpack_destroy_decoder(dec);
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    h2o_mem_clear_pool(&pool);
 }
 
 static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, h2o_iovec_t input, int expected_ret,
@@ -889,6 +966,7 @@ void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
     subtest("response-fill-until-full", test_response_fill_until_full);
+    subtest("response-dont-compress", test_response_dont_compress);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
