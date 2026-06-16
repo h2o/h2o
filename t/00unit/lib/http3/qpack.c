@@ -134,38 +134,50 @@ static void test_response_fill_until_full(void)
 
     h2o_mem_init_pool(&pool);
 
-    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-a"));   /* static name */
-    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-fill"), 0, NULL, H2O_STRLIT("y"));      /* no name ref */
-    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-b"));   /* dynamic name */
-    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"etag-not-indexed\""));  /* excluded */
-    h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=not-indexed")); /* dont_compress */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));          /* static exact */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-static"));    /* static name, insert */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("x"));                   /* static name, too short */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("dynamic-seed")); /* new name */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("dynamic-next")); /* dynamic name, insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("y"));            /* dynamic name, too short */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-short"), 0, NULL, H2O_STRLIT("z"));          /* no name, short insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-long"), 0, NULL, H2O_STRLIT("longvalue"));   /* no name, long insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-long"), 0, NULL, H2O_STRLIT("longvalue"));   /* dynamic exact */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"etag-not-indexed\""));        /* excluded */
 
-    h2o_iovec_t headers_frame =
-        h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
-                                   h2o_iovec_init(NULL, 0), &stats, NULL);
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                           SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
     ok(headers_frame.len != 0);
     ok(enc_stream.size != 0);
-    ok(enc->table.last - enc->table.first == 3);
+    ok(enc->table.last - enc->table.first == 5);
     ok((*enc->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/fill-a")));
-    ok(h2o_memis(enc->table.first[1]->name->base, enc->table.first[1]->name->len, H2O_STRLIT("x-fill")));
-    ok(h2o_memis(enc->table.first[1]->value, enc->table.first[1]->value_len, H2O_STRLIT("y")));
-    ok(enc->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("text/fill-b")));
+    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/fill-static")));
+    ok(h2o_memis(enc->table.first[1]->name->base, enc->table.first[1]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(enc->table.first[1]->value, enc->table.first[1]->value_len, H2O_STRLIT("dynamic-seed")));
+    ok(h2o_memis(enc->table.first[2]->name->base, enc->table.first[2]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("dynamic-next")));
+    ok(h2o_memis(enc->table.first[3]->name->base, enc->table.first[3]->name->len, H2O_STRLIT("x-short")));
+    ok(h2o_memis(enc->table.first[3]->value, enc->table.first[3]->value_len, H2O_STRLIT("z")));
+    ok(h2o_memis(enc->table.first[4]->name->base, enc->table.first[4]->name->len, H2O_STRLIT("x-long")));
+    ok(h2o_memis(enc->table.first[4]->value, enc->table.first[4]->value_len, H2O_STRLIT("longvalue")));
 
     uint64_t insert_count;
     const uint8_t *p = enc_stream.entries;
     int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc);
     ok(ret == 0);
-    ok(insert_count == 3);
+    ok(insert_count == 5);
     ok(p == enc_stream.entries + enc_stream.size);
-    ok(dec->table.last - dec->table.first == 3);
+    ok(dec->table.last - dec->table.first == 5);
     ok((*dec->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/fill-a")));
-    ok(h2o_memis(dec->table.first[1]->name->base, dec->table.first[1]->name->len, H2O_STRLIT("x-fill")));
-    ok(h2o_memis(dec->table.first[1]->value, dec->table.first[1]->value_len, H2O_STRLIT("y")));
-    ok(dec->table.first[2]->name == &H2O_TOKEN_CONTENT_TYPE->buf);
-    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("text/fill-b")));
+    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/fill-static")));
+    ok(h2o_memis(dec->table.first[1]->name->base, dec->table.first[1]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(dec->table.first[1]->value, dec->table.first[1]->value_len, H2O_STRLIT("dynamic-seed")));
+    ok(h2o_memis(dec->table.first[2]->name->base, dec->table.first[2]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("dynamic-next")));
+    ok(h2o_memis(dec->table.first[3]->name->base, dec->table.first[3]->name->len, H2O_STRLIT("x-short")));
+    ok(h2o_memis(dec->table.first[3]->value, dec->table.first[3]->value_len, H2O_STRLIT("z")));
+    ok(h2o_memis(dec->table.first[4]->name->base, dec->table.first[4]->name->len, H2O_STRLIT("x-long")));
+    ok(h2o_memis(dec->table.first[4]->value, dec->table.first[4]->value_len, H2O_STRLIT("longvalue")));
 
     h2o_mem_clear_pool(&pool);
     h2o_qpack_destroy_decoder(dec);
