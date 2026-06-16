@@ -2635,7 +2635,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
+    listener->quic.qpack = (h2o_http3_qpack_context_t){16384, 16384}; /* default: 16KB encoder and decoder tables */
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
