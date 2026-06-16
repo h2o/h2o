@@ -478,7 +478,7 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
 /**
  *
  */
-void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *data, size_t len);
+void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *bytes, size_t len);
 /**
  * Enqueue GOAWAY frame crafted for graceful shutdown
  */

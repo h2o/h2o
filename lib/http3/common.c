@@ -1485,10 +1485,10 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
-void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *data, size_t len)
+void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *bytes, size_t len)
 {
     assert(stream != NULL);
-    h2o_buffer_append(&stream->sendbuf, data, len);
+    h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
