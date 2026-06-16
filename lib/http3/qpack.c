@@ -1144,12 +1144,9 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
-        /*
-         * Fill the dynamic table while there is room. If a name reference exists, short values are encoded compactly
-         * enough as literals with name reference; short values are inserted only when no name reference is available.
-         */
-        if (ctx->encoder_buf != NULL && !dont_compress &&
-            !(h2o_iovec_is_token(name) && H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name) == H2O_TOKEN_ETAG) &&
+        /* Fill the dynamic table while there is room. Short values are inserted only when no name reference is available, because
+         * if a name reference exists, they are encoded compactly. */
+        if (ctx->encoder_buf != NULL && !dont_compress && name != &H2O_TOKEN_ETAG->buf &&
             ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
             /* emit instruction to decoder stream */
