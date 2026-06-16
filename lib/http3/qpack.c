@@ -1116,27 +1116,6 @@ static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, 
     flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-static int calc_effective_dont_compress(const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
-{
-    int dont_compress = flags.dont_compress;
-
-    if (!dont_compress && h2o_iovec_is_token(name))
-        dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
-    if (dont_compress)
-        dont_compress = value.len < 20;
-
-    return dont_compress;
-}
-
-static int should_insert_dynamic(const h2o_iovec_t *name, int dont_compress)
-{
-    if (dont_compress)
-        return 0;
-    if (h2o_iovec_is_token(name) && H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name) == H2O_TOKEN_ETAG)
-        return 0;
-    return 1;
-}
-
 static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int is_exact,
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
@@ -1148,7 +1127,15 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         return;
     }
 
-    dont_compress = calc_effective_dont_compress(name, value, flags);
+    /*
+     * Match HPACK's no-compress policy: a per-header flag or a token flag takes effect only for short values. When
+     * effective, emit a never-indexed literal, bypass Huffman, and skip dynamic table insertion.
+     */
+    dont_compress = flags.dont_compress;
+    if (!dont_compress && h2o_iovec_is_token(name))
+        dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
+    if (dont_compress)
+        dont_compress = value.len < 20;
 
     /* count this header; the static-exact-match early return above counted via flatten_static_indexed */
     ++ctx->stats->count;
@@ -1164,7 +1151,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
          * Fill the dynamic table while there is room. If a name reference exists, short values are encoded compactly
          * enough as literals with name reference; short values are inserted only when no name reference is available.
          */
-        if (ctx->encoder_buf != NULL && should_insert_dynamic(name, dont_compress) &&
+        if (ctx->encoder_buf != NULL && !dont_compress &&
+            !(h2o_iovec_is_token(name) && H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name) == H2O_TOKEN_ETAG) &&
             ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
             /* emit instruction to decoder stream */
