@@ -1930,6 +1930,12 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
             break;
         case X509_V_ERR_HOSTNAME_MISMATCH:
         case X509_V_ERR_INVALID_CA:
+#ifdef X509_V_ERR_CA_MD_TOO_WEAK
+        case X509_V_ERR_CA_MD_TOO_WEAK:
+#endif
+#ifdef X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM
+        case X509_V_ERR_UNSUPPORTED_SIGNATURE_ALGORITHM:
+#endif
             ret = PTLS_ALERT_BAD_CERTIFICATE;
             break;
         default:

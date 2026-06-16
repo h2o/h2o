@@ -132,13 +132,28 @@ subtest "retry" => sub {
 };
 
 subtest "large-client-hello" => sub {
-    my $guard = spawn_server();
-    my $resp = `$cli -E -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
-    is $resp, "hello world\n";
-    my $events = slurp_file("$tempdir/events");
-    complex $events, sub {
-        my $before_receive = (split /"receive"/, $_)[0];
-        $before_receive =~ /"stream_send".*?\n.*?"stream_send"/s;
+    subtest "default" => sub {
+        my $guard = spawn_server();
+        my $resp = `$cli -E -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+        is $resp, "hello world\n";
+        my $events = slurp_file("$tempdir/events");
+        complex $events, sub {
+            my $before_receive = (split /"receive"/, $_)[0];
+            $before_receive =~ /"stream_send".*?\n.*?"stream_send"/s;
+        };
+    };
+    subtest "max-crypto-bytes" => sub {
+        my $doit = sub {
+            my $size = shift;
+            my $server = spawn_server("--max-crypto-bytes", $size);
+            `$cli -E -e $tempdir/events -p /12 127.0.0.1 $port 2>&1`;
+        };
+        subtest "1K" => sub {
+            like $doit->(1024), qr/transport close:code=0xd;frame=6;/, "CRYPTO_BUFFER_EXCEEDED error";
+        };
+        subtest "2K" => sub {
+            like $doit->(2048), qr/hello world\n/s, "got response";
+        };
     };
 };
 
@@ -609,25 +624,16 @@ subtest "coalesced-initials" => sub {
     # Test that server processes coalesced Initial packets (RFC 9000 Section 12.2)
     # The test uses a pre-generated coalesced datagram with [Handshake][Initial]
     # where both packets have matching Connection IDs.
-
-    # Read the coalesced packet
-    open(my $fh, "<:raw", "t/assets/coalesced_packet.bin")
-        or BAIL_OUT("Cannot read coalesced_packet.bin: $!");
-    my $coalesced = do { local $/; <$fh> };
-    close($fh);
-
-    ok length($coalesced) > 0, "coalesced packet is non-empty";
-
-    # Spawn server
     my $guard = spawn_server();
 
     # Send coalesced packet
+    my $coalesced = slurp_file("t/assets/coalesced_packet.bin");
+    ok length($coalesced) > 0, "coalesced packet is non-empty";
     my $socket = IO::Socket::INET->new(
         Proto => 'udp',
         PeerAddr => '127.0.0.1',
         PeerPort => $port,
     ) or BAIL_OUT("Cannot create socket: $!");
-
     $socket->send($coalesced);
 
     # Wait for response with timeout
@@ -647,7 +653,71 @@ subtest "coalesced-initials" => sub {
         fail "server does not respond to coalesced Initial packet";
     }
 };
- 
+
+subtest "max-data" => sub {
+    my $server = spawn_server(qw(-M 1048576 -m 16777216 -X 100 -e), "$tempdir/events");
+    my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
+    # open 100 streams, send one byte of "X" just before 1MB
+    for (my $stream_id = 0; $stream_id < 400; $stream_id += 4) {
+        $conn->send("\x0e\x80\x00" . pack("n", $stream_id) . "\x80\x0f\xff\xff\x01X");
+        sleep 0.001
+            if $stream_id % 40 == 0;
+    }
+    # check server behavior by consulting the events log
+    my $events = slurp_file("$tempdir/events");
+    unlike $events, qr/"type":"max_data_send"/s, "MAX_DATA not sent";
+    like $events, qr/"type":"transport_close_send",.*"error_code":3,"frame_type":14,/, "flow control error caused by STREAM frame";
+    complex $events, sub {
+        my $max_stream_id = -1;
+        while (/"type":"stream_receive",.*"stream_id":([0-9]+),/g) {
+            $max_stream_id = $1
+                if $1 > $max_stream_id;
+        }
+        $max_stream_id == 64;
+    }, "16th stream (stream_id=64) causes overflow";
+};
+
+# quicly misdetects packets ending with 16 0x00 bytes as a stateless reset
+subtest "misdetected-reset" => sub {
+    # Launch a server that will send a full-sized packet with all zeros when receiving the first packet, then switch
+    # it to a real server so that the handshake succeeds. A buggy client would treat this as a stateless reset.
+    my $server_pid = fork;
+    die "fork failed:$!"
+        unless defined $server_pid;
+    if ($server_pid == 0) {
+        my $sock = IO::Socket::INET->new(
+            LocalPort => $port,
+            Proto     => "udp",
+            ReuseAddr => 1,
+        ) or die "failed to create UDP socket:$!";
+        $sock->recv(my $buf, 1500);
+        $sock->send("\0" x 1200);
+        undef $sock;
+        exec "$cli", "-k", "t/assets/server.key", "-c", "t/assets/server.crt", "127.0.0.1", $port;
+        die "failed to exec $cli:$!";
+    }
+    my $resp = `exec $cli -p /12 127.0.0.1 $port 2>&1`;
+    like $resp, qr/^hello world\n/s;
+    kill 9, $server_pid;
+    while (waitpid($server_pid, 0) != $server_pid) {
+    }
+};
+
+subtest "huge-CID" => sub {
+    # sends an Initial with a 255-byte SCID
+    my $server = spawn_server("-e", "$tempdir/events");
+
+    my $socket = IO::Socket::INET->new(
+        Proto    => 'udp',
+        PeerAddr => '127.0.0.1',
+        PeerPort => $port,
+    ) or BAIL_OUT("Cannot create socket:$!");
+    $socket->send(slurp_file("t/assets/huge_cid_packet.bin"));
+
+    sleep 1;
+    ok(!$server->is_dead);
+};
+
 done_testing;
 
 sub spawn_server {

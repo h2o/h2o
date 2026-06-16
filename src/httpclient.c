@@ -1110,7 +1110,7 @@ int main(int argc, char **argv)
             if (ctx.protocol_selector.ratio.http2 < 0 ||
                 ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
                 fprintf(stderr,
-                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
+                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H3 using `-3 <ratio>`\n");
                 exit(EXIT_FAILURE);
             }
         }

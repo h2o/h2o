@@ -60,10 +60,13 @@ static void do_test_simple(int use_enc_stream)
         h2o_headers_t headers = {NULL};
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("dnt"), 0, NULL, H2O_STRLIT("1"));
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-hoge"), 0, NULL, H2O_STRLIT("A")); /* literal, non-huff */
+        h2o_qpack_section_stats_t unused = {1, 2};
         h2o_iovec_t headers_frame =
             h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
                                       h2o_iovec_init(H2O_STRLIT("example.com")), h2o_iovec_init(H2O_STRLIT("/foobar")),
-                                      h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
+                                      h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0), &unused);
+        ok(unused.count == 7);
+        ok(unused.text_bytes == 68);
         flattened = get_payload(headers_frame.base, headers_frame.len);
     }
 
@@ -84,10 +87,13 @@ static void do_test_simple(int use_enc_stream)
         size_t content_length = SIZE_MAX;
         h2o_iovec_t expect = {NULL};
         uint64_t blocked_ref;
+        h2o_qpack_section_stats_t recv_stats = {3, 4};
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, header_ack,
-                                      &header_ack_len, (const uint8_t *)flattened.base, flattened.len, &err_desc);
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      header_ack, &header_ack_len, (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
+        ok(recv_stats.count == 9);
+        ok(recv_stats.text_bytes == 70);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
         ok(scheme == &H2O_URL_SCHEME_HTTPS);
         ok(h2o_memis(authority.base, authority.len, H2O_STRLIT("example.com")));
@@ -136,9 +142,10 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
     h2o_mem_init_pool(&pool);
 
     uint64_t blocked_ref;
+    h2o_qpack_section_stats_t recv_stats = {0};
     int ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, header_ack,
-                                      &header_ack_len, (const uint8_t *)input.base, input.len, &err_desc);
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      header_ack, &header_ack_len, (const uint8_t *)input.base, input.len, &err_desc);
 
     ok(ret == expected_ret);
     ok(err_desc == expected_err_desc);
@@ -459,12 +466,14 @@ static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t strea
     h2o_mem_pool_t pool;
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
 
     h2o_mem_init_pool(&pool);
 
     ok(parse_decode_context(dec, &ctx, &src, src_end) == 0);
+    ctx.stats = &stats;
     for (size_t i = 0; i < expected_num_headers; ++i) {
         h2o_iovec_t *name = NULL, value = {};
         ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == 0);

@@ -28,6 +28,14 @@
 #include "h2o/url.h"
 #include "h2o/cache_digests.h"
 
+#ifndef H2O_HPACK_MAX_HEADERS_HARD_LIMIT
+/**
+ * When the number of fields within a field section exceeds this value, the HPACK decoder raises a hard error that leads to closing
+ * the connection. H2O_MAX_HEADERS is the soft limit.
+ */
+#define H2O_HPACK_MAX_HEADERS_HARD_LIMIT 1000
+#endif
+
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
 
 extern const char h2o_hpack_err_missing_mandatory_pseudo_header[];
@@ -37,6 +45,7 @@ extern const char h2o_hpack_err_unexpected_connection_specific_header[];
 extern const char h2o_hpack_err_invalid_content_length_header[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
+extern const char h2o_hpack_err_headers_too_long[]; /* can either be a hard error or a soft error */
 
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME 0x1
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE 0x2

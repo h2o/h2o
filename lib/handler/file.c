@@ -881,7 +881,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build path (still unterminated at the end of the block) */
     req_path_prefix = self->conf_path.len;
-    rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
+    rpath = h2o_mem_alloc_pool(&req->pool, char,
+                               self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
     rpath_len = 0;
     memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
     rpath_len += self->real_path.len;

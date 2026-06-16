@@ -60,13 +60,6 @@ extern "C" {
 #define H2O_USE_BROTLI 0
 #endif
 
-#ifndef H2O_MAX_HEADERS
-#define H2O_MAX_HEADERS 100
-#endif
-#ifndef H2O_MAX_REQLEN
-#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
-#endif
-
 #ifndef H2O_SOMAXCONN
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN 65535
@@ -1015,6 +1008,12 @@ typedef struct st_h2o_conn_callbacks_t {
     union {
         struct {
             h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
+            /* protocol-agnostic per-message metrics; only h3 implements the new ones initially */
+            h2o_iovec_t (*request_header_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_count)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_count)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
@@ -1050,6 +1049,9 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
                 h2o_iovec_t (*qpack_blocked)(h2o_req_t *req);
+                /* per-request QUIC-stream byte counters */
+                h2o_iovec_t (*request_stream_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*response_stream_bytes)(h2o_req_t *req);
             } http3;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
