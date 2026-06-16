@@ -1120,18 +1120,15 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
     int64_t dynamic_index;
-    int dont_compress;
 
     if (static_index >= 0 && is_exact) {
         flatten_static_indexed(ctx, static_index); /* accounted by flatten_static_indexed */
         return;
     }
 
-    /*
-     * Match HPACK's no-compress policy: a per-header flag or a token flag takes effect only for short values. When
-     * effective, emit a never-indexed literal, bypass Huffman, and skip dynamic table insertion.
-     */
-    dont_compress = flags.dont_compress;
+    /* Match HPACK's no-compress policy: a per-header flag or a token flag takes effect only for short values. When effective, emit
+     * a never-indexed literal, bypass Huffman, and skip dynamic table insertion. */
+    int dont_compress = flags.dont_compress;
     if (!dont_compress && h2o_iovec_is_token(name))
         dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
     if (dont_compress)
