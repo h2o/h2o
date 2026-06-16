@@ -51,6 +51,7 @@ enum en_h2o_memcached_req_type_t { REQ_TYPE_GET, REQ_TYPE_SET, REQ_TYPE_DELETE }
 
 struct st_h2o_memcached_req_t {
     enum en_h2o_memcached_req_type_t type;
+    int refcnt;
     h2o_linklist_t pending;
     h2o_linklist_t inflight;
     union {
@@ -80,6 +81,7 @@ static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o
     h2o_memcached_req_t *req = h2o_mem_alloc(offsetof(h2o_memcached_req_t, key.base) + ctx->prefix.len +
                                              (encode_key ? (key.len + 2) / 3 * 4 + 1 : key.len));
     req->type = type;
+    req->refcnt = 1;
     req->pending = (h2o_linklist_t){NULL};
     req->inflight = (h2o_linklist_t){NULL};
     memset(&req->data, 0, sizeof(req->data));
@@ -97,6 +99,9 @@ static h2o_memcached_req_t *create_req(h2o_memcached_context_t *ctx, enum en_h2o
 
 static void free_req(h2o_memcached_req_t *req)
 {
+    if (__sync_sub_and_fetch(&req->refcnt, 1) != 0)
+        return;
+
     assert(!h2o_linklist_is_linked(&req->pending));
     switch (req->type) {
     case REQ_TYPE_GET:
@@ -115,6 +120,11 @@ static void free_req(h2o_memcached_req_t *req)
         break;
     }
     free(req);
+}
+
+static void retain_req(h2o_memcached_req_t *req)
+{
+    __sync_add_and_fetch(&req->refcnt, 1);
 }
 
 static void discard_req(h2o_memcached_req_t *req)
@@ -179,30 +189,27 @@ static void *writer_main(void *_conn)
 
             switch (req->type) {
             case REQ_TYPE_GET:
+                retain_req(req);
                 pthread_mutex_lock(&conn->mutex);
                 h2o_linklist_insert(&conn->inflight, &req->inflight);
                 pthread_mutex_unlock(&conn->mutex);
-                if ((err = yrmcds_get(&conn->yrmcds, req->key.base, req->key.len, 0, &req->data.get.serial)) != YRMCDS_OK)
-                    goto Error;
+                err = yrmcds_get(&conn->yrmcds, req->key.base, req->key.len, 0, &req->data.get.serial);
                 break;
             case REQ_TYPE_SET:
                 err = yrmcds_set(&conn->yrmcds, req->key.base, req->key.len, req->data.set.value.base, req->data.set.value.len, 0,
                                  req->data.set.expiration, 0, !conn->yrmcds.text_mode, NULL);
-                discard_req(req);
-                if (err != YRMCDS_OK)
-                    goto Error;
                 break;
             case REQ_TYPE_DELETE:
                 err = yrmcds_remove(&conn->yrmcds, req->key.base, req->key.len, !conn->yrmcds.text_mode, NULL);
-                discard_req(req);
-                if (err != YRMCDS_OK)
-                    goto Error;
                 break;
             default:
                 h2o_error_printf("[lib/common/memcached.c] unknown type:%d\n", (int)req->type);
                 err = YRMCDS_NOT_IMPLEMENTED;
-                goto Error;
+                break;
             }
+            free_req(req);
+            if (err != YRMCDS_OK)
+                goto Error;
 
             pthread_mutex_lock(&conn->ctx->mutex);
         }
