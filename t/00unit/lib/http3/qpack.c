@@ -974,6 +974,165 @@ static void test_decode_edge_cases(void)
     }
 }
 
+static size_t encode_section_ack(uint8_t *outbuf, int64_t stream_id)
+{
+    outbuf[0] = 0x80;
+    return h2o_hpack_encode_int(outbuf, stream_id, 7) - outbuf;
+}
+
+static int handle_decoder_stream_instruction(h2o_qpack_encoder_t *enc, const uint8_t *src, size_t len)
+{
+    const uint8_t *p = src;
+    const char *err_desc = NULL;
+    int ret = h2o_qpack_encoder_handle_input(enc, &p, src + len, &err_desc);
+    ok(err_desc == NULL);
+    ok(p == src + len);
+    return ret;
+}
+
+static void add_inflight(h2o_qpack_encoder_t *enc, int64_t stream_id, int64_t largest_ref)
+{
+    h2o_vector_reserve(NULL, &enc->inflight, enc->inflight.size + 1);
+    enc->inflight.entries[enc->inflight.size++] = (struct st_h2o_qpack_blocked_streams_t){stream_id, largest_ref, {{1}}};
+    ++enc->num_blocked;
+}
+
+static void test_encoder_stream_input(void)
+{
+    note("section acknowledgement evicts the only inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 260, 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("section acknowledgement evicts last inflight entry without destroying the list");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries != NULL);
+        ok(enc->inflight.size == 1);
+        ok(enc->inflight.entries[0].stream_id == 4);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("section acknowledgement evicts non-last inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 1);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts the only inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 260, 1);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts last inflight entry without destroying the list");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries != NULL);
+        ok(enc->inflight.size == 1);
+        ok(enc->inflight.entries[0].stream_id == 4);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts multiple non-last inflight entries");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 4, 2);
+        add_inflight(enc, 260, 3);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 1);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+}
+
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
@@ -985,4 +1144,5 @@ void test_lib__http3_qpack(void)
     subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
     subtest("decode-errors", test_decode_errors);
     subtest("decode-edge-cases", test_decode_edge_cases);
+    subtest("encoder-stream-input", test_encoder_stream_input);
 }
