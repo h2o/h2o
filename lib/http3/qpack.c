@@ -108,8 +108,8 @@ struct st_h2o_qpack_encoder_t {
      */
     uint64_t max_blocked;
     /**
-     * number of potentially blocked HEADERS (not streams, sorry!) We count header blocks rather than streams because it is easier.
-     * Hopefully it would work well.
+     * Number of potentially blocked field sections; not streams, as counting sections is easier. It would be overly restrictive
+     * only for responses that send multiple sections.
      */
     size_t num_blocked;
     /**
