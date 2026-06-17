@@ -1145,7 +1145,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             return;
         }
         /* Fill the dynamic table while there is room. Short values are inserted only when no name reference is available, because
-         * if a name reference exists, they are encoded compactly. */
+         * if a name reference exists, they are encoded compactly. Etag values are never added as they are very unlikely to repeat;
+         * Content-Length and Age might the same property but they are mostly covered by the `value.len` gate. */
         if (ctx->encoder_buf != NULL && !dont_compress && name != &H2O_TOKEN_ETAG->buf &&
             ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             name->len + value.len + HEADER_ENTRY_SIZE_OFFSET <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
