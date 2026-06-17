@@ -1127,13 +1127,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         return;
     }
 
-    /* Match HPACK's no-compress policy: a per-header flag or a token flag takes effect only for short values. When effective, emit
-     * a never-indexed literal, bypass Huffman, and skip dynamic table insertion. */
-    int dont_compress = flags.dont_compress;
-    if (!dont_compress && h2o_iovec_is_token(name))
-        dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
-    if (dont_compress)
-        dont_compress = value.len < 20;
+    /* When effective, emit a never-indexed literal, bypass Huffman, and skip dynamic table insertion. */
+    int dont_compress = h2o_hpack_dont_compress(name, value, flags);
 
     /* count this header; the static-exact-match early return above counted via flatten_static_indexed */
     ++ctx->stats->count;
