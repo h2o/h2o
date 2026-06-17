@@ -896,7 +896,8 @@ static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
         free(qpack->inflight.entries);
         memset(&qpack->inflight, 0, sizeof(qpack->inflight));
     } else if (index < qpack->inflight.size) {
-        memmove(qpack->inflight.entries + index, qpack->inflight.entries + index + 1, qpack->inflight.size - index);
+        memmove(qpack->inflight.entries + index, qpack->inflight.entries + index + 1,
+                sizeof(qpack->inflight.entries[0]) * (qpack->inflight.size - index));
     }
 }
 
