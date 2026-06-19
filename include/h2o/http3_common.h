@@ -292,6 +292,12 @@ typedef struct st_h2o_http3_qpack_context_t {
      * Table capacity we advertise to the peer for its encoder.
      */
     uint32_t decoder_table_capacity;
+    /**
+     * If set, our encoder keeps refining the dynamic table after it fills (evicting low-value entries to admit better ones);
+     * otherwise it fills the table until full and then leaves it unchanged. Applies to whatever this endpoint encodes (responses
+     * for a server, requests for a client).
+     */
+    int refine_after_full;
 } h2o_http3_qpack_context_t;
 
 typedef struct st_h2o_http3_conn_callbacks_t {

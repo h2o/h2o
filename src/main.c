@@ -2635,7 +2635,8 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){16384, 16384}; /* default: 16KB encoder and decoder tables */
+    listener->quic.qpack =
+        (h2o_http3_qpack_context_t){16384, 16384, 1}; /* default: 16KB encoder and decoder tables, encoder refinement on */
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
@@ -3185,18 +3186,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
-                        **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
+                        **qpack_decoder_table_capacity, **qpack_encoder_refine, **max_streams_bidi, **max_udp_payload_size,
                         **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing,
                         **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
                         **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
+                            "qpack-encoder-refine:s,"
                             "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity,
-                            &qpack_decoder_table_capacity, &max_streams_bidi, &max_udp_payload_size,
+                            &qpack_decoder_table_capacity, &qpack_encoder_refine, &max_streams_bidi, &max_udp_payload_size,
                             &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
                             &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
                             &resume_jumpstart_ratio, &rapid_start) != 0)
@@ -3225,6 +3227,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
                                                    &listener->quic.qpack.decoder_table_capacity) != 0)
                             return -1;
+                    }
+                    if (qpack_encoder_refine != NULL) {
+                        ssize_t on = h2o_configurator_get_one_of(cmd, *qpack_encoder_refine, "OFF,ON");
+                        if (on == -1)
+                            return -1;
+                        listener->quic.qpack.refine_after_full = (int)on;
                     }
                     if (max_streams_bidi != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
