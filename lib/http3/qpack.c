@@ -493,46 +493,20 @@ static int encoder_evict_one(h2o_qpack_encoder_t *qpack, const struct st_h2o_qpa
     return skipped_shadow;
 }
 
-static int encoder_evict(h2o_qpack_encoder_t *qpack, size_t delta, int64_t smallest_blocking_ref,
-                               const struct st_h2o_qpack_header_t *preserved)
-{
-    while (qpack->table.first != qpack->table.last) {
-        if (qpack->table.num_bytes + delta <= qpack->table.max_size)
-            return 1;
-        if ((*qpack->table.first)->abs_index >= smallest_blocking_ref)
-            return 0;
-        if (encoder_evict_one(qpack, preserved))
-            preserved = NULL;
-    }
-    assert(qpack->table.num_bytes == 0);
-    return delta <= qpack->table.max_size;
-}
-
-static int encoder_can_evict(h2o_qpack_encoder_t *qpack, size_t delta, int64_t smallest_blocking_ref)
-{
-    size_t num_bytes = qpack->table.num_bytes;
-
-    for (struct st_h2o_qpack_header_t **slot = qpack->table.first; slot != qpack->table.last; ++slot) {
-        if (num_bytes + delta <= qpack->table.max_size)
-            return 1;
-        if ((*slot)->abs_index >= smallest_blocking_ref)
-            return 0;
-        num_bytes -= header_entry_size(*slot);
-    }
-    return delta <= qpack->table.max_size;
-}
-
-static int encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *added, int64_t smallest_blocking_ref,
-                          const struct st_h2o_qpack_header_t *preserved)
+static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *added, int64_t evict_upto,
+                           const struct st_h2o_qpack_header_t *preserved)
 {
     size_t delta = header_entry_size(added);
 
-    if (!encoder_evict(qpack, delta, smallest_blocking_ref, preserved))
-        return 0;
+    while (qpack->table.first != qpack->table.last && qpack->table.num_bytes + delta > qpack->table.max_size) {
+        assert((*qpack->table.first)->abs_index < evict_upto);
+        if (encoder_evict_one(qpack, preserved))
+            preserved = NULL;
+    }
+    assert(qpack->table.num_bytes + delta <= qpack->table.max_size);
     header_table_insert(&qpack->table, added);
     if (entry_score(added) < qpack->table_min_score)
         qpack->table_min_score = entry_score(added);
-    return 1;
 }
 
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
@@ -1279,20 +1253,13 @@ static int candidate_beats_entry(float candidate_score, struct st_h2o_qpack_head
     return candidate_score > entry_score(entry) * QPACK_SWAP_MARGIN;
 }
 
-static int duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struct st_h2o_qpack_header_t *entry,
-                              int64_t smallest_blocking_ref)
+static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struct st_h2o_qpack_header_t *entry)
 {
     int64_t relative_index = qpack_table_total_inserts(&ctx->qpack->table) - 1 - entry->abs_index;
     struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
-    if (!encoder_can_evict(ctx->qpack, header_entry_size(clone), smallest_blocking_ref)) {
-        h2o_mem_release_shared(clone);
-        return 0;
-    }
     emit_duplicate(ctx->pool, ctx->encoder_buf, relative_index);
-    int inserted = encoder_insert(ctx->qpack, clone, smallest_blocking_ref, entry);
-    assert(inserted);
-    return 1;
+    encoder_insert(ctx->qpack, clone, entry->abs_index + 1, entry);
 }
 
 static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
@@ -1324,8 +1291,8 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
     return evict_upto;
 }
 
-static int make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
-                              int64_t smallest_blocking_ref)
+static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
+                                  int64_t smallest_blocking_ref)
 {
     int64_t evict_upto;
 
@@ -1339,13 +1306,10 @@ static int make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t
             continue;
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
         if (!candidate_beats_entry(candidate_score, entry)) {
-            int duplicated = duplicate_resident(ctx, entry, smallest_blocking_ref);
-            assert(duplicated);
-            if (!duplicated)
-                return 0;
+            duplicate_resident(ctx, entry);
         }
     }
-    return 1;
+    return evict_upto;
 }
 
 static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value, int acked_only, int *is_exact)
@@ -1546,8 +1510,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             struct st_h2o_qpack_header_t *added =
                 create_entry(ctx->qpack, name, value, NULL,
                              calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
-            int inserted = encoder_insert(ctx->qpack, added, INT64_MAX, NULL);
-            assert(inserted);
+            encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset, NULL);
             /* emit header field to headers block */
             flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
             return;
@@ -1560,16 +1523,16 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             float candidate_score = shadow->freq * bytes_saved / candidate_size;
             int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx);
 
+            int64_t evict_upto;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
-                make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) {
+                (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
                 if (static_index >= 0) {
                     emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
                 } else {
                     emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
                 }
                 struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, shadow, bytes_saved);
-                int inserted = encoder_insert(ctx->qpack, added, smallest_blocking_ref, NULL);
-                assert(inserted);
+                encoder_insert(ctx->qpack, added, evict_upto, NULL);
                 flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
                 return;
             }
