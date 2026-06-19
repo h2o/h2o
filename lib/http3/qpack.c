@@ -416,11 +416,6 @@ static int name_is(const h2o_iovec_t *a, const h2o_iovec_t *b)
     return h2o_memis(a->base, a->len, b->base, b->len);
 }
 
-static int entry_is(const struct st_h2o_qpack_header_t *entry, const h2o_iovec_t *name, h2o_iovec_t value)
-{
-    return name_is(entry->name, name) && h2o_memis(entry->value, entry->value_len, value.base, value.len);
-}
-
 static double entry_score(const struct st_h2o_qpack_header_t *entry)
 {
     /* `freq` and `bytes_saved` are stored compactly, but the product can exceed the range of float near the freeze boundary;
@@ -476,34 +471,44 @@ static struct st_h2o_qpack_shadow_slot_t *shadow_cache_get(h2o_qpack_encoder_t *
     return victim;
 }
 
-static int encoder_evict_one(h2o_qpack_encoder_t *qpack, const struct st_h2o_qpack_header_t *preserved)
+/**
+ * Records a removed entry's frequency as shadow evidence, so that a later re-occurrence of the (name,value) pair can re-earn a
+ * dynamic-table slot. Called when an entry is dropped from the table, not when it is merely relocated (duplicated).
+ */
+static void demote_entry(h2o_qpack_encoder_t *qpack, const struct st_h2o_qpack_header_t *entry)
+{
+    if (no_refine(qpack))
+        return;
+    struct st_h2o_qpack_shadow_slot_t *shadow =
+        shadow_cache_get(qpack, hash_field(entry->name, h2o_iovec_init(entry->value, entry->value_len)));
+    /* `entry->freq` is the pair's complete accumulated frequency, so assign rather than accumulate. The pair's own slot is always
+     * zero here (it was reset on admission and a resident pair never accumulates shadow evidence); a non-zero slot can only be a
+     * hashcode collision with a different pair, which assignment correctly replaces. */
+    shadow->freq = entry->freq;
+}
+
+/**
+ * Unlinks the oldest entry from the dynamic table. This is a purely mechanical removal that mirrors the decoder's implicit
+ * eviction; the decision of whether the entry's frequency is demoted to the shadow cache is made by the caller (see
+ * `make_room_for_swap`).
+ */
+static void encoder_evict_one(h2o_qpack_encoder_t *qpack)
 {
     struct st_h2o_qpack_header_t *entry = *qpack->table.first;
-    int skipped_shadow =
-        preserved != NULL && entry_is(entry, preserved->name, h2o_iovec_init(preserved->value, preserved->value_len));
-
-    if (!skipped_shadow && !no_refine(qpack)) {
-        struct st_h2o_qpack_shadow_slot_t *shadow =
-            shadow_cache_get(qpack, hash_field(entry->name, h2o_iovec_init(entry->value, entry->value_len)));
-        shadow->freq += entry->freq;
-    }
 
     qpack->table.num_bytes -= header_entry_size(entry);
     h2o_mem_release_shared(entry);
     *qpack->table.first++ = NULL;
     ++qpack->table.base_offset;
-    return skipped_shadow;
 }
 
-static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *added, int64_t evict_upto,
-                           const struct st_h2o_qpack_header_t *preserved)
+static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *added, int64_t evict_upto)
 {
     size_t delta = header_entry_size(added);
 
     while (qpack->table.first != qpack->table.last && qpack->table.num_bytes + delta > qpack->table.max_size) {
         assert((*qpack->table.first)->abs_index < evict_upto);
-        if (encoder_evict_one(qpack, preserved))
-            preserved = NULL;
+        encoder_evict_one(qpack);
     }
     assert(qpack->table.num_bytes + delta <= qpack->table.max_size);
     header_table_insert(&qpack->table, added);
@@ -1260,8 +1265,9 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
     int64_t relative_index = qpack_table_total_inserts(&ctx->qpack->table) - 1 - entry->abs_index;
     struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
+    /* The frequency travels with the clone; the original is evicted mechanically (without demotion) as the prefix is consumed. */
     emit_duplicate(ctx->pool, ctx->encoder_buf, relative_index);
-    encoder_insert(ctx->qpack, clone, entry->abs_index + 1, entry);
+    encoder_insert(ctx->qpack, clone, entry->abs_index + 1);
 }
 
 static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
@@ -1303,13 +1309,22 @@ static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
         return 0;
     if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) == 0)
         return 0;
+    /* The whole prefix [base_offset, evict_upto) is going to be removed. Demote the entries the candidate beats (they are being
+     * dropped) up front, before any eviction happens below; demotion is encoder-internal, so unlike the physical eviction it does
+     * not need to be interleaved with the inserts. */
+    for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
+        struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
+        if (candidate_beats_entry(candidate_score, entry))
+            demote_entry(ctx->qpack, entry);
+    }
+    /* Relocate the entries that are kept by emitting Duplicate and cloning them to the tail; this mechanically evicts the prefix
+     * (the originals are released without demotion, as their frequency now lives in the clones). */
     for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
         if (abs_index < ctx->qpack->table.base_offset)
             continue;
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
-        if (!candidate_beats_entry(candidate_score, entry)) {
+        if (!candidate_beats_entry(candidate_score, entry))
             duplicate_resident(ctx, entry);
-        }
     }
     return evict_upto;
 }
@@ -1510,7 +1525,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             /* register the entry to table */
             struct st_h2o_qpack_header_t *added = create_entry(
                 ctx->qpack, name, value, NULL, calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
-            encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset, NULL);
+            encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset);
             /* emit header field to headers block */
             flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
             return;
@@ -1538,7 +1553,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                     emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
                 }
                 struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, shadow, bytes_saved);
-                encoder_insert(ctx->qpack, added, evict_upto, NULL);
+                encoder_insert(ctx->qpack, added, evict_upto);
                 flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
                 return;
             }
