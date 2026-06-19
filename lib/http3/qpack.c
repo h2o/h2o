@@ -1526,8 +1526,14 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             int64_t evict_upto;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
                 (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
+                int dynamic_is_exact;
+
                 if (static_index >= 0) {
                     emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
+                } else if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, 0, &dynamic_is_exact)) >= 0) {
+                    assert(!dynamic_is_exact);
+                    emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
+                                             qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
                 } else {
                     emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
                 }
