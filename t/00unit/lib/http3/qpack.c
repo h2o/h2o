@@ -1035,26 +1035,39 @@ static int qpack_table_contains(h2o_qpack_encoder_t *enc, const char *name, cons
     return 0;
 }
 
+/**
+ * returns if `hashcode` has no slot in the shadow cache; unlike `shadow_cache_get` this never mutates the cache (which would
+ * otherwise allocate a slot on a miss)
+ */
+static int shadow_cache_is_missing(struct st_h2o_qpack_shadow_cache_t *cache, uint32_t hashcode)
+{
+    struct st_h2o_qpack_shadow_slot_t *set = cache->sets[shadow_cache_set_index(cache, hashcode)];
+    for (size_t i = 0; i != PTLS_ELEMENTSOF(cache->sets[0]); ++i)
+        if (set[i].freq != 0 && set[i].hashcode == hashcode)
+            return 0;
+    return 1;
+}
+
 static void test_shadow_cache(void)
 {
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 10, 1);
 
     ok(enc->shadow_cache.sets != NULL);
-    ok(qpack_shadow_cache_num_sets(&enc->shadow_cache) == 1);
+    ok(shadow_cache_num_sets(&enc->shadow_cache) == 1);
 
-    qpack_shadow_cache_record(enc, 1, 3);
-    qpack_shadow_cache_record(enc, 2, 2);
-    qpack_shadow_cache_record(enc, 3, 4);
-    qpack_shadow_cache_record(enc, 4, 5);
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, 1)->freq == 3);
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, 2)->freq == 2);
+    shadow_cache_get(enc, 1)->freq += 3;
+    shadow_cache_get(enc, 2)->freq += 2;
+    shadow_cache_get(enc, 3)->freq += 4;
+    shadow_cache_get(enc, 4)->freq += 5;
+    ok(shadow_cache_get(enc, 1)->freq == 3);
+    ok(shadow_cache_get(enc, 2)->freq == 2);
 
-    qpack_shadow_cache_record(enc, 5, 1);
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, 2) == NULL);
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, 5)->freq == 1);
+    shadow_cache_get(enc, 5)->freq += 1;
+    ok(shadow_cache_is_missing(&enc->shadow_cache, 2));
+    ok(shadow_cache_get(enc, 5)->freq == 1);
 
-    qpack_shadow_cache_record(enc, 5, 6);
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, 5)->freq == 7);
+    shadow_cache_get(enc, 5)->freq += 6;
+    ok(shadow_cache_get(enc, 5)->freq == 7);
 
     h2o_qpack_destroy_encoder(enc);
 }
@@ -1078,7 +1091,7 @@ static void test_response_swap(void)
     ok(enc->table.last - enc->table.first == 2);
     ok(qpack_table_contains(enc, "x-a", a_value));
     ok(qpack_table_contains(enc, "x-b", b_value));
-    ok(qpack_shadow_cache_lookup(&enc->shadow_cache, qpack_pair_hash(&headers.entries[2].name[0], headers.entries[2].value)) != NULL);
+    ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
     ack_encoder_section(enc, 1);
 
     for (int64_t stream_id = 2; stream_id != 32; ++stream_id) {
