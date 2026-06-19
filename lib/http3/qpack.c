@@ -1295,13 +1295,13 @@ static int duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struct
     return 1;
 }
 
-static int plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
-                              int64_t smallest_blocking_ref, int64_t *last_abs_index)
+static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
+                                  int64_t smallest_blocking_ref)
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
+    int64_t evict_upto = ctx->qpack->table.base_offset;
     float min_score = FLT_MAX;
 
-    *last_abs_index = ctx->qpack->table.base_offset - 1;
     for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first; available < needed && slot != ctx->qpack->table.last;
          ++slot) {
         struct st_h2o_qpack_header_t *entry = *slot;
@@ -1314,25 +1314,27 @@ static int plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t
         if (!candidate_beats_entry(candidate_score, entry))
             needed += entry_size;
         available += entry_size;
-        *last_abs_index = entry->abs_index;
+        evict_upto = entry->abs_index + 1;
     }
 
-    if (available < needed)
+    if (available < needed) {
         ctx->qpack->table_min_score = min_score;
-    return available >= needed;
+        return 0;
+    }
+    return evict_upto;
 }
 
 static int make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
                               int64_t smallest_blocking_ref)
 {
-    int64_t last_abs_index;
+    int64_t evict_upto;
 
     if (ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size &&
         candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
         return 0;
-    if (!plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref, &last_abs_index))
+    if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) == 0)
         return 0;
-    for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index <= last_abs_index; ++abs_index) {
+    for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
         if (abs_index < ctx->qpack->table.base_offset)
             continue;
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
