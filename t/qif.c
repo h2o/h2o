@@ -102,6 +102,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
         h2o_byte_vector_t encoder_buf = {NULL};                                                                                    \
         h2o_iovec_t headers_payload;                                                                                               \
         h2o_qpack_section_stats_t stats = {0};                                                                                     \
+        int should_ack = 0;                                                                                                        \
         if (!is_resp) {                                                                                                            \
             assert(message.method.base != NULL);                                                                                   \
             assert(message.scheme != NULL);                                                                                        \
@@ -117,6 +118,12 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
                 enc, &pool, stream_id, stream_id % 2 != 0 ? &encoder_buf : NULL, message.status, message.headers.entries,          \
                 message.headers.size, NULL, message.content_length, h2o_iovec_init(NULL, 0), &stats, NULL));                       \
         }                                                                                                                          \
+        {                                                                                                                          \
+            const uint8_t *src = (const uint8_t *)headers_payload.base;                                                            \
+            int64_t req_insert_count = h2o_hpack_decode_int(&src, src + headers_payload.len, 8);                                   \
+            assert(req_insert_count >= 0);                                                                                         \
+            should_ack = req_insert_count != 0;                                                                                    \
+        }                                                                                                                          \
         if (encoder_buf.size != 0) {                                                                                               \
             write_int(outp, 0, 8);                                                                                                 \
             write_int(outp, (uint32_t)encoder_buf.size, 4);                                                                        \
@@ -125,7 +132,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
         write_int(outp, stream_id, 8);                                                                                             \
         write_int(outp, (uint32_t)headers_payload.len, 4);                                                                         \
         fwrite(headers_payload.base, 1, headers_payload.len, outp);                                                                \
-        if (simulate_ack && encoder_buf.size != 0 && encoder_buf.entries[0] != 0) {                                                \
+        if (simulate_ack && should_ack) {                                                                                          \
             /* inject header acknowledgement */                                                                                    \
             uint8_t decoder_buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *p = decoder_buf;                                                \
             const char *err_desc = NULL;                                                                                           \
