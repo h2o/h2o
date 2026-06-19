@@ -1494,8 +1494,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
          * repeated ones can earn a dynamic-table entry. Etag values are never added as they are very unlikely to repeat;
          * Content-Length and Age might share the same property but they are mostly covered by the `value.len` gate. */
         size_t candidate_size = entry_size(name, value);
-        if (can_index &&
-            ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
+        if (can_index && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
             /* emit instruction to decoder stream */
             if (static_index >= 0) {
@@ -1507,9 +1506,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                 emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
             }
             /* register the entry to table */
-            struct st_h2o_qpack_header_t *added =
-                create_entry(ctx->qpack, name, value, NULL,
-                             calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
+            struct st_h2o_qpack_header_t *added = create_entry(
+                ctx->qpack, name, value, NULL, calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
             encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset, NULL);
             /* emit header field to headers block */
             flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
@@ -1745,8 +1743,7 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
         } else {
             char cl_str[sizeof(H2O_SIZE_T_LONGEST_STR)];
             size_t cl_len = (size_t)sprintf(cl_str, "%zu", content_length);
-            do_flatten_header(&ctx, 4, 0, &H2O_TOKEN_CONTENT_LENGTH->buf, h2o_iovec_init(cl_str, cl_len),
-                              (h2o_header_flags_t){0});
+            do_flatten_header(&ctx, 4, 0, &H2O_TOKEN_CONTENT_LENGTH->buf, h2o_iovec_init(cl_str, cl_len), (h2o_header_flags_t){0});
         }
     }
 
