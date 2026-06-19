@@ -29,7 +29,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "h2o/http3_common.h"
+#include "h2o/http2_common.h"
 #include "h2o/qpack.h"
+#include "h2o/socket.h"
 #include "h2o/url.h"
 
 static void write_int(FILE *fp, uint64_t v, size_t nbytes)
@@ -66,9 +68,19 @@ static h2o_iovec_t get_headers_payload(h2o_iovec_t frame)
 }
 
 static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp,
-                      int refine_after_full)
+                      int refine_after_full, int use_hpack)
 {
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked, refine_after_full);
+    h2o_hpack_header_table_t hpack_table = {0};
+    h2o_buffer_t *hpack_buf = NULL;
+    hpack_table.hpack_capacity = header_table_size; /* never grown by flatten (it only shrinks), so set it up front */
+    if (use_hpack) {
+        if (!is_resp) {
+            fprintf(stderr, "--hpack is only supported for responses (-r)\n");
+            return 1;
+        }
+        h2o_buffer_init(&hpack_buf, &h2o_socket_buffer_prototype);
+    }
     uint64_t stream_id = 1;
     h2o_mem_pool_t pool;
     struct {
@@ -100,6 +112,25 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 
 #define EMIT()                                                                                                                     \
     do {                                                                                                                           \
+        if (use_hpack) {                                                                                                           \
+            assert(100 <= message.status && message.status <= 999);                                                               \
+            size_t block = h2o_hpack_flatten_response(&hpack_buf, &hpack_table, header_table_size, (uint32_t)stream_id, 16384,     \
+                                                      message.status, message.headers.entries, message.headers.size, NULL,        \
+                                                      message.content_length, 1);                                                 \
+            size_t tb = strlen(":status") + 3; /* ":status" + 3-digit status, matching the QPACK text accounting */               \
+            for (size_t hi = 0; hi != message.headers.size; ++hi)                                                                  \
+                tb += message.headers.entries[hi].name->len + message.headers.entries[hi].value.len;                              \
+            if (message.content_length != SIZE_MAX) {                                                                             \
+                char cl[sizeof(H2O_SIZE_T_LONGEST_STR)];                                                                          \
+                tb += strlen("content-length") + (size_t)sprintf(cl, "%zu", message.content_length);                             \
+            }                                                                                                                      \
+            total_text += tb;                                                                                                      \
+            total_headers += block;                                                                                               \
+            h2o_buffer_consume(&hpack_buf, hpack_buf->size);                                                                       \
+            ++stream_id;                                                                                                           \
+            CLEAR();                                                                                                              \
+            break;                                                                                                                 \
+        }                                                                                                                          \
         h2o_byte_vector_t encoder_buf = {NULL};                                                                                    \
         h2o_iovec_t headers_payload;                                                                                               \
         h2o_qpack_section_stats_t stats = {0};                                                                                     \
@@ -215,6 +246,10 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
         EMIT();
 
     fprintf(stderr, "STATS text=%zu headers=%zu encoder=%zu\n", total_text, total_headers, total_encoder);
+    if (use_hpack) {
+        h2o_hpack_dispose_header_table(&hpack_table);
+        h2o_buffer_dispose(&hpack_buf);
+    }
     return 0;
 #undef EMIT
 #undef CLEAR
@@ -411,6 +446,8 @@ static void usage(const char *cmd)
            "  -r         handling series of responses (default is requests)\n"
            "  --refine-after-full=[01]\n"
            "             refine the dynamic table after fill-till-full (default: 1; encoder only)\n"
+           "  --hpack    encode using HPACK instead of QPACK, for comparison (encoder, responses only;\n"
+           "             prints STATS, writes no output)\n"
            "  -s [bytes] header table size bytes (default: 4096)\n"
            "\n",
            cmd);
@@ -421,8 +458,9 @@ int main(int argc, char **argv)
 {
     uint32_t header_table_size = 4096;
     uint16_t max_blocked = 100;
-    int ch, decode = 0, simulate_ack = 0, is_resp = 0, refine_after_full = 1;
-    static const struct option longopts[] = {{"refine-after-full", required_argument, NULL, 256}, {NULL}};
+    int ch, decode = 0, simulate_ack = 0, is_resp = 0, refine_after_full = 1, use_hpack = 0;
+    static const struct option longopts[] = {
+        {"refine-after-full", required_argument, NULL, 256}, {"hpack", no_argument, NULL, 257}, {NULL}};
 
     while ((ch = getopt_long(argc, argv, "ab:drs:h", longopts, NULL)) != -1) {
         switch (ch) {
@@ -457,6 +495,9 @@ int main(int argc, char **argv)
                 exit(1);
             }
             break;
+        case 257:
+            use_hpack = 1;
+            break;
         default:
             usage(argv[0]);
             break;
@@ -482,5 +523,5 @@ int main(int argc, char **argv)
     }
 
     return decode ? decode_qif(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp)
-                  : encode_qif(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp, refine_after_full);
+                  : encode_qif(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp, refine_after_full, use_hpack);
 }
