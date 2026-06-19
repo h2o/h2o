@@ -164,7 +164,8 @@ struct st_h2o_qpack_encoder_t {
     /**
      * Additive weight for one observation, grown by `QPACK_FREQ_DECAY_FACTOR` per header section. Due to the weight monotonically
      * increasing, older evidence becomes relatively smaller. Rather than implementing scaling, frequency updates and dynamic-table
-     * swaps stop once this reaches `QPACK_FREQ_ADD_CAP` after sending roughly ten thousand sections.
+     * swaps stop once this reaches `QPACK_FREQ_ADD_CAP` after sending roughly ten thousand sections. The value is initialized
+     * to the cap when cost-based admission is disabled.
      */
     float freq_add;
 };
@@ -375,7 +376,7 @@ static int64_t qpack_table_total_inserts(struct st_h2o_qpack_header_table_t *tab
     return table->base_offset + (table->last - table->first);
 }
 
-static int encoder_is_frozen(const h2o_qpack_encoder_t *qpack)
+static int no_refine(const h2o_qpack_encoder_t *qpack)
 {
     return qpack->freq_add >= QPACK_FREQ_ADD_CAP;
 }
@@ -468,7 +469,7 @@ static struct st_h2o_qpack_shadow_slot_t *shadow_cache_record(h2o_qpack_encoder_
 {
     struct st_h2o_qpack_shadow_slot_t *slot, *victim;
 
-    if (encoder_is_frozen(qpack) || qpack->shadow_cache.sets == NULL)
+    if (no_refine(qpack))
         return NULL;
     if ((slot = shadow_cache_lookup(&qpack->shadow_cache, hashcode)) != NULL) {
         slot->freq += freq;
@@ -1100,7 +1101,7 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
     } else {
         qpack->shadow_cache = (struct st_h2o_qpack_shadow_cache_t){NULL};
     }
-    qpack->freq_add = 1;
+    qpack->freq_add = qpack->shadow_cache.sets != NULL ? 1 : QPACK_FREQ_ADD_CAP;
     return qpack;
 }
 
@@ -1356,7 +1357,7 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
         /* compare values */
         if (h2o_memis(value.base, value.len, entry->value, entry->value_len)) {
             *is_exact = 1;
-            if (!encoder_is_frozen(qpack))
+            if (!no_refine(qpack))
                 entry->freq += qpack->freq_add;
             return i;
         }
@@ -1568,7 +1569,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
             return;
         }
-        if (can_index && candidate_size <= ctx->qpack->table.max_size && !encoder_is_frozen(ctx->qpack)) {
+        if (can_index && candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
             struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_record(ctx->qpack, hashcode, ctx->qpack->freq_add);
 
             if (shadow != NULL) {
