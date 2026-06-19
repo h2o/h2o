@@ -169,10 +169,16 @@ struct st_h2o_qpack_encoder_t {
      */
     float freq_add;
     /**
-     * Conservative lower bound of resident dynamic-table scores. The value is updated when entries are inserted and when a full
-     * planning scan fails; it can become stale-low, which is safe because that only weakens the fast reject.
+     * Minimum score among the resident dynamic-table entries, used as the swap fast-reject bound. Negative means invalid: it is
+     * invalidated on insert and recomputed lazily for free while `lookup_dynamic` next walks the table to find a match. It covers
+     * all residents (not just the evictable ones), which only weakens the reject, never makes it admit something it shouldn't.
      */
     double table_min_score;
+    /**
+     * Smallest absolute index referenced by any in-flight (un-acked) section; maintained incrementally so that the per-field
+     * eviction-safety check need not rescan `inflight`. `INT64_MAX` when nothing is in flight.
+     */
+    int64_t inflight_smallest_ref;
 };
 
 struct st_h2o_qpack_flatten_context_t {
@@ -512,8 +518,9 @@ static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_heade
     }
     assert(qpack->table.num_bytes + delta <= qpack->table.max_size);
     header_table_insert(&qpack->table, added);
-    if (entry_score(added) < qpack->table_min_score)
-        qpack->table_min_score = entry_score(added);
+    /* Invalidate the cached minimum; the added entry may be the new minimum. It is recomputed lazily by the next lookup_dynamic
+     * walk that needs it (negative == invalid; real scores are non-negative). */
+    qpack->table_min_score = -1;
 }
 
 static int insert_with_name_reference(h2o_qpack_decoder_t *qpack, int name_is_static, int64_t name_index, int value_is_huff,
@@ -1069,7 +1076,8 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
         qpack->shadow_cache = (struct st_h2o_qpack_shadow_cache_t){NULL};
     }
     qpack->freq_add = qpack->shadow_cache.sets != NULL ? FLT_MIN : QPACK_FREQ_ADD_CAP;
-    qpack->table_min_score = DBL_MAX;
+    qpack->table_min_score = -1; /* invalid; recomputed lazily by lookup_dynamic */
+    qpack->inflight_smallest_ref = INT64_MAX;
     return qpack;
 }
 
@@ -1095,6 +1103,14 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
 Error:
     *err_desc = "Table State Synchronize: invalid argument";
     return H2O_HTTP3_ERROR_QPACK_DECODER_STREAM;
+}
+
+static void recalc_inflight_smallest_ref(h2o_qpack_encoder_t *qpack)
+{
+    qpack->inflight_smallest_ref = INT64_MAX;
+    for (size_t i = 0; i != qpack->inflight.size; ++i)
+        if (qpack->inflight.entries[i].smallest_ref < qpack->inflight_smallest_ref)
+            qpack->inflight_smallest_ref = qpack->inflight.entries[i].smallest_ref;
 }
 
 static void evict_inflight_by_index(h2o_qpack_encoder_t *qpack, size_t index)
@@ -1129,8 +1145,11 @@ Found:
     /* update largest reference */
     if (qpack->largest_known_received < qpack->inflight.entries[i].largest_ref)
         qpack->largest_known_received = qpack->inflight.entries[i].largest_ref;
-    /* evict the found entry */
+    /* evict the found entry, refreshing the cached floor if this entry was (or tied) the smallest reference */
+    int recalc_floor = qpack->inflight.entries[i].smallest_ref <= qpack->inflight_smallest_ref;
     evict_inflight_by_index(qpack, i);
+    if (recalc_floor)
+        recalc_inflight_smallest_ref(qpack);
 
     return 0;
 }
@@ -1138,15 +1157,19 @@ Found:
 static int handle_stream_cancellation(h2o_qpack_encoder_t *qpack, int64_t stream_id, const char **err_desc)
 {
     size_t index = 0;
+    int removed = 0;
 
     if (qpack != NULL) {
         while (index < qpack->inflight.size) {
             if (qpack->inflight.entries[index].stream_id == stream_id) {
                 evict_inflight_by_index(qpack, index);
+                removed = 1;
             } else {
                 ++index;
             }
         }
+        if (removed)
+            recalc_inflight_smallest_ref(qpack);
     }
 
     return 0;
@@ -1247,12 +1270,8 @@ static void emit_duplicate(h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t
 
 static int64_t calc_smallest_blocking_ref(struct st_h2o_qpack_flatten_context_t *ctx)
 {
-    int64_t smallest = ctx->smallest_ref;
-
-    for (size_t i = 0; i != ctx->qpack->inflight.size; ++i)
-        if (ctx->qpack->inflight.entries[i].smallest_ref < smallest)
-            smallest = ctx->qpack->inflight.entries[i].smallest_ref;
-    return smallest;
+    /* combine the cached floor over other in-flight sections with the current section's own references */
+    return ctx->smallest_ref < ctx->qpack->inflight_smallest_ref ? ctx->smallest_ref : ctx->qpack->inflight_smallest_ref;
 }
 
 static int candidate_beats_entry(double candidate_score, struct st_h2o_qpack_header_t *entry)
@@ -1275,7 +1294,6 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
     int64_t evict_upto = ctx->qpack->table.base_offset;
-    double min_score = DBL_MAX;
 
     for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first; available < needed && slot != ctx->qpack->table.last;
          ++slot) {
@@ -1284,18 +1302,14 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
 
         if (entry->abs_index >= smallest_blocking_ref)
             return 0;
-        if (entry_score(entry) < min_score)
-            min_score = entry_score(entry);
         if (!candidate_beats_entry(candidate_score, entry))
             needed += entry_size;
         available += entry_size;
         evict_upto = entry->abs_index + 1;
     }
 
-    if (available < needed) {
-        ctx->qpack->table_min_score = min_score;
+    if (available < needed)
         return 0;
-    }
     return evict_upto;
 }
 
@@ -1304,6 +1318,8 @@ static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
 {
     int64_t evict_upto;
 
+    /* the lookup_dynamic walk that precedes every swap attempt leaves the cached minimum valid */
+    assert(ctx->qpack->table_min_score >= 0);
     if (ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size &&
         candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
         return 0;
@@ -1333,10 +1349,20 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
 {
     size_t i;
     int64_t name_found = -1;
+    /* When the cached minimum resident score has been invalidated (by an insert), recompute it for free during this walk, so the
+     * swap fast-reject has a live bound without a second pass. Skipped on the acked-only (no-insert) path, when refinement is
+     * off/frozen, and when the cached value is still valid. */
+    int track_score = !acked_only && !no_refine(qpack) && qpack->table_min_score < 0;
+    double min_score = DBL_MAX;
 
     for (i = acked_only ? qpack->largest_known_received : qpack_table_total_inserts(&qpack->table) - 1;
          i >= qpack->table.base_offset; --i) {
         struct st_h2o_qpack_header_t *entry = qpack->table.first[i - qpack->table.base_offset];
+        if (track_score) {
+            double score = entry_score(entry);
+            if (score < min_score)
+                min_score = score;
+        }
         /* compare names (and continue unless they match) */
         if (!name_is(name, entry->name))
             continue;
@@ -1352,6 +1378,8 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
     }
 
     *is_exact = 0;
+    if (track_score)
+        qpack->table_min_score = min_score;
     return name_found;
 }
 
@@ -1632,10 +1660,12 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
             ++ctx->qpack->num_blocked;
             is_blocking = 1;
         }
-        /* mark as inflight */
+        /* mark as inflight, extending the cached floor to cover this section's references */
         h2o_vector_reserve(NULL, &ctx->qpack->inflight, ctx->qpack->inflight.size + 1);
         ctx->qpack->inflight.entries[ctx->qpack->inflight.size++] =
             (struct st_h2o_qpack_blocked_streams_t){ctx->stream_id, ctx->largest_ref, ctx->smallest_ref, {{is_blocking}}};
+        if (ctx->smallest_ref < ctx->qpack->inflight_smallest_ref)
+            ctx->qpack->inflight_smallest_ref = ctx->smallest_ref;
     }
 
     size_t start_off = PREFIX_CAPACITY;
