@@ -88,7 +88,11 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
                              h2o_qpack_section_stats_t *stats_updated, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src,
                              size_t len, const char **err_desc);
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked);
+/**
+ * Creates a QPACK encoder. When `refine_after_full` is false, the dynamic table is filled until full and then left unchanged;
+ * when true, the encoder can refine the resident set after the fill phase.
+ */
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 /**
  * Handles packets sent to the QPACK encoder (i.e., the bytes carried by the "decoder" stream)

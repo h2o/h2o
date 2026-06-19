@@ -1465,7 +1465,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         }
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams);
+    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams, 1);
     return 0;
 Malformed:
     *err_desc = "malformed SETTINGS frame";

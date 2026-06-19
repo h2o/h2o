@@ -65,9 +65,10 @@ static h2o_iovec_t get_headers_payload(h2o_iovec_t frame)
     return h2o_iovec_init(src, end - src);
 }
 
-static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp)
+static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp,
+                      int refine_after_full)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked, refine_after_full);
     uint64_t stream_id = 1;
     h2o_mem_pool_t pool;
     struct {
@@ -396,7 +397,9 @@ static void usage(const char *cmd)
            "  -b [max]   maximum number of blocked streams\n"
            "  -d         decode (default is encode)\n"
            "  -r         handling series of responses (default is requests)\n"
-           "  -s [bits]  header table size bits (default is 12; i.e. 4096 bytes)\n"
+           "  --refine-after-full=[01]\n"
+           "             refine the dynamic table after fill-till-full (default: 1; encoder only)\n"
+           "  -s [bytes] header table size bytes (default: 4096)\n"
            "\n",
            cmd);
     exit(0);
@@ -406,9 +409,10 @@ int main(int argc, char **argv)
 {
     uint32_t header_table_size = 4096;
     uint16_t max_blocked = 100;
-    int ch, decode = 0, simulate_ack = 0, is_resp = 0;
+    int ch, decode = 0, simulate_ack = 0, is_resp = 0, refine_after_full = 1;
+    static const struct option longopts[] = {{"refine-after-full", required_argument, NULL, 256}, {NULL}};
 
-    while ((ch = getopt(argc, argv, "ab:drs:h")) != -1) {
+    while ((ch = getopt_long(argc, argv, "ab:drs:h", longopts, NULL)) != -1) {
         switch (ch) {
         case 'a':
             simulate_ack = 1;
@@ -428,6 +432,16 @@ int main(int argc, char **argv)
         case 's':
             if (sscanf(optarg, "%" SCNu32, &header_table_size) != 1) {
                 fprintf(stderr, "failed decode header table size\n");
+                exit(1);
+            }
+            break;
+        case 256:
+            if (strcmp(optarg, "0") == 0) {
+                refine_after_full = 0;
+            } else if (strcmp(optarg, "1") == 0) {
+                refine_after_full = 1;
+            } else {
+                fprintf(stderr, "failed decode refine-after-full flag\n");
                 exit(1);
             }
             break;
@@ -455,5 +469,6 @@ int main(int argc, char **argv)
         ++argv;
     }
 
-    return (decode ? decode_qif : encode_qif)(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp);
+    return decode ? decode_qif(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp)
+                  : encode_qif(stdin, stdout, header_table_size, max_blocked, simulate_ack, is_resp, refine_after_full);
 }
