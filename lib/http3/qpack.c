@@ -168,6 +168,11 @@ struct st_h2o_qpack_encoder_t {
      * to the cap when cost-based admission is disabled.
      */
     float freq_add;
+    /**
+     * Conservative lower bound of resident dynamic-table scores. The value is updated when entries are inserted and when a full
+     * planning scan fails; it can become stale-low, which is safe because that only weakens the fast reject.
+     */
+    float table_min_score;
 };
 
 struct st_h2o_qpack_flatten_context_t {
@@ -525,6 +530,8 @@ static int encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header
     if (!encoder_evict(qpack, delta, smallest_blocking_ref, preserved))
         return 0;
     header_table_insert(&qpack->table, added);
+    if (entry_score(added) < qpack->table_min_score)
+        qpack->table_min_score = entry_score(added);
     return 1;
 }
 
@@ -1081,6 +1088,7 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
         qpack->shadow_cache = (struct st_h2o_qpack_shadow_cache_t){NULL};
     }
     qpack->freq_add = qpack->shadow_cache.sets != NULL ? FLT_MIN : QPACK_FREQ_ADD_CAP;
+    qpack->table_min_score = FLT_MAX;
     return qpack;
 }
 
@@ -1288,12 +1296,12 @@ static int duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struct
 }
 
 static int plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
-                              int64_t smallest_blocking_ref, struct st_h2o_qpack_header_t **to_duplicate,
-                              size_t *num_to_duplicate)
+                              int64_t smallest_blocking_ref, int64_t *last_abs_index)
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
+    float min_score = FLT_MAX;
 
-    *num_to_duplicate = 0;
+    *last_abs_index = ctx->qpack->table.base_offset - 1;
     for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first; available < needed && slot != ctx->qpack->table.last;
          ++slot) {
         struct st_h2o_qpack_header_t *entry = *slot;
@@ -1301,29 +1309,39 @@ static int plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t
 
         if (entry->abs_index >= smallest_blocking_ref)
             return 0;
-        if (!candidate_beats_entry(candidate_score, entry)) {
-            to_duplicate[(*num_to_duplicate)++] = entry;
+        if (entry_score(entry) < min_score)
+            min_score = entry_score(entry);
+        if (!candidate_beats_entry(candidate_score, entry))
             needed += entry_size;
-        }
         available += entry_size;
+        *last_abs_index = entry->abs_index;
     }
 
+    if (available < needed)
+        ctx->qpack->table_min_score = min_score;
     return available >= needed;
 }
 
 static int make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
                               int64_t smallest_blocking_ref)
 {
-    size_t table_entries = ctx->qpack->table.last - ctx->qpack->table.first, num_to_duplicate;
-    struct st_h2o_qpack_header_t **to_duplicate = h2o_mem_alloc_pool(ctx->pool, *to_duplicate, table_entries != 0 ? table_entries : 1);
+    int64_t last_abs_index;
 
-    if (!plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref, to_duplicate, &num_to_duplicate))
+    if (ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size &&
+        candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
         return 0;
-    for (size_t i = 0; i != num_to_duplicate; ++i) {
-        int duplicated = duplicate_resident(ctx, to_duplicate[i], smallest_blocking_ref);
-        assert(duplicated);
-        if (!duplicated)
-            return 0;
+    if (!plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref, &last_abs_index))
+        return 0;
+    for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index <= last_abs_index; ++abs_index) {
+        if (abs_index < ctx->qpack->table.base_offset)
+            continue;
+        struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
+        if (!candidate_beats_entry(candidate_score, entry)) {
+            int duplicated = duplicate_resident(ctx, entry, smallest_blocking_ref);
+            assert(duplicated);
+            if (!duplicated)
+                return 0;
+        }
     }
     return 1;
 }
