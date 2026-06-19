@@ -86,6 +86,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
     } message;
     char line[4096];
     size_t len;
+    size_t total_text = 0, total_headers = 0, total_encoder = 0;
 
     h2o_mem_init_pool(&pool);
 
@@ -132,6 +133,9 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
         write_int(outp, stream_id, 8);                                                                                             \
         write_int(outp, (uint32_t)headers_payload.len, 4);                                                                         \
         fwrite(headers_payload.base, 1, headers_payload.len, outp);                                                                \
+        total_text += stats.text_bytes;                                                                                            \
+        total_headers += headers_payload.len;                                                                                      \
+        total_encoder += encoder_buf.size;                                                                                         \
         if (simulate_ack && should_ack) {                                                                                          \
             /* inject header acknowledgement */                                                                                    \
             uint8_t decoder_buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *p = decoder_buf;                                                \
@@ -210,6 +214,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
     if (message.method.base != NULL || message.status != 0)
         EMIT();
 
+    fprintf(stderr, "STATS text=%zu headers=%zu encoder=%zu\n", total_text, total_headers, total_encoder);
     return 0;
 #undef EMIT
 #undef CLEAR
