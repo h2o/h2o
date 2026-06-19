@@ -1211,39 +1211,47 @@ static size_t calc_bytes_saved(h2o_mem_pool_t *pool, const h2o_iovec_t *name, h2
     return value_len + (has_name_ref ? 0 : name->len);
 }
 
-static void prepare_inserted_entry(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *entry,
-                                   struct st_h2o_qpack_shadow_slot_t *shadow, size_t bytes_saved)
+static struct st_h2o_qpack_header_t *do_alloc_entry(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value,
+                                                    unsigned soft_errors, float freq, size_t bytes_saved)
 {
-    entry->freq = shadow != NULL ? shadow->freq : qpack->freq_add;
+    struct st_h2o_qpack_header_t *entry;
+
+    if (h2o_iovec_is_token(name)) {
+        entry = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
+        entry->name = (h2o_iovec_t *)name;
+    } else {
+        entry = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
+        entry->name = &entry->_name_buf;
+        entry->_name_buf = h2o_iovec_init(entry->value + value.len + 1, name->len);
+        memcpy(entry->_name_buf.base, name->base, name->len);
+        entry->_name_buf.base[name->len] = '\0';
+    }
+    entry->value_len = value.len;
+    entry->soft_errors = soft_errors;
+    entry->freq = freq;
     entry->bytes_saved = bytes_saved;
     entry->abs_index = qpack_table_total_inserts(&qpack->table);
-    if (shadow != NULL)
-        shadow->freq = 0;
+    memcpy(entry->value, value.base, value.len);
+    entry->value[value.len] = '\0';
+
+    return entry;
 }
 
-static struct st_h2o_qpack_header_t *clone_header_entry(struct st_h2o_qpack_header_t *src)
+static struct st_h2o_qpack_header_t *create_entry(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value,
+                                                  struct st_h2o_qpack_shadow_slot_t *shadow, size_t bytes_saved)
 {
-    struct st_h2o_qpack_header_t *dst;
+    struct st_h2o_qpack_header_t *entry =
+        do_alloc_entry(qpack, name, value, 0, shadow != NULL ? shadow->freq : qpack->freq_add, bytes_saved);
 
-    if (h2o_iovec_is_token(src->name)) {
-        dst = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + src->value_len + 1, NULL);
-        dst->name = src->name;
-    } else {
-        dst = h2o_mem_alloc_shared(NULL,
-                                   offsetof(struct st_h2o_qpack_header_t, value) + src->value_len + 1 + src->name->len + 1, NULL);
-        dst->name = &dst->_name_buf;
-        dst->_name_buf = h2o_iovec_init(dst->value + src->value_len + 1, src->name->len);
-        memcpy(dst->_name_buf.base, src->name->base, src->name->len);
-        dst->_name_buf.base[src->name->len] = '\0';
-    }
-    dst->value_len = src->value_len;
-    dst->soft_errors = src->soft_errors;
-    dst->freq = src->freq;
-    dst->bytes_saved = src->bytes_saved;
-    dst->abs_index = src->abs_index;
-    memcpy(dst->value, src->value, src->value_len);
-    dst->value[src->value_len] = '\0';
-    return dst;
+    if (shadow != NULL)
+        shadow->freq = 0;
+    return entry;
+}
+
+static struct st_h2o_qpack_header_t *clone_entry(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *src)
+{
+    return do_alloc_entry(qpack, src->name, h2o_iovec_init(src->value, src->value_len), src->soft_errors, src->freq,
+                          src->bytes_saved);
 }
 
 static void emit_duplicate(h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index);
@@ -1267,9 +1275,8 @@ static int duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struct
                               int64_t smallest_blocking_ref)
 {
     int64_t relative_index = qpack_table_total_inserts(&ctx->qpack->table) - 1 - entry->abs_index;
-    struct st_h2o_qpack_header_t *clone = clone_header_entry(entry);
+    struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
-    clone->abs_index = qpack_table_total_inserts(&ctx->qpack->table);
     if (!encoder_can_evict(ctx->qpack, header_entry_size(clone), smallest_blocking_ref)) {
         h2o_mem_release_shared(clone);
         return 0;
@@ -1404,28 +1411,6 @@ static void emit_duplicate(h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t
     flatten_int(buf, index, 5);
 }
 
-static struct st_h2o_qpack_header_t *alloc_header_entry(const h2o_iovec_t *name, h2o_iovec_t value)
-{
-    struct st_h2o_qpack_header_t *added;
-
-    if (h2o_iovec_is_token(name)) {
-        added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value.len + 1, NULL);
-        added->name = (h2o_iovec_t *)name;
-    } else {
-        added = h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + name->len + 1 + value.len + 1, NULL);
-        added->name = &added->_name_buf;
-        added->_name_buf = h2o_iovec_init(added->value + value.len + 1, name->len);
-        memcpy(added->_name_buf.base, name->base, name->len);
-        added->_name_buf.base[name->len] = '\0';
-    }
-    added->value_len = value.len;
-    added->soft_errors = 0;
-    memcpy(added->value, value.base, value.len);
-    added->value[value.len] = '\0';
-
-    return added;
-}
-
 static void flatten_static_indexed(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index)
 {
     ++ctx->stats->count;
@@ -1538,9 +1523,9 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                 emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
             }
             /* register the entry to table */
-            struct st_h2o_qpack_header_t *added = alloc_header_entry(name, value);
-            prepare_inserted_entry(ctx->qpack, added, NULL,
-                                   calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
+            struct st_h2o_qpack_header_t *added =
+                create_entry(ctx->qpack, name, value, NULL,
+                             calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
             int inserted = encoder_insert(ctx->qpack, added, INT64_MAX, NULL);
             assert(inserted);
             /* emit header field to headers block */
@@ -1562,8 +1547,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                 } else {
                     emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
                 }
-                struct st_h2o_qpack_header_t *added = alloc_header_entry(name, value);
-                prepare_inserted_entry(ctx->qpack, added, shadow, bytes_saved);
+                struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, shadow, bytes_saved);
                 int inserted = encoder_insert(ctx->qpack, added, smallest_blocking_ref, NULL);
                 assert(inserted);
                 flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
