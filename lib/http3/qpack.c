@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <float.h>
 #include "picotls.h"
 #include "h2o.h"
 #include "h2o/hpack.h"
@@ -30,6 +31,10 @@
 #include "h2o/http3_common.h"
 
 #define HEADER_ENTRY_SIZE_OFFSET 32
+#define QPACK_FREQ_DECAY_FACTOR 1.0108892860517004753f /* 2^(1/64) */
+#define QPACK_FREQ_ADD_CAP (FLT_MAX / 65536)
+#define QPACK_SWAP_MARGIN 2.0f
+#define QPACK_REPEAT_THRESHOLD 1.1f
 
 /**
  * a mem-shared object that contains the name and value of a header field
@@ -39,7 +44,42 @@ struct st_h2o_qpack_header_t {
     size_t value_len;
     h2o_iovec_t _name_buf;
     unsigned soft_errors;
+    /**
+     * Decayed frequency of this exact (name,value) pair while it is resident in the dynamic table.
+     */
+    float freq;
+    /**
+     * Estimated bytes saved by indexing this pair instead of emitting it as a literal.
+     */
+    size_t bytes_saved;
+    /**
+     * Absolute insertion index, used to derive the relative index without searching the dynamic table again.
+     */
+    int64_t abs_index;
     char value[1];
+};
+
+/**
+ * Shadow evidence for non-resident (name,value) pairs.
+ */
+struct st_h2o_qpack_shadow_slot_t {
+    uint32_t hashcode;
+    float freq;
+};
+
+/**
+ * 4-way set-associative cache of shadow evidence for non-resident (name,value) pairs.
+ */
+struct st_h2o_qpack_shadow_cache_t {
+    /**
+     * Sets are selected by the least significant `bits` bits of the hashcode. Ways within a set are unordered; on a miss, the
+     * lowest-frequency way is replaced so the new observation is always counted.
+     */
+    struct st_h2o_qpack_shadow_slot_t (*sets)[4];
+    /**
+     * Number of index bits; the number of sets is `1 << bits`.
+     */
+    unsigned bits;
 };
 
 struct st_h2o_qpack_header_table_t {
@@ -116,6 +156,20 @@ struct st_h2o_qpack_encoder_t {
      * list of unacked streams
      */
     H2O_VECTOR(struct st_h2o_qpack_blocked_streams_t) inflight;
+    /**
+     * Shadow evidence used by the dynamic-table admission policy.
+     */
+    struct st_h2o_qpack_shadow_cache_t shadow_cache;
+    /**
+     * Additive weight for one observation, grown by `QPACK_FREQ_DECAY_FACTOR` per header section. Due to the weight monotonically
+     * increasing, older evidence becomes relatively smaller. Rather than implementing scaling, frequency updates and dynamic-table
+     * swaps stop once this reaches `QPACK_FREQ_ADD_CAP` after sending roughly ten thousand sections.
+     */
+    float freq_add;
+    /**
+     * Lowest score observed among current QPACK dynamic-table entries during the last scan, used as a fast-reject bound.
+     */
+    float table_min_score;
 };
 
 struct st_h2o_qpack_flatten_context_t {
