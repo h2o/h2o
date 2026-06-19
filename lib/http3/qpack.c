@@ -33,7 +33,7 @@
 #define HEADER_ENTRY_SIZE_OFFSET 32
 #define QPACK_FREQ_DECAY_FACTOR 1.0108892860517004753f /* 2^(1/64) */
 #define QPACK_FREQ_ADD_CAP (FLT_MAX / 65536)
-#define QPACK_SWAP_MARGIN 2.0f
+#define QPACK_SWAP_MARGIN 2.0 /* applied to scores, which are computed in double */
 #define QPACK_REPEAT_THRESHOLD 1.1f
 
 /**
@@ -172,7 +172,7 @@ struct st_h2o_qpack_encoder_t {
      * Conservative lower bound of resident dynamic-table scores. The value is updated when entries are inserted and when a full
      * planning scan fails; it can become stale-low, which is safe because that only weakens the fast reject.
      */
-    float table_min_score;
+    double table_min_score;
 };
 
 struct st_h2o_qpack_flatten_context_t {
@@ -421,9 +421,11 @@ static int entry_is(const struct st_h2o_qpack_header_t *entry, const h2o_iovec_t
     return name_is(entry->name, name) && h2o_memis(entry->value, entry->value_len, value.base, value.len);
 }
 
-static float entry_score(const struct st_h2o_qpack_header_t *entry)
+static double entry_score(const struct st_h2o_qpack_header_t *entry)
 {
-    return entry->freq * entry->bytes_saved / header_entry_size(entry);
+    /* `freq` and `bytes_saved` are stored compactly, but the product can exceed the range of float near the freeze boundary;
+     * compute the score in double to avoid overflowing to infinity */
+    return (double)entry->freq * entry->bytes_saved / header_entry_size(entry);
 }
 
 static size_t shadow_cache_num_sets(const struct st_h2o_qpack_shadow_cache_t *cache)
@@ -1062,7 +1064,7 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
         qpack->shadow_cache = (struct st_h2o_qpack_shadow_cache_t){NULL};
     }
     qpack->freq_add = qpack->shadow_cache.sets != NULL ? FLT_MIN : QPACK_FREQ_ADD_CAP;
-    qpack->table_min_score = FLT_MAX;
+    qpack->table_min_score = DBL_MAX;
     return qpack;
 }
 
@@ -1248,7 +1250,7 @@ static int64_t calc_smallest_blocking_ref(struct st_h2o_qpack_flatten_context_t 
     return smallest;
 }
 
-static int candidate_beats_entry(float candidate_score, struct st_h2o_qpack_header_t *entry)
+static int candidate_beats_entry(double candidate_score, struct st_h2o_qpack_header_t *entry)
 {
     return candidate_score > entry_score(entry) * QPACK_SWAP_MARGIN;
 }
@@ -1262,12 +1264,12 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
     encoder_insert(ctx->qpack, clone, entry->abs_index + 1, entry);
 }
 
-static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
+static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
                                   int64_t smallest_blocking_ref)
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
     int64_t evict_upto = ctx->qpack->table.base_offset;
-    float min_score = FLT_MAX;
+    double min_score = DBL_MAX;
 
     for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first; available < needed && slot != ctx->qpack->table.last;
          ++slot) {
@@ -1291,7 +1293,7 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
     return evict_upto;
 }
 
-static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, float candidate_score,
+static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
                                   int64_t smallest_blocking_ref)
 {
     int64_t evict_upto;
@@ -1518,7 +1520,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             shadow->freq += ctx->qpack->freq_add;
 
             size_t bytes_saved = calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0);
-            float candidate_score = shadow->freq * bytes_saved / candidate_size;
+            double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
             int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx);
 
             int64_t evict_upto;
