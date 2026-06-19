@@ -164,7 +164,7 @@ struct st_h2o_qpack_encoder_t {
     /**
      * Additive weight for one observation, grown by `QPACK_FREQ_DECAY_FACTOR` per header section. Due to the weight monotonically
      * increasing, older evidence becomes relatively smaller. Rather than implementing scaling, frequency updates and dynamic-table
-     * swaps stop once this reaches `QPACK_FREQ_ADD_CAP` after sending roughly ten thousand sections. The value is initialized
+     * swaps stop once this reaches `QPACK_FREQ_ADD_CAP` after sending roughly fifteen thousand sections. The value is initialized
      * to the cap when cost-based admission is disabled.
      */
     float freq_add;
@@ -1101,7 +1101,7 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
     } else {
         qpack->shadow_cache = (struct st_h2o_qpack_shadow_cache_t){NULL};
     }
-    qpack->freq_add = qpack->shadow_cache.sets != NULL ? 1 : QPACK_FREQ_ADD_CAP;
+    qpack->freq_add = qpack->shadow_cache.sets != NULL ? FLT_MIN : QPACK_FREQ_ADD_CAP;
     return qpack;
 }
 
