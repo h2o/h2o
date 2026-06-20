@@ -1577,6 +1577,28 @@ static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, 
     flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
+/* Emits the insert of (name, value) onto the encoder stream, registers it in the dynamic table (inheriting the frequency carried by
+ * `shadow`, or starting fresh when NULL) while evicting the table prefix below `evict_upto`, then references the new entry from the
+ * header block. `dynamic_index` is the name-only dynamic match to reference, or < 0 to emit the name literally. The entry is scored
+ * by the size it actually took on the wire. */
+static void emit_insert_and_reference(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int64_t dynamic_index,
+                                      const h2o_iovec_t *name, h2o_iovec_t value, struct st_h2o_qpack_shadow_slot_t *shadow,
+                                      int64_t evict_upto)
+{
+    size_t bytes_saved;
+    if (static_index >= 0) {
+        bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
+    } else if (dynamic_index >= 0) {
+        bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
+                                               qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
+    } else {
+        bytes_saved = emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+    }
+    struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, shadow, bytes_saved);
+    encoder_insert(ctx->qpack, added, evict_upto);
+    flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
+}
+
 static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int is_exact,
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
@@ -1605,66 +1627,49 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
-        /* Fill the dynamic table while there is room.
-         * - Short values are inserted only when no name reference is available, because if a name reference exists, they are
-         *   encoded compactly.
-         * - When refine is on, skipped short values are still recorded as shadows below; if the name-value pair repeats before the
-         *   table becomes full, the pair is inserted.
-         * - Etag values are never added as they are very unlikely to repeat; Content-Length and Age might share the same property
-         *   but they are mostly covered by the `value.len` gate. */
+    } else {
+        dynamic_index = -1;
+    }
+
+    /* Insert the pair into the dynamic table if worthwhile and reference it, else fall through to a literal below. (`can_index` is
+     * only ever set while encoding, so this is skipped when not using qpack.) The two admission regimes are one policy: a fill is
+     * just a swap whose victim is an empty (zero-score) slot, so it inserts with evict_upto = base_offset and no shadow. */
+    if (can_index) {
+        int has_name_ref = static_index >= 0 || dynamic_index >= 0;
         size_t candidate_size = entry_size(name, value);
-        if (can_index && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
-            candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
+        /* fill-till-full: admit on first sight while both a byte budget and an entry slot remain. A short value is inserted only
+         * when no name reference is available: a slot is worth spending only to avoid re-emitting something costly on repeats, and a
+         * name reference already makes a short value cheap to repeat (whereas with no name reference, inserting also saves
+         * re-emitting the name). A short value skipped here is still recorded as a shadow by the refinement below, so a repeat before
+         * the table fills can promote it. (Etag is excluded above as it rarely repeats; Content-Length and Age may share that
+         * property but are mostly covered by the `value.len` gate.) */
+        if ((!has_name_ref || value.len >= 8) && candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
             (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) < encoder_max_entries(ctx->qpack)) {
-            /* emit instruction to decoder stream */
-            size_t bytes_saved;
-            if (static_index >= 0) {
-                bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
-            } else if (dynamic_index >= 0) {
-                bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
-                                                       qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
-            } else {
-                bytes_saved = emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
-            }
-            /* register the entry to table */
-            struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, NULL, bytes_saved);
-            encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset);
-            /* emit header field to headers block */
-            flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
+            emit_insert_and_reference(ctx, static_index, dynamic_index, name, value, NULL, ctx->qpack->table.base_offset);
             return;
         }
-        if (can_index && candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
-            /* record the observation in the shadow cache */
+        /* refinement: record the observation and promote the pair once it has gathered enough repeat-evidence -- when the table is
+         * full that means outscoring a resident it may evict, otherwise (e.g. a short value the fill above skipped while there was
+         * still room) it simply takes the remaining space. The cost model tracks only name-value pairs, so a frequent name always
+         * paired with a different value is never promoted (TODO FIX). */
+        if (candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
             struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_get(ctx->qpack, hashcode);
             shadow->freq += ctx->qpack->freq_add;
-            /* Calculate the cost and see if we should promote the name-value pair to the dynamic table. As the cost model tracks
-             * only name-value pairs, we never promote a frequently used name that is always accompanied by a different value (TODO
-             * FIX). */
-            size_t bytes_saved = calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0);
+            size_t bytes_saved = calc_bytes_saved(ctx->pool, name, value, has_name_ref);
             double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
             int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx), evict_upto;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
                 (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
-                /* promote; dynamic index is looked up once more, because the reference might have become stale due to
-                 * `make_room_for_swap` evicting or reinserting the item. */
-                int dynamic_is_exact;
-                if (static_index >= 0) {
-                    emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
-                } else if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, 0, &dynamic_is_exact)) >= 0) {
-                    assert(!dynamic_is_exact);
-                    emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
-                                             qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
-                } else {
-                    emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+                /* re-resolve the dynamic name reference, as make_room_for_swap may have evicted or relocated it */
+                if (static_index < 0) {
+                    int dynamic_is_exact;
+                    dynamic_index = lookup_dynamic(ctx->qpack, name, value, 0, &dynamic_is_exact);
+                    assert(dynamic_index < 0 || !dynamic_is_exact);
                 }
-                struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, shadow, bytes_saved);
-                encoder_insert(ctx->qpack, added, evict_upto);
-                flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
+                emit_insert_and_reference(ctx, static_index, dynamic_index, name, value, shadow, evict_upto);
                 return;
             }
         }
-    } else {
-        dynamic_index = -1;
     }
 
     if (static_index >= 0) {
