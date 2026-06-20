@@ -1371,8 +1371,9 @@ static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
 
     /* the lookup_dynamic walk that precedes every swap attempt leaves the cached minimum valid */
     assert(ctx->qpack->table_min_score >= 0);
-    if (ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size &&
-        candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
+    int needs_room = ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size ||
+                     (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) >= encoder_max_entries(ctx->qpack);
+    if (needs_room && candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
         return 0;
     if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) == 0)
         return 0;
