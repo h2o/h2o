@@ -1666,6 +1666,8 @@ static const size_t PREFIX_CAPACITY =
 static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
                             int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_qpack_section_stats_t *stats_updated)
 {
+    if (qpack != NULL)
+        qpack->freq_add *= QPACK_FREQ_DECAY_FACTOR;
     ctx->qpack = qpack;
     ctx->pool = pool;
     ctx->stream_id = stream_id;
@@ -1781,8 +1783,6 @@ h2o_iovec_t h2o_qpack_flatten_response(h2o_qpack_encoder_t *_qpack, h2o_mem_pool
 {
     struct st_h2o_qpack_flatten_context_t ctx;
 
-    if (_qpack != NULL)
-        _qpack->freq_add *= QPACK_FREQ_DECAY_FACTOR;
     prepare_flatten(&ctx, _qpack, _pool, _stream_id, _encoder_buf, stats_updated);
 
     /* pseudo headers */
