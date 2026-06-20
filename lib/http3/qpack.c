@@ -1589,10 +1589,13 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }
-        /* Fill the dynamic table while there is room. Short values are inserted only when no name reference is available, because
-         * if a name reference exists, they are encoded compactly; skipped short values are still recorded as shadows below, so
-         * repeated ones can earn a dynamic-table entry. Etag values are never added as they are very unlikely to repeat;
-         * Content-Length and Age might share the same property but they are mostly covered by the `value.len` gate. */
+        /* Fill the dynamic table while there is room.
+         * - Short values are inserted only when no name reference is available, because if a name reference exists, they are
+         *   encoded compactly.
+         * - When refine is on, skipped short values are still recorded as shadows below; if the name-value pair repeats before the
+         *   table becomes full, the pair is inserted.
+         * - Etag values are never added as they are very unlikely to repeat; Content-Length and Age might share the same property
+         *   but they are mostly covered by the `value.len` gate. */
         size_t candidate_size = entry_size(name, value);
         if (can_index && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
             candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
@@ -1615,18 +1618,20 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             return;
         }
         if (can_index && candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
+            /* record the observation in the shadow cache */
             struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_get(ctx->qpack, hashcode);
             shadow->freq += ctx->qpack->freq_add;
-
+            /* Calculate the cost and see if we should promote the name-value pair to the dynamic table. As the cost model tracks
+             * only name-value pairs, we never promote a frequently used name that is always accompanied by a different value (TODO
+             * FIX). */
             size_t bytes_saved = calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0);
             double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
-            int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx);
-
-            int64_t evict_upto;
+            int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx), evict_upto;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
                 (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
+                /* promote; dynamic index is looked up once more, because the reference might have become stale due to
+                 * `make_room_for_swap` evicting or reinserting the item. */
                 int dynamic_is_exact;
-
                 if (static_index >= 0) {
                     emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
                 } else if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, 0, &dynamic_is_exact)) >= 0) {
