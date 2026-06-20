@@ -1025,6 +1025,27 @@ static void flatten_response_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool,
     flatten_response_headers(enc, pool, stream_id, enc_stream, headers.entries, headers.size);
 }
 
+static void flatten_request_headers(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
+                                    h2o_byte_vector_t *enc_stream, h2o_header_t *headers, size_t num_headers)
+{
+    h2o_qpack_section_stats_t stats = {0};
+    h2o_iovec_t headers_frame =
+        h2o_qpack_flatten_request(enc, pool, stream_id, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
+                                  h2o_iovec_init(H2O_STRLIT("x")), h2o_iovec_init(H2O_STRLIT("/")),
+                                  h2o_iovec_init(NULL, 0), headers, num_headers, h2o_iovec_init(NULL, 0), &stats);
+
+    assert(headers_frame.len != 0);
+}
+
+static void flatten_request_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
+                                h2o_byte_vector_t *enc_stream, const char *name, const char *value)
+{
+    h2o_headers_t headers = {NULL};
+
+    h2o_add_header_by_str(pool, &headers, name, strlen(name), 0, NULL, value, strlen(value));
+    flatten_request_headers(enc, pool, stream_id, enc_stream, headers.entries, headers.size);
+}
+
 static int qpack_table_contains(h2o_qpack_encoder_t *enc, const char *name, const char *value)
 {
     for (struct st_h2o_qpack_header_t **slot = enc->table.first; slot != enc->table.last; ++slot)
@@ -1123,6 +1144,53 @@ static void test_response_swap(void)
     ok(qpack_table_contains(enc, "x-a", a_value));
     ok(!qpack_table_contains(enc, "x-b", b_value));
     ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_request_shadow_evidence_ages(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
+    static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    int64_t stream_id = 0;
+    flatten_request_headers(enc, &pool, stream_id, &enc_stream, headers.entries, headers.size);
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+    ok(!qpack_table_contains(enc, "x-c", c_value));
+    ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
+
+    for (stream_id += 4; stream_id != 24; stream_id += 4) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+
+        flatten_request_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        ok(!qpack_table_contains(enc, "x-c", c_value));
+    }
+
+    for (; stream_id != 2080; stream_id += 4)
+        flatten_request_headers(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, NULL, 0);
+
+    ack_encoder_section(enc, 0);
+    {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_request_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        if (enc->inflight.size != inflight_size)
+            ack_encoder_section(enc, stream_id);
+    }
+    ok(!qpack_table_contains(enc, "x-c", c_value));
 
     h2o_mem_clear_pool(&pool);
     h2o_qpack_destroy_encoder(enc);
@@ -1315,6 +1383,7 @@ void test_lib__http3_qpack(void)
     subtest("response-dont-compress", test_response_dont_compress);
     subtest("shadow-cache", test_shadow_cache);
     subtest("response-swap", test_response_swap);
+    subtest("request-shadow-evidence-ages", test_request_shadow_evidence_ages);
     subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
