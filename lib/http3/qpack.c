@@ -1255,6 +1255,12 @@ Exit:
     return (int)ret;
 }
 
+/**
+ * Estimates the bytes being saved by using a reference. This is an approximation. It does not take into consideration the overhead
+ * of QPACK instructions. Or that the benefit could vary if the added entry becomes the sole entry to retain the name in the QPACK
+ * table; it just takes a boolean indicating if there is already a name ref. Similarly, it does not calculate the Huffman-coded
+ * length of the name, assuming the impact is smaller than the compressed value length.
+ */
 static size_t calc_bytes_saved(h2o_mem_pool_t *pool, const h2o_iovec_t *name, h2o_iovec_t value, int has_name_ref)
 {
     size_t value_len = value.len, hufflen;
@@ -1441,7 +1447,7 @@ static void flatten_int(h2o_byte_vector_t *buf, int64_t value, unsigned prefix_b
     buf->size = p - buf->entries;
 }
 
-static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, unsigned prefix_bits, int dont_compress)
+static size_t flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, unsigned prefix_bits, int dont_compress)
 {
     size_t hufflen;
 
@@ -1451,6 +1457,7 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
         flatten_int(buf, len, prefix_bits);
         memcpy(buf->entries + buf->size, src, len);
         buf->size += len;
+        return len;
     } else {
         /* build huffman header and adjust the location (if necessary) */
         uint8_t tmpbuf[H2O_HPACK_ENCODE_INT_MAX_LENGTH], *p = tmpbuf;
@@ -1464,27 +1471,36 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
             memcpy(buf->entries + buf->size, tmpbuf, p - tmpbuf);
         }
         buf->size += p - tmpbuf + hufflen;
+        return hufflen;
     }
 }
 
-static void emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int is_static,
-                                     int64_t index, h2o_iovec_t value)
+/**
+ * Returns the same value as calc_bytes_saved for the field being emitted.
+ */
+static size_t emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int is_static,
+                                       int64_t index, h2o_iovec_t value)
 {
     h2o_vector_reserve(pool, buf, buf->size + (H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2) + value.len);
     buf->entries[buf->size] = 0x80 | (is_static ? 0x40 : 0);
     flatten_int(buf, index, 6);
-    flatten_string(buf, value.base, value.len, 7, 0);
+    size_t bytes_saved = flatten_string(buf, value.base, value.len, 7, 0);
     ++qpack->stats.num_instructions.insert_with_name_reference;
+    return bytes_saved;
 }
 
-static void emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
-                                        const h2o_iovec_t *name, h2o_iovec_t value)
+/**
+ * Returns the same value as calc_bytes_saved for the field being emitted.
+ */
+static size_t emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
+                                          const h2o_iovec_t *name, h2o_iovec_t value)
 {
     h2o_vector_reserve(pool, buf, buf->size + (H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2) + name->len + value.len);
     buf->entries[buf->size] = 0x40;
     flatten_string(buf, name->base, name->len, 5, 0);
-    flatten_string(buf, value.base, value.len, 7, 0);
+    size_t bytes_saved = name->len + flatten_string(buf, value.base, value.len, 7, 0);
     ++qpack->stats.num_instructions.insert_without_name_reference;
+    return bytes_saved;
 }
 
 static void emit_duplicate(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index)
@@ -1601,17 +1617,17 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
             (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) < encoder_max_entries(ctx->qpack)) {
             /* emit instruction to decoder stream */
+            size_t bytes_saved;
             if (static_index >= 0) {
-                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
+                bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);
             } else if (dynamic_index >= 0) {
-                emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
-                                         qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
+                bytes_saved = emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 0,
+                                                       qpack_table_total_inserts(&ctx->qpack->table) - 1 - dynamic_index, value);
             } else {
-                emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
+                bytes_saved = emit_insert_without_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, name, value);
             }
             /* register the entry to table */
-            struct st_h2o_qpack_header_t *added = create_entry(
-                ctx->qpack, name, value, NULL, calc_bytes_saved(ctx->pool, name, value, static_index >= 0 || dynamic_index >= 0));
+            struct st_h2o_qpack_header_t *added = create_entry(ctx->qpack, name, value, NULL, bytes_saved);
             encoder_insert(ctx->qpack, added, ctx->qpack->table.base_offset);
             /* emit header field to headers block */
             flatten_dynamic_indexed(ctx, qpack_table_total_inserts(&ctx->qpack->table) - 1);
