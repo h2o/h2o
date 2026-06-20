@@ -199,9 +199,8 @@ static void test_response_dont_compress(void)
         h2o_add_header(&pool, &headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("sid=mini"));
         h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=mini"));
 
-        h2o_iovec_t headers_frame =
-            h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
-                                       h2o_iovec_init(NULL, 0), &stats, NULL);
+        h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                               SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
         h2o_iovec_t payload = get_payload(headers_frame.base, headers_frame.len);
         const uint8_t *p = (const uint8_t *)payload.base, *end = p + payload.len;
         int64_t v;
@@ -238,9 +237,8 @@ static void test_response_dont_compress(void)
         h2o_qpack_section_stats_t stats = {0};
         h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=0123456789abcdef0123456789"));
 
-        h2o_iovec_t headers_frame =
-            h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL, SIZE_MAX,
-                                       h2o_iovec_init(NULL, 0), &stats, NULL);
+        h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                               SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
         ok(headers_frame.len != 0);
         ok(enc_stream.size != 0);
         ok(enc->table.last - enc->table.first == 1);
@@ -951,8 +949,10 @@ static void test_decode_edge_cases(void)
         static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
         static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
         static const uint8_t inserts[] = {
-            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
-            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
         };
         const uint8_t *src = input1;
         uint64_t blocked_ref;
@@ -1010,15 +1010,14 @@ static void flatten_response_headers(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *p
                                      h2o_byte_vector_t *enc_stream, h2o_header_t *headers, size_t num_headers)
 {
     h2o_qpack_section_stats_t stats = {0};
-    h2o_iovec_t headers_frame =
-        h2o_qpack_flatten_response(enc, pool, stream_id, enc_stream, 200, headers, num_headers, NULL, SIZE_MAX,
-                                   h2o_iovec_init(NULL, 0), &stats, NULL);
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, pool, stream_id, enc_stream, 200, headers, num_headers, NULL,
+                                                           SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
 
     ok(headers_frame.len != 0);
 }
 
-static void flatten_response_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
-                                 h2o_byte_vector_t *enc_stream, const char *name, const char *value)
+static void flatten_response_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *enc_stream,
+                                 const char *name, const char *value)
 {
     h2o_headers_t headers = {NULL};
 
@@ -1092,6 +1091,8 @@ static void test_response_swap(void)
     ok(qpack_table_contains(enc, "x-a", a_value));
     ok(qpack_table_contains(enc, "x-b", b_value));
     ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == 2);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
     ack_encoder_section(enc, 1);
 
     for (int64_t stream_id = 2; stream_id != 32; ++stream_id) {
@@ -1104,6 +1105,7 @@ static void test_response_swap(void)
     }
 
     int saw_duplicate = 0;
+    uint64_t inserts_before_swap = h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference;
     for (int64_t stream_id = 32; stream_id != 40 && !qpack_table_contains(enc, "x-c", c_value); ++stream_id) {
         h2o_byte_vector_t one_enc_stream = {NULL};
         size_t inflight_size = enc->inflight.size;
@@ -1116,6 +1118,8 @@ static void test_response_swap(void)
     }
 
     ok(saw_duplicate);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate != 0);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == inserts_before_swap + 1);
     ok(qpack_table_contains(enc, "x-a", a_value));
     ok(!qpack_table_contains(enc, "x-b", b_value));
     ok(qpack_table_contains(enc, "x-c", c_value));

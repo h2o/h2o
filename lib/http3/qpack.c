@@ -133,6 +133,7 @@ struct st_h2o_qpack_decoder_t {
      *
      */
     uint64_t max_blocked;
+    h2o_qpack_stats_t stats;
 };
 
 struct st_h2o_qpack_encoder_t {
@@ -179,6 +180,7 @@ struct st_h2o_qpack_encoder_t {
      * eviction-safety check need not rescan `inflight`. `INT64_MAX` when nothing is in flight.
      */
     int64_t inflight_smallest_ref;
+    h2o_qpack_stats_t stats;
 };
 
 struct st_h2o_qpack_flatten_context_t {
@@ -320,6 +322,7 @@ h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64
     qpack->max_entries = header_table_size / 32;
     qpack->total_inserts = 0;
     qpack->max_blocked = max_blocked;
+    qpack->stats = (h2o_qpack_stats_t){0};
     header_table_init(&qpack->table, qpack->header_table_size);
 
     return qpack;
@@ -598,6 +601,11 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
     return 0;
 }
 
+const h2o_qpack_stats_t *h2o_qpack_get_decoder_stats(h2o_qpack_decoder_t *qpack)
+{
+    return &qpack->stats;
+}
+
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **_src, const uint8_t *src_end,
                                    const char **err_desc)
 {
@@ -621,6 +629,8 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             if (!(src + value_len <= src_end))
                 goto Exit;
             ret = insert_with_name_reference(qpack, name_is_static, name_index, value_is_huff, src, value_len, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.insert_with_name_reference;
             src += value_len;
         } break;
         case 2:
@@ -639,6 +649,8 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             if (!(src + value_len <= src_end))
                 goto Exit;
             ret = insert_without_name_reference(qpack, name_is_huff, name, name_len, value_is_huff, src, value_len, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.insert_without_name_reference;
             src += value_len;
         } break;
         case 0: /* duplicate */ {
@@ -646,12 +658,16 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             if ((ret = decode_int(&index, &src, src_end, 5)) != 0)
                 goto Exit;
             ret = duplicate(qpack, index, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.duplicate;
         } break;
         case 1: /* dynamic table size update */ {
             int64_t max_size;
             if ((ret = decode_int(&max_size, &src, src_end, 5)) != 0)
                 goto Exit;
             ret = dynamic_table_size_update(qpack, max_size, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.dynamic_table_size_update;
         } break;
         }
         *_src = src;
@@ -674,6 +690,7 @@ size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *ou
     *dst = 0;
     dst = h2o_hpack_encode_int(dst, qpack->insert_count, 6);
     qpack->insert_count = 0;
+    ++qpack->stats.num_instructions.insert_count_increment;
 
     return dst - outbuf;
 }
@@ -681,6 +698,8 @@ size_t h2o_qpack_decoder_send_state_sync(h2o_qpack_decoder_t *qpack, uint8_t *ou
 size_t h2o_qpack_decoder_send_stream_cancel(h2o_qpack_decoder_t *qpack, uint8_t *outbuf, int64_t stream_id)
 {
     outbuf[0] = 0x40;
+    if (qpack != NULL)
+        ++qpack->stats.num_instructions.stream_cancellation;
     return h2o_hpack_encode_int(outbuf, stream_id, 6) - outbuf;
 }
 
@@ -827,6 +846,7 @@ static size_t send_header_ack(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_de
     if (ctx->req_insert_count == 0)
         return 0;
     outbuf[0] = 0x80;
+    ++qpack->stats.num_instructions.section_acknowledgement;
     return h2o_hpack_encode_int(outbuf, stream_id, 7) - outbuf;
 }
 
@@ -1078,7 +1098,13 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
     qpack->freq_add = qpack->shadow_cache.sets != NULL ? FLT_MIN : QPACK_FREQ_ADD_CAP;
     qpack->table_min_score = -1; /* invalid; recomputed lazily by lookup_dynamic */
     qpack->inflight_smallest_ref = INT64_MAX;
+    qpack->stats = (h2o_qpack_stats_t){0};
     return qpack;
+}
+
+const h2o_qpack_stats_t *h2o_qpack_get_encoder_stats(h2o_qpack_encoder_t *qpack)
+{
+    return &qpack->stats;
 }
 
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack)
@@ -1187,18 +1213,24 @@ int h2o_qpack_encoder_handle_input(h2o_qpack_encoder_t *qpack, const uint8_t **_
             if ((ret = decode_int(&insert_count, &src, src_end, 6)) != 0)
                 goto Exit;
             ret = handle_table_state_synchronize(qpack, insert_count, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.insert_count_increment;
         } break;
         default: /* header ack */ {
             int64_t stream_id;
             if ((ret = decode_int(&stream_id, &src, src_end, 7)) != 0)
                 goto Exit;
             ret = handle_header_ack(qpack, stream_id, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.section_acknowledgement;
         } break;
         case 1: /* stream cancellation */ {
             int64_t stream_id;
             if ((ret = decode_int(&stream_id, &src, src_end, 6)) != 0)
                 goto Exit;
             ret = handle_stream_cancellation(qpack, stream_id, err_desc);
+            if (ret == 0)
+                ++qpack->stats.num_instructions.stream_cancellation;
         } break;
         }
         *_src = src;
@@ -1266,7 +1298,7 @@ static struct st_h2o_qpack_header_t *clone_entry(h2o_qpack_encoder_t *qpack, str
                           src->bytes_saved);
 }
 
-static void emit_duplicate(h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index);
+static void emit_duplicate(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index);
 
 static int64_t calc_smallest_blocking_ref(struct st_h2o_qpack_flatten_context_t *ctx)
 {
@@ -1285,7 +1317,7 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
     struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
     /* The frequency travels with the clone; the original is evicted mechanically (without demotion) as the prefix is consumed. */
-    emit_duplicate(ctx->pool, ctx->encoder_buf, relative_index);
+    emit_duplicate(ctx->qpack, ctx->pool, ctx->encoder_buf, relative_index);
     encoder_insert(ctx->qpack, clone, entry->abs_index + 1);
 }
 
@@ -1422,6 +1454,7 @@ static void emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t 
     buf->entries[buf->size] = 0x80 | (is_static ? 0x40 : 0);
     flatten_int(buf, index, 6);
     flatten_string(buf, value.base, value.len, 7, 0);
+    ++qpack->stats.num_instructions.insert_with_name_reference;
 }
 
 static void emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
@@ -1431,13 +1464,15 @@ static void emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool
     buf->entries[buf->size] = 0x40;
     flatten_string(buf, name->base, name->len, 5, 0);
     flatten_string(buf, value.base, value.len, 7, 0);
+    ++qpack->stats.num_instructions.insert_without_name_reference;
 }
 
-static void emit_duplicate(h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index)
+static void emit_duplicate(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int64_t index)
 {
     h2o_vector_reserve(pool, buf, buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
     buf->entries[buf->size] = 0;
     flatten_int(buf, index, 5);
+    ++qpack->stats.num_instructions.duplicate;
 }
 
 static void flatten_static_indexed(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index)

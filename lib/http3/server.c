@@ -812,6 +812,47 @@ static h2o_iovec_t log_qpack_blocked(h2o_req_t *_req)
     return stream->qpack_blocked_ever ? h2o_iovec_init(H2O_STRLIT("1")) : h2o_iovec_init(H2O_STRLIT("0"));
 }
 
+static h2o_iovec_t log_qpack_stats(h2o_req_t *req, const h2o_qpack_stats_t *stats)
+{
+#define QPACK_STATS_FMT                                                                                                            \
+    "num-instructions.insert-with-name-reference=%" PRIu64 ","                                                                     \
+    "num-instructions.insert-without-name-reference=%" PRIu64 ","                                                                  \
+    "num-instructions.duplicate=%" PRIu64 ","                                                                                     \
+    "num-instructions.dynamic-table-size-update=%" PRIu64 ","                                                                     \
+    "num-instructions.section-acknowledgement=%" PRIu64 ","                                                                       \
+    "num-instructions.stream-cancellation=%" PRIu64 ","                                                                           \
+    "num-instructions.insert-count-increment=%" PRIu64
+#define QPACK_STATS_FIELDS                                                                                                         \
+    stats->num_instructions.insert_with_name_reference,                                                                            \
+    stats->num_instructions.insert_without_name_reference, stats->num_instructions.duplicate,                                      \
+    stats->num_instructions.dynamic_table_size_update, stats->num_instructions.section_acknowledgement,                            \
+    stats->num_instructions.stream_cancellation, stats->num_instructions.insert_count_increment
+
+    const size_t bufsize =
+        sizeof(QPACK_STATS_FMT) +
+        PTLS_ELEMENTSOF(((uint64_t[]){QPACK_STATS_FIELDS})) * (sizeof(H2O_UINT64_LONGEST_STR) - sizeof("%" PRIu64));
+    char *buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
+    int len = sprintf(buf, QPACK_STATS_FMT, QPACK_STATS_FIELDS);
+    assert(len > 0 && (size_t)len < bufsize);
+    return h2o_iovec_init(buf, len);
+
+#undef QPACK_STATS_FIELDS
+#undef QPACK_STATS_FMT
+}
+
+static h2o_iovec_t log_qpack_encoder_stats(h2o_req_t *req)
+{
+    static const h2o_qpack_stats_t zero = {0};
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    return log_qpack_stats(req, conn->h3.qpack.enc != NULL ? h2o_qpack_get_encoder_stats(conn->h3.qpack.enc) : &zero);
+}
+
+static h2o_iovec_t log_qpack_decoder_stats(h2o_req_t *req)
+{
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+    return log_qpack_stats(req, h2o_qpack_get_decoder_stats(conn->h3.qpack.dec));
+}
+
 static h2o_iovec_t log_quic_stats(h2o_req_t *req)
 {
 #define PUSH_FIELD(field, name)                                                                                                    \
@@ -1541,8 +1582,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
                                        &stream->req.content_length, &expect, NULL /* TODO cache-digests */, &datagram_flow_id_field,
-                                       conn->num_qpack_blocked, &stream->qpack_blocked_ref, &stream->stats.req.qpack, header_ack, &header_ack_len, frame.payload, frame.length,
-                                       err_desc)) != 0 &&
+                                       conn->num_qpack_blocked, &stream->qpack_blocked_ref, &stream->stats.req.qpack, header_ack,
+                                       &header_ack_len, frame.payload, frame.length, err_desc)) != 0 &&
         ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
         return ret;
     }
@@ -2377,6 +2418,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                     .quic_stats = log_quic_stats,
                     .quic_version = log_quic_version,
                     .qpack_blocked = log_qpack_blocked,
+                    .qpack_encoder_stats = log_qpack_encoder_stats,
+                    .qpack_decoder_stats = log_qpack_decoder_stats,
                     .request_stream_bytes = log_request_stream_bytes,
                     .response_stream_bytes = log_response_stream_bytes,
                 },
