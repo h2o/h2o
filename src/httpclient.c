@@ -87,7 +87,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
-    .qpack = {.encoder_table_capacity = 8192, .refine_after_full = 1},
+    .qpack = {.encoder = {.table_capacity = 8192, .refine_after_full = 1}},
     .max_frame_payload_size = 16384,
 };
 static quicly_cid_plaintext_t h3_next_cid;
@@ -1039,14 +1039,14 @@ int main(int argc, char **argv)
             h3ctx.quic.enable_ratio.ecn = 0;
             break;
         case OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY:
-            if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder_table_capacity) != 1) {
+            if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder.table_capacity) != 1) {
                 fprintf(stderr, "--http3-qpack-encoder-table-capacity must be a non-negative integer\n");
                 exit(EXIT_FAILURE);
             }
             break;
         case OPT_HTTP3_QPACK_ENCODER_REFINE:
-            if (sscanf(optarg, "%d", &h3ctx.qpack.refine_after_full) != 1 ||
-                (h3ctx.qpack.refine_after_full != 0 && h3ctx.qpack.refine_after_full != 1)) {
+            if (sscanf(optarg, "%d", &h3ctx.qpack.encoder.refine_after_full) != 1 ||
+                (h3ctx.qpack.encoder.refine_after_full != 0 && h3ctx.qpack.encoder.refine_after_full != 1)) {
                 fprintf(stderr, "--http3-qpack-encoder-refine must be 0 or 1\n");
                 exit(EXIT_FAILURE);
             }

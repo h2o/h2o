@@ -2635,8 +2635,10 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack =
-        (h2o_http3_qpack_context_t){8192, 16384, 1}; /* default: 8KB encoder table, 16KB decoder table, encoder refinement on */
+    listener->quic.qpack = (h2o_http3_qpack_context_t){
+        .encoder = {.table_capacity = 8192, .refine_after_full = 1},
+        .decoder = {.table_capacity = 16384},
+    };
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
@@ -3220,19 +3222,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     }
                     if (qpack_encoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
-                                                   &listener->quic.qpack.encoder_table_capacity) != 0)
+                                                   &listener->quic.qpack.encoder.table_capacity) != 0)
                             return -1;
                     }
                     if (qpack_decoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
-                                                   &listener->quic.qpack.decoder_table_capacity) != 0)
+                                                   &listener->quic.qpack.decoder.table_capacity) != 0)
                             return -1;
                     }
                     if (qpack_encoder_refine != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *qpack_encoder_refine, "OFF,ON");
                         if (on == -1)
                             return -1;
-                        listener->quic.qpack.refine_after_full = (int)on;
+                        listener->quic.qpack.encoder.refine_after_full = (int)on;
                     }
                     if (max_streams_bidi != NULL) {
                         if (h2o_configurator_scanf(cmd, *max_streams_bidi, "%" SCNu64,
