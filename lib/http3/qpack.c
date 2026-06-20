@@ -511,11 +511,24 @@ static void encoder_evict_one(h2o_qpack_encoder_t *qpack)
     ++qpack->table.base_offset;
 }
 
+/* Upper bound on the number of resident dynamic-table entries, derived from the byte capacity (4K->32, 8K->64). Bounds the
+ * per-field table walk in `lookup_dynamic` and keeps the encoder stream small (fewer inserts -> less HoLB risk). When h2o
+ * proxies a third-party origin, the response headers being encoded are outside our control, so this also caps the per-field
+ * cost a malicious or compromised origin can impose by emitting many small entries. Operators who raise the capacity get a
+ * proportionally larger table (and walk) at their own cost. */
+static size_t encoder_max_entries(const h2o_qpack_encoder_t *qpack)
+{
+    size_t max_entries = qpack->table.max_size / 128;
+    return max_entries > 32 ? max_entries : 32;
+}
+
 static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_header_t *added, int64_t evict_upto)
 {
-    size_t delta = header_entry_size(added);
+    size_t delta = header_entry_size(added), max_entries = encoder_max_entries(qpack);
 
-    while (qpack->table.first != qpack->table.last && qpack->table.num_bytes + delta > qpack->table.max_size) {
+    while (qpack->table.first != qpack->table.last &&
+           (qpack->table.num_bytes + delta > qpack->table.max_size ||
+            (size_t)(qpack->table.last - qpack->table.first) >= max_entries)) {
         assert((*qpack->table.first)->abs_index < evict_upto);
         encoder_evict_one(qpack);
     }
@@ -1325,22 +1338,28 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
                                   int64_t smallest_blocking_ref)
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
+    /* Also free an entry slot, not just bytes: the max-entries limit can bind before the byte capacity does. */
+    size_t max_entries = encoder_max_entries(ctx->qpack), num_entries = ctx->qpack->table.last - ctx->qpack->table.first;
+    size_t avail_slots = max_entries > num_entries ? max_entries - num_entries : 0, need_slots = 1;
     int64_t evict_upto = ctx->qpack->table.base_offset;
 
-    for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first; available < needed && slot != ctx->qpack->table.last;
-         ++slot) {
+    for (struct st_h2o_qpack_header_t **slot = ctx->qpack->table.first;
+         (available < needed || avail_slots < need_slots) && slot != ctx->qpack->table.last; ++slot) {
         struct st_h2o_qpack_header_t *entry = *slot;
         size_t entry_size = header_entry_size(entry);
 
         if (entry->abs_index >= smallest_blocking_ref)
             return 0;
-        if (!candidate_beats_entry(candidate_score, entry))
+        if (!candidate_beats_entry(candidate_score, entry)) {
             needed += entry_size;
+            ++need_slots; /* a kept entry is re-added by Duplicate, so it consumes a slot too */
+        }
         available += entry_size;
+        ++avail_slots;
         evict_upto = entry->abs_index + 1;
     }
 
-    if (available < needed)
+    if (available < needed || avail_slots < need_slots)
         return 0;
     return evict_upto;
 }
@@ -1575,7 +1594,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
          * Content-Length and Age might share the same property but they are mostly covered by the `value.len` gate. */
         size_t candidate_size = entry_size(name, value);
         if (can_index && ((static_index < 0 && dynamic_index < 0) || value.len >= 8) &&
-            candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes) {
+            candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
+            (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) < encoder_max_entries(ctx->qpack)) {
             /* emit instruction to decoder stream */
             if (static_index >= 0) {
                 emit_insert_with_nameref(ctx->qpack, ctx->pool, ctx->encoder_buf, 1, static_index, value);

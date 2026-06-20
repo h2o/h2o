@@ -87,7 +87,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
-    .qpack = {.encoder_table_capacity = 4096, .refine_after_full = 1},
+    .qpack = {.encoder_table_capacity = 8192, .refine_after_full = 1},
     .max_frame_payload_size = 16384,
 };
 static quicly_cid_plaintext_t h3_next_cid;
