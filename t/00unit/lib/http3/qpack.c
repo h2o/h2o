@@ -812,8 +812,10 @@ static void test_decode_edge_cases(void)
         static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
         static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
         static const uint8_t inserts[] = {
-            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
-            0xc0, 0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
         };
         const uint8_t *src = input1;
         uint64_t blocked_ref;

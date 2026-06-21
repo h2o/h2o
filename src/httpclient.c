@@ -824,21 +824,21 @@ int main(int argc, char **argv)
         OPT_UPGRADE,
         OPT_INPUT,
     };
-    struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
-                                {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
-                                {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
-                                {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
-                                {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
-                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
-                                {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
-                                {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
-                                {"http3-qpack-encoder-table-capacity", required_argument, NULL,
-                                 OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY},
-                                {"upgrade", required_argument, NULL, OPT_UPGRADE},
-                                {"output", required_argument, NULL, 'o'},
-                                {"input", required_argument, NULL, OPT_INPUT},
-                                {"help", no_argument, NULL, 'h'},
-                                {NULL}};
+    struct option longopts[] = {
+        {"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
+        {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
+        {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
+        {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
+        {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+        {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+        {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
+        {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
+        {"http3-qpack-encoder-table-capacity", required_argument, NULL, OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY},
+        {"upgrade", required_argument, NULL, OPT_UPGRADE},
+        {"output", required_argument, NULL, 'o'},
+        {"input", required_argument, NULL, OPT_INPUT},
+        {"help", no_argument, NULL, 'h'},
+        {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
@@ -1109,8 +1109,8 @@ int main(int argc, char **argv)
         } else if (strcmp(req.method, "CONNECT") == 0) {
             if (ctx.protocol_selector.ratio.http2 < 0 ||
                 ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
-                fprintf(stderr,
-                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H3 using `-3 <ratio>`\n");
+                fprintf(stderr, "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 "
+                                "and H3 using `-3 <ratio>`\n");
                 exit(EXIT_FAILURE);
             }
         }
