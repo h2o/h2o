@@ -1255,24 +1255,6 @@ Exit:
     return (int)ret;
 }
 
-/**
- * Estimates the bytes being saved by using a reference. This is an approximation. It does not take into consideration the overhead
- * of QPACK instructions. Or that the benefit could vary if the added entry becomes the sole entry to retain the name in the QPACK
- * table; it just takes a boolean indicating if there is already a name ref. Similarly, it does not calculate the Huffman-coded
- * length of the name, assuming the impact is smaller than the compressed value length.
- */
-static size_t calc_bytes_saved(h2o_mem_pool_t *pool, const h2o_iovec_t *name, h2o_iovec_t value, int has_name_ref)
-{
-    size_t value_len = value.len, hufflen;
-
-    if (value.len != 0) {
-        uint8_t *huffbuf = h2o_mem_alloc_pool(pool, uint8_t, value.len);
-        if ((hufflen = h2o_hpack_encode_huffman(huffbuf, (const uint8_t *)value.base, value.len)) != SIZE_MAX)
-            value_len = hufflen;
-    }
-
-    return value_len + (has_name_ref ? 0 : name->len);
-}
 
 static struct st_h2o_qpack_header_t *do_alloc_entry(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value,
                                                     unsigned soft_errors, float freq, size_t bytes_saved)
@@ -1476,7 +1458,8 @@ static size_t flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len
 }
 
 /**
- * Returns the same value as calc_bytes_saved for the field being emitted.
+ * Returns the value's coded length -- the bytes a future reference to this entry would save (a name reference is present here, so
+ * the name is not part of that saving).
  */
 static size_t emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf, int is_static,
                                        int64_t index, h2o_iovec_t value)
@@ -1490,7 +1473,8 @@ static size_t emit_insert_with_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_
 }
 
 /**
- * Returns the same value as calc_bytes_saved for the field being emitted.
+ * Returns the value's coded length plus the literal name length -- the bytes a future reference to this entry would save (with no
+ * name reference, the name is re-emitted on every repeat, so it is part of that saving).
  */
 static size_t emit_insert_without_nameref(h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool, h2o_byte_vector_t *buf,
                                           const h2o_iovec_t *name, h2o_iovec_t value)
@@ -1541,15 +1525,25 @@ static void flatten_dynamic_indexed(struct st_h2o_qpack_flatten_context_t *ctx, 
     }
 }
 
-static void flatten_static_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index, h2o_iovec_t value, int dont_compress)
+/**
+ * Emits the field as a static name reference plus a literal value into the header block. Returns the value's coded length (see
+ * emit_literal).
+ */
+static size_t flatten_static_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int32_t index, h2o_iovec_t value,
+                                     int dont_compress)
 {
     h2o_vector_reserve(ctx->pool, &ctx->headers_buf, ctx->headers_buf.size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + value.len);
     ctx->headers_buf.entries[ctx->headers_buf.size] = 0x50 | (dont_compress ? 0x20 : 0);
     flatten_int(&ctx->headers_buf, index, 4);
-    flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
+    return flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-static void flatten_dynamic_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int64_t index, h2o_iovec_t value, int dont_compress)
+/**
+ * Emits the field as a dynamic name reference plus a literal value, recording the reference in the blocked-stream window. Returns
+ * the value's coded length (see emit_literal).
+ */
+static size_t flatten_dynamic_nameref(struct st_h2o_qpack_flatten_context_t *ctx, int64_t index, h2o_iovec_t value,
+                                      int dont_compress)
 {
     if (index > ctx->largest_ref)
         ctx->largest_ref = index;
@@ -1564,23 +1558,44 @@ static void flatten_dynamic_nameref(struct st_h2o_qpack_flatten_context_t *ctx, 
         ctx->headers_buf.entries[ctx->headers_buf.size] = dont_compress ? 0x8 : 0;
         flatten_int(&ctx->headers_buf, index - ctx->base_index - 1, 3);
     }
-    flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
+    return flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-static void flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_iovec_t *name, h2o_iovec_t value,
-                                    int dont_compress)
+/**
+ * Emits the field as a literal name plus a literal value into the header block. Returns the value's coded length only; emit_literal
+ * adds the name length to form the full score input.
+ */
+static size_t flatten_without_nameref(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_iovec_t *name, h2o_iovec_t value,
+                                      int dont_compress)
 {
     h2o_vector_reserve(ctx->pool, &ctx->headers_buf,
                        ctx->headers_buf.size + H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2 + name->len + value.len);
     ctx->headers_buf.entries[ctx->headers_buf.size] = 0x20 | (dont_compress ? 0x10 : 0);
     flatten_string(&ctx->headers_buf, name->base, name->len, 3, 0);
-    flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
+    return flatten_string(&ctx->headers_buf, value.base, value.len, 7, dont_compress);
 }
 
-/* Emits the insert of (name, value) onto the encoder stream, registers it in the dynamic table (inheriting the frequency carried by
+/**
+ * Emits the field as a literal (with a static, dynamic, or no name reference) into the header block. Returns the value's coded
+ * length plus -- when there is no name reference -- the literal name length, i.e. the bytes a future dynamic-table reference would
+ * save; that is the score input the refinement path needs, and equals what a corresponding insert would save.
+ */
+static size_t emit_literal(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int64_t dynamic_index,
+                           const h2o_iovec_t *name, h2o_iovec_t value, int dont_compress)
+{
+    if (static_index >= 0)
+        return flatten_static_nameref(ctx, static_index, value, dont_compress);
+    if (dynamic_index >= 0)
+        return flatten_dynamic_nameref(ctx, dynamic_index, value, dont_compress);
+    return flatten_without_nameref(ctx, name, value, dont_compress) + name->len;
+}
+
+/**
+ * Emits the insert of (name, value) onto the encoder stream, registers it in the dynamic table (inheriting the frequency carried by
  * `shadow`, or starting fresh when NULL) while evicting the table prefix below `evict_upto`, then references the new entry from the
  * header block. `dynamic_index` is the name-only dynamic match to reference, or < 0 to emit the name literally. The entry is scored
- * by the size it actually took on the wire. */
+ * by the size it actually took on the wire.
+ */
 static void emit_insert_and_reference(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int64_t dynamic_index,
                                       const h2o_iovec_t *name, h2o_iovec_t value, struct st_h2o_qpack_shadow_slot_t *shadow,
                                       int64_t evict_upto)
@@ -1655,30 +1670,35 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         if (candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
             struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_get(ctx->qpack, hashcode);
             shadow->freq += ctx->qpack->freq_add;
-            size_t bytes_saved = calc_bytes_saved(ctx->pool, name, value, has_name_ref);
-            double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
+            /* Emitting a literal is the common outcome, so emit it now and read the value's coded size straight off it for scoring,
+             * rather than Huffman-coding the value a second time just to measure it. The blocking-ref floor is captured before the
+             * emit, because the literal's own name reference must not constrain the swap that would replace it. */
             int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx), evict_upto;
+            struct {
+                size_t headers_size;
+                int64_t largest_ref, smallest_ref;
+            } backup = {ctx->headers_buf.size, ctx->largest_ref, ctx->smallest_ref};
+            size_t bytes_saved = emit_literal(ctx, static_index, dynamic_index, name, value, dont_compress);
+            double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
                 (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
-                /* re-resolve the dynamic name reference, as make_room_for_swap may have evicted or relocated it */
+                /* Promote instead: undo the literal just emitted, then insert and reference. make_room_for_swap may have evicted or
+                 * relocated the name reference, so re-resolve it. */
+                ctx->headers_buf.size = backup.headers_size;
+                ctx->largest_ref = backup.largest_ref;
+                ctx->smallest_ref = backup.smallest_ref;
                 if (static_index < 0) {
                     int dynamic_is_exact;
                     dynamic_index = lookup_dynamic(ctx->qpack, name, value, 0, &dynamic_is_exact);
                     assert(dynamic_index < 0 || !dynamic_is_exact);
                 }
                 emit_insert_and_reference(ctx, static_index, dynamic_index, name, value, shadow, evict_upto);
-                return;
             }
+            return;
         }
     }
 
-    if (static_index >= 0) {
-        flatten_static_nameref(ctx, static_index, value, dont_compress);
-    } else if (dynamic_index >= 0) {
-        flatten_dynamic_nameref(ctx, dynamic_index, value, dont_compress);
-    } else {
-        flatten_without_nameref(ctx, name, value, dont_compress);
-    }
+    emit_literal(ctx, static_index, dynamic_index, name, value, dont_compress);
 }
 
 static void flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, const h2o_header_t *header)
