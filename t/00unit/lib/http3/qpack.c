@@ -40,7 +40,7 @@ static h2o_iovec_t get_payload(const char *_src, size_t len)
 static void do_test_simple(int use_enc_stream)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
     h2o_mem_pool_t pool;
     h2o_byte_vector_t *enc_stream = NULL;
     h2o_iovec_t flattened;
@@ -120,6 +120,143 @@ static void test_simple(void)
 {
     do_test_simple(0);
     do_test_simple(1);
+}
+
+static void test_response_fill_until_full(void)
+{
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    h2o_qpack_section_stats_t stats = {0};
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/plain"));          /* static exact */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("text/fill-static"));    /* static name, insert */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_CONTENT_TYPE, NULL, H2O_STRLIT("x"));                   /* static name, too short */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("dynamic-seed")); /* new name */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("dynamic-next")); /* dynamic name, insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-dyn"), 0, NULL, H2O_STRLIT("y"));            /* dynamic name, too short */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-short"), 0, NULL, H2O_STRLIT("z"));          /* no name, short insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-long"), 0, NULL, H2O_STRLIT("longvalue"));   /* no name, long insert */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-long"), 0, NULL, H2O_STRLIT("longvalue"));   /* dynamic exact */
+    h2o_add_header(&pool, &headers, H2O_TOKEN_ETAG, NULL, H2O_STRLIT("\"etag-not-indexed\""));        /* excluded */
+
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                           SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
+    ok(headers_frame.len != 0);
+    ok(enc_stream.size != 0);
+    ok(enc->table.last - enc->table.first == 5);
+    ok((*enc->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis((*enc->table.first)->value, (*enc->table.first)->value_len, H2O_STRLIT("text/fill-static")));
+    ok(h2o_memis(enc->table.first[1]->name->base, enc->table.first[1]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(enc->table.first[1]->value, enc->table.first[1]->value_len, H2O_STRLIT("dynamic-seed")));
+    ok(h2o_memis(enc->table.first[2]->name->base, enc->table.first[2]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(enc->table.first[2]->value, enc->table.first[2]->value_len, H2O_STRLIT("dynamic-next")));
+    ok(h2o_memis(enc->table.first[3]->name->base, enc->table.first[3]->name->len, H2O_STRLIT("x-short")));
+    ok(h2o_memis(enc->table.first[3]->value, enc->table.first[3]->value_len, H2O_STRLIT("z")));
+    ok(h2o_memis(enc->table.first[4]->name->base, enc->table.first[4]->name->len, H2O_STRLIT("x-long")));
+    ok(h2o_memis(enc->table.first[4]->value, enc->table.first[4]->value_len, H2O_STRLIT("longvalue")));
+
+    uint64_t insert_count;
+    const uint8_t *p = enc_stream.entries;
+    int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc);
+    ok(ret == 0);
+    ok(insert_count == 5);
+    ok(p == enc_stream.entries + enc_stream.size);
+    ok(dec->table.last - dec->table.first == 5);
+    ok((*dec->table.first)->name == &H2O_TOKEN_CONTENT_TYPE->buf);
+    ok(h2o_memis((*dec->table.first)->value, (*dec->table.first)->value_len, H2O_STRLIT("text/fill-static")));
+    ok(h2o_memis(dec->table.first[1]->name->base, dec->table.first[1]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(dec->table.first[1]->value, dec->table.first[1]->value_len, H2O_STRLIT("dynamic-seed")));
+    ok(h2o_memis(dec->table.first[2]->name->base, dec->table.first[2]->name->len, H2O_STRLIT("x-dyn")));
+    ok(h2o_memis(dec->table.first[2]->value, dec->table.first[2]->value_len, H2O_STRLIT("dynamic-next")));
+    ok(h2o_memis(dec->table.first[3]->name->base, dec->table.first[3]->name->len, H2O_STRLIT("x-short")));
+    ok(h2o_memis(dec->table.first[3]->value, dec->table.first[3]->value_len, H2O_STRLIT("z")));
+    ok(h2o_memis(dec->table.first[4]->name->base, dec->table.first[4]->name->len, H2O_STRLIT("x-long")));
+    ok(h2o_memis(dec->table.first[4]->value, dec->table.first[4]->value_len, H2O_STRLIT("longvalue")));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_decoder(dec);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_dont_compress(void)
+{
+    h2o_mem_pool_t pool;
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    { /* short cookie / set-cookie use never-indexed, non-Huffman literals and are not inserted */
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_headers_t headers = {NULL};
+        h2o_byte_vector_t enc_stream = {NULL};
+        h2o_qpack_section_stats_t stats = {0};
+        h2o_add_header(&pool, &headers, H2O_TOKEN_COOKIE, NULL, H2O_STRLIT("sid=mini"));
+        h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=mini"));
+
+        h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                               SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
+        h2o_iovec_t payload = get_payload(headers_frame.base, headers_frame.len);
+        const uint8_t *p = (const uint8_t *)payload.base, *end = p + payload.len;
+        int64_t v;
+
+        ok(enc_stream.size == 0);
+        ok(enc->table.last == enc->table.first);
+        ok(decode_int(&v, &p, end, 8) == 0); /* required insert count */
+        ok(v == 0);
+        ok(decode_int(&v, &p, end, 7) == 0); /* delta base */
+        ok(v == 0);
+        ok((*p & 0xc0) == 0xc0); /* static :status */
+        ok(decode_int(&v, &p, end, 6) == 0);
+        for (size_t i = 0; i != 2; ++i) {
+            ok((*p & 0xf0) == 0x70); /* literal with static name reference, N bit set */
+            ok(decode_int(&v, &p, end, 4) == 0);
+            ok((*p & 0x80) == 0); /* non-Huffman value */
+            ok(decode_int(&v, &p, end, 7) == 0);
+            ok(v == strlen("sid=mini"));
+            p += v;
+        }
+        ok(p == end);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    h2o_mem_clear_pool(&pool);
+    h2o_mem_init_pool(&pool);
+
+    { /* long set-cookie follows the normal fill-till-full path */
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        h2o_headers_t headers = {NULL};
+        h2o_byte_vector_t enc_stream = {NULL};
+        h2o_qpack_section_stats_t stats = {0};
+        h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=0123456789abcdef0123456789"));
+
+        h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, &pool, 0, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                               SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
+        ok(headers_frame.len != 0);
+        ok(enc_stream.size != 0);
+        ok(enc->table.last - enc->table.first == 1);
+        ok((*enc->table.first)->name == &H2O_TOKEN_SET_COOKIE->buf);
+
+        uint64_t insert_count;
+        const uint8_t *p = enc_stream.entries;
+        int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc);
+        ok(ret == 0);
+        ok(insert_count == 1);
+        ok(dec->table.last - dec->table.first == 1);
+        ok((*dec->table.first)->name == &H2O_TOKEN_SET_COOKIE->buf);
+
+        h2o_qpack_destroy_decoder(dec);
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    h2o_mem_clear_pool(&pool);
 }
 
 static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, h2o_iovec_t input, int expected_ret,
@@ -837,13 +974,421 @@ static void test_decode_edge_cases(void)
     }
 }
 
+static size_t encode_section_ack(uint8_t *outbuf, int64_t stream_id)
+{
+    outbuf[0] = 0x80;
+    return h2o_hpack_encode_int(outbuf, stream_id, 7) - outbuf;
+}
+
+static int handle_decoder_stream_instruction(h2o_qpack_encoder_t *enc, const uint8_t *src, size_t len)
+{
+    const uint8_t *p = src;
+    const char *err_desc = NULL;
+    int ret = h2o_qpack_encoder_handle_input(enc, &p, src + len, &err_desc);
+    ok(err_desc == NULL);
+    ok(p == src + len);
+    return ret;
+}
+
+static void add_inflight(h2o_qpack_encoder_t *enc, int64_t stream_id, int64_t largest_ref)
+{
+    h2o_vector_reserve(NULL, &enc->inflight, enc->inflight.size + 1);
+    enc->inflight.entries[enc->inflight.size++] =
+        (struct st_h2o_qpack_blocked_streams_t){stream_id, largest_ref, largest_ref, {{1}}};
+    ++enc->num_blocked;
+}
+
+static void ack_encoder_section(h2o_qpack_encoder_t *enc, int64_t stream_id)
+{
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+    size_t len = encode_section_ack(buf, stream_id);
+
+    ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+}
+
+static void flatten_response_headers(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
+                                     h2o_byte_vector_t *enc_stream, h2o_header_t *headers, size_t num_headers)
+{
+    h2o_qpack_section_stats_t stats = {0};
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_response(enc, pool, stream_id, enc_stream, 200, headers, num_headers, NULL,
+                                                           SIZE_MAX, h2o_iovec_init(NULL, 0), &stats, NULL);
+
+    ok(headers_frame.len != 0);
+}
+
+static void flatten_response_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *enc_stream,
+                                 const char *name, const char *value)
+{
+    h2o_headers_t headers = {NULL};
+
+    h2o_add_header_by_str(pool, &headers, name, strlen(name), 0, NULL, value, strlen(value));
+    flatten_response_headers(enc, pool, stream_id, enc_stream, headers.entries, headers.size);
+}
+
+static void flatten_request_headers(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
+                                    h2o_byte_vector_t *enc_stream, h2o_header_t *headers, size_t num_headers)
+{
+    h2o_qpack_section_stats_t stats = {0};
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_request(
+        enc, pool, stream_id, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("x")),
+        h2o_iovec_init(H2O_STRLIT("/")), h2o_iovec_init(NULL, 0), headers, num_headers, h2o_iovec_init(NULL, 0), &stats);
+
+    assert(headers_frame.len != 0);
+}
+
+static void flatten_request_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *enc_stream,
+                                const char *name, const char *value)
+{
+    h2o_headers_t headers = {NULL};
+
+    h2o_add_header_by_str(pool, &headers, name, strlen(name), 0, NULL, value, strlen(value));
+    flatten_request_headers(enc, pool, stream_id, enc_stream, headers.entries, headers.size);
+}
+
+static int qpack_table_contains(h2o_qpack_encoder_t *enc, const char *name, const char *value)
+{
+    for (struct st_h2o_qpack_header_t **slot = enc->table.first; slot != enc->table.last; ++slot)
+        if (h2o_memis((*slot)->name->base, (*slot)->name->len, name, strlen(name)) &&
+            h2o_memis((*slot)->value, (*slot)->value_len, value, strlen(value)))
+            return 1;
+    return 0;
+}
+
+/**
+ * returns if `hashcode` has no slot in the shadow cache; unlike `shadow_cache_get` this never mutates the cache (which would
+ * otherwise allocate a slot on a miss)
+ */
+static int shadow_cache_is_missing(struct st_h2o_qpack_shadow_cache_t *cache, uint32_t hashcode)
+{
+    struct st_h2o_qpack_shadow_slot_t *set = cache->sets[shadow_cache_set_index(cache, hashcode)];
+    for (size_t i = 0; i != PTLS_ELEMENTSOF(cache->sets[0]); ++i)
+        if (set[i].freq != 0 && set[i].hashcode == hashcode)
+            return 0;
+    return 1;
+}
+
+static void test_shadow_cache(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 10, 1);
+
+    ok(enc->shadow_cache.sets != NULL);
+    ok(shadow_cache_num_sets(&enc->shadow_cache) == 1);
+
+    shadow_cache_get(enc, 1)->freq += 3;
+    shadow_cache_get(enc, 2)->freq += 2;
+    shadow_cache_get(enc, 3)->freq += 4;
+    shadow_cache_get(enc, 4)->freq += 5;
+    ok(shadow_cache_get(enc, 1)->freq == 3);
+    ok(shadow_cache_get(enc, 2)->freq == 2);
+
+    shadow_cache_get(enc, 5)->freq += 1;
+    ok(shadow_cache_is_missing(&enc->shadow_cache, 2));
+    ok(shadow_cache_get(enc, 5)->freq == 1);
+
+    shadow_cache_get(enc, 5)->freq += 6;
+    ok(shadow_cache_get(enc, 5)->freq == 7);
+
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_swap(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
+    static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    flatten_response_headers(enc, &pool, 1, &enc_stream, headers.entries, headers.size);
+    ok(enc->table.last - enc->table.first == 2);
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+    ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == 2);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+    ack_encoder_section(enc, 1);
+
+    for (int64_t stream_id = 2; stream_id != 32; ++stream_id) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-a", a_value);
+        ok(enc->inflight.size == inflight_size + 1);
+        ack_encoder_section(enc, stream_id);
+    }
+
+    int saw_duplicate = 0;
+    uint64_t inserts_before_swap = h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference;
+    for (int64_t stream_id = 32; stream_id != 40 && !qpack_table_contains(enc, "x-c", c_value); ++stream_id) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        if (one_enc_stream.size != 0 && (one_enc_stream.entries[0] & 0xe0) == 0)
+            saw_duplicate = 1;
+        if (enc->inflight.size != inflight_size)
+            ack_encoder_section(enc, stream_id);
+    }
+
+    ok(saw_duplicate);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate != 0);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == inserts_before_swap + 1);
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(!qpack_table_contains(enc, "x-b", b_value));
+    ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_request_shadow_evidence_ages(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
+    static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    int64_t stream_id = 0;
+    flatten_request_headers(enc, &pool, stream_id, &enc_stream, headers.entries, headers.size);
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+    ok(!qpack_table_contains(enc, "x-c", c_value));
+    ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
+
+    for (stream_id += 4; stream_id != 24; stream_id += 4) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+
+        flatten_request_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        ok(!qpack_table_contains(enc, "x-c", c_value));
+    }
+
+    for (; stream_id != 2080; stream_id += 4)
+        flatten_request_headers(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, NULL, 0);
+
+    ack_encoder_section(enc, 0);
+    {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_request_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        if (enc->inflight.size != inflight_size)
+            ack_encoder_section(enc, stream_id);
+    }
+    ok(!qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_swap_respects_inflight(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    h2o_byte_vector_t enc_stream = {NULL};
+    static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
+    static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    flatten_response_headers(enc, &pool, 1, &enc_stream, headers.entries, headers.size);
+    ok(enc->inflight.size == 1);
+
+    for (int64_t stream_id = 2; stream_id != 7; ++stream_id) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        ok(enc->inflight.size == inflight_size);
+    }
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+    ok(!qpack_table_contains(enc, "x-c", c_value));
+
+    ack_encoder_section(enc, 1);
+    for (int64_t stream_id = 7; stream_id != 12 && !qpack_table_contains(enc, "x-c", c_value); ++stream_id) {
+        h2o_byte_vector_t one_enc_stream = {NULL};
+        size_t inflight_size = enc->inflight.size;
+
+        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
+        if (enc->inflight.size != inflight_size)
+            ack_encoder_section(enc, stream_id);
+    }
+    ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_encoder_stream_input(void)
+{
+    note("section acknowledgement evicts the only inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 260, 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("section acknowledgement evicts last inflight entry without destroying the list");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries != NULL);
+        ok(enc->inflight.size == 1);
+        ok(enc->inflight.entries[0].stream_id == 4);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("section acknowledgement evicts non-last inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 1);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts the only inflight entry");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 260, 1);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts last inflight entry without destroying the list");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 260, 2);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries != NULL);
+        ok(enc->inflight.size == 1);
+        ok(enc->inflight.entries[0].stream_id == 4);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.entries == NULL);
+        ok(enc->inflight.size == 0);
+        ok(enc->inflight.capacity == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("stream cancellation evicts multiple non-last inflight entries");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t len;
+
+        add_inflight(enc, 4, 1);
+        add_inflight(enc, 4, 2);
+        add_inflight(enc, 260, 3);
+
+        len = h2o_qpack_decoder_send_stream_cancel(NULL, buf, 4);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 1);
+        ok(enc->num_blocked == 1);
+
+        len = encode_section_ack(buf, 260);
+        ok(handle_decoder_stream_instruction(enc, buf, len) == 0);
+        ok(enc->inflight.size == 0);
+        ok(enc->num_blocked == 0);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
+}
+
 void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
+    subtest("response-fill-until-full", test_response_fill_until_full);
+    subtest("response-dont-compress", test_response_dont_compress);
+    subtest("shadow-cache", test_shadow_cache);
+    subtest("response-swap", test_response_swap);
+    subtest("request-shadow-evidence-ages", test_request_shadow_evidence_ages);
+    subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
     subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
     subtest("decode-errors", test_decode_errors);
     subtest("decode-edge-cases", test_decode_edge_cases);
+    subtest("encoder-stream-input", test_encoder_stream_input);
 }

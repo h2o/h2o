@@ -323,6 +323,8 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
                     MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
                     MAP_EXT_TO_PROTO("http3.qpack-blocked", http3.qpack_blocked);
+                    MAP_EXT_TO_PROTO("http3.qpack.encoder-stats", http3.qpack_encoder_stats);
+                    MAP_EXT_TO_PROTO("http3.qpack.decoder-stats", http3.qpack_decoder_stats);
                     MAP_EXT_TO_PROTO("http3.request-stream-bytes", http3.request_stream_bytes);
                     MAP_EXT_TO_PROTO("http3.response-stream-bytes", http3.response_stream_bytes);
                     { /* not found */

@@ -856,13 +856,12 @@ static uint8_t *header_table_adjust_size(h2o_hpack_header_table_t *table, uint32
 }
 
 static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_iovec_t *name,
-                                 const h2o_iovec_t *value, int dont_compress)
+                                 const h2o_iovec_t *value, h2o_header_flags_t flags)
 {
     int is_token = h2o_iovec_is_token(name);
     int name_index = is_token ? ((const h2o_token_t *)name)->flags.http2_static_table_name_index : 0;
 
-    /* try to send as indexed */
-    {
+    { /* try to send as indexed */
         size_t header_table_index = header_table->entry_start_index, n;
         for (n = header_table->num_entries; n != 0; --n) {
             struct st_h2o_hpack_header_table_entry_t *entry = header_table->entries + header_table_index;
@@ -889,10 +888,7 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
         }
     }
 
-    if (!dont_compress && is_token)
-        dont_compress = ((const h2o_token_t *)name)->flags.dont_compress;
-    if (dont_compress)
-        dont_compress = value->len < 20;
+    int dont_compress = h2o_hpack_dont_compress(name, *value, flags);
 
     if (name_index != 0) {
         /* literal header field with indexing (indexed name). */
@@ -938,13 +934,13 @@ static uint8_t *do_encode_header(h2o_hpack_header_table_t *header_table, uint8_t
 
 static uint8_t *encode_header(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_header_t *header)
 {
-    return do_encode_header(header_table, dst, header->name, &header->value, header->flags.dont_compress);
+    return do_encode_header(header_table, dst, header->name, &header->value, header->flags);
 }
 
 static uint8_t *encode_header_token(h2o_hpack_header_table_t *header_table, uint8_t *dst, const h2o_token_t *token,
                                     const h2o_iovec_t *value)
 {
-    return do_encode_header(header_table, dst, &token->buf, value, token->flags.dont_compress);
+    return do_encode_header(header_table, dst, &token->buf, value, (h2o_header_flags_t){0});
 }
 
 static uint8_t *encode_method(h2o_hpack_header_table_t *header_table, uint8_t *dst, h2o_iovec_t value)

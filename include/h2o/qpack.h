@@ -53,8 +53,26 @@ typedef struct st_h2o_qpack_section_stats_t {
     size_t text_bytes;
 } h2o_qpack_section_stats_t;
 
+typedef struct st_h2o_qpack_stats_t {
+    /**
+     * Number of QPACK instruction frames processed by this encoder or decoder. Direction is determined by the owner: encoder-stream
+     * instructions are sent by encoders and received by decoders, while decoder-stream instructions are sent by decoders and
+     * received by encoders.
+     */
+    struct {
+        uint64_t insert_with_name_reference;
+        uint64_t insert_without_name_reference;
+        uint64_t duplicate;
+        uint64_t dynamic_table_size_update;
+        uint64_t section_acknowledgement;
+        uint64_t stream_cancellation;
+        uint64_t insert_count_increment;
+    } num_instructions;
+} h2o_qpack_stats_t;
+
 h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64_t max_blocked);
 void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
+const h2o_qpack_stats_t *h2o_qpack_get_decoder_stats(h2o_qpack_decoder_t *qpack);
 /**
  * This function processes a stream of QPACK encoder instructions provided in [*src, src_end), and updates `*src` to point to the
  * beginning of the first partial instruction being found.
@@ -88,8 +106,13 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
                              h2o_qpack_section_stats_t *stats_updated, uint8_t *outbuf, size_t *outbufsize, const uint8_t *src,
                              size_t len, const char **err_desc);
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked);
+/**
+ * Creates a QPACK encoder. When `refine_after_full` is false, the dynamic table is filled until full and then left unchanged;
+ * when true, the encoder can refine the resident set after the fill phase.
+ */
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
+const h2o_qpack_stats_t *h2o_qpack_get_encoder_stats(h2o_qpack_encoder_t *qpack);
 /**
  * Handles packets sent to the QPACK encoder (i.e., the bytes carried by the "decoder" stream)
  * @param qpack can be NULL

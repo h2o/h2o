@@ -283,15 +283,24 @@ struct st_h2o_quic_conn_t {
 };
 
 typedef struct st_h2o_http3_qpack_context_t {
-    /**
-     * Our preferred table capacity for the encoder. The value actually used is MIN(this_value,
-     * peer_settings.encoder_table_capacity).
-     */
-    uint32_t encoder_table_capacity;
-    /**
-     * Table capacity we advertise to the peer for its encoder.
-     */
-    uint32_t decoder_table_capacity;
+    struct {
+        /**
+         * Our preferred table capacity. The value actually used is MIN(this_value, peer_settings.encoder_table_capacity).
+         */
+        uint32_t table_capacity;
+        /**
+         * If set, keeps refining the dynamic table after it fills (evicting low-value entries to admit better ones); otherwise
+         * fills the table until full and then leaves it unchanged. Applies to whatever this endpoint encodes (responses for a
+         * server, requests for a client).
+         */
+        int refine_after_full;
+    } encoder;
+    struct {
+        /**
+         * Table capacity we advertise to the peer for its encoder.
+         */
+        uint32_t table_capacity;
+    } decoder;
 } h2o_http3_qpack_context_t;
 
 typedef struct st_h2o_http3_conn_callbacks_t {
@@ -478,7 +487,7 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
 /**
  *
  */
-void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
+void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *bytes, size_t len);
 /**
  * Enqueue GOAWAY frame crafted for graceful shutdown
  */
