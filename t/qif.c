@@ -113,22 +113,22 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
 #define EMIT()                                                                                                                     \
     do {                                                                                                                           \
         if (use_hpack) {                                                                                                           \
-            assert(100 <= message.status && message.status <= 999);                                                               \
+            assert(100 <= message.status && message.status <= 999);                                                                \
             size_t block = h2o_hpack_flatten_response(&hpack_buf, &hpack_table, header_table_size, (uint32_t)stream_id, 16384,     \
-                                                      message.status, message.headers.entries, message.headers.size, NULL,        \
-                                                      message.content_length, 1);                                                 \
-            size_t tb = strlen(":status") + 3; /* ":status" + 3-digit status, matching the QPACK text accounting */               \
+                                                      message.status, message.headers.entries, message.headers.size, NULL,         \
+                                                      message.content_length, 1);                                                  \
+            size_t tb = strlen(":status") + 3; /* ":status" + 3-digit status, matching the QPACK text accounting */                \
             for (size_t hi = 0; hi != message.headers.size; ++hi)                                                                  \
-                tb += message.headers.entries[hi].name->len + message.headers.entries[hi].value.len;                              \
-            if (message.content_length != SIZE_MAX) {                                                                             \
-                char cl[sizeof(H2O_SIZE_T_LONGEST_STR)];                                                                          \
-                tb += strlen("content-length") + (size_t)sprintf(cl, "%zu", message.content_length);                             \
+                tb += message.headers.entries[hi].name->len + message.headers.entries[hi].value.len;                               \
+            if (message.content_length != SIZE_MAX) {                                                                              \
+                char cl[sizeof(H2O_SIZE_T_LONGEST_STR)];                                                                           \
+                tb += strlen("content-length") + (size_t)sprintf(cl, "%zu", message.content_length);                               \
             }                                                                                                                      \
             total_text += tb;                                                                                                      \
-            total_headers += block;                                                                                               \
+            total_headers += block;                                                                                                \
             h2o_buffer_consume(&hpack_buf, hpack_buf->size);                                                                       \
             ++stream_id;                                                                                                           \
-            CLEAR();                                                                                                              \
+            CLEAR();                                                                                                               \
             break;                                                                                                                 \
         }                                                                                                                          \
         h2o_byte_vector_t encoder_buf = {NULL};                                                                                    \

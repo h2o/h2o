@@ -1029,16 +1029,15 @@ static void flatten_request_headers(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *po
                                     h2o_byte_vector_t *enc_stream, h2o_header_t *headers, size_t num_headers)
 {
     h2o_qpack_section_stats_t stats = {0};
-    h2o_iovec_t headers_frame =
-        h2o_qpack_flatten_request(enc, pool, stream_id, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
-                                  h2o_iovec_init(H2O_STRLIT("x")), h2o_iovec_init(H2O_STRLIT("/")),
-                                  h2o_iovec_init(NULL, 0), headers, num_headers, h2o_iovec_init(NULL, 0), &stats);
+    h2o_iovec_t headers_frame = h2o_qpack_flatten_request(
+        enc, pool, stream_id, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("x")),
+        h2o_iovec_init(H2O_STRLIT("/")), h2o_iovec_init(NULL, 0), headers, num_headers, h2o_iovec_init(NULL, 0), &stats);
 
     assert(headers_frame.len != 0);
 }
 
-static void flatten_request_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id,
-                                h2o_byte_vector_t *enc_stream, const char *name, const char *value)
+static void flatten_request_one(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool, int64_t stream_id, h2o_byte_vector_t *enc_stream,
+                                const char *name, const char *value)
 {
     h2o_headers_t headers = {NULL};
 

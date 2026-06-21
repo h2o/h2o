@@ -526,9 +526,8 @@ static void encoder_insert(h2o_qpack_encoder_t *qpack, struct st_h2o_qpack_heade
 {
     size_t delta = header_entry_size(added), max_entries = encoder_max_entries(qpack);
 
-    while (qpack->table.first != qpack->table.last &&
-           (qpack->table.num_bytes + delta > qpack->table.max_size ||
-            (size_t)(qpack->table.last - qpack->table.first) >= max_entries)) {
+    while (qpack->table.first != qpack->table.last && (qpack->table.num_bytes + delta > qpack->table.max_size ||
+                                                       (size_t)(qpack->table.last - qpack->table.first) >= max_entries)) {
         assert((*qpack->table.first)->abs_index < evict_upto);
         encoder_evict_one(qpack);
     }
@@ -1255,7 +1254,6 @@ Exit:
     return (int)ret;
 }
 
-
 static struct st_h2o_qpack_header_t *do_alloc_entry(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *name, h2o_iovec_t value,
                                                     unsigned soft_errors, float freq, size_t bytes_saved)
 {
@@ -1653,11 +1651,11 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         int has_name_ref = static_index >= 0 || dynamic_index >= 0;
         size_t candidate_size = entry_size(name, value);
         /* fill-till-full: admit on first sight while both a byte budget and an entry slot remain. A short value is inserted only
-         * when no name reference is available: a slot is worth spending only to avoid re-emitting something costly on repeats, and a
-         * name reference already makes a short value cheap to repeat (whereas with no name reference, inserting also saves
-         * re-emitting the name). A short value skipped here is still recorded as a shadow by the refinement below, so a repeat before
-         * the table fills can promote it. (Etag is excluded above as it rarely repeats; Content-Length and Age may share that
-         * property but are mostly covered by the `value.len` gate.) */
+         * when no name reference is available: a slot is worth spending only to avoid re-emitting something costly on repeats, and
+         * a name reference already makes a short value cheap to repeat (whereas with no name reference, inserting also saves
+         * re-emitting the name). A short value skipped here is still recorded as a shadow by the refinement below, so a repeat
+         * before the table fills can promote it. (Etag is excluded above as it rarely repeats; Content-Length and Age may share
+         * that property but are mostly covered by the `value.len` gate.) */
         if ((!has_name_ref || value.len >= 8) && candidate_size <= ctx->qpack->table.max_size - ctx->qpack->table.num_bytes &&
             (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) < encoder_max_entries(ctx->qpack)) {
             emit_insert_and_reference(ctx, static_index, dynamic_index, name, value, NULL, ctx->qpack->table.base_offset);

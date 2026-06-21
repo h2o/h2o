@@ -817,20 +817,19 @@ static h2o_iovec_t log_qpack_stats(h2o_req_t *req, const h2o_qpack_stats_t *stat
 #define QPACK_STATS_FMT                                                                                                            \
     "num-instructions.insert-with-name-reference=%" PRIu64 ","                                                                     \
     "num-instructions.insert-without-name-reference=%" PRIu64 ","                                                                  \
-    "num-instructions.duplicate=%" PRIu64 ","                                                                                     \
-    "num-instructions.dynamic-table-size-update=%" PRIu64 ","                                                                     \
-    "num-instructions.section-acknowledgement=%" PRIu64 ","                                                                       \
-    "num-instructions.stream-cancellation=%" PRIu64 ","                                                                           \
+    "num-instructions.duplicate=%" PRIu64 ","                                                                                      \
+    "num-instructions.dynamic-table-size-update=%" PRIu64 ","                                                                      \
+    "num-instructions.section-acknowledgement=%" PRIu64 ","                                                                        \
+    "num-instructions.stream-cancellation=%" PRIu64 ","                                                                            \
     "num-instructions.insert-count-increment=%" PRIu64
 #define QPACK_STATS_FIELDS                                                                                                         \
-    stats->num_instructions.insert_with_name_reference,                                                                            \
-    stats->num_instructions.insert_without_name_reference, stats->num_instructions.duplicate,                                      \
-    stats->num_instructions.dynamic_table_size_update, stats->num_instructions.section_acknowledgement,                            \
-    stats->num_instructions.stream_cancellation, stats->num_instructions.insert_count_increment
+    stats->num_instructions.insert_with_name_reference, stats->num_instructions.insert_without_name_reference,                     \
+        stats->num_instructions.duplicate, stats->num_instructions.dynamic_table_size_update,                                      \
+        stats->num_instructions.section_acknowledgement, stats->num_instructions.stream_cancellation,                              \
+        stats->num_instructions.insert_count_increment
 
-    const size_t bufsize =
-        sizeof(QPACK_STATS_FMT) +
-        PTLS_ELEMENTSOF(((uint64_t[]){QPACK_STATS_FIELDS})) * (sizeof(H2O_UINT64_LONGEST_STR) - sizeof("%" PRIu64));
+    const size_t bufsize = sizeof(QPACK_STATS_FMT) + PTLS_ELEMENTSOF(((uint64_t[]){QPACK_STATS_FIELDS})) *
+                                                         (sizeof(H2O_UINT64_LONGEST_STR) - sizeof("%" PRIu64));
     char *buf = h2o_mem_alloc_pool(&req->pool, char, bufsize);
     int len = sprintf(buf, QPACK_STATS_FMT, QPACK_STATS_FIELDS);
     assert(len > 0 && (size_t)len < bufsize);

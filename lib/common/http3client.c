@@ -847,9 +847,9 @@ void start_request(struct st_h2o_http3client_req_t *req)
     }
     h2o_qpack_section_stats_t unused = {0};
     h2o_byte_vector_t encoder_buf = {NULL};
-    h2o_iovec_t headers_frame = h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id,
-                                                          &encoder_buf, method, url.scheme, url.authority, url.path, protocol,
-                                                          headers, num_headers, datagram_flow_id, &unused);
+    h2o_iovec_t headers_frame =
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, &encoder_buf, method,
+                                  url.scheme, url.authority, url.path, protocol, headers, num_headers, datagram_flow_id, &unused);
     if (encoder_buf.size != 0)
         h2o_http3_write_unistream(req->conn->super._control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);

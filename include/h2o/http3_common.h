@@ -289,9 +289,9 @@ typedef struct st_h2o_http3_qpack_context_t {
          */
         uint32_t table_capacity;
         /**
-         * If set, keeps refining the dynamic table after it fills (evicting low-value entries to admit better ones); otherwise fills
-         * the table until full and then leaves it unchanged. Applies to whatever this endpoint encodes (responses for a server,
-         * requests for a client).
+         * If set, keeps refining the dynamic table after it fills (evicting low-value entries to admit better ones); otherwise
+         * fills the table until full and then leaves it unchanged. Applies to whatever this endpoint encodes (responses for a
+         * server, requests for a client).
          */
         int refine_after_full;
     } encoder;
