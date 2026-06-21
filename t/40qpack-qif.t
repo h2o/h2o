@@ -160,15 +160,11 @@ subtest "qpackers qpack-05 dynamic table decode" => sub {
     }
 };
 
-subtest "h2o encoder refines using Duplicate under t-qif" => sub {
-    my $qif = "$tmpdir/shadow-swap.qif";
-    my $encoded = "$tmpdir/shadow-swap.encoded";
-    my $decoded = "$tmpdir/shadow-swap.decoded.qif";
-    my $expected = "$tmpdir/shadow-swap.expected.qif";
-    my $actual = "$tmpdir/shadow-swap.actual.qif";
-
-    open my $fh, ">", $qif
-        or die "failed to open $qif:$!";
+sub write_shadow_swap_qif {
+    my ($path) = @_;
+    open my $fh, ">", $path
+        or die "failed to open $path:$!";
+    # fill the small table with x-a and x-b, then keep hammering the non-resident x-c
     print $fh ":status\t200\nx-a\taaaaaaaaaaaaaaaaaaaa\nx-b\tbbbbbbbbbbbbbbbbbbbb\nx-c\tcccccccccccccccccccc\n\n";
     for (1..120) {
         print $fh ":status\t200\nx-a\taaaaaaaaaaaaaaaaaaaa\n\n";
@@ -177,6 +173,16 @@ subtest "h2o encoder refines using Duplicate under t-qif" => sub {
         print $fh ":status\t200\nx-c\tcccccccccccccccccccc\n\n";
     }
     close $fh;
+}
+
+subtest "h2o encoder refines using Duplicate under t-qif" => sub {
+    my $qif = "$tmpdir/shadow-swap.qif";
+    my $encoded = "$tmpdir/shadow-swap.encoded";
+    my $decoded = "$tmpdir/shadow-swap.decoded.qif";
+    my $expected = "$tmpdir/shadow-swap.expected.qif";
+    my $actual = "$tmpdir/shadow-swap.actual.qif";
+
+    write_shadow_swap_qif($qif);
 
     my $ret = run_to_file($encoded, $t_qif, "-s", 128, "-b", 10, "-a", "-r", "--refine-after-full=1", $qif);
     is $ret, 0, "encode synthetic swap qif";
@@ -189,6 +195,30 @@ subtest "h2o encoder refines using Duplicate under t-qif" => sub {
 
     my $diff = `diff -u "$expected" "$actual" 2>&1`;
     is $?, 0, "decoded QIF matches synthetic source QIF";
+    diag $diff
+        if $diff ne "";
+};
+
+subtest "h2o encoder freezes when refinement is off (no Duplicate)" => sub {
+    my $qif = "$tmpdir/freeze.qif";
+    my $encoded = "$tmpdir/freeze.encoded";
+    my $decoded = "$tmpdir/freeze.decoded.qif";
+    my $expected = "$tmpdir/freeze.expected.qif";
+    my $actual = "$tmpdir/freeze.actual.qif";
+
+    write_shadow_swap_qif($qif);
+
+    my $ret = run_to_file($encoded, $t_qif, "-s", 128, "-b", 10, "-a", "-r", "--refine-after-full=0", $qif);
+    is $ret, 0, "encode synthetic swap qif with refinement off";
+    is count_duplicate_instructions($encoded), 0, "no Duplicate emitted when refinement is off";
+
+    $ret = run_to_file($decoded, $t_qif, "-s", 128, "-b", 10, "-d", "-r", $encoded);
+    is $ret, 0, "decode synthetic swap qif with refinement off";
+    normalize_qif($qif, $expected);
+    normalize_qif($decoded, $actual);
+
+    my $diff = `diff -u "$expected" "$actual" 2>&1`;
+    is $?, 0, "decoded QIF matches synthetic source QIF (refinement off)";
     diag $diff
         if $diff ne "";
 };
