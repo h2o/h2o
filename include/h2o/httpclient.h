@@ -368,6 +368,11 @@ struct st_h2o_httpclient__h3_conn_t {
      * linklist used to queue pending requests
      */
     h2o_linklist_t pending_requests;
+    /**
+     * linklist used to queue requests blocked by QPACK decoder state
+     */
+    h2o_linklist_t qpack_blocked_requests;
+    size_t num_qpack_blocked;
 };
 
 /**

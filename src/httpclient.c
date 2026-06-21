@@ -724,6 +724,10 @@ static void usage(const char *progname)
             " --http3-qpack-encoder-refine <0|1>\n"
             "               whether the QPACK encoder refines its dynamic table after it fills\n"
             "               (default: 1)\n"
+            " --http3-qpack-decoder-table-capacity <bytes>\n"
+            "               sets the QPACK decoder dynamic table capacity advertised to the peer,\n"
+            "               i.e. how large a dynamic table the peer's encoder may use for responses\n"
+            "               (default: 0, which disables the peer's dynamic-table use)\n"
             " --input <path>\n"
             "               file from which the request body is read\n"
             "  -h, --help   prints this help\n"
@@ -825,6 +829,7 @@ int main(int argc, char **argv)
         OPT_HTTP3_NO_ECN,
         OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY,
         OPT_HTTP3_QPACK_ENCODER_REFINE,
+        OPT_HTTP3_QPACK_DECODER_TABLE_CAPACITY,
         OPT_UPGRADE,
         OPT_INPUT,
     };
@@ -839,6 +844,8 @@ int main(int argc, char **argv)
                                 {"http3-qpack-encoder-table-capacity", required_argument, NULL,
                                  OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY},
                                 {"http3-qpack-encoder-refine", required_argument, NULL, OPT_HTTP3_QPACK_ENCODER_REFINE},
+                                {"http3-qpack-decoder-table-capacity", required_argument, NULL,
+                                 OPT_HTTP3_QPACK_DECODER_TABLE_CAPACITY},
                                 {"upgrade", required_argument, NULL, OPT_UPGRADE},
                                 {"output", required_argument, NULL, 'o'},
                                 {"input", required_argument, NULL, OPT_INPUT},
@@ -1048,6 +1055,12 @@ int main(int argc, char **argv)
             if (sscanf(optarg, "%d", &h3ctx.qpack.encoder.refine_after_full) != 1 ||
                 (h3ctx.qpack.encoder.refine_after_full != 0 && h3ctx.qpack.encoder.refine_after_full != 1)) {
                 fprintf(stderr, "--http3-qpack-encoder-refine must be 0 or 1\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
+        case OPT_HTTP3_QPACK_DECODER_TABLE_CAPACITY:
+            if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.decoder.table_capacity) != 1) {
+                fprintf(stderr, "--http3-qpack-decoder-table-capacity must be a non-negative integer\n");
                 exit(EXIT_FAILURE);
             }
             break;
