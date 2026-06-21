@@ -49,10 +49,12 @@ The <code>quic</code> attribute accepts following parameters.
 <dd>See <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-transport-parameter-definit">Section 18.2 of RFC 9000</a>. Default is 1,472.</dd>
 <dt>pacing</dt>
 <dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether sent packets should be paced. The default setting is <code>OFF</code>.</dd>
-<dt>qpack-encoder-table-capacity</dt>
-<dd>Size of the QPACK encoder table, in bytes. Controls the maximum size of the dynamic table that h2o will use for encoding the response headers. Setting this field to 0 disables the use of the dynamic table. Default is 16,384.</dd>
 <dt>qpack-decoder-table-capacity</dt>
 <dd>Size of the QPACK decoder table, in bytes. Setting this to a non-zero value advertises <code>SETTINGS_QPACK_MAX_TABLE_CAPACITY</code> to the peer, allowing the peer to use dynamic-table references when encoding request headers. Default is 16,384.</dd>
+<dt>qpack-encoder-table-capacity</dt>
+<dd>Size of the QPACK encoder table, in bytes. Controls the maximum size of the dynamic table that h2o will use for encoding the response headers. Setting this field to 0 disables the use of the dynamic table. Default is 8,192.</dd>
+<dt>qpack-encoder-refine</dt>
+<dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether to refine entries of the dynamic table after it becomes full. Default is <code>ON</code>.</dd>
 <dt>respect-app-limited</dt>
 <dd>This boolean flag (either <code>OFF</code> or <code>ON</code>) indicates whether the server should respect the notion of rate limited traffic when adjusting the size of the congestion window, as detailed in <a href="https://datatracker.ietf.org/doc/html/rfc7661" target=_blank>RFC 7661</a>. The default setting is <code>ON</code>.</dd>
 <dt>retry</dt>
