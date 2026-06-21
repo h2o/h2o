@@ -117,7 +117,7 @@ void register_proxy(h2o_hostconf_t *hostconf, const char *unix_path, h2o_access_
     proxy_config.max_buffer_size = 1024 * 1024;
     h2o_url_parse(&pool, unix_path, strlen(unix_path), &upstream);
     h2o_socketpool_t *sockpool = new h2o_socketpool_t();
-    h2o_socketpool_target_t *target = h2o_socketpool_create_target(&upstream, NULL);
+    h2o_socketpool_target_t *target = h2o_socketpool_create_target(&upstream, NULL, NULL);
     h2o_socketpool_init_specific(sockpool, SIZE_MAX /* FIXME */, &target, 1, NULL);
     h2o_socketpool_set_timeout(sockpool, 2000);
     h2o_socketpool_set_ssl_ctx(sockpool, NULL);
