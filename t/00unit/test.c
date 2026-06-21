@@ -24,6 +24,11 @@
 #include "../../src/standalone.h"
 #include "./test.h"
 
+/* Code below uses SHA1_* which are deprecated by OpenSSL 3.0. */
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#endif
+
 static void loopback_on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt,
                              h2o_send_state_t send_state)
 {
