@@ -113,15 +113,11 @@ subtest "server encoder table disabled => no inserts" => sub {
 };
 
 subtest "server decoder reports inserts received from the client" => sub {
-    plan skip_all => "h2o-httpclient does not emit request QPACK encoder-stream inserts";
-
     my $stats = run_and_collect("", "", fetch_with_client_header(""));
     cmp_ok inserts($stats->{dec}), ">", 0, "decoder-stats reports inserts received from the client";
 };
 
 subtest "client encoder table disabled => decoder sees no inserts" => sub {
-    plan skip_all => "h2o-httpclient does not emit request QPACK encoder-stream inserts";
-
     my $stats = run_and_collect("", "", fetch_with_client_header("--http3-qpack-encoder-table-capacity 0"));
     is inserts($stats->{dec}), 0, "decoder-stats reports no inserts when the client encoder table is disabled";
 };
