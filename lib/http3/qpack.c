@@ -1721,7 +1721,6 @@ static void flatten_known_header_with_static_lookup(struct st_h2o_qpack_flatten_
 {
     int is_exact;
     int32_t static_index = lookup_cb(value, &is_exact);
-    assert(index >= 0);
 
     do_flatten_header(ctx, static_index, is_exact, &name->buf, value, (h2o_header_flags_t){0});
 }
