@@ -5,6 +5,7 @@ use IO::Socket::SSL;
 use IO::Socket::UNIX;
 use File::Temp qw(tempdir);
 use POSIX qw(WNOHANG);
+use Socket qw(SOL_SOCKET SO_RCVBUF);
 use Test::More;
 use Time::HiRes qw(sleep time);
 use t::Util;
@@ -68,13 +69,15 @@ sub run_slow_client {
         Proto    => "tcp",
     );
     die "failed to connect to h2o:$!" unless $sock;
+    setsockopt($sock, SOL_SOCKET, SO_RCVBUF, pack("i", 64 * 1024))
+        or die "failed to set SO_RCVBUF:$!";
 
     print $sock "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
 
     my $received = "";
     my @sleep_at;
-    my $bytes_per_sec = $ENV{SLOW_CLIENT_BYTES_PER_SEC} || 1024 * 1024;
-    my $read_unit = $ENV{SLOW_CLIENT_READ_UNIT} || 65536;
+    my $bytes_per_sec = 1024 * 1024;
+    my $read_unit = 8192;
     my $start_at = time;
     READ:
     while (1) {
@@ -85,7 +88,7 @@ sub run_slow_client {
             $received .= $buf;
         } while (length($received) < int((time - $start_at) * $bytes_per_sec));
         push @sleep_at, length($received);
-        sleep $read_unit / $bytes_per_sec;
+        sleep 0.01;
     }
     my $elapsed = time - $start_at;
 
