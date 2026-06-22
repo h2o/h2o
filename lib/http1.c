@@ -841,6 +841,11 @@ static void on_send_next(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
+    if (err == h2o_socket_error_write_progress) {
+        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+        return;
+    }
+
     if (err != NULL)
         close_connection(conn, 1);
     else
@@ -862,6 +867,11 @@ static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
 static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
+
+    if (err == h2o_socket_error_write_progress) {
+        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+        return;
+    }
 
     if (err == NULL) {
         if (conn->req._ostr_top != &conn->_ostr_final.super) {
@@ -1100,7 +1110,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     if (bufcnt != 0)
         set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
 
-    h2o_socket_sendvec(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
+    h2o_socket_sendvec(conn->sock, bufs, bufcnt, H2O_SOCKET_SENDVEC_FLAG_REPORT_PROGRESS,
+                       h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
 }
 
 static void on_send_informational_complete(h2o_socket_t *sock, const char *err);
