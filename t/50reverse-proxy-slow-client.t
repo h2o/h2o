@@ -72,21 +72,27 @@ sub run_slow_client {
     print $sock "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
 
     my $received = "";
-    my $start_at = time;
+    my @sleep_at;
     my $bytes_per_sec = $ENV{SLOW_CLIENT_BYTES_PER_SEC} || 1024 * 1024;
+    my $read_unit = $ENV{SLOW_CLIENT_READ_UNIT} || 65536;
+    my $start_at = time;
+    READ:
     while (1) {
-        my $r = sysread $sock, my $buf, 8192;
-        last unless $r;
-        $received .= $buf;
-        my $target_elapsed = length($received) / $bytes_per_sec;
-        my $sleep_for = $target_elapsed - (time - $start_at);
-        sleep $sleep_for if $sleep_for > 0;
+        do {
+            my $buf = "";
+            my $r = sysread $sock, $buf, $read_unit;
+            last READ unless $r;
+            $received .= $buf;
+        } while (length($received) < int((time - $start_at) * $bytes_per_sec));
+        push @sleep_at, length($received);
+        sleep $read_unit / $bytes_per_sec;
     }
     my $elapsed = time - $start_at;
 
     like $received, qr{^HTTP/1\.1 200\b}s, "$proto: received response headers";
     my ($headers, $body) = split /\r\n\r\n/, $received, 2;
     diag "$proto: received @{[ length($body) ]} of $body_size bytes in ${elapsed}s";
+    note "$proto: body bytes at sleep: @sleep_at";
     is length($body), $body_size, "$proto: response body was not truncated by http1 request I/O timeout";
 }
 
