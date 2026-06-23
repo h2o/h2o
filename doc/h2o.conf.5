@@ -3651,6 +3651,14 @@ Setup a CONNECT-UDP gateway defined by RFC 9298.
 Supplied argument is an access control list, using the same format as that of proxy.connect.
 
 
+To be compatible with clients using the default URI Template defined in RFC 9298, the handler should be registered at path /.well-known/masque/udp/:
+
+paths:
+  "/.well-known/masque/udp":
+    proxy.connect-udp:
+      - "+*"
+
+
 Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see proxy.connect.masque-draft-03.
 
 
