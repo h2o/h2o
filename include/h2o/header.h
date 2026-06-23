@@ -29,6 +29,22 @@
 extern "C" {
 #endif
 
+#ifndef H2O_MAX_HEADERS
+/**
+ * Maximum number of fields expected in a field section. This is a soft target for processing input. Functions must be prepared for
+ * processing field sections that have more fields than H2O_MAX_HEADERS.
+ */
+#define H2O_MAX_HEADERS 100
+#endif
+
+#ifndef H2O_MAX_REQLEN
+/**
+ * Maximum size of an encoded field section in bytes. This is a soft target for processing input. Functions must be prepared for
+ * processing field sections that is larger than this (consider huffman decompression in HPACK).
+ */
+#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
+#endif
+
 typedef struct st_h2o_header_flags_t {
     unsigned char dont_compress : 1;
 } h2o_header_flags_t;

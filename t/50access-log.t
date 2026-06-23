@@ -396,6 +396,65 @@ subtest 'compressed-body-size' => sub {
     };
 };
 
+subtest 'request-body-size' => sub {
+    my @expected;
+    my $push_expected = sub {
+        my ($http_ver) = @_;
+        $http_ver = $http_ver == 257 ? "1.1" : $http_ver / 256; # convert $http_ver to textual notation
+        push @expected, qr{^HTTP/$http_ver GET 0$}, qr{^HTTP/$http_ver POST 5$};
+    };
+    doit(
+        sub {
+            my $server = shift;
+            run_with_curl($server, sub {
+                my ($proto, $port, $cmd, $http_ver) = @_;
+                is system("$cmd --silent $proto://127.0.0.1:${port}/ > /dev/null"), 0, "run curl";
+                is system("$cmd --silent --data-binary hello $proto://127.0.0.1:${port}/ > /dev/null"), 0, "run curl";
+                $push_expected->($http_ver);
+            });
+        },
+        '%H %m %{request-body-bytes}x',
+        \@expected,
+    );
+};
+
+subtest 'h3-message-size' => sub {
+    my @expected = (
+        sub {
+            my $log = shift;
+            my @cols = split / +/, $log;
+            is $cols[0], "GET", "method";
+            cmp_ok $cols[1], '>', 0, "encoded request header bytes";
+            cmp_ok $cols[2], '>', 0, "request header text bytes";
+            cmp_ok $cols[3], '>', 0, "request header count";
+            is $cols[4], 0, "request body bytes";
+            cmp_ok $cols[5], '>', 0, "response header text bytes";
+            cmp_ok $cols[6], '>', 0, "response header count";
+        },
+        sub {
+            my $log = shift;
+            my @cols = split / +/, $log;
+            is $cols[0], "POST", "method";
+            cmp_ok $cols[1], '>', 0, "encoded request header bytes";
+            cmp_ok $cols[2], '>', 0, "request header text bytes";
+            cmp_ok $cols[3], '>', 0, "request header count";
+            is $cols[4], 5, "request body bytes";
+            cmp_ok $cols[5], '>', 0, "response header text bytes";
+            cmp_ok $cols[6], '>', 0, "response header count";
+        },
+    );
+    doit(
+        sub {
+            my $server = shift;
+            is system("$client_prog -3 100 -k https://127.0.0.1:$server->{quic_port}/ > /dev/null"), 0, "run h2o-httpclient";
+            is system("$client_prog -3 100 -k -m POST -b 5 https://127.0.0.1:$server->{quic_port}/ > /dev/null"), 0,
+                "run h2o-httpclient";
+        },
+        '%m %{request-header-bytes}x %{request-header-text-bytes}x %{request-header-count}x %{request-body-bytes}x %{response-header-text-bytes}x %{response-header-count}x',
+        \@expected,
+    );
+};
+
 subtest 'header-bytes' => sub {
     my @expected;
     my $push_expected = sub {

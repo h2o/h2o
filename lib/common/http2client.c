@@ -497,7 +497,7 @@ static ssize_t expect_continuation_of_headers_eos(struct st_h2o_http2client_conn
 }
 
 static ssize_t expect_continuation_of_headers_no_eos(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len,
-        const char **err_desc)
+                                                     const char **err_desc)
 {
     return expect_continuation_of_headers(conn, src, len, err_desc, 0);
 }

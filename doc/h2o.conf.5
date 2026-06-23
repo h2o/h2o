@@ -2313,7 +2313,9 @@ See Section 18.2 of RFC 9000. Default is 1,472.
 pacing
 A boolean flag (either OFF or ON) indicating whether sent packets should be paced. The default setting is OFF.
 qpack-encoder-table-capacity
-Size of the QPACK encoder table. Default is 4,096.
+Size of the QPACK encoder table, in bytes. Controls the maximum size of the dynamic table that h2o will use for encoding the response headers. Setting this field to 0 disables the use of the dynamic table. Default is 16,384.
+qpack-decoder-table-capacity
+Size of the QPACK decoder table, in bytes. Setting this to a non-zero value advertises SETTINGS_QPACK_MAX_TABLE_CAPACITY to the peer, allowing the peer to use dynamic-table references when encoding request headers. Default is 16,384.
 respect-app-limited
 This boolean flag (either OFF or ON) indicates whether the server should respect the notion of rate limited traffic when adjusting the size of the congestion window, as detailed in RFC 7661. The default setting is ON.
 retry
@@ -2530,6 +2532,17 @@ process-timetime spent after receiving request, before starting to send response
 response-timetime spent sending response
 durationsum of request-total-time, process-time, response-time
 total-timesame as duration (since v2.3)
+
+
+HTTP Message Sizes
+NameDescription
+request-header-bytesnumber of bytes used to receive request headers in the protocol-specific encoded form
+response-header-bytesnumber of bytes used to send response headers in the protocol-specific encoded form
+request-header-text-bytessum of request header name and value lengths after decoding
+response-header-text-bytessum of response header name and value lengths before encoding
+request-header-countnumber of request header fields
+response-header-countnumber of response header fields
+request-body-bytesnumber of request body bytes received
 
 
 Proxy Timings (since v2.3)

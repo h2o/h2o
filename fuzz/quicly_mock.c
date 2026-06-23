@@ -516,7 +516,7 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
     assert(0 && "unimplemented");
 }
 
-void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed)
+void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed, uint64_t *shifted)
 {
     if (send_permitted != NULL)
         *send_permitted = 0xdeadbeef;
@@ -524,6 +524,8 @@ void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t
         *sent = 0xdeadbeef;
     if (consumed != NULL)
         *consumed = 0xdeadbeef;
+    if (shifted != NULL)
+        *shifted = 0xdeadbeef;
 }
 
 quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn)

@@ -43,6 +43,8 @@ static char const *asn1_universal_types[] = {
 
 static size_t nb_asn1_universal_types = sizeof(asn1_universal_types) / sizeof(char const *);
 
+#define PTLS_ASN1_MAX_RECURSION 32
+
 static void ptls_asn1_print_indent(int level, ptls_minicrypto_log_ctx_t *log_ctx)
 {
     for (int indent = 0; indent <= level; indent++) {
@@ -183,6 +185,11 @@ size_t ptls_asn1_get_expected_type_and_length(const uint8_t *bytes, size_t bytes
 {
     int is_indefinite = 0;
 
+    if (byte_index >= bytes_max) {
+        *decode_error = PTLS_ERROR_INCORRECT_ASN1_SYNTAX;
+        return ptls_asn1_error_message("Unexpected end of input", bytes_max, byte_index, 0, log_ctx);
+    }
+
     /* Check that the expected type is present */
     if (bytes[byte_index] != expected_type) {
         byte_index = ptls_asn1_error_message("Unexpected type", bytes_max, byte_index, 0, log_ctx);
@@ -207,6 +214,11 @@ size_t ptls_asn1_get_expected_type_and_length(const uint8_t *bytes, size_t bytes
 size_t ptls_asn1_validation_recursive(const uint8_t *bytes, size_t bytes_max, int *decode_error, int level,
                                       ptls_minicrypto_log_ctx_t *log_ctx)
 {
+    if (level > PTLS_ASN1_MAX_RECURSION) {
+        *decode_error = PTLS_ERROR_INCORRECT_ASN1_SYNTAX;
+        return ptls_asn1_error_message("ASN.1 nesting too deep", bytes_max, 0, level, log_ctx);
+    }
+
     /* Get the type byte */
     int structure_bit = 0;
     int type_class = 0;

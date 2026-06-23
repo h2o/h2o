@@ -944,7 +944,10 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                         break;
                     packet.ecn = ecn;
                     if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
-                        if (packet.version != 0 && !quicly_is_supported_version(packet.version)) {
+                        /* handle version negotiation */
+                        if (packet.version == 0) {
+                            break;
+                        } else if (!quicly_is_supported_version(packet.version)) {
                             uint8_t payload[ctx.transport_params.max_udp_payload_size];
                             size_t payload_len = quicly_send_version_negotiation(&ctx, packet.cid.src, packet.cid.dest.encrypted,
                                                                                  quicly_supported_versions, payload);
@@ -952,9 +955,6 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                             send_one_packet(fd, &remote, &local, payload, payload_len);
                             break;
                         }
-                        /* there is no way to send response to these v1 packets */
-                        if (packet.cid.dest.encrypted.len > QUICLY_MAX_CID_LEN_V1 || packet.cid.src.len > QUICLY_MAX_CID_LEN_V1)
-                            break;
                     }
 
                     quicly_conn_t *conn = NULL;
@@ -1246,6 +1246,7 @@ static void usage(const char *cmd)
            "  -l log-file               file to log traffic secrets\n"
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
            "  -m <bytes>                max data (in bytes; default: 16MB)\n"
+           "  --max-crypto-bytes <N>    maximum permitted length of a CRYPTO stream\n"
            "  -N                        enforce HelloRetryRequest (client-only)\n"
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
@@ -1536,6 +1537,7 @@ int main(int argc, char **argv)
                                              {"disregard-app-limited", no_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
+                                             {"max-crypto-bytes", required_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
                                              {"sockfd", required_argument, NULL, 0},
                                              {"exit-after-handshake", no_argument, NULL, 0},
@@ -1563,6 +1565,11 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "jumpstart-max") == 0) {
                 if (sscanf(optarg, "%" SCNu32, &ctx.max_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
+                    exit(1);
+                }
+            } else if (strcmp(longopts[opt_index].name, "max-crypto-bytes") == 0) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.max_crypto_bytes) != 1) {
+                    fprintf(stderr, "failed to parse max-crypto-bytes: %s\n", optarg);
                     exit(1);
                 }
             } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {

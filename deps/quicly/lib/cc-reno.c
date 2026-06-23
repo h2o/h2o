@@ -143,6 +143,7 @@ quicly_cc_type_t quicly_cc_type_reno = {"reno",
                                         quicly_cc_reno_on_persistent_congestion,
                                         quicly_cc_reno_on_sent,
                                         reno_on_switch,
+                                        NULL,
                                         quicly_cc_jumpstart_enter};
 quicly_init_cc_t quicly_cc_reno_init = {reno_init};
 

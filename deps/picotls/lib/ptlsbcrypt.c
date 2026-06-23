@@ -448,8 +448,13 @@ static size_t ptls_bcrypt_aead_do_decrypt(struct st_ptls_aead_context_t *_ctx, v
 {
     struct ptls_bcrypt_aead_context_t *ctx = (struct ptls_bcrypt_aead_context_t *)_ctx;
     ULONG cbResult;
-    size_t textLen = inlen - ctx->super.algo->tag_size;
+    size_t textLen;
     NTSTATUS ret;
+
+    if (inlen < ctx->super.algo->tag_size) {
+        return SIZE_MAX;
+    }
+    textLen = inlen - ctx->super.algo->tag_size;
 
     /* Build the IV for this decryption */
     ptls_aead__build_iv(ctx->super.algo, ctx->bctx.iv, ctx->bctx.iv_static, seq);

@@ -44,7 +44,8 @@ static void acked(quicly_loss_t *loss, uint64_t pn, size_t epoch)
     int64_t sent_at = sent->sent_at;
     ok(quicly_sentmap_update(&loss->sentmap, &iter, QUICLY_SENTMAP_EVENT_ACKED) == 0);
 
-    quicly_loss_on_ack_received(loss, pn, epoch, now, sent_at, 0, 1);
+    quicly_loss_on_ack_received(loss, pn, UINT64_MAX, pn + 1, epoch, now, sent_at, 0,
+                                QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING);
 }
 
 static void test_time_detection(void)
@@ -184,9 +185,50 @@ static void test_slow_cert_verify(void)
     quicly_loss_dispose(&loss);
 }
 
+static void test_late_ack_threshold_adjustment(void)
+{
+    quicly_loss_t loss;
+
+    now = 0;
+
+    quicly_loss_init(&loss, &quicly_spec_context.loss, 20, &quicly_spec_context.transport_params.max_ack_delay,
+                     &quicly_spec_context.transport_params.ack_delay_exponent);
+
+    ok(loss.min_pn_to_relax_reorder_tolerance == 0);
+    ok(loss.thresholds.use_packet_based);
+    ok(loss.thresholds.time_based_percentile == 1024 / 8);
+
+    quicly_loss_on_ack_received(&loss, 100, 100, 200, QUICLY_EPOCH_1RTT, now, now - 20, 0,
+                                QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK);
+    ok(loss.min_pn_to_relax_reorder_tolerance == 200);
+    ok(!loss.thresholds.use_packet_based);
+    ok(loss.thresholds.time_based_percentile == 1024 / 8);
+
+    quicly_loss_on_ack_received(&loss, 101, 101, 200, QUICLY_EPOCH_1RTT, now, now - 20, 0,
+                                QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK);
+    ok(loss.min_pn_to_relax_reorder_tolerance == 200);
+    ok(!loss.thresholds.use_packet_based);
+    ok(loss.thresholds.time_based_percentile == 1024 / 8);
+
+    quicly_loss_on_ack_received(&loss, 250, 199, 300, QUICLY_EPOCH_1RTT, now, now - 20, 0,
+                                QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK);
+    ok(loss.min_pn_to_relax_reorder_tolerance == 200);
+    ok(!loss.thresholds.use_packet_based);
+    ok(loss.thresholds.time_based_percentile == 1024 / 8);
+
+    quicly_loss_on_ack_received(&loss, 200, 200, 300, QUICLY_EPOCH_1RTT, now, now - 20, 0,
+                                QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK);
+    ok(loss.min_pn_to_relax_reorder_tolerance == 300);
+    ok(!loss.thresholds.use_packet_based);
+    ok(loss.thresholds.time_based_percentile == 1024 / 4);
+
+    quicly_loss_dispose(&loss);
+}
+
 void test_loss(void)
 {
     subtest("time-detection", test_time_detection);
     subtest("pn-detection", test_pn_detection);
     subtest("slow-cert-verify", test_slow_cert_verify);
+    subtest("late-ack-threshold-adjustment", test_late_ack_threshold_adjustment);
 }
