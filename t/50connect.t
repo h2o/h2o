@@ -8,7 +8,9 @@ use t::Util;
 
 my $tempdir = tempdir(CLEANUP => 1);
 
-my $origin_port = empty_port();
+# allocate two distinct ports: the higher one is the origin (and the start of the allowed CONNECT port range), the lower one sits
+# below the range so it is rejected by the ACL
+my ($below_range, $origin_port) = sort { $a <=> $b } empty_ports(2);
 my $origin = spawn_server(
     argv     => [
         qw(plackup -s Starlet --access-log /dev/null -p), $origin_port, ASSETS_DIR . "/upstream.psgi",
@@ -36,7 +38,7 @@ hosts:
     paths:
       "/":
         proxy.connect:
-          - "+127.0.0.1:$origin_port"
+          - "+127.0.0.1:$origin_port-65535" # a range (rather than an exact port) so the allowed-path tests also exercise port-range ACLs
           - "+127.0.0.1:$one_shot_upstream"
           - "+255.255.255.255:$origin_port"
         proxy.timeout.io: 2000
@@ -107,6 +109,10 @@ subtest "curl-h1" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
         like $content, $re_fail->(403);
         unlike $content, qr{proxy-status:}i;
+        # $below_range is an allocated port below the allowed range ($origin_port-65535), so it is denied by the ACL; 403 (rather
+        # than a 502 connect failure) proves the denial came from the ACL, so no listener is needed on that port
+        my $oor = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$below_range/echo 2>&1`;
+        like $oor, $re_fail->(403), "port below allowed range rejected";
     };
     subtest "immediate connect failure" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://255.255.255.255:$origin_port/ 2>&1 2>&1`;
