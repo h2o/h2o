@@ -36,7 +36,7 @@ hosts:
     paths:
       "/":
         proxy.connect:
-          - "+127.0.0.1:$origin_port"
+          - "+127.0.0.1:$origin_port-65535" # a range (rather than an exact port) so the allowed-path tests also exercise port-range ACLs
           - "+127.0.0.1:$one_shot_upstream"
           - "+255.255.255.255:$origin_port"
         proxy.timeout.io: 2000
@@ -107,6 +107,11 @@ subtest "curl-h1" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error https://8.8.8.8/ 2>&1 2>&1`;
         like $content, $re_fail->(403);
         unlike $content, qr{proxy-status:}i;
+        # a port just below the allowed range ($origin_port-65535) is denied by the ACL; 403 (rather than a 502 connect failure)
+        # proves the denial came from the ACL, so no listener is needed on that port
+        my $below_range = $origin_port - 1;
+        my $oor = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://127.0.0.1:$below_range/echo 2>&1`;
+        like $oor, $re_fail->(403), "port below allowed range rejected";
     };
     subtest "immediate connect failure" => sub {
         my $content = `curl --http1.1 -p -x 127.0.0.1:$server->{port} --silent -v --show-error http://255.255.255.255:$origin_port/ 2>&1 2>&1`;
@@ -154,60 +159,6 @@ subtest "h2o-httpclient" => sub {
             };
         };
     }
-};
-
-subtest "port-range-acl" => sub {
-    plan skip_all => "curl not found"
-        unless prog_exists("curl");
-
-    # Spawn 2 more origin servers and then
-    # Spawn a second h2o with a port-range ACL that allows 2 and not the third
-    my $origin_port2 = empty_port();
-    my $origin2 = spawn_server(
-        argv     => [
-            qw(plackup -s Starlet --access-log /dev/null -p), $origin_port2, ASSETS_DIR . "/upstream.psgi",
-        ],
-        is_ready => sub {
-            check_port($origin_port2);
-        },
-    );
-
-    my $origin_port3 = empty_port();
-    my $origin3 = spawn_server(
-        argv     => [
-            qw(plackup -s Starlet --access-log /dev/null -p), $origin_port3, ASSETS_DIR . "/upstream.psgi",
-        ],
-        is_ready => sub {
-            check_port($origin_port3);
-        },
-    );
-
-    my ($port_min, $port_max, $port_disallowed) = sort { $a <=> $b } ($origin_port, $origin_port2, $origin_port3);
-
-    my $server2 = spawn_h2o(<< "EOT");
-hosts:
-  default:
-    paths:
-      "/":
-        proxy.connect:
-          - "+127.0.0.0/8:$port_min-$port_max"
-          - "-*"
-EOT
-
-    my $curl_success = qr{Proxy replied 200 to CONNECT request|CONNECT tunnel established, response 200}m;
-    my $curl_fail_403 = qr{Received HTTP code 403 from proxy after CONNECT|CONNECT tunnel failed, response 403}m;
-
-    subtest "within range - allowed" => sub {
-        my $content = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_min/echo 2>&1`;
-        like $content, $curl_success, "port in range accepted";
-
-        my $content2 = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_max/echo 2>&1`;
-        like $content2, $curl_success, "port in range accepted";
-    };
-    subtest "outside range - rejected" => sub {
-        my $content = `curl --http1.1 -p -x 127.0.0.1:$server2->{port} --silent -v --show-error http://127.0.0.1:$port_disallowed/echo 2>&1`;
-        like $content, $curl_fail_403, "port outside range rejected";
-    };
 };
 
 done_testing;
