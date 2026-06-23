@@ -1233,8 +1233,7 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
     return token_start;
 }
 
-const char *
-h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)
+const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)
 {
     /* type */
     switch (input[0]) {
