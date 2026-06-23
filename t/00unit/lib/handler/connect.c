@@ -185,6 +185,56 @@ static void test_acl_port_range(void)
     ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
 }
 
+static void test_acl_legacy_format(void)
+{
+    h2o_connect_acl_entry_t entry;
+
+    /* `:*` means any port, same as omitting the port */
+    ok(h2o_connect_parse_acl(&entry, "+127.0.0.1:*") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr.v4 == 0x7f000001);
+    ok(entry.addr_mask == 32);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 0);
+
+    /* `:*` on the wildcard address */
+    ok(h2o_connect_parse_acl(&entry, "+*:*") == NULL);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 0);
+
+    /* legacy order: netmask after the port (address:port/mask) */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:443/8") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 443);
+    ok(entry.port_max == 443);
+
+    /* legacy order with a port range (address:port-port/mask) */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:80-443/8") == NULL);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 80);
+    ok(entry.port_max == 443);
+
+    /* legacy order with any-port wildcard followed by a netmask */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:*/8") == NULL);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 0);
+
+    /* new and legacy orders yield the same result */
+    h2o_connect_acl_entry_t entry2;
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443") == NULL);
+    ok(h2o_connect_parse_acl(&entry2, "+10.0.0.0:443/8") == NULL);
+    ok(entry.addr.v4 == entry2.addr.v4 && entry.addr_mask == entry2.addr_mask && entry.port_min == entry2.port_min &&
+       entry.port_max == entry2.port_max);
+
+    /* error: netmask given on both sides of the port */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443/16") != NULL);
+}
+
 static void test_masque_decode_hostport(void)
 {
     h2o_mem_pool_t pool;
@@ -350,4 +400,5 @@ void test_lib__handler__connect_c()
     subtest("masque_decode_hostport", test_masque_decode_hostport);
     subtest("get_next_server_address_for_connect", test_get_next_server_address_for_connect);
     subtest("acl_port_range", test_acl_port_range);
+    subtest("acl_legacy_format", test_acl_legacy_format);
 }

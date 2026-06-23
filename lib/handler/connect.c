@@ -1154,8 +1154,9 @@ static int parse_decimal(const char **s, const char *end)
 
 /**
  * Parse an ACL host/mask:port specification.
- * Accepted format: host[/mask][:port[-port]]
- * Examples: 10.0.0.0/8:80-443, [::1]:443, *:25, 127.0.0.1/32, local
+ * Accepted format: host[/mask][:port[-port]] (the netmask may also appear after the port, e.g. host:port/mask, for backward
+ * compatibility). A port of `*` means any port, same as omitting it.
+ * Examples: 10.0.0.0/8:80-443, [::1]:443, *:25, 127.0.0.1/32, 127.0.0.1:25/24, 127.0.0.1:*, local
  * Returns pointer to first unparsed character on success, NULL on error.
  */
 static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *host, size_t *addr_mask, uint16_t *port_min,
@@ -1189,7 +1190,7 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
     if (host->len == 0)
         return NULL;
 
-    /* parse optional /mask */
+    /* parse optional /mask appearing before the port (e.g. 10.0.0.0/8:80) */
     if (token_start != end && *token_start == '/') {
         int mask;
         ++token_start;
@@ -1198,19 +1199,35 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
         *addr_mask = mask;
     }
 
-    /* parse optional :port or :port-port */
+    /* parse optional :port, :port-port, or :* (any port) */
     if (token_start != end && *token_start == ':') {
-        int p;
         ++token_start;
-        if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
-            return NULL;
-        *port_min = (uint16_t)p;
-        if (token_start != end && *token_start == '-') {
+        if (token_start != end && *token_start == '*') {
+            /* `:*` means any port; leave port_min == port_max == 0 */
             ++token_start;
+        } else {
+            int p;
             if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
                 return NULL;
+            *port_min = (uint16_t)p;
+            if (token_start != end && *token_start == '-') {
+                ++token_start;
+                if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                    return NULL;
+            }
+            *port_max = (uint16_t)p;
         }
-        *port_max = (uint16_t)p;
+    }
+
+    /* parse optional /mask appearing after the port (legacy order, e.g. 10.0.0.0:80/8) */
+    if (token_start != end && *token_start == '/') {
+        int mask;
+        if (*addr_mask != 0) /* mask already given before the port */
+            return NULL;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
+            return NULL;
+        *addr_mask = mask;
     }
 
     return token_start;

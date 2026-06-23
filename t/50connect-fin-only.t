@@ -20,7 +20,7 @@ hosts:
     paths:
       "/":
         proxy.connect:
-          - "+127.0.0.1"
+          - "+127.0.0.1:*"
         proxy.timeout.io: 30000
 EOT
 
