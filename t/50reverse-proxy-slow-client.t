@@ -103,9 +103,20 @@ my $tempdir = tempdir(CLEANUP => 1);
 my $upstream_socket = "$tempdir/upstream.sock";
 my $upstream_guard = spawn_large_response_upstream($upstream_socket, $body_size);
 
-my $server = spawn_h2o(<< "EOT");
+my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+my $server = spawn_h2o_raw(<< "EOT", [{ port => $port, proto => "tcp" }, { port => $tls_port, proto => "tcp" }]);
 http1-request-io-timeout: 1
 proxy.zerocopy: OFF
+listen:
+  - host: 0.0.0.0
+    port: $port
+    sndbuf: 65536
+  - host: 0.0.0.0
+    port: $tls_port
+    sndbuf: 65536
+    ssl:
+      key-file: examples/h2o/server.key
+      certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -113,6 +124,8 @@ hosts:
         proxy.reverse.url: http://[unix:$upstream_socket]/
         proxy.timeout.io: 1000000
 EOT
+$server->{port} = $port;
+$server->{tls_port} = $tls_port;
 
 subtest "http" => sub {
     run_slow_client("http", $server->{port});
