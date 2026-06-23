@@ -805,6 +805,31 @@ listen:
 .fi
 .PP
 
+Listening on an MPTCP socket
+
+If the type attribute is set to mptcp, h2o will listen on an MPTCP socket, instead of a TCP one.
+
+.PP
+.BR Example:\ 
+Listen Directive for MPTCP
+.PP
+.nf
+.RS
+# accept HTTPS on port 443 with MPTCP
+listen:
+  type: mptcp
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+
+.RE
+.fi
+.PP
+
+
+MPTCP is fully backwards compatible with regular TCP clients.
+
 
 .RE
 .RE

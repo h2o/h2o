@@ -172,6 +172,20 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 
+# IPPROTO_MPTCP is available in glibc 2.32 (Debian 12, RHEL 9, Ubuntu 22.04)
+CHECK_C_SOURCE_COMPILES("
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+int main(void) {
+    int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_MPTCP);
+    return 0;
+}" LIBC_HAS_MPTCP)
+
+IF (LIBC_HAS_MPTCP)
+    ADD_DEFINITIONS("-DH2O_WITH_MPTCP=1")
+ENDIF ()
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec

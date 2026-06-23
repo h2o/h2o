@@ -2814,7 +2814,11 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         goto Error;
 
     /* TCP-specific actions */
-    if (protocol == IPPROTO_TCP) {
+    if (protocol == IPPROTO_TCP
+#if H2O_WITH_MPTCP
+        || protocol == IPPROTO_MPTCP
+#endif
+    ) {
 #ifdef TCP_DEFER_ACCEPT
         { /* set TCP_DEFER_ACCEPT */
             int flag = 1;
@@ -2859,13 +2863,28 @@ Error:
     return -1;
 }
 
+static const char *protocol_to_string(int protocol)
+{
+    switch (protocol) {
+    case IPPROTO_TCP:
+        return "TCP";
+    case IPPROTO_UDP:
+        return "UDP";
+#if H2O_WITH_MPTCP
+    case IPPROTO_MPTCP:
+        return "MPTCP";
+#endif
+    }
+    return "";
+}
+
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
                               int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
     if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
-        h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
+        h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol_to_string(protocol),
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
     return fd;
@@ -3076,8 +3095,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
-    } else if (strcmp(type, "tcp") == 0) {
-
+    } else if (strcmp(type, "tcp") == 0
+#if H2O_WITH_MPTCP
+               || strcmp(type, "mptcp") == 0
+#endif
+    ) {
         /* TCP socket */
 #if !defined(TCP_CONGESTION)
         if (cc_node != NULL)
@@ -3104,7 +3126,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else {
-                        if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                        int protocol = ai->ai_protocol;
+#if H2O_WITH_MPTCP
+                        if (strcmp(type, "mptcp") == 0) {
+                            if (protocol == IPPROTO_TCP) {
+                                // glibc getaddrinfo() doesn't support IPPROTO_MPTCP until a8e9022e0f82("getaddrinfo.c: support
+                                // MPTCP (BZ #29609)") i.e. version 2.42. We always pass IPPROTO_TCP and correct here.
+                                protocol = IPPROTO_MPTCP;
+                            }
+                        }
+#endif
+                        if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, protocol,
                                                      ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
@@ -5087,6 +5119,9 @@ int main(int argc, char **argv)
 #endif
 #if H2O_USE_IO_URING
                 printf("io_uring: YES\n");
+#endif
+#if H2O_WITH_MPTCP
+                printf("mptcp: YES\n");
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
