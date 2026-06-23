@@ -2363,8 +2363,10 @@ typedef struct st_h2o_connect_acl_entry_t {
         uint8_t v6[16];
     } addr;
     size_t addr_mask;
-    uint16_t port_min; /* 0 indicates ANY */
-    uint16_t port_max; /* for single port: port_min == port_max; for ANY: both 0; port range is INCLUSIVE on both min and max */
+    /* matched ports are the inclusive range [port_min, port_max]; a single port has port_min == port_max, and ANY is the full
+     * range 0 to 65535 */
+    uint16_t port_min;
+    uint16_t port_max;
 } h2o_connect_acl_entry_t;
 
 /**

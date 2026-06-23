@@ -1164,8 +1164,9 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
 {
     const char *token_start = s, *token_end, *end = s + len;
 
+    /* default to matching any port; overridden below if a port or range is given */
     *port_min = 0;
-    *port_max = 0;
+    *port_max = 65535;
     *addr_mask = 0;
 
     if (token_start == end)
@@ -1203,7 +1204,7 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
     if (token_start != end && *token_start == ':') {
         ++token_start;
         if (token_start != end && *token_start == '*') {
-            /* `:*` means any port; leave port_min == port_max == 0 */
+            /* `:*` means any port; leave the default full range in place */
             ++token_start;
         } else {
             int p;
@@ -1294,8 +1295,6 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
 
     if (port_max < port_min)
         return "port range end must be >= start";
-    if (port_min == 0 && port_max != 0)
-        return "port 0 is not valid in a range";
 
     output->port_min = port_min;
     output->port_max = port_max;
@@ -1329,7 +1328,7 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
     for (size_t i = 0; i != num_acl_entries; ++i) {
         h2o_connect_acl_entry_t *entry = acl_entries + i;
         /* check port */
-        if (entry->port_min != 0 && (target_port < entry->port_min || target_port > entry->port_max))
+        if (target_port < entry->port_min || target_port > entry->port_max)
             goto Next;
         /* check address */
         switch (entry->addr_family) {

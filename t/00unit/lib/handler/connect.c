@@ -51,7 +51,7 @@ static void test_acl(void)
     ok(entries[1].addr.v4 == 0x7f000000);
     ok(entries[1].addr_mask == 24);
     ok(entries[1].port_min == 0);
-    ok(entries[1].port_max == 0);
+    ok(entries[1].port_max == 65535);
 
     ok(h2o_connect_parse_acl(entries + 2, "-*:25") == NULL);
     ok(!entries[2].allow_);
@@ -70,13 +70,13 @@ static void test_acl(void)
               16) == 0);
     ok(entries[3].addr_mask == 33);
     ok(entries[3].port_min == 0);
-    ok(entries[3].port_max == 0);
+    ok(entries[3].port_max == 65535);
 
     ok(h2o_connect_parse_acl(entries + 4, "+*") == NULL);
     ok(entries[4].allow_);
     ok(entries[4].addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
     ok(entries[4].port_min == 0);
-    ok(entries[4].port_max == 0);
+    ok(entries[4].port_max == 65535);
 
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
@@ -144,8 +144,16 @@ static void test_acl_port_range(void)
     ok(entry.port_min == 443);
     ok(entry.port_max == 443);
 
-    /* parsing: no port still works (both 0 = any) */
+    /* parsing: no port still works (0-65535 = any) */
     ok(h2o_connect_parse_acl(&entry, "+*") == NULL);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 65535);
+
+    /* parsing: port 0 is a first-class endpoint, both as a range and as a single port */
+    ok(h2o_connect_parse_acl(&entry, "+*:0-100") == NULL);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 100);
+    ok(h2o_connect_parse_acl(&entry, "+*:0-0") == NULL);
     ok(entry.port_min == 0);
     ok(entry.port_max == 0);
 
@@ -183,6 +191,10 @@ static void test_acl_port_range(void)
     /* port 8080: well outside range, should be allowed */
     sin.sin_port = htons(8080);
     ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 0: below the denied range, matched by the any-port allow entry */
+    sin.sin_port = htons(0);
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
 }
 
 static void test_acl_legacy_format(void)
@@ -196,13 +208,13 @@ static void test_acl_legacy_format(void)
     ok(entry.addr.v4 == 0x7f000001);
     ok(entry.addr_mask == 32);
     ok(entry.port_min == 0);
-    ok(entry.port_max == 0);
+    ok(entry.port_max == 65535);
 
     /* `:*` on the wildcard address */
     ok(h2o_connect_parse_acl(&entry, "+*:*") == NULL);
     ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
     ok(entry.port_min == 0);
-    ok(entry.port_max == 0);
+    ok(entry.port_max == 65535);
 
     /* legacy order: netmask after the port (address:port/mask) */
     ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:443/8") == NULL);
@@ -222,7 +234,7 @@ static void test_acl_legacy_format(void)
     ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:*/8") == NULL);
     ok(entry.addr_mask == 8);
     ok(entry.port_min == 0);
-    ok(entry.port_max == 0);
+    ok(entry.port_max == 65535);
 
     /* new and legacy orders yield the same result */
     h2o_connect_acl_entry_t entry2;
