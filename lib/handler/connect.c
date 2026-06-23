@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <limits.h>
 #include "h2o/hostinfo.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
@@ -1131,6 +1132,27 @@ void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t 
 }
 
 /**
+ * Parses a decimal number at the beginning of [*s, end), advancing *s past the digits consumed. Returns the parsed value, or -1 if
+ * no digit is found or the value would not fit in a non-negative int. The caller is responsible for range-checking the result.
+ */
+static int parse_decimal(const char **s, const char *end)
+{
+    const char *start = *s;
+    int v = 0;
+
+    for (; *s != end && '0' <= **s && **s <= '9'; ++*s) {
+        int digit = **s - '0';
+        /* reject if `v * 10 + digit` would overflow INT_MAX, checked before the multiply to avoid relying on a wider type */
+        if (v > (INT_MAX - digit) / 10)
+            return -1;
+        v = v * 10 + digit;
+    }
+    if (*s == start)
+        return -1;
+    return v;
+}
+
+/**
  * Parse an ACL host/mask:port specification.
  * Accepted format: host[/mask][:port[-port]]
  * Examples: 10.0.0.0/8:80-443, [::1]:443, *:25, 127.0.0.1/32, local
@@ -1169,40 +1191,26 @@ static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *ho
 
     /* parse optional /mask */
     if (token_start != end && *token_start == '/') {
-        size_t mask = 0;
-        const char *mask_start = ++token_start;
-        while (token_start != end && '0' <= *token_start && *token_start <= '9') {
-            mask = mask * 10 + *token_start - '0';
-            ++token_start;
-        }
-        if (token_start == mask_start || mask == 0)
+        int mask;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
             return NULL;
         *addr_mask = mask;
     }
 
     /* parse optional :port or :port-port */
     if (token_start != end && *token_start == ':') {
-        uint32_t p = 0;
-        int have_range = 0;
-        for (++token_start; token_start != end; ++token_start) {
-            if ('0' <= *token_start && *token_start <= '9') {
-                p = p * 10 + *token_start - '0';
-                if (p > 65535)
-                    return NULL;
-            } else if (*token_start == '-' && !have_range) {
-                *port_min = (uint16_t)p;
-                p = 0;
-                have_range = 1;
-            } else {
-                break;
-            }
+        int p;
+        ++token_start;
+        if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+            return NULL;
+        *port_min = (uint16_t)p;
+        if (token_start != end && *token_start == '-') {
+            ++token_start;
+            if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                return NULL;
         }
-        if (have_range) {
-            *port_max = (uint16_t)p;
-        } else {
-            *port_min = (uint16_t)p;
-            *port_max = (uint16_t)p;
-        }
+        *port_max = (uint16_t)p;
     }
 
     return token_start;
