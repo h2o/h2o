@@ -98,8 +98,8 @@ If none of the entries match, the request is also rejected.
 </p>
 <?= $ctx->{example}->(q{Simple HTTPS proxy}, <<'EOT')
 proxy.connect:
-- "-192.168.0.0/24"   # reject any attempts to local network
-- "+*:443"            # accept attempts to port 443 of any host
+- "-192.168.0.0/24"    # reject any attempts to local network
+- "+*:443"             # accept attempts to port 443 of any host
 - "+10.0.0.0/8:80-443" # accept attempts to ports 80 through 443 of 10.0.0.0/8
 EOT
 ?>

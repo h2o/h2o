@@ -297,8 +297,8 @@ If none of the entries match, the request is also rejected.
 <div class="example">
 <div class="caption">Example. Simple HTTPS proxy</div>
 <pre><code>proxy.connect:
-- &quot;-192.168.0.0/24&quot;   # reject any attempts to local network
-- &quot;+*:443&quot;            # accept attempts to port 443 of any host
+- &quot;-192.168.0.0/24&quot;    # reject any attempts to local network
+- &quot;+*:443&quot;             # accept attempts to port 443 of any host
 - &quot;+10.0.0.0/8:80-443&quot; # accept attempts to ports 80 through 443 of 10.0.0.0/8
 </code></pre>
 </div>
