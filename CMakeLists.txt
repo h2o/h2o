@@ -890,7 +890,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t t-qif ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
@@ -947,7 +947,7 @@ ExternalProject_Add(quicly-cli
 SET_TARGET_PROPERTIES(quicly-cli PROPERTIES EXCLUDE_FROM_ALL TRUE)
 ADD_DEPENDENCIES(checkdepends quicly-cli)
 
-ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove -I. -v t/*.t
+ADD_CUSTOM_TARGET(check-valgrind env H2O_VALGRIND=./misc/h2o_valgrind/ H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} PERL5LIB=.:deps/quicly prove -v t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     DEPENDS h2o t-00unit-evloop.t)
 

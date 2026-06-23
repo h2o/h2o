@@ -87,6 +87,7 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
+    .qpack = {.encoder_table_capacity = 4096},
     .max_frame_payload_size = 16384,
 };
 static quicly_cid_plaintext_t h3_next_cid;
@@ -717,6 +718,9 @@ static void usage(const char *progname)
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
             " --http3-key-exchange <name>\n"
             "               overrides the TLS/1.3 key exchanges to be used\n"
+            " --http3-qpack-encoder-table-capacity <bytes>\n"
+            "               sets the QPACK encoder dynamic table capacity for outgoing requests\n"
+            "               (default: 4096; set to 0 to disable dynamic-table use)\n"
             " --input <path>\n"
             "               file from which the request body is read\n"
             "  -h, --help   prints this help\n"
@@ -816,22 +820,25 @@ int main(int argc, char **argv)
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_HTTP3_KEY_EXCHANGE,
         OPT_HTTP3_NO_ECN,
+        OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY,
         OPT_UPGRADE,
         OPT_INPUT,
     };
-    struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
-                                {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
-                                {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
-                                {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
-                                {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
-                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
-                                {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
-                                {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
-                                {"upgrade", required_argument, NULL, OPT_UPGRADE},
-                                {"output", required_argument, NULL, 'o'},
-                                {"input", required_argument, NULL, OPT_INPUT},
-                                {"help", no_argument, NULL, 'h'},
-                                {NULL}};
+    struct option longopts[] = {
+        {"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
+        {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
+        {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
+        {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
+        {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+        {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+        {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
+        {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
+        {"http3-qpack-encoder-table-capacity", required_argument, NULL, OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY},
+        {"upgrade", required_argument, NULL, OPT_UPGRADE},
+        {"output", required_argument, NULL, 'o'},
+        {"input", required_argument, NULL, OPT_INPUT},
+        {"help", no_argument, NULL, 'h'},
+        {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
@@ -1026,6 +1033,12 @@ int main(int argc, char **argv)
         case OPT_HTTP3_NO_ECN:
             h3ctx.quic.enable_ratio.ecn = 0;
             break;
+        case OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY:
+            if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder_table_capacity) != 1) {
+                fprintf(stderr, "--http3-qpack-encoder-table-capacity must be a non-negative integer\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
             break;
@@ -1096,8 +1109,8 @@ int main(int argc, char **argv)
         } else if (strcmp(req.method, "CONNECT") == 0) {
             if (ctx.protocol_selector.ratio.http2 < 0 ||
                 ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 != 100) {
-                fprintf(stderr,
-                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
+                fprintf(stderr, "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 "
+                                "and H3 using `-3 <ratio>`\n");
                 exit(EXIT_FAILURE);
             }
         }

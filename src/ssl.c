@@ -327,20 +327,29 @@ static int ticket_key_callback_ossl(SSL *ssl, unsigned char *key_name, unsigned 
     return ticket_key_callback(key_name, iv, ctx, hctx, enc);
 }
 
-static void calculate_quic_tp_tag(uint8_t *tag64, const quicly_context_t *ctx)
+static void calculate_quic_tag(uint8_t *tag64, const quicly_context_t *ctx, const h2o_http3_qpack_context_t *qpack)
 {
     ptls_buffer_t buf;
     uint8_t full_digest[PTLS_SHA256_DIGEST_SIZE];
+    int ret = 0;
 
-    /* calculate sha256 hash of remembered tp */
+    /* calculate sha256 hash of remembered transport parameters and HTTP/3 settings that constrain 0-RTT */
     ptls_buffer_init(&buf, "", 0);
-    if (quicly_build_session_ticket_auth_data(&buf, ctx) != 0 ||
-        ptls_calc_hash(&ptls_openssl_sha256, full_digest, buf.base, buf.off) != 0)
-        h2o_fatal("failed to calculate sha256 of remembered TPs");
+    if ((ret = quicly_build_session_ticket_auth_data(&buf, ctx)) != 0)
+        goto Exit;
+    ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
+    ptls_buffer_push_quicint(&buf, qpack->decoder_table_capacity);
+    if ((ret = ptls_calc_hash(&ptls_openssl_sha256, full_digest, buf.base, buf.off)) != 0)
+        goto Exit;
     ptls_buffer_dispose(&buf);
 
     /* use the first 64-bit */
     memcpy(tag64, full_digest, 8);
+    return;
+
+Exit: /* The if-error-goto-exit pattern is used because ptls_buffer_push_quicint relies on it. */
+    assert(ret != 0);
+    h2o_fatal("failed to build session ticket auth data");
 }
 
 struct encrypt_ticket_ptls_t {
@@ -380,13 +389,13 @@ static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is
     }
 }
 
-static ptls_encrypt_ticket_t *create_encrypt_ticket_ptls(const quicly_context_t *quic)
+static ptls_encrypt_ticket_t *create_encrypt_ticket_ptls(const quicly_context_t *quic, const h2o_http3_qpack_context_t *qpack)
 {
     struct encrypt_ticket_ptls_t *self = malloc(sizeof(*self));
     *self = (struct encrypt_ticket_ptls_t){{encrypt_ticket_ptls}};
     if (quic != NULL) {
         self->is_quic = 1;
-        calculate_quic_tp_tag(self->quic_tag, quic);
+        calculate_quic_tag(self->quic_tag, quic, qpack);
     }
     return &self->super;
 }
@@ -1132,12 +1141,12 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 #endif
 }
 
-void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic)
+void ssl_setup_session_resumption_ptls(ptls_context_t *ptls, quicly_context_t *quic, const h2o_http3_qpack_context_t *qpack)
 {
     if (conf.ticket.update_thread != NULL) {
         ptls->ticket_lifetime = conf.lifetime;
         assert((quic != NULL) == ptls->omit_end_of_early_data && "detected contradictory setting");
-        ptls->encrypt_ticket = create_encrypt_ticket_ptls(quic);
+        ptls->encrypt_ticket = create_encrypt_ticket_ptls(quic, qpack);
     }
 }
 

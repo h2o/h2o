@@ -29,6 +29,7 @@ enum {
     ELEMENT_TYPE_LOCAL_ADDR,                    /* %A */
     ELEMENT_TYPE_BYTES_SENT,                    /* %b */
     ELEMENT_TYPE_HEADER_BYTES_SENT,             /* %{response-header-bytes}x */
+    ELEMENT_TYPE_REQUEST_BODY_BYTES,            /* %{request-body-bytes}x */
     ELEMENT_TYPE_PROTOCOL,                      /* %H */
     ELEMENT_TYPE_REMOTE_ADDR,                   /* %h */
     ELEMENT_TYPE_LOGNAME,                       /* %l */
@@ -272,6 +273,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("total-time", ELEMENT_TYPE_TOTAL_TIME);
                     MAP_EXT_TO_TYPE("error", ELEMENT_TYPE_ERROR);
                     MAP_EXT_TO_TYPE("response-header-bytes", ELEMENT_TYPE_HEADER_BYTES_SENT);
+                    MAP_EXT_TO_TYPE("request-body-bytes", ELEMENT_TYPE_REQUEST_BODY_BYTES);
                     MAP_EXT_TO_TYPE("proxy.idle-time", ELEMENT_TYPE_PROXY_IDLE_TIME);
                     MAP_EXT_TO_TYPE("proxy.connect-time", ELEMENT_TYPE_PROXY_CONNECT_TIME);
                     MAP_EXT_TO_TYPE("proxy.request-time", ELEMENT_TYPE_PROXY_REQUEST_TIME);
@@ -289,18 +291,11 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_TYPE("proxy.ssl.cipher", ELEMENT_TYPE_PROXY_SSL_CIPHER);
                     MAP_EXT_TO_TYPE("proxy.ssl.cipher-bits", ELEMENT_TYPE_PROXY_SSL_CIPHER_BITS);
                     MAP_EXT_TO_PROTO("extensible-priorities", extensible_priorities);
-                    MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
-                    MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
-                    MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
-                    MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
-                    MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
-                    MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
-                    MAP_EXT_TO_PROTO("http2.priority.actual", http2.priority_actual);
-                    MAP_EXT_TO_PROTO("http2.priority.actual.parent", http2.priority_actual_parent);
-                    MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight);
-                    MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
-                    MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
-                    MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
+                    MAP_EXT_TO_PROTO("request-header-bytes", request_header_bytes);
+                    MAP_EXT_TO_PROTO("request-header-text-bytes", request_header_text_bytes);
+                    MAP_EXT_TO_PROTO("request-header-count", request_header_count);
+                    MAP_EXT_TO_PROTO("response-header-text-bytes", response_header_text_bytes);
+                    MAP_EXT_TO_PROTO("response-header-count", response_header_count);
                     MAP_EXT_TO_PROTO("cc.name", transport.cc_name);
                     MAP_EXT_TO_PROTO("delivery-rate", transport.delivery_rate);
                     MAP_EXT_TO_PROTO("ssl.protocol-version", ssl.protocol_version);
@@ -315,6 +310,21 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("ssl.ech.cipher", ssl.ech_cipher);
                     MAP_EXT_TO_PROTO("ssl.ech.cipher-bits", ssl.ech_cipher_bits);
                     MAP_EXT_TO_PROTO("ssl.backend", ssl.backend);
+                    MAP_EXT_TO_PROTO("http1.request-index", http1.request_index);
+                    MAP_EXT_TO_PROTO("http2.stream-id", http2.stream_id);
+                    MAP_EXT_TO_PROTO("http2.priority.received", http2.priority_received);
+                    MAP_EXT_TO_PROTO("http2.priority.received.exclusive", http2.priority_received_exclusive);
+                    MAP_EXT_TO_PROTO("http2.priority.received.parent", http2.priority_received_parent);
+                    MAP_EXT_TO_PROTO("http2.priority.received.weight", http2.priority_received_weight);
+                    MAP_EXT_TO_PROTO("http2.priority.actual", http2.priority_actual);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.parent", http2.priority_actual_parent);
+                    MAP_EXT_TO_PROTO("http2.priority.actual.weight", http2.priority_actual_weight);
+                    MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
+                    MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
+                    MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
+                    MAP_EXT_TO_PROTO("http3.qpack-blocked", http3.qpack_blocked);
+                    MAP_EXT_TO_PROTO("http3.request-stream-bytes", http3.request_stream_bytes);
+                    MAP_EXT_TO_PROTO("http3.response-stream-bytes", http3.response_stream_bytes);
                     { /* not found */
                         h2o_iovec_t name = strdup_lowercased(pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_EXTENDED_VAR);
@@ -602,6 +612,10 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
             pos += sprintf(pos, "%" PRIu64, req->header_bytes_sent);
             break;
+        case ELEMENT_TYPE_REQUEST_BODY_BYTES: /* %{request-body-bytes}x */
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%zu", req->req_body_bytes_received);
+            break;
         case ELEMENT_TYPE_PROTOCOL: /* %H */
             if (req->version == 0)
                 goto EmitNull;
@@ -748,7 +762,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 found = 1;                                                                                                         \
             }                                                                                                                      \
             const h2o_header_t *header = headers->entries + index;                                                                 \
-            RESERVE(header->value.len *unsafe_factor);                                                                             \
+            RESERVE(header->value.len * unsafe_factor);                                                                            \
             pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
             if (!concat)                                                                                                           \
                 break;                                                                                                             \

@@ -384,11 +384,10 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         origin = &pool->socketpool->targets.entries[0]->url;
 
     static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
-    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &ctx->http3->qpack, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
@@ -539,9 +538,10 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
             return 0;
         }
     }
+    h2o_qpack_section_stats_t unused = {0};
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
-                                        &datagram_flow_id, header_ack, &header_ack_len, frame.payload, frame.length, err_desc)) !=
-        0) {
+                                        &datagram_flow_id, 0 /* client has no blocked-streams budget */, NULL, &unused, header_ack,
+                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
             /* the request is blocked by the QPACK stream */
             req->handle_input = NULL; /* FIXME */
@@ -787,9 +787,10 @@ void start_request(struct st_h2o_http3client_req_t *req)
     } else if (req->super.upgrade_to != NULL && req->super.upgrade_to != h2o_httpclient_upgrade_to_connect) {
         protocol = h2o_iovec_init(req->super.upgrade_to, strlen(req->super.upgrade_to));
     }
+    h2o_qpack_section_stats_t unused = {0};
     h2o_iovec_t headers_frame =
         h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, NULL, method, url.scheme,
-                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id);
+                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id, &unused);
     h2o_buffer_append(&req->sendbuf, headers_frame.base, headers_frame.len);
     if (body.len != 0)
         emit_data(req, body);
