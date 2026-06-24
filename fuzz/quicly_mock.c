@@ -501,7 +501,7 @@ uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn)
 
 size_t quicly_send_scatter_bufsize(quicly_conn_t *conn, size_t num_datagrams)
 {
-    return conn->egress.max_udp_payload_size * num_datagrams;
+    return 1500 * num_datagrams;
 }
 
 int64_t quicly_foreach_stream(quicly_conn_t *conn, void *thunk, int64_t (*cb)(void *thunk, quicly_stream_t *stream))
