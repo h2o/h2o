@@ -211,6 +211,7 @@ const char h2o_socket_error_ssl_cert_invalid[] = "invalid certificate";
 const char h2o_socket_error_ssl_cert_name_mismatch[] = "certificate name mismatch";
 const char h2o_socket_error_ssl_decode[] = "SSL decode error";
 const char h2o_socket_error_ssl_handshake[] = "ssl handshake failure";
+const char h2o_socket_error_write_progress[] = "write progress";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
@@ -920,6 +921,7 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     });
 
     assert(sock->_cb.write == NULL);
+    assert(sock->_cb.write_flags == 0);
     sock->_cb.write = cb;
 
     for (size_t i = 0; i != bufcnt; ++i) {
@@ -933,12 +935,14 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
     do_write(sock, bufs, bufcnt);
 }
 
-void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, h2o_socket_cb cb)
+void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, unsigned flags, h2o_socket_cb cb)
 {
     assert(sock->_cb.write == NULL);
+    assert(sock->_cb.write_flags == 0);
     assert(sock->_write_buf.flattened == NULL);
 
     sock->_cb.write = cb;
+    sock->_cb.write_flags = flags;
 
     if (cnt == 0)
         return do_write(sock, NULL, 0);
@@ -987,6 +991,7 @@ void on_write_complete(h2o_socket_t *sock, const char *err)
 
     cb = sock->_cb.write;
     sock->_cb.write = NULL;
+    sock->_cb.write_flags = 0;
     cb(sock, err);
 }
 
