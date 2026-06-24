@@ -298,8 +298,13 @@ static h2o_sendvec_random_read_result_t do_random_read_rwf_nowait(h2o_sendvec_t 
     struct iovec iovec = {.iov_base = dst, .iov_len = len};
     if ((rret = preadv2(self->file.ref->fd, &iovec, 1, file_off, RWF_NOWAIT)) == len)
         return H2O_SENDVEC_RANDOM_READ_SUCCESS;
-    if (!(rret > 0 || (rret == -1 && errno == EAGAIN)))
+    if (!(rret > 0 || (rret == -1 && errno == EAGAIN))) {
+        if (rret == -1 && (errno == ENOTSUP || errno == EOPNOTSUPP))
+            h2o_req_log_error(self->src_req, "lib/handler/file.c",
+                              "preadv2(RWF_NOWAIT) is not supported; use `file.io_uring: splice` to disable the "
+                              "RWF_NOWAIT path");
         return H2O_SENDVEC_RANDOM_READ_ERROR;
+    }
     /* data was not immediatlely available, start async read if none is in flight */
     if (self->uring_reader != NULL) {
         assert(!self->uring_reader->complete);
@@ -638,17 +643,16 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
 
     if (self->ranged.range_count < 2) {
 #if H2O_USE_IO_URING
-        if ((flags & H2O_FILE_FLAG_IO_URING) != 0) {
-            /* try using io_uring if requested: use of preadv2(RWF_NOWAIT) backed by asynchronous read is preferred, as it is faster
-             * than splice and avoids buffering when H3 is used */
-            if (req->_ostr_top->random_read_unblocked != NULL) {
-                self->super.proceed = do_proceed_rwf_nowait;
-            } else if (h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
+        /* try using io_uring if requested: use of preadv2(RWF_NOWAIT) backed by asynchronous read is preferred, as it is faster
+         * than splice and avoids buffering when H3 is used */
+        if ((flags & H2O_FILE_FLAG_IO_URING_RWF_NOWAIT) != 0 && req->_ostr_top->random_read_unblocked != NULL) {
+            self->super.proceed = do_proceed_rwf_nowait;
+        } else if ((flags & H2O_FILE_FLAG_IO_URING_SPLICE) != 0) {
+            if (h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
                 self->super.proceed = do_proceed_async_splice;
                 self->super.stop = do_stop_async_splice;
             } else {
-                h2o_req_log_error(req, "lib/handler/file.c",
-                                  "failed to allocate a pipe for async I/O; falling back to blocking I/O");
+                h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
             }
         }
 #endif
