@@ -279,25 +279,38 @@ static void test_adjust_stream_frame_layout(void)
 #undef TEST
 }
 
-static void test_calculate_out_of_place_offset(void)
+static void test_calculate_out_of_place_offset_multi(size_t stream_frame_header_size)
 {
-    /* no out-of-place encryption if space is minimal */
-    ok(calculate_out_of_place_offset(1280, 11, 16, 1, 1280) == 0);
-    ok(calculate_out_of_place_offset(1280, 11, 16, 2, 1280 * 2) == 0);
+    const size_t mtu = 1280, packet_overhead = 1 + 8 + 2 + 16 /* 1st byte, cid, pn, tag */;
 
     /* emulate generating 10 datagrams */
-    const size_t mtu = 1280, packet_header = 11, tag = 16;
-    size_t datagrams = 10, payload_offset = calculate_out_of_place_offset(mtu, packet_header, tag, datagrams, 15000);
-    /* payload of first datagram is out-of-place */
+    size_t datagrams = 10, bufsize,
+           payload_offset = calculate_out_of_place_offset(mtu, packet_overhead, datagrams, 15000, &bufsize);
+
+    /* payload of the first datagram is out-of-place */
     ok(payload_offset > mtu);
 
-    /* payload of following datagrams are also out-of-place */
-    size_t datagram_end = mtu * 2;
+    /* payload of the following datagrams are also out-of-place, with the STREAM frame header prepended */
+    size_t datagram_end = mtu;
     while (--datagrams != 0) {
-        payload_offset += mtu - (packet_header + tag + (1 + 8 + 8 + 8) /* max stream header size */);
-        ok(datagram_end <= payload_offset - (1 + 8 + 8 + 8) /* max stream header size */);
+        payload_offset += mtu - (packet_overhead + stream_frame_header_size);
         datagram_end += mtu;
+        size_t payload_from = payload_offset - stream_frame_header_size;
+        ok(datagram_end <= payload_from);
+        ok(payload_from + mtu - packet_overhead <= bufsize);
     }
+}
+
+static void test_calculate_out_of_place_offset(void)
+{
+    const size_t mtu = 1280, packet_overhead = 1 + 8 + 2 + 16 /* 1st byte, cid, pn, tag */;
+
+    /* no out-of-place encryption if space is minimal */
+    ok(calculate_out_of_place_offset(mtu, packet_overhead, 1, mtu, NULL) == 0);
+    ok(calculate_out_of_place_offset(mtu, packet_overhead, 2, mtu * 2, NULL) == 0);
+
+    subtest("frame_size=max", test_calculate_out_of_place_offset_multi, 1 + 8 + 8 + 8);
+    subtest("frame_size=0", test_calculate_out_of_place_offset_multi, 0);
 }
 
 static int64_t get_now_cb(quicly_now_t *self)
