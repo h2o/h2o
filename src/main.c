@@ -1321,6 +1321,7 @@ IdentityFound:
     return ret;
 }
 
+#if H2O_USE_BROTLI
 static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptls_context_t *ctx, ptls_iovec_t ocsp_status)
 {
     ptls_emit_compressed_certificate_t *ecc = h2o_mem_alloc(sizeof(*ecc));
@@ -1331,24 +1332,29 @@ static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptl
 
     return ecc;
 }
+#endif
 
 static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o_buffer_t *ocsp_status)
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
 
+#if H2O_USE_BROTLI
     if (identity->ptls.ctx != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
             identity->ptls.ctx,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
+#endif
 
     pthread_mutex_lock(&identity->dynamic.mutex);
 
     if (identity->dynamic.ocsp_status != NULL)
         h2o_buffer_dispose(&identity->dynamic.ocsp_status);
+#if H2O_USE_BROTLI
     if (identity->dynamic.emit_compressed_ptls != NULL) {
         ptls_dispose_compressed_certificate(identity->dynamic.emit_compressed_ptls);
         free(identity->dynamic.emit_compressed_ptls);
     }
+#endif
     identity->dynamic.ocsp_status = ocsp_status;
     identity->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
 
@@ -1487,12 +1493,14 @@ static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls,
 
     pthread_mutex_lock(&self->conf->dynamic.mutex);
 
+#if H2O_USE_BROTLI
     if (self->conf->dynamic.emit_compressed_ptls != NULL) {
         ptls_emit_certificate_t *ec = &self->conf->dynamic.emit_compressed_ptls->super;
         if ((ret = ec->cb(ec, tls, emitter, key_sched, context, push_status_request, compress_algos, num_compress_algos)) !=
             PTLS_ERROR_DELEGATE)
             goto Exit;
     }
+#endif
 
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
         ptls_context_t *tlsctx = ptls_get_context(tls);

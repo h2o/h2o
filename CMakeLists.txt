@@ -353,7 +353,6 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/drbg.c
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
-    deps/picotls/lib/certificate_compression.c
     deps/picotls/lib/hpke.c
     deps/picotls/lib/pembase64.c
     deps/picotls/lib/picotls.c
@@ -414,7 +413,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
-    lib/handler/compress/brotli.c
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -472,6 +470,12 @@ SET(LIB_SOURCE_FILES
     lib/http3/server.c
 
     ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h)
+
+IF (BROTLI_FOUND)
+    LIST(APPEND LIB_SOURCE_FILES
+        deps/picotls/lib/certificate_compression.c
+        lib/handler/compress/brotli.c)
+ENDIF (BROTLI_FOUND)
 
 IF (WITH_DTRACE)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
@@ -737,7 +741,11 @@ SET(STANDALONE_SOURCE_FILES
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DQUICLY_USE_TRACER=1")
+IF (BROTLI_FOUND)
+    SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DQUICLY_USE_TRACER=1")
+ELSE ()
+    SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=0 -DQUICLY_USE_TRACER=1")
+ENDIF ()
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -840,9 +848,15 @@ INSTALL(DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/h2o/acme/webroot)
 
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
-SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
-    EXCLUDE_FROM_ALL 1)
+IF (BROTLI_FOUND)
+    SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
+        COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
+        EXCLUDE_FROM_ALL 1)
+ELSE ()
+    SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
+        COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=0 -DH2O_UNITTEST=1"
+        EXCLUDE_FROM_ALL 1)
+ENDIF ()
 
 IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND BROTLI_FOUND)
     ExternalProject_Add(build-theft
@@ -863,9 +877,15 @@ ENDIF ()
 
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
-    SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-        COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
-        EXCLUDE_FROM_ALL 1)
+    IF (BROTLI_FOUND)
+        SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
+            COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
+            EXCLUDE_FROM_ALL 1)
+    ELSE ()
+        SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
+            COMPILE_FLAGS "-DH2O_USE_BROTLI=0 -DH2O_UNITTEST=1"
+            EXCLUDE_FROM_ALL 1)
+    ENDIF ()
 ENDIF (LIBUV_FOUND)
 
 TARGET_INCLUDE_DIRECTORIES(t-00unit-evloop.t PUBLIC ${OPENSSL_INCLUDE_DIR})
