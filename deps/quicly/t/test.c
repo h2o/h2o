@@ -279,13 +279,14 @@ static void test_adjust_stream_frame_layout(void)
 #undef TEST
 }
 
-static void test_calculate_out_of_place_offset_multi(size_t stream_frame_header_size)
+static void test_scatter_bufsize_multi(size_t stream_frame_header_size)
 {
-    const size_t mtu = 1280, packet_overhead = 1 + 8 + 2 + 16 /* 1st byte, cid, pn, tag */;
+    const size_t mtu = 1280, real_overhead = 1 + 8 + 2 + 16 /* 1st byte, cid, pn, tag */;
 
-    /* emulate generating 10 datagrams */
-    size_t datagrams = 10, bufsize,
-           payload_offset = calculate_out_of_place_offset(mtu, packet_overhead, datagrams, 15000, &bufsize);
+    /* emulate generating 10 datagrams: size the tail (with the conservative, zero-length-DCID overhead), then derive the offset from
+     * it using the real overhead, exactly as the send path does */
+    size_t datagrams = 10, bufsize = calc_scatter_bufsize(mtu, datagrams),
+           payload_offset = bufsize - (mtu - real_overhead) * datagrams;
 
     /* payload of the first datagram is out-of-place */
     ok(payload_offset > mtu);
@@ -293,24 +294,25 @@ static void test_calculate_out_of_place_offset_multi(size_t stream_frame_header_
     /* payload of the following datagrams are also out-of-place, with the STREAM frame header prepended */
     size_t datagram_end = mtu;
     while (--datagrams != 0) {
-        payload_offset += mtu - (packet_overhead + stream_frame_header_size);
+        payload_offset += mtu - (real_overhead + stream_frame_header_size);
         datagram_end += mtu;
         size_t payload_from = payload_offset - stream_frame_header_size;
         ok(datagram_end <= payload_from);
-        ok(payload_from + mtu - packet_overhead <= bufsize);
+        ok(payload_from + mtu - real_overhead <= bufsize);
     }
 }
 
-static void test_calculate_out_of_place_offset(void)
+static void test_scatter_bufsize(void)
 {
-    const size_t mtu = 1280, packet_overhead = 1 + 8 + 2 + 16 /* 1st byte, cid, pn, tag */;
+    const size_t mtu = 1280;
 
-    /* no out-of-place encryption if space is minimal */
-    ok(calculate_out_of_place_offset(mtu, packet_overhead, 1, mtu, NULL) == 0);
-    ok(calculate_out_of_place_offset(mtu, packet_overhead, 2, mtu * 2, NULL) == 0);
+    /* out-of-place does not apply to a single datagram */
+    ok(calc_scatter_bufsize(mtu, 1) == mtu);
+    /* two datagrams require more buffer than the in-place size of 2 * mtu */
+    ok(calc_scatter_bufsize(mtu, 2) > mtu * 2);
 
-    subtest("frame_size=max", test_calculate_out_of_place_offset_multi, 1 + 8 + 8 + 8);
-    subtest("frame_size=0", test_calculate_out_of_place_offset_multi, 0);
+    subtest("frame_size=max", test_scatter_bufsize_multi, 1 + 8 + 8 + 8);
+    subtest("frame_size=0", test_scatter_bufsize_multi, 0);
 }
 
 static int64_t get_now_cb(quicly_now_t *self)
@@ -1294,6 +1296,69 @@ static void test_setup_connected_peers(quicly_conn_t **client, quicly_conn_t **s
     exchange_until_idle(*client, *server);
 }
 
+static struct {
+    int is_blocked;     /* if set, on_send_emit reports the payload as unavailable */
+    int num_emit_calls; /* number of times on_send_emit has been invoked */
+} blocked_sched;
+
+static void blocked_emit_on_send_emit(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all)
+{
+    ++blocked_sched.num_emit_calls;
+    /* emulate an application whose payload is not yet available (e.g., waiting on disk I/O) */
+    if (blocked_sched.is_blocked) {
+        *len = 0;
+        *wrote_all = 0;
+        return;
+    }
+    quicly_streambuf_egress_emit(stream, off, dst, len, wrote_all);
+}
+
+static const quicly_stream_callbacks_t blocked_emit_stream_callbacks = {
+    on_destroy, quicly_streambuf_egress_shift, blocked_emit_on_send_emit, on_egress_stop, on_ingress_receive, on_ingress_reset};
+
+static void test_send_emit_blocked(void)
+{
+    blocked_sched.is_blocked = 0;
+    blocked_sched.num_emit_calls = 0;
+
+    quicly_conn_t *client, *server;
+    test_setup_connected_peers(&client, &server);
+
+    /* open a stream whose on_send_emit can report the payload as not-yet-available */
+    quicly_stream_t *client_stream;
+    quicly_error_t ret = quicly_open_stream(client, &client_stream, 0);
+    ok(ret == 0);
+    client_stream->callbacks = &blocked_emit_stream_callbacks;
+    ret = quicly_streambuf_egress_write(client_stream, "hello", 5);
+    ok(ret == 0);
+
+    /* while blocked, the default scheduler deschedules the stream: nothing is emitted and the peer never learns it exists, yet
+     * quicly_send still succeeds */
+    blocked_sched.is_blocked = 1;
+    transmit(client, server);
+    ok(blocked_sched.num_emit_calls == 1);
+    ok(quicly_get_stream(server, client_stream->stream_id) == NULL);
+
+    /* the descheduled stream is not retried by a subsequent send */
+    transmit(client, server);
+    ok(blocked_sched.num_emit_calls == 1);
+
+    /* unblock and reschedule; the data is delivered intact */
+    blocked_sched.is_blocked = 0;
+    quicly_stream_sync_sendbuf(client_stream, 0);
+    transmit(client, server);
+    ok(blocked_sched.num_emit_calls == 2);
+    quicly_stream_t *server_stream = quicly_get_stream(server, client_stream->stream_id);
+    ok(server_stream != NULL);
+    if (server_stream != NULL) {
+        ptls_iovec_t received = quicly_streambuf_ingress_get(server_stream);
+        ok(received.len == 5 && memcmp(received.base, "hello", 5) == 0);
+    }
+
+    quicly_free(client);
+    quicly_free(server);
+}
+
 static void test_setup_send_context(quicly_conn_t *conn, quicly_send_context_t *s, struct iovec *datagram, void *buf,
                                     size_t bufsize)
 {
@@ -1574,7 +1639,8 @@ int main(int argc, char **argv)
     subtest("loss", test_loss);
     subtest("adjust-crypto-frame-layout", test_adjust_crypto_frame_layout);
     subtest("adjust-stream-frame-layout", test_adjust_stream_frame_layout);
-    subtest("calculate-out-of-place-offset", test_calculate_out_of_place_offset);
+    subtest("scatter-bufsize", test_scatter_bufsize);
+    subtest("send-emit-blocked", test_send_emit_blocked);
     subtest("test-vector", test_vector);
     subtest("test-retry-aead", test_retry_aead);
     subtest("transport-parameters", test_transport_parameters);

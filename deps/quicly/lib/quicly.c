@@ -3919,6 +3919,8 @@ static quicly_error_t commit_send_packet(quicly_conn_t *conn, quicly_send_contex
             *s->frames.dst++ = QUICLY_FRAME_TYPE_PADDING;
     }
 
+    assert(s->frames.dst <= s->buf_end && "the built frames stay within the output buffer");
+
     /* encode packet size, packet number, key-phase */
     if (QUICLY_PACKET_IS_LONG_HEADER(*s->packet.dst)) {
         uint16_t length = s->frames.dst - s->frames.start + s->packet.cipher->aead->algo->tag_size + QUICLY_SEND_PN_SIZE;
@@ -4074,31 +4076,33 @@ static void prepare_packet(quicly_conn_t *conn, quicly_send_context_t *s)
 }
 
 /**
- * Calculates the offset where frames have to be built for using out-of-place encryption, relative to the current position of the
- * packet being built. If `buffer_capacity` is insufficient, returns zero.
- * @param buffer_capacity  size of the buffer remaining, starting from the beginning of the packet being built
+ * Computes the buffer size that should be available, measured from the start of the packet being built, for out-of-place encryption
+ * of a burst of `num_datagrams` datagrams of the given MTU. This is the MTU-taking implementation of `quicly_send_scatter_bufsize`.
  */
-static inline size_t calculate_out_of_place_offset(size_t mtu, size_t packet_overhead, size_t num_datagrams, size_t buffer_capacity,
-                                                   size_t *out_space_needed)
+static size_t calc_scatter_bufsize(size_t mtu, size_t num_datagrams)
 {
-    if (num_datagrams == 1)
-        return 0;
+    if (num_datagrams <= 1)
+        return num_datagrams * mtu;
 
-    const size_t max_stream_frame_header_size = 1 + 8 + 8 + 8;
+    const size_t min_packet_overhead = 1 /* first byte */ + 0 /* DCID */ + QUICLY_SEND_PN_SIZE + QUICLY_AEAD_TAG_SIZE,
+                 max_stream_frame_header_size = 1 + 8 + 8 + 8;
 
     /* Both of these conditions have to be met:
      * 1. Even if STREAM frame headers were never prepended, writing the payload for all the datagrams at once does not cause an
      *    overflow.
      * 2. Even if the largest STREAM frame headers were always prepended, the packet and the frame region of the last packet do not
-     *    overlap. */
+     *    overlap.
+     * The smallest per-packet overhead (a zero-length DCID plus the AEAD tag) is used for calculation, as the required buffer size
+     * is decreasing in overhead. Using the minimum yields an upper bound on the real requirement. */
     size_t offset_needed =
-               mtu + (num_datagrams - 1) * (packet_overhead + max_stream_frame_header_size) + max_stream_frame_header_size,
-           space_needed = offset_needed + (mtu - packet_overhead) * num_datagrams;
+        mtu + (num_datagrams - 1) * (min_packet_overhead + max_stream_frame_header_size) + max_stream_frame_header_size;
 
-    if (out_space_needed != NULL)
-        *out_space_needed = space_needed;
+    return offset_needed + (mtu - min_packet_overhead) * num_datagrams;
+}
 
-    return space_needed <= buffer_capacity ? offset_needed : 0;
+size_t quicly_send_scatter_bufsize(quicly_conn_t *conn, size_t num_datagrams)
+{
+    return calc_scatter_bufsize(conn->egress.max_udp_payload_size, num_datagrams);
 }
 
 #define ALLOCATE_FRAME_FLAG_CONSULT_CC 0x1
@@ -4166,12 +4170,19 @@ static quicly_error_t allocate_frame(quicly_conn_t *conn, quicly_send_context_t 
         int out_of_place = 0;
         if (!QUICLY_PACKET_IS_LONG_HEADER(s->context.first_byte) && conn->initial == NULL && conn->handshake == NULL) {
             assert(conn->application != NULL && !s->packet.coalesced);
-            size_t out_of_place_offset = calculate_out_of_place_offset(mtu, packet_overhead, s->max_datagrams - s->num_datagrams,
-                                                                       s->buf_end - s->packet.dst, NULL);
-            if (out_of_place_offset != 0) {
-                s->frames.start = s->packet.dst + out_of_place_offset;
-                s->frames.end = s->frames.start + mtu - packet_overhead;
-                out_of_place = 1;
+            /* If quicly is ready to emit multiple datagrams and the buffer is large enough, then try reading the payload for those
+             * datagrams at once to a contiguous buffer that is slightly offset, and scatter-encrypt them as packets. The offset is
+             * derived from the tail of the needed capacity (as returned by `quicly_send_scatter_bufsize`) using the real overhead.
+             * A miscalculation here or in `quicly_send_scatter_bufsize` will be caught by the bounds / no-overlap asserts in
+             * `commit_send_packet`. */
+            size_t remaining_datagrams = s->max_datagrams - s->num_datagrams;
+            if (remaining_datagrams >= 2) {
+                size_t scatter_bufsize = quicly_send_scatter_bufsize(conn, remaining_datagrams);
+                if (scatter_bufsize <= (size_t)(s->buf_end - s->packet.dst)) {
+                    s->frames.start = s->packet.dst + (scatter_bufsize - (mtu - packet_overhead) * remaining_datagrams);
+                    s->frames.end = s->frames.start + mtu - packet_overhead;
+                    out_of_place = 1;
+                }
             }
         }
         if (!out_of_place) {
@@ -5845,7 +5856,7 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
                     goto Exit;
                 /* send STREAM frames */
                 if ((ret = conn->super.ctx->stream_scheduler->do_send(conn->super.ctx->stream_scheduler, conn, s)) != 0) {
-                    assert(ret != QUICLY_ERROR_SEND_EMIT_BLOCKED && "blocked emit must be absorbed by a custom stream scheduler");
+                    assert(ret != QUICLY_ERROR_SEND_EMIT_BLOCKED && "blocked emit must be absorbed by the stream scheduler");
                     goto Exit;
                 }
                 /* once more, send control frames related to streams, as the state might have changed */

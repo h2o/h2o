@@ -340,6 +340,11 @@ static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t
             if (ret == QUICLY_ERROR_SENDBUF_FULL) {
                 assert(quicly_stream_can_send(stream, 1));
                 link_stream(sched, stream, conn_is_blocked);
+            } else if (ret == QUICLY_ERROR_SEND_EMIT_BLOCKED) {
+                /* `on_send_emit` reported that the payload is not yet available; leave the stream detached (the application
+                 * reschedules it via `quicly_stream_sync_sendbuf` once the data is ready) and continue with other streams */
+                ret = 0;
+                continue;
             }
             break;
         }

@@ -141,6 +141,11 @@ static const quicly_stream_callbacks_t server_stream_callbacks = {quicly_streamb
                                                                   client_on_receive,
                                                                   on_receive_reset};
 
+/* Records the size of the payloads supplied to quicly through the flatten callbacks (i.e., per `on_send_emit`). When out-of-place
+ * ("scatter") encryption fuses multiple datagrams into one read, the maximum rises well above the MTU; that is how `t/e2e.t` observes
+ * that scatter is being exercised. */
+static uint64_t emit_size_max, emit_size_sum, emit_count;
+
 static void dump_stats(FILE *fp, quicly_conn_t *conn)
 {
     quicly_stats_t stats;
@@ -158,7 +163,7 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             ", cwnd-exiting-slow-start: %" PRIu32 ", slow-start-exit-at: %" PRId64 ", jumpstart-cwnd: %" PRIu32
             ", jumpstart-exit: %" PRIu32 ", jumpstart-prev-rate: %" PRIu64 ", jumpstart-prev-rtt: %" PRIu32
             ", token-sent-rate: %" PRIu64 ", token-sent-rtt: %" PRIu32 ", ack-frequency-frames-sent: %" PRIu64
-            ", ack-frequency-frames-received: %" PRIu64 "\n",
+            ", ack-frequency-frames-received: %" PRIu64 ", emit-size-max: %" PRIu64 ", emit-size-avg: %" PRIu64 "\n",
             stats.num_packets.received, stats.num_packets.initial_received, stats.num_packets.zero_rtt_received,
             stats.num_packets.handshake_received, stats.num_packets.received_ecn_counts[0],
             stats.num_packets.received_ecn_counts[1], stats.num_packets.received_ecn_counts[2], stats.num_packets.decryption_failed,
@@ -170,7 +175,7 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             stats.cc.num_ecn_loss_episodes, stats.delivery_rate.smoothed, stats.cc.cwnd, stats.cc.cwnd_exiting_slow_start,
             stats.cc.exit_slow_start_at, stats.jumpstart.cwnd, stats.cc.cwnd_exiting_jumpstart, stats.jumpstart.prev_rate,
             stats.jumpstart.prev_rtt, stats.token_sent.rate, stats.token_sent.rtt, stats.num_frames_sent.ack_frequency,
-            stats.num_frames_received.ack_frequency);
+            stats.num_frames_received.ack_frequency, emit_size_max, emit_count != 0 ? emit_size_sum / emit_count : 0);
 }
 
 static int validate_path(const char *path)
@@ -223,10 +228,20 @@ static void send_header(quicly_stream_t *stream, int is_http1, int status, const
     send_str(stream, buf);
 }
 
+static void record_emit_size(size_t len)
+{
+    if (len > emit_size_max)
+        emit_size_max = len;
+    emit_size_sum += len;
+    ++emit_count;
+}
+
 static quicly_error_t flatten_file_vec(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
 {
     int fd = (intptr_t)vec->cbdata;
     ssize_t rret;
+
+    record_emit_size(len);
 
     /* FIXME handle partial read */
     while ((rret = pread(fd, dst, len, off)) == -1 && errno == EINTR)
@@ -283,6 +298,8 @@ static quicly_error_t flatten_sized_text(quicly_sendbuf_vec_t *vec, void *dst, s
         "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
         "world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello world\nhello "
         "world\nhello world\nhello world\nhello world\nhello world\nhello world\n";
+
+    record_emit_size(len);
 
     while (len != 0) {
         const char *src = pattern + off % 12;

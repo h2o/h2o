@@ -953,10 +953,10 @@ typedef struct st_quicly_stream_callbacks_t {
      * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
      * This callback is triggered by calling `quicly_stream_sync_sendbuf(stream, 1)` when tx data is present, and therefore, it
      * typically writes some data and sets `*len` to a non-zero value. However, the callback may set `*len` to zero to indicate that
-     * the payload was not immediately available (e.g., when it has to be loaded from disk). Setting `*len` to zero requires the use
-     * of a custom stream scheduler that absorbs the resulting `QUICLY_ERROR_SEND_EMIT_BLOCKED` (by descheduling the stream and
-     * returning zero) and reschedules the stream once the data becomes available. The default stream scheduler does not support
-     * the signal.
+     * the payload was not immediately available (e.g., when it has to be loaded from disk). When that happens the stream is
+     * descheduled, and it becomes the responsibility of the application to reschedule it by calling `quicly_stream_sync_sendbuf`
+     * once the data becomes available. The default stream scheduler supports this; a custom scheduler must likewise absorb the
+     * resulting `QUICLY_ERROR_SEND_EMIT_BLOCKED` and reschedule the stream.
      */
     void (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
@@ -1359,6 +1359,14 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  */
 quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                            size_t *num_datagrams, void *buf, size_t bufsize);
+/**
+ * Returns the size of the buffer that should be supplied to `quicly_send` so that quicly is given the opportunity to use out-of-
+ * place ("scatter") encryption when building the datagrams. Supplying at least this many bytes does not guarantee that the
+ * optimization is used -- quicly still decides per packet (e.g., it is never used for a single packet or during the handshake);
+ * supplying fewer bytes is permitted and simply disables it. The value tracks the connection's current MTU, so it should be queried
+ * per send.
+ */
+size_t quicly_send_scatter_bufsize(quicly_conn_t *conn, size_t num_datagrams);
 /**
  * returns ECN bits to be set for the packets built by the last invocation of `quicly_send`
  */
