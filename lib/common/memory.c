@@ -604,16 +604,13 @@ void h2o_append_to_null_terminated_list(void ***list, void *element)
 
 char *h2o_strerror_r(int err, char *buf, size_t len)
 {
-#if !(defined(_GNU_SOURCE) && defined(__gnu_linux__))
+#if defined(_GNU_SOURCE) && defined(__GLIBC__)
+    /* The GNU-specific strerror_r() returns a pointer to a string containing the error message. This may be either a pointer to a
+     * string that the function stores in  buf, or a pointer to some (immutable) static string (in which case buf is unused). */
+    return strerror_r(err, buf, len);
+#else
     strerror_r(err, buf, len);
     return buf;
-#else
-    /**
-     * The GNU-specific strerror_r() returns a pointer to a string containing the error message.
-     * This may be either a pointer to a string that the function stores in  buf,
-     * or a pointer to some (immutable) static string (in which case buf is unused)
-     */
-    return strerror_r(err, buf, len);
 #endif
 }
 
