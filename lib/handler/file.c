@@ -70,7 +70,7 @@ struct st_h2o_sendfile_generator_t {
     } header_bufs;
 #if H2O_USE_IO_URING
     /**
-     * back pointer to the request which is necessary for splicing async; becomes NULL when the generator is stopped
+     * back pointer to the request which is necessary for async file I/O; becomes NULL when the generator is stopped
      */
     h2o_req_t *src_req;
     h2o_pipe_sender_t pipe_sender;
@@ -204,7 +204,7 @@ static h2o_sendvec_random_read_result_t do_random_read_blocking(h2o_sendvec_t *s
 
 #if H2O_USE_IO_URING
 
-static void do_stop_async_splice(h2o_generator_t *_self, h2o_req_t *req)
+static void do_stop_async(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     self->src_req = NULL;
@@ -647,10 +647,11 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
          * than splice and avoids buffering when H3 is used */
         if ((flags & H2O_FILE_FLAG_IO_URING_RWF_NOWAIT) != 0 && req->_ostr_top->random_read_unblocked != NULL) {
             self->super.proceed = do_proceed_rwf_nowait;
+            self->super.stop = do_stop_async;
         } else if ((flags & H2O_FILE_FLAG_IO_URING_SPLICE) != 0) {
             if (h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
                 self->super.proceed = do_proceed_async_splice;
-                self->super.stop = do_stop_async_splice;
+                self->super.stop = do_stop_async;
             } else {
                 h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
             }
