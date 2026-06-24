@@ -60,13 +60,6 @@ extern "C" {
 #define H2O_USE_BROTLI 0
 #endif
 
-#ifndef H2O_MAX_HEADERS
-#define H2O_MAX_HEADERS 100
-#endif
-#ifndef H2O_MAX_REQLEN
-#define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
-#endif
-
 #ifndef H2O_SOMAXCONN
 /* simply use a large value, and let the kernel clip it to the internal max */
 #define H2O_SOMAXCONN 65535
@@ -546,6 +539,9 @@ struct st_h2o_globalconf_t {
         struct {
             uint32_t max_concurrent_streams;
         } http2;
+        struct {
+            unsigned ecn : 1;
+        } http3;
 
         /**
          * See the documentation of `h2o_httpclient_t::protocol_selector.ratio`.
@@ -1016,6 +1012,12 @@ typedef struct st_h2o_conn_callbacks_t {
     union {
         struct {
             h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
+            /* protocol-agnostic per-message metrics; only h3 implements the new ones initially */
+            h2o_iovec_t (*request_header_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_count)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_count)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
@@ -1050,6 +1052,10 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
+                h2o_iovec_t (*qpack_blocked)(h2o_req_t *req);
+                /* per-request QUIC-stream byte counters */
+                h2o_iovec_t (*request_stream_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*response_stream_bytes)(h2o_req_t *req);
             } http3;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
@@ -1176,16 +1182,16 @@ typedef struct st_h2o_filereq_t {
 } h2o_filereq_t;
 
 /**
- * Called be the protocol handler to submit chunk of request body to the generator. The callback returns 0 if successful, otherwise
- * a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is called. At
- * the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we should
- * consider delegating the responsibility of retaining the buffer to the caller.
+ * Called by the protocol handler to submit a chunk of request body to the generator. The callback returns 0 if successful,
+ * otherwise a non-zero value. Once `write_req.cb` is called, subsequent invocations MUST be postponed until the `proceed_req` is
+ * called. At the moment, `write_req_cb` is required to create a copy of data being provided before returning. To avoid copying, we
+ * should consider delegating the responsibility of retaining the buffer to the caller.
  */
 typedef int (*h2o_write_req_cb)(void *ctx, int is_end_stream);
 /**
- * Called by the generator, in response to `h2o_write_req_cb` to indicate to the protocol handler that new chunk can be submitted,
- * or to notify that an error has occurred. In the latter case, write might not be inflight. Note that `errstr` will be NULL (rather
- * than an error code indicating EOS) when called in response to `h2o_write_req_cb` with `is_end_stream` set to 1.
+ * Called by the generator to notify either of the following:
+ * * errstr == NULL: More data can be supplied by `h2o_write_req_cb`, or the processing of `h2o_write_req_cb(..., 1)` has completed.
+ * * errstr != NULL: An error has occurred. Note that the error might be reported at any moment outside the submit-consume cycle.
  */
 typedef void (*h2o_proceed_req_cb)(h2o_req_t *req, const char *errstr);
 /**
@@ -1797,6 +1803,14 @@ void h2o_context_init_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathc
  *
  */
 void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pathconf);
+/**
+ *
+ */
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso);
+/**
+ *
+ */
+void h2o_destroy_proxy_http3_context(h2o_http3client_ctx_t *h3ctx);
 
 /**
  * returns current timestamp
@@ -2298,6 +2312,9 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint32_t max_concurrent_streams;
         unsigned force_cleartext : 1;
     } http2;
+    struct {
+        unsigned ecn : 1;
+    } http3;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
 
@@ -2350,7 +2367,10 @@ typedef struct st_h2o_connect_acl_entry_t {
         uint8_t v6[16];
     } addr;
     size_t addr_mask;
-    uint16_t port; /* 0 indicates ANY */
+    /* matched ports are the inclusive range [port_min, port_max]; a single port has port_min == port_max, and ANY is the full
+     * range 0 to 65535 */
+    uint16_t port_min;
+    uint16_t port_max;
 } h2o_connect_acl_entry_t;
 
 /**
@@ -2434,6 +2454,8 @@ void h2o_log_register(h2o_hostconf_t *hostconf);
  * registers the h2olog configurator.
  */
 void h2o_log_register_configurator(h2o_globalconf_t *conf);
+
+PTLS_LOG_DEFINE_GETSNI(h2o_conn, h2o_conn_t *, { return arg->callbacks->get_ssl_server_name(arg); })
 
 /* inline defs */
 

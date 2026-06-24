@@ -111,6 +111,12 @@ typedef struct st_h2o_socket_t h2o_socket_t;
 
 typedef void (*h2o_socket_cb)(h2o_socket_t *sock, const char *err);
 
+/**
+ * When set, successful write progress may be reported by invoking the write callback with
+ * h2o_socket_error_write_progress. The write remains inflight until the callback is invoked with NULL or an error.
+ */
+#define H2O_SOCKET_SENDVEC_FLAG_REPORT_PROGRESS 0x1
+
 /* used by probes */
 struct st_h2o_io_uring_cmd_t;
 
@@ -217,6 +223,7 @@ struct st_h2o_socket_t {
     struct {
         h2o_socket_cb read;
         h2o_socket_cb write;
+        unsigned write_flags;
     } _cb;
     struct st_h2o_socket_addr_t *_peername;
     struct st_h2o_socket_addr_t *_sockname;
@@ -296,6 +303,7 @@ extern const char h2o_socket_error_ssl_cert_invalid[];
 extern const char h2o_socket_error_ssl_cert_name_mismatch[];
 extern const char h2o_socket_error_ssl_decode[];
 extern const char h2o_socket_error_ssl_handshake[];
+extern const char h2o_socket_error_write_progress[];
 
 /**
  * returns the loop
@@ -353,7 +361,15 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
 /**
  *
  */
-void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *bufs, size_t bufcnt, h2o_socket_cb cb);
+/**
+ * writes given sendvecs to socket
+ * @param sock the socket
+ * @param bufs an array of sendvecs
+ * @param bufcnt length of the sendvec array
+ * @param flags optional H2O_SOCKET_SENDVEC_FLAG_* flags
+ * @param cb callback to be called when write is complete
+ */
+void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *bufs, size_t bufcnt, unsigned flags, h2o_socket_cb cb);
 /**
  * starts polling on the socket (for read) and calls given callback when data arrives
  * @param sock the socket
@@ -558,6 +574,8 @@ int h2o_socket_boringssl_get_async_job_index(void);
  */
 int h2o_socket_boringssl_async_resumption_in_flight(SSL *ssl);
 #endif
+
+PTLS_LOG_DEFINE_GETSNI(h2o_sock, h2o_socket_t *, { return h2o_socket_get_ssl_server_name(arg); })
 
 /* inline defs */
 

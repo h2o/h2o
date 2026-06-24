@@ -35,6 +35,10 @@ struct st_h2o_http3_egress_unistream_t {
      */
     quicly_stream_t *quic;
     /**
+     * Points to the counter that records the number of bytes sent on a local control or QPACK stream.
+     */
+    uint64_t *bytes_sent;
+    /**
      *
      */
     h2o_buffer_t *sendbuf;

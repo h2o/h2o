@@ -51,9 +51,9 @@ extern mquicly_context_t mquicly_context;
 int mquicly_open_stream(quicly_conn_t *conn, quicly_stream_t **stream, int is_remote_initiated, int unidirectional);
 
 /**
- * simulate a connection close event from remote
+ * simulate a connection close event
  */
-int mquicly_closed_by_remote(quicly_conn_t *conn, int err, uint64_t frame_type, ptls_iovec_t reason_phrase);
+void mquicly_closed(quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, ptls_iovec_t reason_phrase, int is_remote);
 
 #ifdef __cplusplus
 }

@@ -125,6 +125,10 @@ struct st_h2o_http2_stream_t {
      */
     unsigned reset_by_peer_action : 1;
     /**
+     * indicates if RST_STREAM(NO_ERROR) should be sent to the client after sending a complete response
+     */
+    unsigned delayed_rst_stream_no_error : 1;
+    /**
      *  state of the ostream, only used in push mode
      */
     h2o_send_state_t send_state;

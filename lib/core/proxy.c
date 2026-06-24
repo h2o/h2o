@@ -383,7 +383,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-   size_t len;
+    size_t len;
     if ((len = self->body_bytes_read - self->pipe_sender.bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
         if (send_state == H2O_SEND_STATE_FINAL)
             send_state = H2O_SEND_STATE_IN_PROGRESS;

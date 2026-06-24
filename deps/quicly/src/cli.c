@@ -402,25 +402,33 @@ static quicly_error_t on_stream_open(quicly_stream_open_t *self, quicly_stream_t
 
 static quicly_stream_open_t stream_open = {&on_stream_open};
 
-static void on_closed_by_remote(quicly_closed_by_remote_t *self, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type,
-                                const char *reason, size_t reason_len)
+static void on_closed(quicly_closed_t *self, quicly_conn_t *conn)
 {
+    uint64_t frame_type;
+    const char *reason;
+    int is_remote;
+    quicly_error_t err = quicly_get_close_reason(conn, &frame_type, &reason, &is_remote);
+
+    if (!is_remote)
+        return;
+
     if (QUICLY_ERROR_IS_QUIC_TRANSPORT(err)) {
-        fprintf(stderr, "transport close:code=0x%" PRIx64 ";frame=%" PRIu64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
-                frame_type, (int)reason_len, reason);
+        fprintf(stderr, "transport close:code=0x%" PRIx64 ";frame=%" PRIu64 ";reason=%s\n", QUICLY_ERROR_GET_ERROR_CODE(err),
+                frame_type, reason);
     } else if (QUICLY_ERROR_IS_QUIC_APPLICATION(err)) {
-        fprintf(stderr, "application close:code=0x%" PRIx64 ";reason=%.*s\n", QUICLY_ERROR_GET_ERROR_CODE(err), (int)reason_len,
-                reason);
+        fprintf(stderr, "application close:code=0x%" PRIx64 ";reason=%s\n", QUICLY_ERROR_GET_ERROR_CODE(err), reason);
     } else if (err == QUICLY_ERROR_RECEIVED_STATELESS_RESET) {
         fprintf(stderr, "stateless reset\n");
     } else if (err == QUICLY_ERROR_NO_COMPATIBLE_VERSION) {
         fprintf(stderr, "no compatible version\n");
+    } else if (PTLS_ERROR_GET_CLASS(err) == PTLS_ERROR_CLASS_PEER_ALERT) {
+        fprintf(stderr, "TLS alert:code=%d\n", (int)PTLS_ERROR_TO_ALERT(err));
     } else {
         fprintf(stderr, "unexpected close:code=%" PRId64 "\n", err);
     }
 }
 
-static quicly_closed_by_remote_t closed_by_remote = {&on_closed_by_remote};
+static quicly_closed_t closed = {&on_closed};
 
 static quicly_error_t on_generate_resumption_token(quicly_generate_resumption_token_t *self, quicly_conn_t *conn,
                                                    ptls_buffer_t *buf, quicly_address_token_plaintext_t *token)
@@ -936,7 +944,10 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                         break;
                     packet.ecn = ecn;
                     if (QUICLY_PACKET_IS_LONG_HEADER(packet.octets.base[0])) {
-                        if (packet.version != 0 && !quicly_is_supported_version(packet.version)) {
+                        /* handle version negotiation */
+                        if (packet.version == 0) {
+                            break;
+                        } else if (!quicly_is_supported_version(packet.version)) {
                             uint8_t payload[ctx.transport_params.max_udp_payload_size];
                             size_t payload_len = quicly_send_version_negotiation(&ctx, packet.cid.src, packet.cid.dest.encrypted,
                                                                                  quicly_supported_versions, payload);
@@ -944,9 +955,6 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                             send_one_packet(fd, &remote, &local, payload, payload_len);
                             break;
                         }
-                        /* there is no way to send response to these v1 packets */
-                        if (packet.cid.dest.encrypted.len > QUICLY_MAX_CID_LEN_V1 || packet.cid.src.len > QUICLY_MAX_CID_LEN_V1)
-                            break;
                     }
 
                     quicly_conn_t *conn = NULL;
@@ -1238,6 +1246,7 @@ static void usage(const char *cmd)
            "  -l log-file               file to log traffic secrets\n"
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
            "  -m <bytes>                max data (in bytes; default: 16MB)\n"
+           "  --max-crypto-bytes <N>    maximum permitted length of a CRYPTO stream\n"
            "  -N                        enforce HelloRetryRequest (client-only)\n"
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
@@ -1506,7 +1515,7 @@ int main(int argc, char **argv)
     ctx = quicly_spec_context;
     ctx.tls = &tlsctx;
     ctx.stream_open = &stream_open;
-    ctx.closed_by_remote = &closed_by_remote;
+    ctx.closed = &closed;
     ctx.save_resumption_token = &save_resumption_token;
     ctx.generate_resumption_token = &generate_resumption_token;
     stream_scheduler = quicly_default_stream_scheduler;
@@ -1529,6 +1538,7 @@ int main(int argc, char **argv)
                                              {"disregard-app-limited", no_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
+                                             {"max-crypto-bytes", required_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
                                              {"sockfd", required_argument, NULL, 0},
                                              {"exit-after-handshake", no_argument, NULL, 0},
@@ -1556,6 +1566,11 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "jumpstart-max") == 0) {
                 if (sscanf(optarg, "%" SCNu32, &ctx.max_jumpstart_cwnd_packets) != 1) {
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
+                    exit(1);
+                }
+            } else if (strcmp(longopts[opt_index].name, "max-crypto-bytes") == 0) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.max_crypto_bytes) != 1) {
+                    fprintf(stderr, "failed to parse max-crypto-bytes: %s\n", optarg);
                     exit(1);
                 }
             } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {

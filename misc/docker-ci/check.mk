@@ -51,7 +51,7 @@ ossl3.0:
 boringssl:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl' \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl -DEXTERNALPROJECT_SSL_ROOT_DIR=/usr' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='SKIP_PROG_EXISTS=1 $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'

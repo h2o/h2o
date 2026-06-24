@@ -86,7 +86,7 @@ $ctx->{directive}->(
 )->(sub {
 ?>
 <p>
-Each element of the access control list starts with either <code>+</code> or <code>-</code> followed by an wildcard (<code>*</code>) or an IP address with an optional netmask and an optional port number.
+Each element of the access control list starts with either <code>+</code> or <code>-</code> followed by a wildcard (<code>*</code>) or an IP address with an optional netmask and an optional port number or port range.
 </p>
 <p>
 When a CONNECT request is received and the name resolution of the connect target is complete, the access control list is searched from top to bottom.
@@ -98,12 +98,14 @@ If none of the entries match, the request is also rejected.
 </p>
 <?= $ctx->{example}->(q{Simple HTTPS proxy}, <<'EOT')
 proxy.connect:
-- "-192.168.0.0/24"  # reject any attempts to local network
-- "+*:443"           # accept attempts to port 443 of any host
+- "-192.168.0.0/24"    # reject any attempts to local network
+- "+*:443"             # accept attempts to port 443 of any host
+- "+10.0.0.0/8:80-443" # accept attempts to ports 80 through 443 of 10.0.0.0/8
 EOT
 ?>
 <p>
-Note: The precise syntax of the access control list element is <code>address:port/netmask</code>. This is because the URL parser is reused.
+The syntax of each access control list element is <code>address[/netmask][:port]</code>, where <code>port</code> is either a single port number, an inclusive range expressed as <code>low-high</code>, or <code>*</code> meaning any port (which is also the default when the port is omitted).
+For backward compatibility, the netmask may instead be specified after the port (i.e., <code>address:port/netmask</code>).
 </p>
 <p>
 The directive can only be used for the root path (i.e., <code>/</code>), as the classic CONNECT does not specify the path.
@@ -120,6 +122,14 @@ $ctx->{directive}->(
 <p>
 Supplied argument is an access control list, using the same format as that of <a href="configure/proxy_directives.html#proxy.connect"><code>proxy.connect</code></a>.
 </p>
+<p>
+To be compatible with clients using the default URI Template defined in RFC 9298, the handler should be registered at path <code>/.well-known/masque/udp/</code>:
+</p>
+<pre><code>paths:
+  "/.well-known/masque/udp":
+    proxy.connect-udp:
+      - "+*"
+</code></pre>
 <p>
 Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see <a href="configure/proxy_directives.html#proxy.connect.masque-draft-03"><code>proxy.connect.masque-draft-03</code></a>.
 </p>
@@ -326,6 +336,19 @@ Connection attempts to use HTTP/2 will be indicated to the server via ALPN, with
 When the backend protocol is cleartext HTTP, this directive has impact only when the ratio is set to <code>100</code> with <a href="configure/proxy_directives.html#proxy.http2.force-cleartext"><code>proxy.http2.force-cleartext</code></a> set to <code>ON</code>. In such case, all backend connection will use HTTP/2 without negotiation.
 </p>
 ? })
+
+<?
+$ctx->{directive}->(
+    name         => "proxy.http3.ecn",
+    levels       => [ qw(global host path extension) ],
+    desc         => q{If ECN should be used to detect congestion.},
+    default      => "proxy.http3.ecn: ON",
+    experimental => 1,
+    see_also     => render_mt(<<EOT),
+<a href="configure/http3_directives.html#quic-attributes">Fine-tuning QUIC Behavior</a>
+EOT
+)->(sub {})
+?>
 
 <?
 $ctx->{directive}->(

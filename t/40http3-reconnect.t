@@ -50,7 +50,7 @@ subtest "idle-timeout-reconnect" => sub {
 
     # spawn client that fetches twice with an interval greater than the idle timeout
     unlink("$tempdir/session");
-    open my $client_fh, "-|", "$client_prog -3 100 -d 6000 -t 2 -s $tempdir/session https://127.0.0.1:$quic_port/ 2> /dev/null"
+    open my $client_fh, "-|", "$client_prog -k -3 100 -d 6000 -t 2 -s $tempdir/session https://127.0.0.1:$quic_port/ 2> /dev/null"
         or die "failed to spawn $client_prog:$!";
 
     sleep 1;
@@ -71,7 +71,7 @@ subtest "too-early" => sub {
         is_ready => sub { !! -e "$tempdir/upstream.sock" },
     );
     unlink("$tempdir/session");
-    open my $client_fh, "-|", "$client_prog -3 100 -d 5000 -t 2 -s $tempdir/session https://127.0.0.1:$quic_port/proxy/425 2>&1"
+    open my $client_fh, "-|", "$client_prog -k -3 100 -d 5000 -t 2 -s $tempdir/session https://127.0.0.1:$quic_port/proxy/425 2>&1"
         or die "failed to spawn $client_prog:$!";
     like do {local $/; join "", <$client_fh>}, qr{^HTTP/[0-9\.]+ 200.*\nhello\nHTTP/[0-9\.]+ 425}s, "2nd response is 425";
 };

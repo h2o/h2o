@@ -71,6 +71,12 @@ static h2o_evloop_t *create_evloop(size_t sz);
 static void update_now(h2o_evloop_t *loop);
 static int32_t adjust_max_wait(h2o_evloop_t *loop, int32_t max_wait);
 
+static void notify_write_progress(struct st_h2o_evloop_socket_t *sock)
+{
+    if ((sock->super._cb.write_flags & H2O_SOCKET_SENDVEC_FLAG_REPORT_PROGRESS) != 0)
+        sock->super._cb.write(&sock->super, h2o_socket_error_write_progress);
+}
+
 /* functions to be defined in the backends */
 static int evloop_do_proceed(h2o_evloop_t *loop, int32_t max_wait);
 static void evloop_do_dispose(h2o_evloop_t *loop);
@@ -181,6 +187,8 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;
+        if (wret != 0)
+            notify_write_progress(sock);
 
         /* adjust the buffer, doing the write once again only if all IOV_MAX buffers being supplied were fully written */
         while ((*bufs)->len <= wret) {
@@ -291,6 +299,8 @@ static int sendvec_core(struct st_h2o_evloop_socket_t *sock)
     /* send, and return an error if failed */
     if ((bytes_sent = sock->sendvec.callbacks->send_(&sock->sendvec, sock->fd, sock->sendvec.len)) == SIZE_MAX)
         return 0;
+    if (bytes_sent != 0)
+        notify_write_progress(sock);
 
     /* update offset, and return if we are not done yet */
     if (sock->sendvec.len != 0)
@@ -728,17 +738,7 @@ h2o_socket_t *h2o_evloop_socket_accept(h2o_socket_t *_listener)
      * https://github.com/h2o/h2o/pull/2542#issuecomment-760700859 */
     set_nodelay_if_likely_tcp(fd, &peeraddr.sa);
 
-    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes);
-    switch (peeraddr.sa.sa_family) {
-    case AF_INET: /* store as v6-mapped v4 address */
-        ptls_build_v4_mapped_v6_address(&sock->_log_state.address, &peeraddr.sin4.sin_addr);
-        break;
-    case AF_INET6:
-        sock->_log_state.address = peeraddr.sin6.sin6_addr;
-        break;
-    default:
-        break;
-    }
+    ptls_log_init_conn_state(&sock->_log_state, ptls_openssl_random_bytes, 0, &peeraddr.sa);
 
     return sock;
 }
@@ -824,6 +824,7 @@ void h2o_socket_notify_write(h2o_socket_t *_sock, h2o_socket_cb cb)
 {
     struct st_h2o_evloop_socket_t *sock = (struct st_h2o_evloop_socket_t *)_sock;
     assert(sock->super._cb.write == NULL);
+    assert(sock->super._cb.write_flags == 0);
     assert(sock->super._write_buf.cnt == 0);
     assert(!has_pending_ssl_bytes(sock->super.ssl));
 

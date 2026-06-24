@@ -105,6 +105,7 @@ const char h2o_hpack_err_unexpected_connection_specific_header[] = "found an une
 const char h2o_hpack_err_invalid_content_length_header[] = "invalid content-length header";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_name[] = "found an invalid character in header name";
 const char h2o_hpack_soft_err_found_invalid_char_in_header_value[] = "found an invalid character in header value";
+const char h2o_hpack_err_headers_too_long[] = "headers too long";
 
 static int header_value_valid_as_whole(const char *s, size_t len)
 {
@@ -505,6 +506,7 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                             const char **err_desc)
 {
     const uint8_t *src_end = src + len;
+    size_t num_headers_decoded = 0;
 
     *content_length = SIZE_MAX;
 
@@ -522,6 +524,11 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                 *err_desc = decode_err;
                 return ret;
             }
+        }
+        ++num_headers_decoded;
+        if (num_headers_decoded > H2O_HPACK_MAX_HEADERS_HARD_LIMIT) {
+            *err_desc = h2o_hpack_err_headers_too_long;
+            return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
@@ -611,9 +618,17 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
-                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_err_headers_too_long;
+                }
             } else {
-                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_err_headers_too_long;
+                }
             }
         }
     Next:;
@@ -632,6 +647,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         *status = 0;
 
     const uint8_t *src_end = src + len;
+    size_t num_headers_decoded = 0;
 
     /* the response MUST contain a :status header as the first element */
     if (status != NULL && src == src_end) {
@@ -653,6 +669,11 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                 *err_desc = decode_err;
                 return ret;
             }
+        }
+        ++num_headers_decoded;
+        if (num_headers_decoded > H2O_HPACK_MAX_HEADERS_HARD_LIMIT) {
+            *err_desc = h2o_hpack_err_headers_too_long;
+            return H2O_HTTP2_ERROR_COMPRESSION;
         }
         if (name->base[0] == ':') {
             if (status == NULL) {
@@ -706,15 +727,23 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
                 }
-                h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header(pool, headers, token, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_err_headers_too_long;
+                }
             } else {
-                h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                if (headers->size < H2O_MAX_HEADERS) {
+                    h2o_add_header_by_str(pool, headers, name->base, name->len, 0, NULL, value.base, value.len);
+                } else if (*err_desc == NULL) {
+                    *err_desc = h2o_hpack_err_headers_too_long;
+                }
             }
         }
     Next:;
     } while (src != src_end);
 
-    if (*err_desc) {
+    if (*err_desc != NULL) {
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
     }
     return 0;

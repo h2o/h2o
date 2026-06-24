@@ -44,7 +44,7 @@ subtest "h2olog", sub {
     args => [],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -72,7 +72,7 @@ subtest "h2olog -t", sub {
     ],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -96,7 +96,7 @@ subtest "h2olog -H", sub {
     args => ["-H"],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -120,7 +120,7 @@ subtest "multi clients", sub {
     push @tracers, $tracer;
   }
 
-  system($client_prog, "-3", "100", "https://127.0.0.1:$server->{quic_port}/");
+  system($client_prog, "-k", "-3", "100", "https://127.0.0.1:$server->{quic_port}/");
 
   my @logs;
   for my $tracer(@tracers) {
@@ -174,7 +174,7 @@ EOT
   ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
   $client->syswrite("GET /.well-known/h2olog HTTP/1.0\r\n\r\n");
 
-  system($client_prog, "-3", "100", "https://127.0.0.1:$server->{quic_port}/") == 0 or die $!;
+  system($client_prog, "-k", "-3", "100", "https://127.0.0.1:$server->{quic_port}/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
 };

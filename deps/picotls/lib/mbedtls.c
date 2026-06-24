@@ -199,7 +199,7 @@ static int setup_aes256ctr(ptls_cipher_context_t *ctx, int is_enc, const void *k
 }
 
 ptls_cipher_algorithm_t ptls_mbedtls_aes256ctr = {
-    "AES128-CTR",   PTLS_AES256_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 16 /* iv size */, sizeof(struct st_ptls_mbedtls_cipher_context_t),
+    "AES256-CTR",   PTLS_AES256_KEY_SIZE, PTLS_AES_BLOCK_SIZE, 16 /* iv size */, sizeof(struct st_ptls_mbedtls_cipher_context_t),
     setup_aes256ctr};
 
 #if 0

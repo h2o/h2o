@@ -1066,8 +1066,8 @@ static void ctr_transform(ptls_cipher_context_t *_ctx, void *output, const void 
 {
     struct ctr_context *ctx = (struct ctr_context *)_ctx;
 
-    assert((ctx->is_ready && len <= 16) ||
-           !"CTR transfomation is supported only once per call to `init` and the maximum size is limited  to 16 bytes");
+    assert(ctx->is_ready && len <= 16 &&
+           "CTR transfomation is supported only once per call to `init` and the maximum size is limited to 16 bytes");
     ctx->is_ready = 0;
 
     if (len < 16) {
@@ -1138,8 +1138,10 @@ void aead_do_encrypt(struct st_ptls_aead_context_t *_ctx, void *output, const vo
 {
     struct aesgcm_context *ctx = (void *)_ctx;
 
-    if (inlen + aadlen > ctx->aesgcm->capacity)
+    if (inlen + aadlen > ctx->aesgcm->capacity) {
         ctx->aesgcm = ptls_fusion_aesgcm_set_capacity(ctx->aesgcm, inlen + aadlen);
+        assert(ctx->aesgcm != NULL && "fusion assumes sufficient amount of memory to be available");
+    }
     ptls_fusion_aesgcm_encrypt(ctx->aesgcm, output, input, inlen, calc_counter(ctx, seq), aad, aadlen, supp);
 }
 
@@ -1158,8 +1160,10 @@ static size_t aead_do_decrypt(ptls_aead_context_t *_ctx, void *output, const voi
         return SIZE_MAX;
 
     size_t enclen = inlen - 16;
-    if (enclen + aadlen > ctx->aesgcm->capacity)
+    if (enclen + aadlen > ctx->aesgcm->capacity) {
         ctx->aesgcm = ptls_fusion_aesgcm_set_capacity(ctx->aesgcm, enclen + aadlen);
+        assert(ctx->aesgcm != NULL && "fusion assumes sufficient amount of memory to be available");
+    }
     if (!ptls_fusion_aesgcm_decrypt(ctx->aesgcm, output, input, enclen, calc_counter(ctx, seq), aad, aadlen,
                                     (const uint8_t *)input + enclen))
         return SIZE_MAX;
@@ -1202,7 +1206,7 @@ static int aesgcm_setup(ptls_aead_context_t *_ctx, int is_enc, const void *key, 
     ctx->super.do_decrypt = aead_do_decrypt;
 
     ctx->aesgcm = new_aesgcm(key, key_size, 1500 /* assume ordinary packet size */, 0 /* no support for aesni256 yet */);
-
+    assert(ctx->aesgcm != NULL && "fusion assumes sufficient amount of memory to be available");
     return 0;
 }
 
@@ -2138,7 +2142,7 @@ static int non_temporal_setup(ptls_aead_context_t *_ctx, int is_enc, const void 
         new_aesgcm(key, key_size,
                    7 * (ptls_fusion_can_aesni256 ? 32 : 16), // 6 blocks at once, plus len(A) | len(C) that we might append
                    aesni256);
-
+   assert(ctx->aesgcm != NULL && "fusion assumes sufficient amount of memory to be available");
     return 0;
 }
 

@@ -483,8 +483,8 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
             ;
     } else if (getenv("H2O_VIA_MASTER") == NULL) {
         h2o_configurator_errprintf(cmd, node,
-                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                    "launched with neither `-m master` nor `-m worker`");
+                                   "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                   "launched with neither `-m master` nor `-m worker`");
     }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
@@ -2209,8 +2209,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
             if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node,
-                                           "to use ACME, the `ssl` node must only be specified within each host");
+                h2o_configurator_errprintf(cmd, *ssl_node, "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
             }
             /* load certificate from acme.sh */
@@ -2635,7 +2634,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
+    listener->quic.qpack = (h2o_http3_qpack_context_t){16384, 16384}; /* default: 16KB encoder and decoder tables */
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
@@ -2874,26 +2873,33 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 
 static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
+    int on = 1;
+
     /* set the option for obtaining destination address */
     switch (family) {
-    case AF_INET: {
-#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
-        int on = 1;
+    case AF_INET:
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux and macOS) */
         if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
 #elif defined(IP_RECVDSTADDR) /* *BSD */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
-    } break;
-    case AF_INET6: {
+#ifdef IP_RECVTOS
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
+#endif
+        break;
+    case AF_INET6:
 #ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
-    } break;
+#ifdef IPV6_RECVTCLASS
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
+#endif
+        break;
     default:
         break;
     }
@@ -3177,20 +3183,20 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
-                        **resume_jumpstart_ratio, **rapid_start;
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
+                        **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
+                        **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing, **respect_app_limited,
+                        **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio, **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
-                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
+                            "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
-                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
-                            &resume_jumpstart_ratio, &rapid_start) != 0)
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &qpack_decoder_table_capacity,
+                            &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                            &max_initial_handshake_packets, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
+                            &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3210,6 +3216,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (qpack_encoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
                                                    &listener->quic.qpack.encoder_table_capacity) != 0)
+                            return -1;
+                    }
+                    if (qpack_decoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.decoder_table_capacity) != 0)
                             return -1;
                     }
                     if (max_streams_bidi != NULL) {
@@ -4345,7 +4356,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                                                   packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }
@@ -4384,7 +4395,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
             }
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }
@@ -4505,7 +4516,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
-                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
+                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, NULL, listener_config->quic.ctx,
                                           &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
                                           conf.globalconf.http3.use_gso);
             h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
@@ -5079,8 +5090,8 @@ int main(int argc, char **argv)
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
-                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
-                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
+                    printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                           ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -5383,7 +5394,7 @@ int main(int argc, char **argv)
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls.ctx;
                 if (ptls != NULL)
-                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx, &conf.listeners[i]->quic.qpack);
             }
         }
     }

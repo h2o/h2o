@@ -25,10 +25,12 @@
 #include <errno.h>
 #include <sys/types.h>
 #include <netinet/in.h>
+#include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #include "picotls/openssl.h"
 #include "h2o.h"
 #include "h2o/string_.h"
@@ -50,6 +52,11 @@ struct st_h2o_http3_ingress_unistream_t {
      */
     h2o_buffer_t *recvbuf;
     /**
+     * Points to the counter that records the number of bytes received on a control or QPACK stream; remains NULL until such a
+     * stream type is identified.
+     */
+    uint64_t *bytes_received;
+    /**
      * A callback that passes unparsed input to be handled. `src` is set to NULL when receiving a reset.
      */
     void (*handle_input)(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream, const uint8_t **src,
@@ -70,8 +77,54 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
+#if !H2O_USE_LIBUV
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
+{
+    int fd, on = 1;
+    quicly_address_t addr = {.sa.sa_family = family};
+    socklen_t addrlen;
+
+    if ((fd = socket(family, SOCK_DGRAM, 0)) == -1)
+        return NULL;
+
+    switch (family) {
+    case AF_INET:
+#ifdef IP_RECVTOS
+        setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on));
+#endif
+        addrlen = sizeof(addr.sin);
+        break;
+    case AF_INET6:
+#ifdef IPV6_V6ONLY
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
+            goto Error;
+#endif
+#ifdef IPV6_RECVTCLASS
+        setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on));
+#endif
+        addrlen = sizeof(addr.sin6);
+        break;
+    default:
+        assert(!"unexpected address family");
+        goto Error;
+    }
+
+    if (bind(fd, &addr.sa, addrlen) != 0)
+        goto Error;
+
+    return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
+
+Error: {
+    int saved_errno = errno;
+    close(fd);
+    errno = saved_errno;
+}
+    return NULL;
+}
+#endif
+
 int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
-                            size_t num_datagrams)
+                            size_t num_datagrams, uint8_t ecn)
 {
     union {
         struct cmsghdr hdr;
@@ -88,7 +141,8 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
 #ifdef UDP_SEGMENT
             + CMSG_SPACE(sizeof(uint16_t))
 #endif
-            + CMSG_SPACE(1) /* sentry */
+            + CMSG_SPACE(sizeof(int)) /* IP_TOS or IPV6_TCLASS */
+            + CMSG_SPACE(1)           /* sentry */
         ];
     } cmsgbuf = {.buf = {} /* zero-cleared so that CMSG_NXTHDR can be used for locating the *next* cmsghdr */};
     struct msghdr mess = {
@@ -98,6 +152,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         .msg_controllen = sizeof(cmsgbuf.buf),
     };
     struct cmsghdr *cmsg = CMSG_FIRSTHDR(&mess);
+    h2o_quic_socket_t *sock;
     int ret;
 
 #define PUSH_CMSG(level, type, value)                                                                                              \
@@ -109,19 +164,27 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         cmsg = CMSG_NXTHDR(&mess, cmsg);                                                                                           \
     } while (0)
 
+    if (ctx->sock.addr.ss_family == dest->sa.sa_family) {
+        sock = &ctx->sock;
+    } else if (ctx->sock_alt_family.sock != NULL && ctx->sock_alt_family.addr.ss_family == dest->sa.sa_family) {
+        sock = &ctx->sock_alt_family;
+    } else {
+        return 0;
+    }
+
     /* first CMSG is the source address */
     if (src->sa.sa_family != AF_UNSPEC) {
         switch (src->sa.sa_family) {
         case AF_INET: {
 #if defined(IP_PKTINFO)
-            if (*ctx->sock.port != src->sin.sin_port)
+            if (*sock->port != src->sin.sin_port)
                 return 0;
             struct in_pktinfo info = {.ipi_spec_dst = src->sin.sin_addr};
             PUSH_CMSG(IPPROTO_IP, IP_PKTINFO, info);
 #elif defined(IP_SENDSRCADDR)
-            if (*ctx->sock.port != src->sin.sin_port)
+            if (*sock->port != src->sin.sin_port)
                 return 0;
-            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&ctx->sock.addr;
+            struct sockaddr_in *fdaddr = (struct sockaddr_in *)&sock->addr;
             assert(fdaddr->sin_family == AF_INET);
             if (fdaddr->sin_addr.s_addr == INADDR_ANY)
                 PUSH_CMSG(IPPROTO_IP, IP_SENDSRCADDR, src->sin.sin_addr);
@@ -131,7 +194,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
         } break;
         case AF_INET6:
 #ifdef IPV6_PKTINFO
-            if (*ctx->sock.port != src->sin6.sin6_port)
+            if (*sock->port != src->sin6.sin6_port)
                 return 0;
             struct in6_pktinfo info = {.ipi6_addr = src->sin6.sin6_addr};
             PUSH_CMSG(IPPROTO_IPV6, IPV6_PKTINFO, info);
@@ -165,6 +228,22 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     }
 #endif
 
+    if (ecn != 0) {
+        int tos = ecn; /* IPV6_TCLASS uses int, and draft-ietf-tsvwg-udp-ecn-05 says IP_TOS assumes int too, on all platforms */
+        switch (dest->sa.sa_family) {
+        case AF_INET:
+            PUSH_CMSG(IPPROTO_IP, IP_TOS, tos);
+            break;
+        case AF_INET6:
+#ifdef IPV6_TCLASS
+            PUSH_CMSG(IPPROTO_IPV6, IPV6_TCLASS, tos);
+#endif
+            break;
+        default:
+            break;
+        }
+    }
+
     /* commit CMSG length */
     if ((mess.msg_controllen = (socklen_t)((char *)cmsg - (char *)cmsgbuf.buf)) == 0)
         mess.msg_control = NULL;
@@ -173,7 +252,7 @@ int h2o_quic_send_datagrams(h2o_quic_ctx_t *ctx, quicly_address_t *dest, quicly_
     for (size_t i = 0; i < num_datagrams; ++i) {
         mess.msg_iov = datagrams + i;
         mess.msg_iovlen = 1;
-        while ((ret = (int)sendmsg(h2o_socket_get_fd(ctx->sock.sock), &mess, 0)) == -1 && errno == EINTR)
+        while ((ret = (int)sendmsg(h2o_socket_get_fd(sock->sock), &mess, 0)) == -1 && errno == EINTR)
             ;
         if (ret == -1)
             goto SendmsgError;
@@ -221,13 +300,16 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     h2o_http3_update_recvbuf(&stream->recvbuf, off, input, len);
 
     /* determine bytes that can be handled */
-    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes,
-                  *src_end = src + quicly_recvstate_bytes_available(&stream->quic->recvstate);
-    if (src == src_end && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+    size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
+    const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes;
+    if (bytes_available == 0 && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
         return;
+    uint64_t bytes_received = stream->quic->recvstate.data_off + bytes_available;
 
     /* handle the bytes */
-    stream->handle_input(conn, stream, &src, src_end, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    stream->handle_input(conn, stream, &src, src + bytes_available, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    if (stream->bytes_received != NULL && *stream->bytes_received < bytes_received)
+        *stream->bytes_received = bytes_received;
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
         return;
 
@@ -255,17 +337,15 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     int ret;
     const char *err_desc = NULL;
-    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
-        0) {
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &insert_count, src, src_end, &err_desc)) != 0) {
         h2o_quic_close_connection(&conn->super, ret, err_desc);
         return;
     }
-
-    /* TODO handle unblocked streams */
+    if (insert_count != 0)
+        get_callbacks(conn)->qpack_unblock_streams(conn, insert_count);
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -336,14 +416,17 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
         conn->_control_streams.ingress.control = stream;
+        stream->bytes_received = &conn->stats.bytes_received.control_stream;
         stream->handle_input = control_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
         conn->_control_streams.ingress.qpack_encoder = stream;
+        stream->bytes_received = &conn->stats.bytes_received.qpack_encoder;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
         conn->_control_streams.ingress.qpack_decoder = stream;
+        stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
     default:
@@ -379,6 +462,9 @@ static void egress_unistream_on_send_emit(quicly_stream_t *qs, size_t off, void 
         *wrote_all = 0;
     }
     memcpy(dst, stream->sendbuf->bytes + off, *len);
+    uint64_t bytes_sent = off + *len;
+    if (stream->bytes_sent != NULL && *stream->bytes_sent < bytes_sent)
+        *stream->bytes_sent = bytes_sent;
 }
 
 static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -397,6 +483,7 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->data = stream;
         qs->callbacks = &callbacks;
         stream->quic = qs;
+        stream->bytes_sent = NULL;
         h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
     } else {
         /* create ingress unistream */
@@ -407,12 +494,13 @@ void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
         qs->callbacks = &callbacks;
         stream->quic = qs;
         h2o_buffer_init(&stream->recvbuf, &h2o_socket_buffer_prototype);
+        stream->bytes_received = NULL;
         stream->handle_input = unknown_type_handle_input;
     }
 }
 
 static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2o_http3_egress_unistream_t **stream,
-                                            h2o_iovec_t initial_bytes)
+                                            uint64_t *bytes_sent, h2o_iovec_t initial_bytes)
 {
     quicly_stream_t *qs;
     quicly_error_t ret;
@@ -421,6 +509,7 @@ static quicly_error_t open_egress_unistream(h2o_http3_conn_t *conn, struct st_h2
         return ret;
     *stream = qs->data;
     assert((*stream)->quic == qs);
+    (*stream)->bytes_sent = bytes_sent;
 
     h2o_buffer_append(&(*stream)->sendbuf, initial_bytes.base, initial_bytes.len);
     return quicly_stream_sync_sendbuf((*stream)->quic, 1);
@@ -509,7 +598,7 @@ static void send_version_negotiation(h2o_quic_ctx_t *ctx, quicly_address_t *dest
     size_t payload_size = quicly_send_version_negotiation(ctx->quic, dest_cid, src_cid, versions, payload);
     assert(payload_size != SIZE_MAX);
     struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-    h2o_quic_send_datagrams(ctx, destaddr, srcaddr, &vec, 1);
+    h2o_quic_send_datagrams(ctx, destaddr, srcaddr, &vec, 1, 0);
     return;
 }
 
@@ -555,7 +644,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 size_t payload_size = quicly_send_stateless_reset(ctx->quic, packets[0].cid.dest.encrypted.base, payload);
                 if (payload_size != SIZE_MAX) {
                     struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-                    h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1);
+                    h2o_quic_send_datagrams(ctx, srcaddr, destaddr, &vec, 1, 0);
                 }
             }
             return;
@@ -692,6 +781,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         quicly_address_t destaddr, srcaddr;
         struct iovec vec;
         uint8_t ttl;
+        uint8_t ecn;
         union {
             struct cmsghdr _align; /* natrually align the contents of controlbuf (which are of type cmsghdr) */
             char controlbuf[
@@ -703,6 +793,9 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
                 CMSG_SPACE(sizeof(struct in_addr))
 #else
                 CMSG_SPACE(1)
+#endif
+#if defined(IPV6_TCLASS) || defined(IP_TOS) || defined(IP_RECVTOS)
+                + CMSG_SPACE(sizeof(int)) /* IPv6 uses int, which is bigger than uint8_t used by IPv4 */
 #endif
             ];
         };
@@ -730,6 +823,10 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
         dgrams[i].vec.iov_base = dgrams[i].buf;                                                                                    \
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
+
+    /* If the socket is either ctx->sock or ctx->sock_alt_family, the destination port is that of the socket. Otherwise, the
+     * preprocess_packet callback takes care, therefore the value can be bogus. */
+    in_port_t dst_port = ctx->sock_alt_family.sock == sock ? *ctx->sock_alt_family.port : *ctx->sock.port;
 
     int fd = h2o_socket_get_fd(sock);
     size_t dgram_index, num_dgrams;
@@ -768,39 +865,67 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
 
     /* normalize and store the obtained data into `dgrams` */
     for (dgram_index = 0; dgram_index < num_dgrams; ++dgram_index) {
+        dgrams[dgram_index].ecn = 0;
+        dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
         { /* fetch destination address */
             struct cmsghdr *cmsg;
             for (cmsg = CMSG_FIRSTHDR(&mess[dgram_index].msg_hdr); cmsg != NULL;
                  cmsg = CMSG_NXTHDR(&mess[dgram_index].msg_hdr, cmsg)) {
+                switch (cmsg->cmsg_level) {
+                case IPPROTO_IP:
+                    switch (cmsg->cmsg_type) {
 #ifdef IP_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
-                           sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
-                    goto DestAddrFound;
-                }
+                    case IP_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg) + offsetof(struct in_pktinfo, ipi_addr),
+                               sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
+                        break;
 #endif
 #ifdef IP_RECVDSTADDR
-                if (cmsg->cmsg_level == IPPROTO_IP && cmsg->cmsg_type == IP_RECVDSTADDR) {
-                    dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
-                    memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
-                    dgrams[dgram_index].destaddr.sin.sin_port = *ctx->sock.port;
-                    goto DestAddrFound;
-                }
+                    case IP_RECVDSTADDR:
+                        dgrams[dgram_index].destaddr.sin.sin_family = AF_INET;
+                        memcpy(&dgrams[dgram_index].destaddr.sin.sin_addr, CMSG_DATA(cmsg), sizeof(struct in_addr));
+                        dgrams[dgram_index].destaddr.sin.sin_port = dst_port;
+                        break;
 #endif
+#ifdef IP_RECVTOS
+#ifdef __APPLE__
+                    case IP_RECVTOS:
+#else
+                    case IP_TOS:
+#endif
+                        /* draft-ietf-tsvwg-udp-ecn-05 recommends using a byte on all platforms */
+                        dgrams[dgram_index].ecn = *(uint8_t *)CMSG_DATA(cmsg) & IPTOS_ECN_MASK;
+                        break;
+#endif
+                    default:
+                        break;
+                    }
+                    break;
+                case IPPROTO_IPV6:
+                    switch (cmsg->cmsg_type) {
 #ifdef IPV6_PKTINFO
-                if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
-                    dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
-                    memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr, CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr),
-                           sizeof(struct in6_addr));
-                    dgrams[dgram_index].destaddr.sin6.sin6_port = *ctx->sock.port;
-                    goto DestAddrFound;
-                }
+                    case IPV6_PKTINFO:
+                        dgrams[dgram_index].destaddr.sin6.sin6_family = AF_INET6;
+                        memcpy(&dgrams[dgram_index].destaddr.sin6.sin6_addr,
+                               CMSG_DATA(cmsg) + offsetof(struct in6_pktinfo, ipi6_addr), sizeof(struct in6_addr));
+                        dgrams[dgram_index].destaddr.sin6.sin6_port = dst_port;
+                        break;
 #endif
+#ifdef IPV6_TCLASS
+                    case IPV6_TCLASS: {
+                        int optval;
+                        memcpy(&optval, CMSG_DATA(cmsg), sizeof(optval));
+                        dgrams[dgram_index].ecn = optval & IPTOS_ECN_MASK;
+                    } break;
+#endif
+                    default:
+                        break;
+                    }
+                    break;
+                }
             }
-            dgrams[dgram_index].destaddr.sa.sa_family = AF_UNSPEC;
-        DestAddrFound:;
         }
         dgrams[dgram_index].ttl = ctx->default_ttl;
         /* preprocess (and drop the packet if it failed) */
@@ -851,6 +976,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             ++dgram_index;
             goto ProcessPackets;
         }
+        packets[packet_index].ecn = dgrams[dgram_index].ecn;
         /* dispatch packets in `packets` if the DCID is different, setting the `has_decoded` flag */
         if (packet_index != 0) {
             const ptls_iovec_t *prev_dcid = &packets[packet_index - 1].cid.dest.encrypted,
@@ -867,6 +993,7 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             if (quicly_decode_packet(ctx->quic, packets + packet_index, dgrams[dgram_index].vec.iov_base,
                                      dgrams[dgram_index].vec.iov_len, &payload_off) == SIZE_MAX)
                 break;
+            packets[packet_index].ecn = dgrams[dgram_index].ecn;
             ++packet_index;
         }
         ++dgram_index;
@@ -900,6 +1027,25 @@ static void on_read(h2o_socket_t *sock, const char *err)
 {
     h2o_quic_ctx_t *ctx = sock->data;
     h2o_quic_read_socket(ctx, sock);
+}
+
+static void setup_quic_socket(h2o_quic_ctx_t *ctx, h2o_quic_socket_t *qsock, h2o_socket_t *sock)
+{
+    *qsock = (h2o_quic_socket_t){.sock = sock};
+    h2o_socket_getsockname(qsock->sock, (void *)&qsock->addr);
+    switch (qsock->addr.ss_family) {
+    case AF_INET:
+        qsock->port = &((struct sockaddr_in *)&qsock->addr)->sin_port;
+        break;
+    case AF_INET6:
+        qsock->port = &((struct sockaddr_in6 *)&qsock->addr)->sin6_port;
+        break;
+    default:
+        assert(!"unexpected address family");
+        break;
+    }
+    qsock->sock->data = ctx;
+    h2o_socket_read_start(qsock->sock, on_read);
 }
 
 static void on_timeout(h2o_timer_t *timeout)
@@ -998,15 +1144,14 @@ Validation_Success:;
     return 0;
 }
 
-void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, quicly_context_t *quic,
-                           quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
+void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *sock, h2o_socket_t *sock_alt_family,
+                           quicly_context_t *quic, quicly_cid_plaintext_t *next_cid, h2o_quic_accept_cb acceptor,
                            h2o_quic_notify_connection_update_cb notify_conn_update, uint8_t use_gso, h2o_quic_stats_t *quic_stats)
 {
     assert(quic->stream_open != NULL);
 
     *ctx = (h2o_quic_ctx_t){
         .loop = loop,
-        .sock = {.sock = sock},
         .quic = quic,
         .next_cid = next_cid,
         .conns_by_id = kh_init_h2o_quic_idmap(),
@@ -1016,22 +1161,10 @@ void h2o_quic_init_context(h2o_quic_ctx_t *ctx, h2o_loop_t *loop, h2o_socket_t *
         .use_gso = use_gso,
         .quic_stats = quic_stats,
     };
-    ctx->sock.sock->data = ctx;
-    ctx->sock.addrlen = h2o_socket_getsockname(ctx->sock.sock, (void *)&ctx->sock.addr);
-    assert(ctx->sock.addrlen != 0);
-    switch (ctx->sock.addr.ss_family) {
-    case AF_INET:
-        ctx->sock.port = &((struct sockaddr_in *)&ctx->sock.addr)->sin_port;
-        break;
-    case AF_INET6:
-        ctx->sock.port = &((struct sockaddr_in6 *)&ctx->sock.addr)->sin6_port;
-        break;
-    default:
-        assert(!"unexpected address family");
-        break;
+    setup_quic_socket(ctx, &ctx->sock, sock);
+    if (sock_alt_family != NULL) {
+        setup_quic_socket(ctx, &ctx->sock_alt_family, sock_alt_family);
     }
-
-    h2o_socket_read_start(ctx->sock.sock, on_read);
 }
 
 void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
@@ -1040,6 +1173,8 @@ void h2o_quic_dispose_context(h2o_quic_ctx_t *ctx)
     assert(kh_size(ctx->conns_accepting) == 0);
 
     h2o_socket_close(ctx->sock.sock);
+    if (ctx->sock_alt_family.sock != NULL)
+        h2o_socket_close(ctx->sock_alt_family.sock);
     kh_destroy_h2o_quic_idmap(ctx->conns_by_id);
     kh_destroy_h2o_quic_acceptmap(ctx->conns_accepting);
 }
@@ -1143,10 +1278,21 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
+{
+    if (conn->qpack.ctx->decoder_table_capacity == 0)
+        return 0;
+    uint64_t max_blocked = quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+    assert(max_blocked == 0 || get_callbacks(conn)->qpack_unblock_streams != NULL ||
+           !"connection enables QPACK blocked-stream support but provides no qpack_unblock_streams callback");
+    return max_blocked;
+}
+
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
 {
     ptls_buffer_t buf;
     int ret = 0;
+    uint64_t max_blocked_streams = calc_max_blocked_streams(conn);
 
     ptls_buffer_init(&buf, bytebuf, capacity);
 
@@ -1164,6 +1310,14 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
+        if (conn->qpack.ctx->decoder_table_capacity != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
+            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder_table_capacity);
+        }
+        if (max_blocked_streams != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS);
+            ptls_buffer_push_quicint(&buf, max_blocked_streams);
+        }
         ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
         ptls_buffer_push_quicint(&buf, 1);
     });
@@ -1186,13 +1340,12 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    /* create decoder with the table size set to zero; see SETTINGS sent below. */
-    conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
+    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
         size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, &conn->stats.bytes_sent.control_stream,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
             return ret;
     }
@@ -1200,9 +1353,9 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     { /* open QPACK encoder & decoder streams */
         static const uint8_t encoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER};
         static const uint8_t decoder_first_flight[] = {H2O_HTTP3_STREAM_TYPE_QPACK_DECODER};
-        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder,
+        if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_encoder, &conn->stats.bytes_sent.qpack_encoder,
                                          h2o_iovec_init(encoder_first_flight, sizeof(encoder_first_flight)))) != 0 ||
-            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder,
+            (ret = open_egress_unistream(conn, &conn->_control_streams.egress.qpack_decoder, &conn->stats.bytes_sent.qpack_decoder,
                                          h2o_iovec_init(decoder_first_flight, sizeof(decoder_first_flight)))) != 0)
             return ret;
     }
@@ -1222,7 +1375,8 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
     quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
     switch (ret) {
     case 0:
-        if (num_datagrams != 0 && !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams)) {
+        if (num_datagrams != 0 &&
+            !h2o_quic_send_datagrams(conn->ctx, &dest, &src, datagrams, num_datagrams, quicly_send_get_ecn_bits(conn->quic))) {
             /* FIXME close the connection immediately */
             break;
         }
@@ -1318,7 +1472,7 @@ Malformed:
     return H2O_HTTP3_ERROR_FRAME;
 }
 
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
 {
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
@@ -1333,11 +1487,11 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
 
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len)
 {
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
+    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
-    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)

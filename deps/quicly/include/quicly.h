@@ -133,10 +133,11 @@ QUICLY_CALLBACK_TYPE(quicly_error_t, stream_open, quicly_stream_t *stream);
  */
 QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iovec_t payload);
 /**
- * called when the connection is closed by remote peer
+ * Called when the connection is closed (i.e., when entering the closing or draining state). Otherwise the callback is not called;
+ * e.g., when `quicly_free` is called directly while the connection is in the connected state. Call `quicly_get_close_reason` to
+ * obtain the details of the closure.
  */
-QUICLY_CALLBACK_TYPE(void, closed_by_remote, quicly_conn_t *conn, quicly_error_t err, uint64_t frame_type, const char *reason,
-                     size_t reason_len);
+QUICLY_CALLBACK_TYPE(void, closed, quicly_conn_t *conn);
 /**
  * Returns current time in milliseconds. The returned value MUST monotonically increase (i.e., it is the responsibility of the
  * callback implementation to guarantee that the returned value never goes back to the past).
@@ -308,7 +309,7 @@ struct st_quicly_context_t {
     /**
      * maximum number of bytes that can be transmitted on a CRYPTO stream (per each epoch)
      */
-    uint64_t max_crypto_bytes;
+    uint32_t max_crypto_bytes;
     /**
      * initial CWND in terms of packet numbers
      */
@@ -402,9 +403,9 @@ struct st_quicly_context_t {
      */
     quicly_receive_datagram_frame_t *receive_datagram_frame;
     /**
-     * callback called when a connection is closed by remote peer
+     * callback called when a connection enters closing or draining
      */
-    quicly_closed_by_remote_t *closed_by_remote;
+    quicly_closed_t *closed;
     /**
      * returns current time in milliseconds
      */
@@ -836,6 +837,8 @@ typedef struct st_quicly_stats_t {
     apply(cc.cwnd_minimum, "cc.cwnd-minimum")                                                                                      \
     apply(cc.cwnd_maximum, "cc.cwnd-maximum")                                                                                      \
     apply(cc.num_loss_episodes, "cc.num-loss-episodes")                                                                            \
+    apply(cc.num_loss_episodes_undone, "cc.num-loss-episodes-undone")                                                              \
+    apply(cc.num_loss_episodes_undone_in_startup, "cc.num-loss-episodes-undone-in-startup")                                        \
     apply(cc.num_ecn_loss_episodes, "cc.num-ecn-loss-episodes")                                                                    \
     apply(delivery_rate.latest, "delivery-rate.latest")                                                                            \
     apply(delivery_rate.smoothed, "delivery-rate.smoothed")                                                                        \
@@ -1112,7 +1115,7 @@ typedef struct st_quicly_decoded_packet_t {
      */
     size_t encrypted_off;
     /**
-     * size of the UDP datagram; set to zero if this is not the first QUIC packet within the datagram
+     * size of the UDP datagram
      */
     size_t datagram_size;
     /**
@@ -1126,6 +1129,10 @@ typedef struct st_quicly_decoded_packet_t {
      * ECN bits
      */
     uint8_t ecn : 2;
+    /**
+     * if it is the first packet within the datagram
+     */
+    uint8_t first_packet : 1;
     /**
      *
      */
@@ -1210,6 +1217,12 @@ static const quicly_transport_parameters_t *quicly_get_remote_transport_paramete
  */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
 /**
+ * Returns the error code and other information regarding the closure of the connection. The out parameters may be NULL. This
+ * function must only be called after the the state transitions to QUICLY_STATE_CLOSING or QUICLY_STATE_DRAINING.
+ */
+quicly_error_t quicly_get_close_reason(quicly_conn_t *conn, uint64_t *offending_frame_type, const char **reason_phrase,
+                                       int *is_remote);
+/**
  *
  */
 int quicly_connection_is_ready(quicly_conn_t *conn);
@@ -1252,7 +1265,7 @@ quicly_error_t quicly_get_delivery_rate(quicly_conn_t *conn, quicly_rate_t *deli
 /**
  *
  */
-void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed);
+void quicly_get_max_data(quicly_conn_t *conn, uint64_t *send_permitted, uint64_t *sent, uint64_t *consumed, uint64_t *shifted);
 /**
  *
  */
@@ -1597,13 +1610,16 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         quicly_conn_t *_c = (_conn);                                                                                               \
         ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
         ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, (const char *(*)(void *))ptls_get_server_name, _tls);                     \
+        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, (const char *(*)(void *))ptls_get_server_name, _tls, _c->stash.now == 0, {     \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
+            if (conn_state->conn_id != 0) {                                                                                        \
+                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_state->conn_id);                                                           \
+            }                                                                                                                      \
             do {                                                                                                                   \
                 _block                                                                                                             \
             } while (0);                                                                                                           \
