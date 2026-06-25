@@ -175,7 +175,6 @@ OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/zstd/lib
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -192,8 +191,6 @@ INCLUDE_DIRECTORIES(
     deps/yaml/include
     deps/yoml
     ${CMAKE_CURRENT_BINARY_DIR})
-
-ADD_DEFINITIONS(-DZSTD_DISABLE_ASM)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBUV libuv>=1.0.0)
@@ -265,6 +262,27 @@ ELSE ()
 ENDIF (WITH_BROTLI)
 
 IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(ZSTD libzstd)
+ENDIF (PKG_CONFIG_FOUND)
+IF (ZSTD_FOUND)
+    SET(WITH_ZSTD_DEFAULT "ON")
+ELSE ()
+    SET(WITH_ZSTD_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_ZSTD "whether or not to use zstd" ${WITH_ZSTD_DEFAULT})
+IF (WITH_ZSTD)
+    IF (NOT ZSTD_FOUND)
+        MESSAGE(FATAL_ERROR "WITH_ZSTD was requested, but pkg-config could not find libzstd")
+    ENDIF ()
+    SET(ZSTD_COMPILE_FLAGS "-DH2O_USE_ZSTD=1")
+    INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${ZSTD_LIBRARY_DIRS})
+    LIST(APPEND EXTRA_LIBS ${ZSTD_LIBRARIES})
+ELSE ()
+    SET(ZSTD_COMPILE_FLAGS "-DH2O_USE_ZSTD=0")
+ENDIF (WITH_ZSTD)
+
+IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)
     IF (LIBCAP_FOUND)
         INCLUDE_DIRECTORIES(${LIBCAP_INCLUDE_DIRS})
@@ -329,36 +347,7 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
 
-SET(ZSTD_SOURCE_FILES
-    deps/zstd/lib/common/debug.c
-    deps/zstd/lib/common/entropy_common.c
-    deps/zstd/lib/common/error_private.c
-    deps/zstd/lib/common/fse_decompress.c
-    deps/zstd/lib/common/pool.c
-    deps/zstd/lib/common/threading.c
-    deps/zstd/lib/common/xxhash.c
-    deps/zstd/lib/common/zstd_common.c
-    deps/zstd/lib/compress/fse_compress.c
-    deps/zstd/lib/compress/hist.c
-    deps/zstd/lib/compress/huf_compress.c
-    deps/zstd/lib/compress/zstd_compress.c
-    deps/zstd/lib/compress/zstd_compress_literals.c
-    deps/zstd/lib/compress/zstd_compress_sequences.c
-    deps/zstd/lib/compress/zstd_compress_superblock.c
-    deps/zstd/lib/compress/zstd_double_fast.c
-    deps/zstd/lib/compress/zstd_fast.c
-    deps/zstd/lib/compress/zstd_lazy.c
-    deps/zstd/lib/compress/zstd_ldm.c
-    deps/zstd/lib/compress/zstdmt_compress.c
-    deps/zstd/lib/compress/zstd_opt.c
-    deps/zstd/lib/compress/zstd_preSplit.c
-    deps/zstd/lib/decompress/huf_decompress.c
-    deps/zstd/lib/decompress/zstd_ddict.c
-    deps/zstd/lib/decompress/zstd_decompress_block.c
-    deps/zstd/lib/decompress/zstd_decompress.c)
-
 SET(LIB_SOURCE_FILES
-    ${ZSTD_SOURCE_FILES}
     deps/cloexec/cloexec.c
     deps/hiredis/async.c
     deps/hiredis/hiredis.c
@@ -442,7 +431,6 @@ SET(LIB_SOURCE_FILES
     lib/handler/access_log.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
-    lib/handler/compress/zstd.c
     lib/handler/errordoc.c
     lib/handler/expires.c
     lib/handler/fastcgi.c
@@ -506,6 +494,10 @@ IF (WITH_BROTLI)
         deps/picotls/lib/certificate_compression.c
         lib/handler/compress/brotli.c)
 ENDIF (WITH_BROTLI)
+IF (WITH_ZSTD)
+    LIST(APPEND LIB_SOURCE_FILES
+        lib/handler/compress/zstd.c)
+ENDIF (WITH_ZSTD)
 
 IF (WITH_DTRACE)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
@@ -650,6 +642,7 @@ EXECUTE_PROCESS(
 MESSAGE(STATUS "extracted version numbers from ${CMAKE_CURRENT_SOURCE_DIR}/include/h2o/version.h:\n\tprerelease=${IS_PRERELEASE}\n\tlibrary version=${LIBRARY_VERSION}\n\tlibrary soversion=${LIBRARY_SOVERSION}")
 
 SET_TARGET_PROPERTIES(libh2o PROPERTIES
+    COMPILE_FLAGS "${ZSTD_COMPILE_FLAGS}"
     OUTPUT_NAME h2o
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
@@ -660,7 +653,7 @@ ELSE ()
 ENDIF (WSLAY_FOUND)
 SET_TARGET_PROPERTIES(libh2o-evloop PROPERTIES
     OUTPUT_NAME h2o-evloop
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DQUICLY_USE_TRACER=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 ${ZSTD_COMPILE_FLAGS} -DQUICLY_USE_TRACER=1"
     VERSION ${LIBRARY_VERSION}
     SOVERSION ${LIBRARY_SOVERSION})
 IF (WSLAY_FOUND)
@@ -770,7 +763,7 @@ SET(STANDALONE_SOURCE_FILES
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 ${BROTLI_COMPILE_FLAGS} -DQUICLY_USE_TRACER=1")
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 ${BROTLI_COMPILE_FLAGS} ${ZSTD_COMPILE_FLAGS} -DQUICLY_USE_TRACER=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -874,7 +867,7 @@ INSTALL(DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/h2o/acme/webroot)
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 ${BROTLI_COMPILE_FLAGS} -DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 ${BROTLI_COMPILE_FLAGS} ${ZSTD_COMPILE_FLAGS} -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
 IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND WITH_BROTLI)
@@ -897,7 +890,7 @@ ENDIF ()
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
     SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-        COMPILE_FLAGS "${BROTLI_COMPILE_FLAGS} -DH2O_UNITTEST=1"
+        COMPILE_FLAGS "${BROTLI_COMPILE_FLAGS} ${ZSTD_COMPILE_FLAGS} -DH2O_UNITTEST=1"
         EXCLUDE_FROM_ALL 1)
 ENDIF (LIBUV_FOUND)
 

@@ -5081,6 +5081,9 @@ int main(int argc, char **argv)
 #if H2O_USE_BROTLI
                 printf("brotli: YES\n");
 #endif
+#if H2O_USE_ZSTD
+                printf("zstd: YES\n");
+#endif
 #if LIBCAP_FOUND
                 printf("capabilities: YES\n");
 #endif

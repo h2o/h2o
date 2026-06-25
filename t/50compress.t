@@ -110,6 +110,8 @@ run_with_curl($server, sub {
     };
 
     subtest "zstd-decompress" => sub {
+        plan skip_all => "server built without zstd support"
+            unless server_features()->{zstd};
         plan skip_all => "zstd not found"
             unless prog_exists("zstd");
         my ($headers, $body) = $fetch_zstd->("/on/alice.txt", "-H accept-encoding:zstd");
