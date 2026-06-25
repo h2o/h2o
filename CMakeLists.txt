@@ -172,6 +172,11 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 
+OPTION(WITH_MPTCP "whether or not to support listening on MPTCP sockets" OFF)
+IF (WITH_MPTCP)
+    ADD_DEFINITIONS("-DH2O_WITH_MPTCP=1")
+ENDIF (WITH_MPTCP)
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
