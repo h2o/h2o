@@ -48,8 +48,6 @@ static void shrink_buf(struct st_zstd_context_t *self, size_t new_size)
 
 static void ensure_space(struct st_zstd_context_t *self)
 {
-    if (self->bufs.size == 0)
-        expand_buf(self);
     size_t active = self->bufs.size - 1;
     if (self->bufs.entries[active].len == self->buf_capacity)
         expand_buf(self);
@@ -78,9 +76,6 @@ static int compress_chunk(struct st_zstd_context_t *self, const void *src, size_
         }
 
         self->bufs.entries[active].len += output.pos;
-
-        if (output.pos == output.size && self->bufs.entries[active].len == self->buf_capacity)
-            expand_buf(self);
         need_more_output = output.pos == output.size;
     } while (input.pos < input.size || (directive != ZSTD_e_continue && remaining != 0) || need_more_output);
 
