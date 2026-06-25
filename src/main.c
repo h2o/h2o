@@ -483,8 +483,8 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
             ;
     } else if (getenv("H2O_VIA_MASTER") == NULL) {
         h2o_configurator_errprintf(cmd, node,
-                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                    "launched with neither `-m master` nor `-m worker`");
+                                   "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                   "launched with neither `-m master` nor `-m worker`");
     }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
@@ -1321,6 +1321,7 @@ IdentityFound:
     return ret;
 }
 
+#if H2O_USE_BROTLI
 static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptls_context_t *ctx, ptls_iovec_t ocsp_status)
 {
     ptls_emit_compressed_certificate_t *ecc = h2o_mem_alloc(sizeof(*ecc));
@@ -1331,24 +1332,29 @@ static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptl
 
     return ecc;
 }
+#endif
 
 static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o_buffer_t *ocsp_status)
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
 
+#if H2O_USE_BROTLI
     if (identity->ptls.ctx != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
             identity->ptls.ctx,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
+#endif
 
     pthread_mutex_lock(&identity->dynamic.mutex);
 
     if (identity->dynamic.ocsp_status != NULL)
         h2o_buffer_dispose(&identity->dynamic.ocsp_status);
+#if H2O_USE_BROTLI
     if (identity->dynamic.emit_compressed_ptls != NULL) {
         ptls_dispose_compressed_certificate(identity->dynamic.emit_compressed_ptls);
         free(identity->dynamic.emit_compressed_ptls);
     }
+#endif
     identity->dynamic.ocsp_status = ocsp_status;
     identity->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
 
@@ -1487,12 +1493,14 @@ static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls,
 
     pthread_mutex_lock(&self->conf->dynamic.mutex);
 
+#if H2O_USE_BROTLI
     if (self->conf->dynamic.emit_compressed_ptls != NULL) {
         ptls_emit_certificate_t *ec = &self->conf->dynamic.emit_compressed_ptls->super;
         if ((ret = ec->cb(ec, tls, emitter, key_sched, context, push_status_request, compress_algos, num_compress_algos)) !=
             PTLS_ERROR_DELEGATE)
             goto Exit;
     }
+#endif
 
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
         ptls_context_t *tlsctx = ptls_get_context(tls);
@@ -2209,8 +2217,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
             if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node,
-                                           "to use ACME, the `ssl` node must only be specified within each host");
+                h2o_configurator_errprintf(cmd, *ssl_node, "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
             }
             /* load certificate from acme.sh */
@@ -2635,7 +2642,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
+    listener->quic.qpack = (h2o_http3_qpack_context_t){16384, 16384}; /* default: 16KB encoder and decoder tables */
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
@@ -3184,20 +3191,20 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
-                        **resume_jumpstart_ratio, **rapid_start;
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
+                        **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
+                        **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing, **respect_app_limited,
+                        **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio, **resume_jumpstart_ratio, **rapid_start;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
-                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
+                            "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
-                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
-                            &resume_jumpstart_ratio, &rapid_start) != 0)
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &qpack_decoder_table_capacity,
+                            &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                            &max_initial_handshake_packets, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
+                            &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
@@ -3217,6 +3224,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (qpack_encoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
                                                    &listener->quic.qpack.encoder_table_capacity) != 0)
+                            return -1;
+                    }
+                    if (qpack_decoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.decoder_table_capacity) != 0)
                             return -1;
                     }
                     if (max_streams_bidi != NULL) {
@@ -5066,6 +5078,9 @@ int main(int argc, char **argv)
 #if H2O_USE_DTRACE
                 printf("dtrace: YES\n");
 #endif
+#if H2O_USE_BROTLI
+                printf("brotli: YES\n");
+#endif
 #if LIBCAP_FOUND
                 printf("capabilities: YES\n");
 #endif
@@ -5086,8 +5101,8 @@ int main(int argc, char **argv)
 #endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
-                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
-                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
+                    printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                           ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -5390,7 +5405,7 @@ int main(int argc, char **argv)
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls.ctx;
                 if (ptls != NULL)
-                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx, &conf.listeners[i]->quic.qpack);
             }
         }
     }

@@ -26,7 +26,7 @@ while (@scripts or %pids) {
     # spawn
     while (@scripts and keys %pids < $jobs) {
         my $script = shift @scripts;
-        $pids{spawn_script($script)} = $script;
+        $pids{spawn_script($script)} = [$script, 0];
     }
 
     # wait for tasks to exit
@@ -39,13 +39,12 @@ while (@scripts or %pids) {
     };
     if ($@) {
         for my $kid (keys %pids) {
-            my $script = delete $pids{$kid};
+            my $test = delete $pids{$kid};
             kill 'TERM', $kid or kill 'KILL', $kid;
-            commit_test($script, 0, 'timeout');
+            commit_test(@$test, 0, 'timeout');
         }
     } elsif ($pids{$kid}) {
-        my $script = delete $pids{$kid};
-        commit_test($script, WIFEXITED($?) && (WEXITSTATUS($?) == 0));
+        commit_test(@{delete $pids{$kid}}, WIFEXITED($?) && (WEXITSTATUS($?) == 0));
     }
 }
 
@@ -91,7 +90,7 @@ sub spawn_script {
     open STDERR, ">&", $logfh
         or die "failed to redirect STDERR:$!";
     autoflush STDERR 1;
-    $ENV{PERL5LIB} = join ":", ".", split ":", $ENV{PERL5LIB} || "";
+    $ENV{PERL5LIB} = join ":", ".", "deps/quicly", split ":", $ENV{PERL5LIB} || "";
     exec "time", $^X, $script;
     die "failed to exec $^X $script:$!";
 }
@@ -103,18 +102,30 @@ sub get_logfn {
 }
 
 sub commit_test {
-    my ($script, $success, $extra_msg) = @_;
+    my ($script, $attempt, $success, $extra_msg) = @_;
+
+    my $logfn = get_logfn($script);
+    open my $logfh, "<", $logfn
+        or die "failed to open script:$logfn:$!";
+    flock($logfh, LOCK_SH) or die "failed to obtain shared lock on $logfn:$!";
+    my $log = do { local $/; <$logfh> };
+    close $logfh;
+    unlink $logfn;
+
+    if (!$success && $attempt == 0
+        && $log =~ /^.*failed to listen to (?:TCP|UDP) port [^\n]+: Address already in use$/m) {
+        $pids{spawn_script($script)} = [$script, $attempt + 1];
+        return;
+    }
+
     $extra_msg = $extra_msg ? " ($extra_msg)" : '';
 
     print colorize("# $script --------------------------------\n", 'cyan');
 
     # print the output of the perl script being run
-    my $logfn = get_logfn($script);
-    open my $logfh, "<", $logfn
-        or die "failed to open script:$logfn:$!";
-    flock($logfh, LOCK_SH) or die "failed to obtain shared lock on $logfn:$!";
-    unlink $logfn;
-    print do { local $/; <$logfh> };
+    print "# retried $script after H2O failed to bind a TCP or UDP port already in use\n"
+        if $attempt != 0;
+    print $log;
 
     # add to the failed list, if necessary
     if ($success) {

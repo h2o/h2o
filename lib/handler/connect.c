@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <limits.h>
 #include "h2o/hostinfo.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
@@ -1130,6 +1131,109 @@ void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t 
     do_register(pathconf, config, acl_entries, num_acl_entries, on_req_connect_udp);
 }
 
+/**
+ * Parses a decimal number at the beginning of [*s, end), advancing *s past the digits consumed. Returns the parsed value, or -1 if
+ * no digit is found or the value would not fit in a non-negative int. The caller is responsible for range-checking the result.
+ */
+static int parse_decimal(const char **s, const char *end)
+{
+    const char *start = *s;
+    int v = 0;
+
+    for (; *s != end && '0' <= **s && **s <= '9'; ++*s) {
+        int digit = **s - '0';
+        /* reject if `v * 10 + digit` would overflow INT_MAX, checked before the multiply to avoid relying on a wider type */
+        if (v > (INT_MAX - digit) / 10)
+            return -1;
+        v = v * 10 + digit;
+    }
+    if (*s == start)
+        return -1;
+    return v;
+}
+
+/**
+ * Parse an ACL host/mask:port specification.
+ * Accepted format: host[/mask][:port[-port]] (the netmask may also appear after the port, e.g. host:port/mask, for backward
+ * compatibility). A port of `*` means any port, same as omitting it.
+ * Examples: 10.0.0.0/8:80-443, [::1]:443, *:25, 127.0.0.1/32, 127.0.0.1:25/24, 127.0.0.1:*, local
+ * Returns pointer to first unparsed character on success, NULL on error.
+ */
+static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *host, size_t *addr_mask, uint16_t *port_min,
+                                      uint16_t *port_max)
+{
+    const char *token_start = s, *token_end, *end = s + len;
+
+    /* default to matching any port; overridden below if a port or range is given */
+    *port_min = 0;
+    *port_max = 65535;
+    *addr_mask = 0;
+
+    if (token_start == end)
+        return NULL;
+
+    /* parse host */
+    if (*token_start == '[') {
+        /* IPv6 address in brackets */
+        ++token_start;
+        if ((token_end = memchr(token_start, ']', end - token_start)) == NULL)
+            return NULL;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end + 1;
+    } else {
+        for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == ':'); ++token_end)
+            ;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end;
+    }
+
+    /* disallow zero-length host */
+    if (host->len == 0)
+        return NULL;
+
+    /* parse optional /mask appearing before the port (e.g. 10.0.0.0/8:80) */
+    if (token_start != end && *token_start == '/') {
+        int mask;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
+            return NULL;
+        *addr_mask = mask;
+    }
+
+    /* parse optional :port, :port-port, or :* (any port) */
+    if (token_start != end && *token_start == ':') {
+        ++token_start;
+        if (token_start != end && *token_start == '*') {
+            /* `:*` means any port; leave the default full range in place */
+            ++token_start;
+        } else {
+            int p;
+            if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                return NULL;
+            *port_min = (uint16_t)p;
+            if (token_start != end && *token_start == '-') {
+                ++token_start;
+                if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                    return NULL;
+            }
+            *port_max = (uint16_t)p;
+        }
+    }
+
+    /* parse optional /mask appearing after the port (legacy order, e.g. 10.0.0.0:80/8) */
+    if (token_start != end && *token_start == '/') {
+        int mask;
+        if (*addr_mask != 0) /* mask already given before the port */
+            return NULL;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
+            return NULL;
+        *addr_mask = mask;
+    }
+
+    return token_start;
+}
+
 const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)
 {
     /* type */
@@ -1144,25 +1248,17 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
         return "ACL entry must begin with + or -";
     }
 
-    /* extract address, port */
+    /* extract address, optional netmask, optional port or port range. Port ranges are INCLUSIVE on both min and max */
     h2o_iovec_t host_vec;
-    uint16_t port;
-    const char *slash_at;
-    if ((slash_at = h2o_url_parse_hostport(input + 1, strlen(input + 1), &host_vec, &port)) == NULL)
+    uint16_t port_min, port_max;
+    const char *rest;
+    if ((rest = parse_acl_hostport(input + 1, strlen(input + 1), &host_vec, &output->addr_mask, &port_min, &port_max)) == NULL)
+        goto GenericParseError;
+    if (*rest != '\0')
         goto GenericParseError;
     char *host = alloca(host_vec.len + 1);
     memcpy(host, host_vec.base, host_vec.len);
     host[host_vec.len] = '\0';
-
-    /* parse netmask (or addr_mask is set to zero to indicate that mask was not specified) */
-    if (*slash_at != '\0') {
-        if (*slash_at != '/')
-            goto GenericParseError;
-        if (sscanf(slash_at + 1, "%zu", &output->addr_mask) != 1 || output->addr_mask == 0)
-            return "invalid address mask";
-    } else {
-        output->addr_mask = 0;
-    }
 
     /* parse address */
     struct in_addr v4addr;
@@ -1197,13 +1293,16 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
         return "failed to parse address";
     }
 
-    /* set port (for whatever reason, `h2o_url_parse_hostport` sets port to 65535 when not specified, convert that to zero) */
-    output->port = port == 65535 ? 0 : port;
+    if (port_max < port_min)
+        return "port range end must be >= start";
+
+    output->port_min = port_min;
+    output->port_max = port_max;
 
     return NULL;
 
 GenericParseError:
-    return "failed to parse input, expected format is: [+-]address(?::port|)(?:/netmask|)";
+    return "failed to parse input, expected format is: [+-]address[/netmask][:port[-port]]";
 }
 
 int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target)
@@ -1229,7 +1328,7 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
     for (size_t i = 0; i != num_acl_entries; ++i) {
         h2o_connect_acl_entry_t *entry = acl_entries + i;
         /* check port */
-        if (entry->port != 0 && entry->port != target_port)
+        if (target_port < entry->port_min || target_port > entry->port_max)
             goto Next;
         /* check address */
         switch (entry->addr_family) {

@@ -25,6 +25,8 @@ subtest "decoded header count soft limit" => sub {
     like $body, qr{headers too long}, "soft error is reported";
 };
 
+undef $server;
+
 done_testing;
 
 sub get_with_headers {

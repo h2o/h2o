@@ -2317,7 +2317,9 @@ See Section 18.2 of RFC 9000. Default is 1,472.
 pacing
 A boolean flag (either OFF or ON) indicating whether sent packets should be paced. The default setting is OFF.
 qpack-encoder-table-capacity
-Size of the QPACK encoder table. Default is 4,096.
+Size of the QPACK encoder table, in bytes. Controls the maximum size of the dynamic table that h2o will use for encoding the response headers. Setting this field to 0 disables the use of the dynamic table. Default is 16,384.
+qpack-decoder-table-capacity
+Size of the QPACK decoder table, in bytes. Setting this to a non-zero value advertises SETTINGS_QPACK_MAX_TABLE_CAPACITY to the peer, allowing the peer to use dynamic-table references when encoding request headers. Default is 16,384.
 respect-app-limited
 This boolean flag (either OFF or ON) indicates whether the server should respect the notion of rate limited traffic when adjusting the size of the congestion window, as detailed in RFC 7661. The default setting is ON.
 retry
@@ -2534,6 +2536,17 @@ process-timetime spent after receiving request, before starting to send response
 response-timetime spent sending response
 durationsum of request-total-time, process-time, response-time
 total-timesame as duration (since v2.3)
+
+
+HTTP Message Sizes
+NameDescription
+request-header-bytesnumber of bytes used to receive request headers in the protocol-specific encoded form
+response-header-bytesnumber of bytes used to send response headers in the protocol-specific encoded form
+request-header-text-bytessum of request header name and value lengths after decoding
+response-header-text-bytessum of response header name and value lengths before encoding
+request-header-countnumber of request header fields
+response-header-countnumber of response header fields
+request-body-bytesnumber of request body bytes received
 
 
 Proxy Timings (since v2.3)
@@ -3599,7 +3612,7 @@ Setup a CONNECT proxy, taking an access control list as the argument.
 .PP
 
 
-Each element of the access control list starts with either + or - followed by an wildcard (*) or an IP address with an optional netmask and an optional port number.
+Each element of the access control list starts with either + or - followed by a wildcard (*) or an IP address with an optional netmask and an optional port number or port range.
 
 
 When a CONNECT request is received and the name resolution of the connect target is complete, the access control list is searched from top to bottom.
@@ -3616,15 +3629,17 @@ Simple HTTPS proxy
 .nf
 .RS
 proxy.connect:
-- "-192.168.0.0/24"  # reject any attempts to local network
-- "+*:443"           # accept attempts to port 443 of any host
+- "-192.168.0.0/24"    # reject any attempts to local network
+- "+*:443"             # accept attempts to port 443 of any host
+- "+10.0.0.0/8:80-443" # accept attempts to ports 80 through 443 of 10.0.0.0/8
 
 .RE
 .fi
 .PP
 
 
-Note: The precise syntax of the access control list element is address:port/netmask. This is because the URL parser is reused.
+The syntax of each access control list element is address[/netmask][:port], where port is either a single port number, an inclusive range expressed as low-high, or * meaning any port (which is also the default when the port is omitted).
+For backward compatibility, the netmask may instead be specified after the port (i.e., address:port/netmask).
 
 
 The directive can only be used for the root path (i.e., /), as the classic CONNECT does not specify the path.
@@ -3640,6 +3655,14 @@ Setup a CONNECT-UDP gateway defined by RFC 9298.
 
 
 Supplied argument is an access control list, using the same format as that of proxy.connect.
+
+
+To be compatible with clients using the default URI Template defined in RFC 9298, the handler should be registered at path /.well-known/masque/udp/:
+
+paths:
+  "/.well-known/masque/udp":
+    proxy.connect-udp:
+      - "+*"
 
 
 Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see proxy.connect.masque-draft-03.
