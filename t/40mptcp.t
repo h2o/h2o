@@ -3,22 +3,19 @@ use warnings;
 use Test::More;
 use IO::Socket::INET;
 use Errno qw(EINTR);
-use Socket qw(SOL_SOCKET SO_PROTOCOL SOCK_STREAM IPPROTO_TCP);
+use Socket qw(SOCK_STREAM IPPROTO_TCP);
 use t::Util;
 
-# IPPROTO_MPTCP is defined as 262 in include/uapi/linux/in.h
+plan 'skip_all' => 'MPTCP test uses hard-coded values for socket constants and therefore rely on linux'
+    unless $^O eq 'linux';
 use constant IPPROTO_MPTCP => 262;
-
-# TCP_IS_MPTCP is defined as 43 in include/uapi/linux/tcp.h
 use constant TCP_IS_MPTCP => 43;
 
-plan 'skip_all' => 'H2O not built with MPTCP' unless server_features()->{mptcp};
+plan 'skip_all' => 'H2O not built with MPTCP'
+    unless server_features()->{mptcp};
 
-my $mptcp_enabled = -f '/proc/sys/net/mptcp/enabled' && `cat /proc/sys/net/mptcp/enabled` + 0 > 0;
-plan skip_all => 'MPTCP not enabled on this system' unless $mptcp_enabled;
-
-my $mptcp_working = check_mptcp();
-plan skip_all => 'MPTCP not working on this system' unless $mptcp_working;
+plan skip_all => 'MPTCP not working on this system'
+    unless mptcp_works();
 
 my ($port) = empty_ports(1, { host => "127.0.0.1" });
 
@@ -62,34 +59,24 @@ undef $server;
 
 done_testing;
 
-sub check_mptcp {
-    my $serv_sock = IO::Socket::INET->new(
+sub mptcp_works {
+    my $listener_sock = IO::Socket::INET->new(
         LocalAddr => "127.0.0.1",
         LocalPort => 0,
         Proto    => IPPROTO_MPTCP,
         Type     => SOCK_STREAM,
         Listen   => 5,
-    );
-    unless ($serv_sock) {
-        return;
-    }
-
+    ) or return;
     my $client_sock = IO::Socket::INET->new(
         PeerAddr => "127.0.0.1",
-        PeerPort => $serv_sock->sockport(),
+        PeerPort => $listener_sock->sockport(),
         Proto    => IPPROTO_MPTCP,
         Type     => SOCK_STREAM,
-    );
-    unless ($client_sock) {
-        return;
-    }
+    ) or return;
 
-    my $is_mptcp = is_socket_mptcp($client_sock) or return;
+    my $server_sock = $listener_sock->accept() or return;
 
-    close $client_sock;
-    close $serv_sock;
-
-    return $is_mptcp;
+    return is_socket_mptcp($client_sock) && is_socket_mptcp($server_sock);
 }
 
 sub is_socket_mptcp {
