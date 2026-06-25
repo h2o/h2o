@@ -2875,7 +2875,7 @@ static const char *protocol_to_string(int protocol)
         return "MPTCP";
 #endif
     }
-    return "";
+    h2o_fatal("unexpected protocol number: %d", protocol);
 }
 
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
