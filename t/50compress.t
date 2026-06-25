@@ -87,6 +87,8 @@ run_with_curl($server, sub {
     is md5_hex($resp), md5_file("@{[DOC_ROOT]}/halfdome.jpg"), "image compressed using gzip";
 
     subtest "brotli-decompress" => sub {
+        plan skip_all => "server built without brotli support"
+            unless server_features()->{brotli};
         plan skip_all => "brotli not found"
             unless prog_exists("brotli");
         $resp = run_prog("$curl --silent -H accept-encoding:br $proto://127.0.0.1:$port/on/alice.txt | brotli --decompress");
