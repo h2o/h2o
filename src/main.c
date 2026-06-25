@@ -3108,6 +3108,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #endif
         if (initcwnd_node != NULL)
             h2o_configurator_errprintf(cmd, *initcwnd_node, "[warning] cannot set initial congestion window for TCP");
+#if H2O_WITH_MPTCP
+        if (strcmp(type, "mptcp") == 0 &&
+            (conf.run_mode == RUN_MODE_MASTER || conf.run_mode == RUN_MODE_DAEMON || conf.server_starter.fds != NULL)) {
+            h2o_configurator_errprintf(cmd, node, "listen type mptcp is supported only in worker mode without server-starter");
+            return -1;
+        }
+#endif
         struct addrinfo *res, *ai;
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
@@ -3155,6 +3162,25 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
+#if H2O_WITH_MPTCP
+            if (listener_is_new == 0 && listener->fds.entries[0] != -1) {
+                int listener_protocol, expected_protocol = strcmp(type, "mptcp") == 0 ? IPPROTO_MPTCP : IPPROTO_TCP;
+                socklen_t listener_protocol_len = sizeof(listener_protocol);
+                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol,
+                               &listener_protocol_len) != 0) {
+                    h2o_configurator_errprintf(cmd, node, "failed to obtain listener socket protocol:%s", strerror(errno));
+                    freeaddrinfo(res);
+                    return -1;
+                }
+                if (listener_protocol != expected_protocol) {
+                    h2o_configurator_errprintf(cmd, node, "cannot change listen type from %s to %s for %s:%s",
+                                               protocol_to_string(listener_protocol), protocol_to_string(expected_protocol),
+                                               hostname != NULL ? hostname : "ANY", servname);
+                    freeaddrinfo(res);
+                    return -1;
+                }
+            }
+#endif
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
