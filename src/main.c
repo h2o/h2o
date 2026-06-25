@@ -3130,8 +3130,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #if H2O_WITH_MPTCP
                         if (strcmp(type, "mptcp") == 0) {
                             if (protocol == IPPROTO_TCP) {
-                                // glibc getaddrinfo() doesn't support IPPROTO_MPTCP until a8e9022e0f82("getaddrinfo.c: support
-                                // MPTCP (BZ #29609)") i.e. version 2.42. We always pass IPPROTO_TCP and correct here.
+                                /* glibc getaddrinfo() doesn't support IPPROTO_MPTCP until a8e9022e0f82("getaddrinfo.c: support
+                                 * MPTCP (BZ #29609)") i.e. version 2.42. We always pass IPPROTO_TCP and correct here. */
                                 protocol = IPPROTO_MPTCP;
                             }
                         }
