@@ -34,23 +34,21 @@ struct st_zstd_context_t {
     size_t buf_capacity;
 };
 
-static void expand_buf(struct st_zstd_context_t *self)
+/* Returns the index of a buffer that has spare capacity, appending a new one when the vector is empty or the last buffer is full.
+ * Being self-contained (it handles the empty vector itself), it has no precondition on bufs.size. */
+static size_t acquire_buf(struct st_zstd_context_t *self)
 {
-    h2o_vector_reserve(NULL, &self->bufs, self->bufs.size + 1);
-    h2o_sendvec_init_raw(self->bufs.entries + self->bufs.size++, h2o_mem_alloc(self->buf_capacity), 0);
+    if (self->bufs.size == 0 || self->bufs.entries[self->bufs.size - 1].len == self->buf_capacity) {
+        h2o_vector_reserve(NULL, &self->bufs, self->bufs.size + 1);
+        h2o_sendvec_init_raw(self->bufs.entries + self->bufs.size++, h2o_mem_alloc(self->buf_capacity), 0);
+    }
+    return self->bufs.size - 1;
 }
 
 static void shrink_buf(struct st_zstd_context_t *self, size_t new_size)
 {
     while (self->bufs.size > new_size)
         free(self->bufs.entries[--self->bufs.size].raw);
-}
-
-static void ensure_space(struct st_zstd_context_t *self)
-{
-    size_t active = self->bufs.size - 1;
-    if (self->bufs.entries[active].len == self->buf_capacity)
-        expand_buf(self);
 }
 
 static int compress_chunk(struct st_zstd_context_t *self, const void *src, size_t len, ZSTD_EndDirective directive)
@@ -61,8 +59,7 @@ static int compress_chunk(struct st_zstd_context_t *self, const void *src, size_
 
     bool need_more_output;
     do {
-        ensure_space(self);
-        size_t active = self->bufs.size - 1;
+        size_t active = acquire_buf(self);
         ZSTD_outBuffer output = {
             .dst = self->bufs.entries[active].raw + self->bufs.entries[active].len,
             .size = self->buf_capacity - self->bufs.entries[active].len,
@@ -170,7 +167,7 @@ h2o_compress_context_t *h2o_compress_zstd_open(h2o_mem_pool_t *pool, int quality
         self->buf_capacity = 1024;
 
     memset(&self->bufs, 0, sizeof(self->bufs));
-    expand_buf(self);
+    acquire_buf(self);
 
     return &self->super;
 }
