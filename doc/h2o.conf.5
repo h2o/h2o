@@ -805,9 +805,11 @@ listen:
 .fi
 .PP
 
-Listening on an Multipath TCP socket
+Listening on a Multipath TCP socket
 
-If the type attribute is set to mptcp, h2o will listen on an Multipath TCP socket, instead of a TCP one.
+If the type attribute is set to mptcp, h2o will listen on a Multipath TCP socket, instead of a TCP one.
+Support for this listener type is available only in worker mode and when h2o is built with -DWITH_MPTCP=ON.
+
 
 .PP
 .BR Example:\ 
@@ -826,6 +828,7 @@ listen:
 .RE
 .fi
 .PP
+
 
 
 Multipath TCP is fully backwards compatible with regular TCP clients.
