@@ -12,10 +12,10 @@ use constant IPPROTO_MPTCP => 262;
 # TCP_IS_MPTCP is defined as 43 in include/uapi/linux/tcp.h
 use constant TCP_IS_MPTCP => 43;
 
+plan 'skip_all' => 'H2O not built with MPTCP' unless server_features()->{mptcp};
+
 my $mptcp_enabled = -f '/proc/sys/net/mptcp/enabled' && `cat /proc/sys/net/mptcp/enabled` + 0 > 0;
 plan skip_all => 'MPTCP not enabled on this system' unless $mptcp_enabled;
-
-plan 'skip_all' => 'H2O not built with MPTCP' unless server_features()->{mptcp};
 
 my $mptcp_working = check_mptcp();
 plan skip_all => 'MPTCP not working on this system' unless $mptcp_working;

@@ -6,6 +6,7 @@ BUILD_ARGS=
 TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
 SERVER_FEATURES_UBUNTU2404=capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,ssl-zerocopy
+SERVER_FEATURES_UBUNTU2404_MPTCP=mptcp,$(SERVER_FEATURES_UBUNTU2404)
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR):ro \
@@ -44,9 +45,9 @@ ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
+		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
+		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404_MPTCP) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
 
 boringssl:
