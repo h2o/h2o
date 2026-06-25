@@ -88,6 +88,8 @@ subtest "no accept-encoding, no compression" => sub {
 };
 
 subtest "br,gzip compresses to br by default" => sub {
+    plan skip_all => "server built without brotli support"
+        unless server_features()->{brotli};
     doit("This is large enough to be compressed", "", "br", "br,gzip");
     doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", "br", "br,gzip");
     doit("This is large enough to be compressed", "x-compress-hint: on\r\n", "br", "br,gzip");

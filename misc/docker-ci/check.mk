@@ -5,8 +5,7 @@ CMAKE_ARGS=
 BUILD_ARGS=
 TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-SERVER_FEATURES_UBUNTU2404=capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,ssl-zerocopy
-SERVER_FEATURES_UBUNTU2404_MPTCP=mptcp,$(SERVER_FEATURES_UBUNTU2404)
+SERVER_FEATURES_UBUNTU2404=brotli,capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,mptcp,ssl-zerocopy
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR):ro \
