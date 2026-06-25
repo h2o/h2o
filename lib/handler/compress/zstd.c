@@ -27,10 +27,6 @@
 #include <zstd.h>
 #include "h2o.h"
 
-#ifndef BUF_SIZE /* allows unit tests to override */
-#define BUF_SIZE 8192
-#endif
-
 struct st_zstd_context_t {
     h2o_compress_context_t super;
     ZSTD_CStream *cstream;
