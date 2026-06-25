@@ -805,17 +805,17 @@ listen:
 .fi
 .PP
 
-Listening on an MPTCP socket
+Listening on an Multipath TCP socket
 
-If the type attribute is set to mptcp, h2o will listen on an MPTCP socket, instead of a TCP one.
+If the type attribute is set to mptcp, h2o will listen on an Multipath TCP socket, instead of a TCP one.
 
 .PP
 .BR Example:\ 
-Listen Directive for MPTCP
+Listen Directive for Multipath TCP
 .PP
 .nf
 .RS
-# accept HTTPS on port 443 with MPTCP
+# accept HTTPS on port 443 with Multipath TCP
 listen:
   type: mptcp
   port: 443
@@ -828,7 +828,7 @@ listen:
 .PP
 
 
-MPTCP is fully backwards compatible with regular TCP clients.
+Multipath TCP is fully backwards compatible with regular TCP clients.
 
 
 .RE
