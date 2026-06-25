@@ -5,7 +5,7 @@ CMAKE_ARGS=
 BUILD_ARGS=
 TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
-SERVER_FEATURES_UBUNTU2404=brotli,capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,ssl-zerocopy,zstd
+SERVER_FEATURES_UBUNTU2404=brotli,capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,mptcp,ssl-zerocopy,zstd
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR):ro \
@@ -44,7 +44,7 @@ ossl3.0:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		env DTRACE_TESTS=1 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format' \
+		CMAKE_ARGS='-DCMAKE_C_FLAGS=-Werror=format -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
@@ -52,7 +52,7 @@ ossl3.0:
 boringssl:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl -DEXTERNALPROJECT_SSL_ROOT_DIR=/usr' \
+		CMAKE_ARGS='-DOPENSSL_ROOT_DIR=/opt/boringssl -DEXTERNALPROJECT_SSL_ROOT_DIR=/usr  -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
@@ -60,7 +60,7 @@ boringssl:
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address' \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS=-fsanitize=address -DCMAKE_CXX_FLAGS=-fsanitize=address -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
@@ -69,7 +69,7 @@ asan:
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404  \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check _coverage_report \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF' \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping -mllvm -runtime-counter-relocation" -DCMAKE_CXX_FLAGS= -DCMAKE_BUILD_TYPE=Debug -DWITH_H2OLOG=OFF -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
 		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) LLVM_PROFILE_FILE=/home/ci/profraw/%c%p-%m.profraw $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
