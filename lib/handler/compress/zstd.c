@@ -154,15 +154,25 @@ h2o_compress_context_t *h2o_compress_zstd_open(h2o_mem_pool_t *pool, int quality
     if (self->cstream == NULL)
         h2o_fatal("ZSTD_createCStream failed");
 
-    if (estimated_content_length != SIZE_MAX) {
-        size_t set_ret = ZSTD_CCtx_setPledgedSrcSize(self->cstream, estimated_content_length);
-        if (ZSTD_isError(set_ret))
-            h2o_error_printf("zstd: failed to set pledged size: %s\n", ZSTD_getErrorName(set_ret));
-    }
-
-    size_t ret = ZSTD_initCStream(self->cstream, quality);
+    size_t ret = ZSTD_CCtx_setParameter(self->cstream, ZSTD_c_compressionLevel, quality);
     if (ZSTD_isError(ret))
-        h2o_fatal("ZSTD_initCStream: %s", ZSTD_getErrorName(ret));
+        h2o_fatal("zstd: failed to set compression level: %s", ZSTD_getErrorName(ret));
+
+    /* For small responses, shrink the compression window to reduce per-stream memory usage. ZSTD_c_windowLog is used rather than
+     * ZSTD_CCtx_setPledgedSrcSize(): the latter would also enforce the pledged size at end-of-frame, causing it to stop short
+     * of forwarding all bytes when the stream is closed early. The threshold is kept at zstd's smallest per-level default window
+     * (windowLog 19) so that we only ever shrink the window, never grow it past the level's default. */
+    if (estimated_content_length != SIZE_MAX && estimated_content_length < ((size_t)1 << 19)) {
+        ZSTD_bounds wlog_bounds = ZSTD_cParam_getBounds(ZSTD_c_windowLog);
+        int wlog = estimated_content_length > 1
+                       ? (int)(sizeof(unsigned long long) * 8 - __builtin_clzll(estimated_content_length - 1))
+                       : 1;
+        if (wlog_bounds.error == 0 && wlog < (int)wlog_bounds.lowerBound)
+            wlog = (int)wlog_bounds.lowerBound;
+        ret = ZSTD_CCtx_setParameter(self->cstream, ZSTD_c_windowLog, wlog);
+        if (ZSTD_isError(ret))
+            h2o_error_printf("zstd: failed to set windowLog: %s\n", ZSTD_getErrorName(ret));
+    }
 
     self->buf_capacity = preferred_chunk_size;
     if (estimated_content_length != SIZE_MAX && self->buf_capacity > estimated_content_length)
