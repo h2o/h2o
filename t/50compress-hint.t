@@ -96,9 +96,26 @@ subtest "br,gzip compresses to br by default" => sub {
     doit("This is large enough to be compressed", "x-compress-hint: off\r\n", "", "br,gzip");
 };
 
+subtest "zstd,gzip compresses to zstd by default" => sub {
+    plan skip_all => "server built without zstd support"
+        unless server_features()->{zstd};
+    doit("This is large enough to be compressed", "", "zstd", "zstd,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: auto\r\n", "zstd", "zstd,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: on\r\n", "zstd", "zstd,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: off\r\n", "", "zstd,gzip");
+    doit("This is large enough to be compressed", "", "zstd", "gzip,zstd");
+};
+
 subtest "forcing gzip or br also works" => sub {
     doit("This is large enough to be compressed", "x-compress-hint: gzip\r\n", "gzip", "br,gzip");
     doit("This is large enough to be compressed", "x-compress-hint: br\r\n", "", "gzip");
+};
+
+subtest "forcing zstd also works" => sub {
+    plan skip_all => "server built without zstd support"
+        unless server_features()->{zstd};
+    doit("This is large enough to be compressed", "x-compress-hint: zstd\r\n", "zstd", "zstd,gzip");
+    doit("This is large enough to be compressed", "x-compress-hint: zstd\r\n", "", "gzip");
 };
 
 $socket->close();
