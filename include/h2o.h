@@ -59,6 +59,9 @@ extern "C" {
 /* disabled for all but the standalone server, since the encoder is written in C++ */
 #define H2O_USE_BROTLI 0
 #endif
+#ifndef H2O_USE_ZSTD
+#define H2O_USE_ZSTD 0
+#endif
 
 #ifndef H2O_SOMAXCONN
 /* simply use a large value, and let the kernel clip it to the internal max */
@@ -2087,6 +2090,9 @@ typedef struct st_h2o_compress_args_t {
     struct {
         int quality; /* -1 if disabled */
     } brotli;
+    struct {
+        int quality; /* -1 if disabled */
+    } zstd;
 } h2o_compress_args_t;
 
 /**
@@ -2111,6 +2117,11 @@ h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool);
  */
 h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length,
                                                  size_t preferred_chunk_size);
+/**
+ * instantiates the zstd compressor (only available if H2O_USE_ZSTD is set)
+ */
+h2o_compress_context_t *h2o_compress_zstd_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length,
+                                               size_t preferred_chunk_size);
 /**
  * registers the configurator for the gzip/brotli output filter
  */

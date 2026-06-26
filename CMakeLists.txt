@@ -172,10 +172,14 @@ ELSE ()
 ENDIF ()
 OPTION(WITH_IO_URING "whether or not to use io_uring" ${WITH_IO_URING_DEFAULT})
 
+OPTION(WITH_MPTCP "whether or not to support listening on MPTCP sockets" OFF)
+IF (WITH_MPTCP)
+    ADD_DEFINITIONS("-DH2O_WITH_MPTCP=1")
+ENDIF (WITH_MPTCP)
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec
-    deps/brotli/c/include
     deps/golombset
     deps/hiredis
     deps/libgkc
@@ -243,12 +247,41 @@ ENDIF (ZLIB_FOUND)
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(BROTLI_DEC libbrotlidec)
     PKG_CHECK_MODULES(BROTLI_ENC libbrotlienc)
-    IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
-        SET(BROTLI_FOUND TRUE)
-        INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
-        LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
-    ENDIF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
 ENDIF (PKG_CONFIG_FOUND)
+IF (BROTLI_DEC_FOUND AND BROTLI_ENC_FOUND)
+    SET(WITH_BROTLI_DEFAULT "ON")
+ELSE ()
+    SET(WITH_BROTLI_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_BROTLI "whether or not to use brotli" ${WITH_BROTLI_DEFAULT})
+IF (WITH_BROTLI)
+    IF (NOT BROTLI_DEC_FOUND OR NOT BROTLI_ENC_FOUND)
+        MESSAGE(FATAL_ERROR "WITH_BROTLI was requested, but pkg-config could not find libbrotlidec and libbrotlienc")
+    ENDIF ()
+    ADD_DEFINITIONS("-DH2O_USE_BROTLI=1")
+    INCLUDE_DIRECTORIES(${BROTLI_DEC_INCLUDE_DIRS} ${BROTLI_ENC_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${BROTLI_DEC_LIBRARY_DIRS} ${BROTLI_ENC_LIBRARY_DIRS})
+    LIST(APPEND EXTRA_LIBS ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
+ENDIF (WITH_BROTLI)
+
+IF (PKG_CONFIG_FOUND)
+    PKG_CHECK_MODULES(ZSTD libzstd)
+ENDIF (PKG_CONFIG_FOUND)
+IF (ZSTD_FOUND)
+    SET(WITH_ZSTD_DEFAULT "ON")
+ELSE ()
+    SET(WITH_ZSTD_DEFAULT "OFF")
+ENDIF ()
+OPTION(WITH_ZSTD "whether or not to use zstd" ${WITH_ZSTD_DEFAULT})
+IF (WITH_ZSTD)
+    IF (NOT ZSTD_FOUND)
+        MESSAGE(FATAL_ERROR "WITH_ZSTD was requested, but pkg-config could not find libzstd")
+    ENDIF ()
+    ADD_DEFINITIONS("-DH2O_USE_ZSTD=1")
+    INCLUDE_DIRECTORIES(${ZSTD_INCLUDE_DIRS})
+    LINK_DIRECTORIES(${ZSTD_LIBRARY_DIRS})
+    LIST(APPEND EXTRA_LIBS ${ZSTD_LIBRARIES})
+ENDIF (WITH_ZSTD)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)
@@ -315,31 +348,6 @@ SET(LIBYAML_SOURCE_FILES
     deps/yaml/src/scanner.c
     deps/yaml/src/writer.c)
 
-SET(BROTLI_SOURCE_FILES
-    deps/brotli/c/common/dictionary.c
-    deps/brotli/c/dec/bit_reader.c
-    deps/brotli/c/dec/decode.c
-    deps/brotli/c/dec/huffman.c
-    deps/brotli/c/dec/state.c
-    deps/brotli/c/enc/backward_references.c
-    deps/brotli/c/enc/backward_references_hq.c
-    deps/brotli/c/enc/bit_cost.c
-    deps/brotli/c/enc/block_splitter.c
-    deps/brotli/c/enc/brotli_bit_stream.c
-    deps/brotli/c/enc/cluster.c
-    deps/brotli/c/enc/compress_fragment.c
-    deps/brotli/c/enc/compress_fragment_two_pass.c
-    deps/brotli/c/enc/dictionary_hash.c
-    deps/brotli/c/enc/encode.c
-    deps/brotli/c/enc/entropy_encode.c
-    deps/brotli/c/enc/histogram.c
-    deps/brotli/c/enc/literal_cost.c
-    deps/brotli/c/enc/memory.c
-    deps/brotli/c/enc/metablock.c
-    deps/brotli/c/enc/static_dict.c
-    deps/brotli/c/enc/utf8_util.c
-    lib/handler/compress/brotli.c)
-
 SET(LIB_SOURCE_FILES
     deps/cloexec/cloexec.c
     deps/hiredis/async.c
@@ -364,7 +372,6 @@ SET(LIB_SOURCE_FILES
     deps/picotls/deps/cifra/src/drbg.c
     deps/picotls/deps/cifra/src/hmac.c
     deps/picotls/deps/cifra/src/sha256.c
-    deps/picotls/lib/certificate_compression.c
     deps/picotls/lib/hpke.c
     deps/picotls/lib/pembase64.c
     deps/picotls/lib/picotls.c
@@ -483,6 +490,16 @@ SET(LIB_SOURCE_FILES
 
     ${CMAKE_CURRENT_BINARY_DIR}/quicly-tracer.h)
 
+IF (WITH_BROTLI)
+    LIST(APPEND LIB_SOURCE_FILES
+        deps/picotls/lib/certificate_compression.c
+        lib/handler/compress/brotli.c)
+ENDIF (WITH_BROTLI)
+IF (WITH_ZSTD)
+    LIST(APPEND LIB_SOURCE_FILES
+        lib/handler/compress/zstd.c)
+ENDIF (WITH_ZSTD)
+
 IF (WITH_DTRACE)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/picotls/picotls-probes.d picotls)
     DEFINE_DTRACE_DEPENDENCIES(${CMAKE_SOURCE_DIR}/deps/quicly/quicly-probes.d quicly)
@@ -502,7 +519,6 @@ ENDIF ()
 SET(UNIT_TEST_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
@@ -579,8 +595,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
 
 SET(FUZZED_SOURCE_FILES
     ${LIB_SOURCE_FILES}
-    ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES})
+    ${LIBYAML_SOURCE_FILES})
 
 # Remove some of quicly files for fuzzing to allow the mockup library to come in
 LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
@@ -605,7 +620,6 @@ SET(EXTRA_LIBS ${EXTRA_LIBS} m ${CMAKE_THREAD_LIBS_INIT})
 IF (ZLIB_FOUND)
     LIST(INSERT EXTRA_LIBS 0 ${ZLIB_LIBRARIES})
 ENDIF (ZLIB_FOUND)
-
 IF (WSLAY_FOUND)
     ADD_LIBRARY(libh2o lib/websocket.c ${LIB_SOURCE_FILES})
     ADD_LIBRARY(libh2o-evloop lib/websocket.c ${LIB_SOURCE_FILES})
@@ -652,10 +666,6 @@ TARGET_INCLUDE_DIRECTORIES(libh2o PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_INCLUDE_DIRECTORIES(libh2o-evloop PUBLIC ${OPENSSL_INCLUDE_DIR})
 TARGET_LINK_LIBRARIES(libh2o ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
 TARGET_LINK_LIBRARIES(libh2o-evloop ${OPENSSL_LIBRARIES} ${CMAKE_DL_LIBS})
-IF (BROTLI_FOUND)
-    TARGET_LINK_LIBRARIES(libh2o ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
-    TARGET_LINK_LIBRARIES(libh2o-evloop ${BROTLI_DEC_LIBRARIES} ${BROTLI_ENC_LIBRARIES})
-ENDIF ()
 
 ADD_CUSTOM_COMMAND(
     OUTPUT quicly-tracer.h
@@ -729,12 +739,12 @@ SET_TARGET_PROPERTIES(examples-websocket-evloop PROPERTIES
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(examples-websocket-evloop libh2o-evloop ${WSLAY_LIBRARIES} ${EXTRA_LIBS})
 
-IF (LIBUV_FOUND AND BROTLI_FOUND AND NOT WITHOUT_LIBS)
+IF (LIBUV_FOUND AND NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o DESTINATION ${CMAKE_INSTALL_LIBDIR})
 ELSE ()
     SET_TARGET_PROPERTIES(libh2o PROPERTIES EXCLUDE_FROM_ALL 1)
 ENDIF ()
-IF (BROTLI_FOUND AND NOT WITHOUT_LIBS)
+IF (NOT WITHOUT_LIBS)
     INSTALL(TARGETS libh2o-evloop DESTINATION ${CMAKE_INSTALL_LIBDIR})
     INSTALL(TARGETS h2o-httpclient DESTINATION ${CMAKE_INSTALL_BINDIR})
 ELSE ()
@@ -746,11 +756,10 @@ ENDIF()
 SET(STANDALONE_SOURCE_FILES
     ${LIB_SOURCE_FILES}
     ${LIBYAML_SOURCE_FILES}
-    ${BROTLI_SOURCE_FILES}
     deps/neverbleed/neverbleed.c
     src/main.c
     src/ssl.c)
-SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DQUICLY_USE_TRACER=1")
+SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DQUICLY_USE_TRACER=1")
 IF (WITH_MRUBY)
     IF (${CMAKE_C_COMPILER_ID} STREQUAL "Clang")
         SET(MRUBY_TOOLCHAIN "clang")
@@ -854,10 +863,10 @@ INSTALL(DIRECTORY DESTINATION ${CMAKE_INSTALL_LOCALSTATEDIR}/h2o/acme/webroot)
 # tests
 ADD_EXECUTABLE(t-00unit-evloop.t ${UNIT_TEST_SOURCE_FILES})
 SET_TARGET_PROPERTIES(t-00unit-evloop.t PROPERTIES
-    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
+    COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DH2O_UNITTEST=1"
     EXCLUDE_FROM_ALL 1)
 
-IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND BROTLI_FOUND)
+IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/deps/theft/Makefile AND WITH_BROTLI)
     ExternalProject_Add(build-theft
                         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/theft"
                         BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/theft"
@@ -877,7 +886,7 @@ ENDIF ()
 IF (LIBUV_FOUND)
     ADD_EXECUTABLE(t-00unit-libuv.t ${UNIT_TEST_SOURCE_FILES})
     SET_TARGET_PROPERTIES(t-00unit-libuv.t PROPERTIES
-        COMPILE_FLAGS "-DH2O_USE_BROTLI=1 -DH2O_UNITTEST=1"
+        COMPILE_FLAGS "-DH2O_UNITTEST=1"
         EXCLUDE_FROM_ALL 1)
 ENDIF (LIBUV_FOUND)
 
@@ -894,12 +903,10 @@ ADD_CUSTOM_TARGET(checkdepends
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
-IF (BROTLI_FOUND)
-    IF (LIBUV_FOUND)
-        ADD_DEPENDENCIES(checkdepends lib-examples)
-    ENDIF ()
-    ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
+IF (LIBUV_FOUND)
+    ADD_DEPENDENCIES(checkdepends lib-examples)
 ENDIF ()
+ADD_DEPENDENCIES(checkdepends lib-examples-evloop)
 
 ADD_CUSTOM_TARGET(check env H2O_ROOT=. BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} time t/run-tests t/*.t
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
