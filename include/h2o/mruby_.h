@@ -174,6 +174,11 @@ struct st_h2o_mruby_generator_t {
         mrb_value generator;
         mrb_value error_stream;
     } refs;
+    /**
+     * request streaming: set to non-NULL to retains context from when mruby asks for more until a new chunk is fed; within that
+     * period, `proceed_req` and `write_req` callbacks will be called
+     */
+    struct st_h2o_mruby_req_streaming_ctx_t *req_streaming;
 };
 
 #define h2o_mruby_assert(mrb)                                                                                                      \
