@@ -652,6 +652,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 size_t len = req->input.path.len - req->input.query_at;
                 RESERVE(len * unsafe_factor);
                 pos = append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);
+            } else {
+                RESERVE(0);
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
@@ -837,6 +839,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_ERROR:
+            RESERVE(req->error_logs != NULL ? req->error_logs->size * unsafe_factor : 0);
             if (req->error_logs != NULL)
                 pos = append_unsafe_string(pos, req->error_logs->bytes, req->error_logs->size);
             break;
