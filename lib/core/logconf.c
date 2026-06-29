@@ -945,7 +945,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         default:
-            assert(!"unknown type");
+            h2o_fatal("unknown log element of type:%u", element->type);
             break;
         }
 
