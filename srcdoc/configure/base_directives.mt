@@ -378,6 +378,26 @@ listen:
   permission: 600
 EOT
 ?>
+<h4 id="listen-mptcp">Listening on a Multipath TCP socket</h4>
+<p>
+If the <code>type</code> attribute is set to <code>mptcp</code>, h2o will listen on a Multipath TCP socket, instead of a TCP one.
+Support for this listener type is available only in worker mode and when h2o is built with <code>-DWITH_MPTCP=ON</code>.
+</p>
+
+<?= $ctx->{example}->('Listen Directive for Multipath TCP', <<'EOT')
+# accept HTTPS on port 443 with Multipath TCP
+listen:
+  type: mptcp
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+EOT
+?>
+
+<p>
+Multipath TCP is fully backwards compatible with regular TCP clients.
+</p>
 ? })
 
 <?

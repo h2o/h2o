@@ -322,6 +322,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     MAP_EXT_TO_PROTO("http3.stream-id", http3.stream_id);
                     MAP_EXT_TO_PROTO("http3.quic-stats", http3.quic_stats);
                     MAP_EXT_TO_PROTO("http3.quic-version", http3.quic_version);
+                    MAP_EXT_TO_PROTO("http3.qpack-blocked", http3.qpack_blocked);
                     MAP_EXT_TO_PROTO("http3.request-stream-bytes", http3.request_stream_bytes);
                     MAP_EXT_TO_PROTO("http3.response-stream-bytes", http3.response_stream_bytes);
                     { /* not found */
@@ -761,7 +762,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 found = 1;                                                                                                         \
             }                                                                                                                      \
             const h2o_header_t *header = headers->entries + index;                                                                 \
-            RESERVE(header->value.len *unsafe_factor);                                                                             \
+            RESERVE(header->value.len * unsafe_factor);                                                                            \
             pos = append_unsafe_string(pos, header->value.base, header->value.len);                                                \
             if (!concat)                                                                                                           \
                 break;                                                                                                             \
