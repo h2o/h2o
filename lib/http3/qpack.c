@@ -257,6 +257,12 @@ void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack)
     free(qpack);
 }
 
+static void assert_literal_length(size_t len)
+{
+    /* regarding this limit; see the doc-comment on h2o_qpack_decoder_handle_input */
+    assert(len <= h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN));
+}
+
 static void decoder_insert(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_header_t *added)
 {
     ++qpack->insert_count;
@@ -283,6 +289,8 @@ Fail:
 static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *name, int value_is_huff, const uint8_t *value,
                                size_t value_len, const char **err_desc)
 {
+    assert_literal_length(value_len);
+
     struct st_h2o_qpack_header_t *header =
         h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + (value_len * 2) + 1, NULL);
 
@@ -294,6 +302,8 @@ static int insert_token_header(h2o_qpack_decoder_t *qpack, const h2o_token_t *na
 static int insert_literal_header(h2o_qpack_decoder_t *qpack, const char *name, size_t name_len, int value_is_huff,
                                  const uint8_t *value, size_t value_len, unsigned soft_errors, const char **err_desc)
 {
+    assert_literal_length(value_len);
+
     size_t value_capacity = (value_is_huff ? value_len * 2 : value_len) + 1;
     struct st_h2o_qpack_header_t *header =
         h2o_mem_alloc_shared(NULL, offsetof(struct st_h2o_qpack_header_t, value) + value_capacity + name_len + 1, NULL);
@@ -343,24 +353,43 @@ static int insert_without_name_reference(h2o_qpack_decoder_t *qpack, int qnhuff,
                                          const uint8_t *qv, int64_t qvlen, const char **err_desc)
 {
     h2o_iovec_t name;
+    char smallbuf[4096];
+    int free_name = 0, ret;
     unsigned soft_errors = 0;
 
+    assert_literal_length(qnlen);
+
     if (qnhuff) {
-        name.base = alloca(qnlen * 2);
-        if ((name.len = h2o_hpack_decode_huffman(name.base, &soft_errors, qn, qnlen, 1, err_desc)) == SIZE_MAX)
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        /* allocate buffer large enough to contain the decompressed string (2x of the compressed form) */
+        if (qnlen * 2 < sizeof(smallbuf)) {
+            name.base = smallbuf;
+        } else {
+            name.base = h2o_mem_alloc(qnlen * 2);
+            free_name = 1;
+        }
+        if ((name.len = h2o_hpack_decode_huffman(name.base, &soft_errors, qn, qnlen, 1, err_desc)) == SIZE_MAX) {
+            ret = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+            goto Exit;
+        }
     } else {
-        if (!h2o_hpack_validate_header_name(&soft_errors, (void *)qn, qnlen, err_desc))
-            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+        if (!h2o_hpack_validate_header_name(&soft_errors, (void *)qn, qnlen, err_desc)) {
+            ret = H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
+            goto Exit;
+        }
         name = h2o_iovec_init(qn, qnlen);
     }
 
     const h2o_token_t *token;
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
-        return insert_token_header(qpack, token, qvhuff, qv, qvlen, err_desc);
+        ret = insert_token_header(qpack, token, qvhuff, qv, qvlen, err_desc);
     } else {
-        return insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, soft_errors, err_desc);
+        ret = insert_literal_header(qpack, name.base, name.len, qvhuff, qv, qvlen, soft_errors, err_desc);
     }
+
+Exit:
+    if (free_name)
+        free(name.base);
+    return ret;
 }
 
 static int duplicate(h2o_qpack_decoder_t *qpack, int64_t index, const char **err_desc)
