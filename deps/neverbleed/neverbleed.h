@@ -24,7 +24,32 @@
 
 #include <pthread.h>
 #include <sys/un.h>
+
+#include <openssl/opensslconf.h>
+#include <openssl/opensslv.h>
+
+#if OPENSSL_VERSION_NUMBER >= 0x1010000fL && !defined(OPENSSL_NO_EC) &&                                                            \
+    (!defined(LIBRESSL_VERSION_NUMBER) || LIBRESSL_VERSION_NUMBER >= 0x2090100fL)
+/* EC_KEY_METHOD and related APIs are avaliable, so ECDSA is enabled. */
+#define NEVERBLEED_ECDSA
+#endif
+
+#include <openssl/bn.h>
+#ifdef NEVERBLEED_ECDSA
+#include <openssl/ec.h>
+#endif
+#include <openssl/rand.h>
+#include <openssl/rsa.h>
+#include <openssl/ssl.h>
+
+#if defined(LIBRESSL_VERSION_NUMBER) ? LIBRESSL_VERSION_NUMBER >= 0x3050000fL : OPENSSL_VERSION_NUMBER >= 0x1010000fL
+/* RSA_METHOD is opaque, so RSA_meth* are used. */
+#define NEVERBLEED_OPAQUE_RSA_METHOD
+#endif
+
+#ifndef OPENSSL_NO_ENGINE
 #include <openssl/engine.h>
+#endif
 
 #ifdef __FreeBSD__
 #include <pthread_np.h>
@@ -46,7 +71,13 @@ extern "C" {
 #define NEVERBLEED_AUTH_TOKEN_SIZE 32
 
 typedef struct st_neverbleed_t {
+    RSA_METHOD *rsa_method;
+#ifdef NEVERBLEED_ECDSA
+    void *ecdsa_method;
+#endif
+#ifndef OPENSSL_NO_ENGINE
     ENGINE *engine;
+#endif
     pid_t daemon_pid;
     struct sockaddr_un sun_;
     pthread_key_t thread_key;
