@@ -1369,10 +1369,10 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
 {
     quicly_address_t dest, src;
     struct iovec datagrams[10];
-    size_t num_datagrams = PTLS_ELEMENTSOF(datagrams);
-    uint8_t datagram_buf[1500 * PTLS_ELEMENTSOF(datagrams)];
+    size_t num_datagrams = PTLS_ELEMENTSOF(datagrams), datagram_bufsize = quicly_send_scatter_bufsize(conn->quic, num_datagrams);
+    uint8_t *datagram_buf = alloca(datagram_bufsize);
 
-    quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, sizeof(datagram_buf));
+    quicly_error_t ret = quicly_send(conn->quic, &dest, &src, datagrams, &num_datagrams, datagram_buf, datagram_bufsize);
     switch (ret) {
     case 0:
         if (num_datagrams != 0 &&

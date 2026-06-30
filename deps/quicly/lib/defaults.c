@@ -340,6 +340,11 @@ static quicly_error_t default_stream_scheduler_do_send(quicly_stream_scheduler_t
             if (ret == QUICLY_ERROR_SENDBUF_FULL) {
                 assert(quicly_stream_can_send(stream, 1));
                 link_stream(sched, stream, conn_is_blocked);
+            } else if (ret == QUICLY_ERROR_SEND_EMIT_BLOCKED) {
+                /* `on_send_emit` reported that the payload is not yet available; leave the stream detached (the application
+                 * reschedules it via `quicly_stream_sync_sendbuf` once the data is ready) and continue with other streams */
+                ret = 0;
+                continue;
             }
             break;
         }
@@ -441,15 +446,14 @@ Exit:
     return ret;
 }
 
-static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn,
-                                         ptls_cipher_context_t *header_protect_ctx, ptls_aead_context_t *packet_protect_ctx,
-                                         ptls_iovec_t datagram, size_t first_byte_at, size_t payload_from, uint64_t packet_number,
-                                         int coalesced)
+static void default_encrypt_packet(quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
+                                   ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
+                                   size_t payload_from, const void *payload, uint64_t packet_number, int coalesced)
 {
     ptls_aead_supplementary_encryption_t supp = {.ctx = header_protect_ctx,
                                                  .input = datagram.base + payload_from - QUICLY_SEND_PN_SIZE + QUICLY_MAX_PN_SIZE};
 
-    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, datagram.base + payload_from,
+    ptls_aead_encrypt_s(packet_protect_ctx, datagram.base + payload_from, payload,
                         datagram.len - payload_from - packet_protect_ctx->algo->tag_size, packet_number,
                         datagram.base + first_byte_at, payload_from - first_byte_at, &supp);
 
@@ -458,4 +462,4 @@ static void default_finalize_send_packet(quicly_crypto_engine_t *engine, quicly_
         datagram.base[payload_from + i - QUICLY_SEND_PN_SIZE] ^= supp.output[i + 1];
 }
 
-quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_finalize_send_packet};
+quicly_crypto_engine_t quicly_default_crypto_engine = {default_setup_cipher, default_encrypt_packet};
