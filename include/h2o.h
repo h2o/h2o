@@ -59,6 +59,9 @@ extern "C" {
 /* disabled for all but the standalone server, since the encoder is written in C++ */
 #define H2O_USE_BROTLI 0
 #endif
+#ifndef H2O_USE_ZSTD
+#define H2O_USE_ZSTD 0
+#endif
 
 #ifndef H2O_SOMAXCONN
 /* simply use a large value, and let the kernel clip it to the internal max */
@@ -1008,6 +1011,12 @@ typedef struct st_h2o_conn_callbacks_t {
     union {
         struct {
             h2o_iovec_t (*extensible_priorities)(h2o_req_t *req);
+            /* protocol-agnostic per-message metrics; only h3 implements the new ones initially */
+            h2o_iovec_t (*request_header_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*request_header_count)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_text_bytes)(h2o_req_t *req);
+            h2o_iovec_t (*response_header_count)(h2o_req_t *req);
             struct {
                 h2o_iovec_t (*cc_name)(h2o_req_t *req);
                 h2o_iovec_t (*delivery_rate)(h2o_req_t *req);
@@ -1042,6 +1051,10 @@ typedef struct st_h2o_conn_callbacks_t {
                 h2o_iovec_t (*stream_id)(h2o_req_t *req);
                 h2o_iovec_t (*quic_stats)(h2o_req_t *req);
                 h2o_iovec_t (*quic_version)(h2o_req_t *req);
+                h2o_iovec_t (*qpack_blocked)(h2o_req_t *req);
+                /* per-request QUIC-stream byte counters */
+                h2o_iovec_t (*request_stream_bytes)(h2o_req_t *req);
+                h2o_iovec_t (*response_stream_bytes)(h2o_req_t *req);
             } http3;
         };
         h2o_iovec_t (*callbacks[1])(h2o_req_t *req);
@@ -2073,6 +2086,9 @@ typedef struct st_h2o_compress_args_t {
     struct {
         int quality; /* -1 if disabled */
     } brotli;
+    struct {
+        int quality; /* -1 if disabled */
+    } zstd;
 } h2o_compress_args_t;
 
 /**
@@ -2097,6 +2113,11 @@ h2o_compress_context_t *h2o_compress_gunzip_open(h2o_mem_pool_t *pool);
  */
 h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quality, size_t estimated_cotent_length,
                                                  size_t preferred_chunk_size);
+/**
+ * instantiates the zstd compressor (only available if H2O_USE_ZSTD is set)
+ */
+h2o_compress_context_t *h2o_compress_zstd_open(h2o_mem_pool_t *pool, int quality, size_t estimated_content_length,
+                                               size_t preferred_chunk_size);
 /**
  * registers the configurator for the gzip/brotli output filter
  */
@@ -2353,7 +2374,10 @@ typedef struct st_h2o_connect_acl_entry_t {
         uint8_t v6[16];
     } addr;
     size_t addr_mask;
-    uint16_t port; /* 0 indicates ANY */
+    /* matched ports are the inclusive range [port_min, port_max]; a single port has port_min == port_max, and ANY is the full
+     * range 0 to 65535 */
+    uint16_t port_min;
+    uint16_t port_max;
 } h2o_connect_acl_entry_t;
 
 /**

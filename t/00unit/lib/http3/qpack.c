@@ -60,19 +60,21 @@ static void do_test_simple(int use_enc_stream)
         h2o_headers_t headers = {NULL};
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("dnt"), 0, NULL, H2O_STRLIT("1"));
         h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-hoge"), 0, NULL, H2O_STRLIT("A")); /* literal, non-huff */
+        h2o_qpack_section_stats_t unused = {1, 2};
         h2o_iovec_t headers_frame =
             h2o_qpack_flatten_request(enc, &pool, 123, enc_stream, h2o_iovec_init(H2O_STRLIT("GET")), &H2O_URL_SCHEME_HTTPS,
                                       h2o_iovec_init(H2O_STRLIT("example.com")), h2o_iovec_init(H2O_STRLIT("/foobar")),
-                                      h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0));
+                                      h2o_iovec_init(NULL, 0), headers.entries, headers.size, h2o_iovec_init(NULL, 0), &unused);
+        ok(unused.count == 7);
+        ok(unused.text_bytes == 68);
         flattened = get_payload(headers_frame.base, headers_frame.len);
     }
 
     if (enc_stream != NULL) {
-        int64_t *unblocked_stream_ids;
-        size_t num_unblocked;
+        uint64_t insert_count;
         assert(enc_stream->size != 0);
         const uint8_t *p = enc_stream->entries;
-        ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &p, p + enc_stream->size, &err_desc);
+        ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream->size, &err_desc);
         assert(ret == 0);
         assert(p == enc_stream->entries + enc_stream->size);
     }
@@ -84,10 +86,14 @@ static void do_test_simple(int use_enc_stream)
         h2o_headers_t headers = {NULL};
         size_t content_length = SIZE_MAX;
         h2o_iovec_t expect = {NULL};
+        uint64_t blocked_ref;
+        h2o_qpack_section_stats_t recv_stats = {3, 4};
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, header_ack, &header_ack_len,
-                                      (const uint8_t *)flattened.base, flattened.len, &err_desc);
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      header_ack, &header_ack_len, (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
+        ok(recv_stats.count == 9);
+        ok(recv_stats.text_bytes == 70);
         ok(h2o_memis(method.base, method.len, H2O_STRLIT("GET")));
         ok(scheme == &H2O_URL_SCHEME_HTTPS);
         ok(h2o_memis(authority.base, authority.len, H2O_STRLIT("example.com")));
@@ -135,9 +141,11 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
 
     h2o_mem_init_pool(&pool);
 
+    uint64_t blocked_ref;
+    h2o_qpack_section_stats_t recv_stats = {0};
     int ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, header_ack, &header_ack_len,
-                                      (const uint8_t *)input.base, input.len, &err_desc);
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      header_ack, &header_ack_len, (const uint8_t *)input.base, input.len, &err_desc);
 
     ok(ret == expected_ret);
     ok(err_desc == expected_err_desc);
@@ -249,15 +257,13 @@ static void test_decode_referred(void)
     };
 
     { /* feed the instructions */
-        int64_t *unblocked_stream_ids;
-        size_t num_unblocked;
+        uint64_t insert_count;
         const uint8_t *p = instructions;
         const char *err_desc;
-        int ret =
-            h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &p, p + sizeof(instructions), &err_desc);
+        int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + sizeof(instructions), &err_desc);
         ok(ret == 0);
         ok(p == instructions + sizeof(instructions));
-        ok(num_unblocked == 0);
+        ok(insert_count == 4);
     }
 
     note("use indexed(0)");
@@ -331,6 +337,38 @@ static void test_decode_referred(void)
                                h2o_hpack_soft_err_found_invalid_char_in_header_name, h2o_iovec_init(H2O_STRLIT("GET")),
                                &H2O_URL_SCHEME_HTTPS, h2o_iovec_init(H2O_STRLIT("a")), h2o_iovec_init(H2O_STRLIT("/")), SIZE_MAX,
                                &invalid_header, 1, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
+    }
+
+    note("dynamic reference beyond required insert count");
+    {
+        static const uint8_t input[] = {
+            2,    1,      /* required_insert_count=1, base=2 */
+            0xd1,         /* :method: GET */
+            0xd7,         /* :scheme: https */
+            0x50, 1, 'a', /* :authority: a */
+            0xc1,         /* :path: / */
+            0x80          /* dynamic entry = 1 */
+        };
+        static const uint8_t expected_ack[] = {};
+        do_test_decode_request(dec, 16, h2o_iovec_init(input, sizeof(input)), H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED,
+                               h2o_qpack_err_invalid_dynamic_reference, h2o_iovec_init(NULL, 0), NULL, h2o_iovec_init(NULL, 0),
+                               h2o_iovec_init(NULL, 0), SIZE_MAX, NULL, 0, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
+    }
+
+    note("post-base dynamic reference beyond required insert count");
+    {
+        static const uint8_t input[] = {
+            2,    0x80,      /* required_insert_count=1, base=0 */
+            0xd1,            /* :method: GET */
+            0xd7,            /* :scheme: https */
+            0x50, 1,    'a', /* :authority: a */
+            0xc1,            /* :path: / */
+            0x11             /* dynamic entry = 1 */
+        };
+        static const uint8_t expected_ack[] = {};
+        do_test_decode_request(dec, 16, h2o_iovec_init(input, sizeof(input)), H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED,
+                               h2o_qpack_err_invalid_dynamic_reference, h2o_iovec_init(NULL, 0), NULL, h2o_iovec_init(NULL, 0),
+                               h2o_iovec_init(NULL, 0), SIZE_MAX, NULL, 0, h2o_iovec_init(expected_ack, sizeof(expected_ack)));
     }
 
     note("use name-ref(0)");
@@ -411,16 +449,14 @@ static void test_decode_referred(void)
 
 static void feed_encoder_stream(h2o_qpack_decoder_t *dec, const uint8_t *input, size_t len)
 {
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     const uint8_t *p = input;
     const char *err_desc = NULL;
-    int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &p, p + len, &err_desc);
+    int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + len, &err_desc);
 
     ok(ret == 0);
     ok(err_desc == NULL);
     ok(p == input + len);
-    ok(num_unblocked == 0);
 }
 
 static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t stream_id, h2o_iovec_t input,
@@ -430,12 +466,14 @@ static void do_test_decode_field_section(h2o_qpack_decoder_t *dec, int64_t strea
     h2o_mem_pool_t pool;
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
+    h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
     uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
 
     h2o_mem_init_pool(&pool);
 
-    ok(parse_decode_context(dec, &ctx, stream_id, &src, src_end) == 0);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == 0);
+    ctx.stats = &stats;
     for (size_t i = 0; i < expected_num_headers; ++i) {
         h2o_iovec_t *name = NULL, value = {};
         ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == 0);
@@ -538,11 +576,10 @@ static void test_rfc9204_appendix_b(void)
 
 static void do_test_decoder_stream_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input, const char *expected_err_desc)
 {
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
     const char *err_desc = NULL;
-    int ret = h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, src_end, &err_desc);
+    int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &src, src_end, &err_desc);
 
     ok(ret == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
     ok(err_desc == expected_err_desc);
@@ -553,7 +590,7 @@ static void do_test_decode_context_error(h2o_qpack_decoder_t *dec, h2o_iovec_t i
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = (const uint8_t *)input.base, *src_end = src + input.len;
 
-    ok(parse_decode_context(dec, &ctx, 0, &src, src_end) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
 }
 
 static void do_test_decode_header_error(h2o_qpack_decoder_t *dec, h2o_iovec_t input, const char *expected_err_desc)
@@ -566,7 +603,7 @@ static void do_test_decode_header_error(h2o_qpack_decoder_t *dec, h2o_iovec_t in
 
     h2o_mem_init_pool(&pool);
 
-    ok(parse_decode_context(dec, &ctx, 0, &src, src_end) == 0);
+    ok(parse_decode_context(dec, &ctx, &src, src_end) == 0);
     ok(decode_header(&pool, &ctx, &name, &value, &src, src_end, &err_desc) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
     ok(err_desc == expected_err_desc);
 
@@ -671,8 +708,7 @@ static void test_decode_edge_cases(void)
     note("partial encoder stream instruction");
     {
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
-        int64_t *unblocked_stream_ids;
-        size_t num_unblocked;
+        uint64_t insert_count;
         static const uint8_t input[] = {
             0xc0,
             5,
@@ -680,12 +716,11 @@ static void test_decode_edge_cases(void)
         };
         const uint8_t *src = input;
         const char *err_desc = NULL;
-        int ret =
-            h2o_qpack_decoder_handle_input(dec, &unblocked_stream_ids, &num_unblocked, &src, input + sizeof(input), &err_desc);
+        int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &src, input + sizeof(input), &err_desc);
         ok(ret == 0);
         ok(err_desc == NULL);
         ok(src == input);
-        ok(num_unblocked == 0);
+        ok(insert_count == 0);
         h2o_qpack_destroy_decoder(dec);
     }
 
@@ -714,7 +749,7 @@ static void test_decode_edge_cases(void)
         dec->total_inserts = 2;
         dec->table.base_offset = 3;
 
-        ok(parse_decode_context(dec, &ctx, 0, &src, input + sizeof(input)) == 0);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
         ok(ctx.req_insert_count == 2);
         ok(ctx.base_index == 2);
         ok(src == input + sizeof(input));
@@ -727,11 +762,77 @@ static void test_decode_edge_cases(void)
         struct st_h2o_qpack_decode_header_ctx_t ctx;
         static const uint8_t input[] = {2, 0}; /* RIC=1, Base=1, blocked until first insert arrives */
         const uint8_t *src = input;
+        uint64_t blocked_ref;
 
-        ok(parse_decode_context(dec, &ctx, 0, &src, input + sizeof(input)) == H2O_HTTP3_ERROR_INCOMPLETE);
-        ok(dec->blocked_streams.list.size == 1);
-        ok(dec->blocked_streams.list.entries[0].stream_id == 0);
-        ok(dec->blocked_streams.list.entries[0].largest_ref == 1);
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+        ok(blocked_ref == 1);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("released blocked stream frees blocked stream budget");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input[] = {2, 0}; /* RIC=1, Base=1 */
+        const uint8_t *src = input;
+        uint64_t blocked_ref;
+
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+        /* caller-tracked counter goes 0 -> 1 -> 0; next blocked section is admissible again */
+        src = input;
+        ok(parse_decode_context(dec, &ctx, &src, input + sizeof(input)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+        ok(blocked_ref == 1);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("blocked stream budget is enforced from caller-supplied num_blocked");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 1);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
+        const uint8_t *src = input1;
+        uint64_t blocked_ref;
+
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+
+        src = input1;
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 1, &blocked_ref) == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    note("encoder stream input reports insert count for H3-side unblocking");
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 2);
+        struct st_h2o_qpack_decode_header_ctx_t ctx;
+        static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
+        static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
+        static const uint8_t inserts[] = {
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0,
+            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+        };
+        const uint8_t *src = input1;
+        uint64_t blocked_ref;
+
+        ok(parse_decode_context(dec, &ctx, &src, input1 + sizeof(input1)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 0, &blocked_ref) == 0);
+        src = input2;
+        ok(parse_decode_context(dec, &ctx, &src, input2 + sizeof(input2)) == 0);
+        ok(check_decode_context_blocked(dec, &ctx, 1, &blocked_ref) == 0);
+
+        uint64_t insert_count;
+        const char *err_desc = NULL;
+        src = inserts;
+        ok(h2o_qpack_decoder_handle_input(dec, &insert_count, &src, inserts + sizeof(inserts), &err_desc) == 0);
+        ok(err_desc == NULL);
+        ok(src == inserts + sizeof(inserts));
+        ok(insert_count == 2);
         h2o_qpack_destroy_decoder(dec);
     }
 }
