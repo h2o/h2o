@@ -78,7 +78,6 @@ void test_lib__handler__throttle_resp_c(void);
 void test_lib__http2__hpack(void);
 void test_lib__http2__scheduler(void);
 void test_lib__http2__casper(void);
-void test_lib__http2__cache_digests(void);
 void test_lib__http3_frames(void);
 void test_lib__http3_qpack(void);
 void test_lib__http3_server(void);

@@ -89,7 +89,7 @@ static void do_test_simple(int use_enc_stream)
         uint64_t blocked_ref;
         h2o_qpack_section_stats_t recv_stats = {3, 4};
         ret = h2o_qpack_parse_request(&pool, dec, 0, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, 0, &blocked_ref, &recv_stats,
                                       header_ack, &header_ack_len, (const uint8_t *)flattened.base, flattened.len, &err_desc);
         ok(ret == 0);
         ok(recv_stats.count == 9);
@@ -144,7 +144,7 @@ static void do_test_decode_request(h2o_qpack_decoder_t *dec, int64_t stream_id, 
     uint64_t blocked_ref;
     h2o_qpack_section_stats_t recv_stats = {0};
     int ret = h2o_qpack_parse_request(&pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                      &pseudo_header_exists_map, &content_length, &expect, NULL, NULL, 0, &blocked_ref, &recv_stats,
+                                      &pseudo_header_exists_map, &content_length, &expect, NULL, 0, &blocked_ref, &recv_stats,
                                       header_ack, &header_ack_len, (const uint8_t *)input.base, input.len, &err_desc);
 
     ok(ret == expected_ret);
