@@ -886,6 +886,10 @@ struct st_h2o_ostream_t {
      * called by the core via h2o_send_informational
      */
     void (*send_informational)(struct st_h2o_ostream_t *self, h2o_req_t *req);
+    /**
+     * called when the random read is unblocked
+     */
+    void (*random_read_unblocked)(struct st_h2o_ostream_t *self);
 };
 
 /**
@@ -2207,7 +2211,9 @@ enum {
     H2O_FILE_FLAG_DIR_LISTING = 0x2,
     H2O_FILE_FLAG_SEND_COMPRESSED = 0x4,
     H2O_FILE_FLAG_GUNZIP = 0x8,
-    H2O_FILE_FLAG_IO_URING = 0x16,
+    H2O_FILE_FLAG_IO_URING_SPLICE = 0x10,
+    H2O_FILE_FLAG_IO_URING_RWF_NOWAIT = 0x20,
+    H2O_FILE_FLAG_IO_URING = H2O_FILE_FLAG_IO_URING_SPLICE | H2O_FILE_FLAG_IO_URING_RWF_NOWAIT,
 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;

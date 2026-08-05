@@ -193,10 +193,12 @@ typedef struct st_quicly_crypto_engine_t {
      * header protection using `header_protect_ctx`. Quicly does not read or write the content of the UDP datagram payload after
      * this function is called. Therefore, an engine might retain the information provided by this function, and protect the packet
      * and the header at a later moment (e.g., hardware crypto offload).
+     * Note: #651 added the `payload` parameter that allows out-of-place encryption. For backward compatibility, refer to
+     * https://gist.github.com/kazuho/ac85028fe7810c68255a8d967eb2400d.
      */
     void (*encrypt_packet)(struct st_quicly_crypto_engine_t *engine, quicly_conn_t *conn, ptls_cipher_context_t *header_protect_ctx,
                            ptls_aead_context_t *packet_protect_ctx, ptls_iovec_t datagram, size_t first_byte_at,
-                           size_t payload_from, uint64_t packet_number, int coalesced);
+                           size_t payload_from, const void *payload, uint64_t packet_number, int coalesced);
 } quicly_crypto_engine_t;
 
 /**
@@ -946,11 +948,15 @@ typedef struct st_quicly_stream_callbacks_t {
      */
     void (*on_send_shift)(quicly_stream_t *stream, size_t delta);
     /**
-     * asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
+     * Asks the application to fill the frame payload.  `off` is the offset within the buffer (the beginning position of the buffer
      * changes as `on_send_shift` is invoked). `len` is an in/out argument that specifies the size of the buffer / amount of data
      * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
-     * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
-     * to be available - that is `len` return value should be non-zero.
+     * This callback is triggered by calling `quicly_stream_sync_sendbuf(stream, 1)` when tx data is present, and therefore, it
+     * typically writes some data and sets `*len` to a non-zero value. However, the callback may set `*len` to zero to indicate that
+     * the payload was not immediately available (e.g., when it has to be loaded from disk). When that happens the stream is
+     * descheduled, and it becomes the responsibility of the application to reschedule it by calling `quicly_stream_sync_sendbuf`
+     * once the data becomes available. The default stream scheduler supports this; a custom scheduler must likewise absorb the
+     * resulting `QUICLY_ERROR_SEND_EMIT_BLOCKED` and reschedule the stream.
      */
     void (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
@@ -1353,6 +1359,14 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  */
 quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                            size_t *num_datagrams, void *buf, size_t bufsize);
+/**
+ * Returns the size of the buffer that should be supplied to `quicly_send` so that quicly is given the opportunity to use out-of-
+ * place ("scatter") encryption when building the datagrams. Supplying at least this many bytes does not guarantee that the
+ * optimization is used -- quicly still decides per packet (e.g., it is never used for a single packet or during the handshake);
+ * supplying fewer bytes is permitted and simply disables it. The value tracks the connection's current MTU, so it should be queried
+ * per send.
+ */
+size_t quicly_send_scatter_bufsize(quicly_conn_t *conn, size_t num_datagrams);
 /**
  * returns ECN bits to be set for the packets built by the last invocation of `quicly_send`
  */

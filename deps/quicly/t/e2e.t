@@ -599,6 +599,23 @@ subtest "stream-open-after-connection-close" => sub {
     is `$cli -I 1000 -p /12 127.0.0.1 $port 2> /dev/null`, "hello world\n", "server is responding";
 };
 
+subtest "out-of-place-encryption" => sub {
+    my $server = spawn_server();
+    # request a response spanning many packets; served bufferlessly (read per `on_send_emit`), so the size passed to the flatten
+    # callback reflects how many datagrams quicly fused into one read
+    my $resp = `$cli -p /120000 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n" x 10000, "response body intact under scatter";
+    sleep 0.5; # let the server close the connection and emit stats
+    my $log = $server->finalize;
+    if ($log =~ /emit-size-max:\s*([0-9]+),/) {
+        # one packet carries ~1.2KB; a max well beyond that means out-of-place ("scatter") encryption fused multiple datagrams into
+        # a single on_send_emit
+        cmp_ok $1, ">", 4000, "scatter fused multiple datagrams into one on_send_emit";
+    } else {
+        fail "server did not report emit-size-max";
+    }
+};
+
 subtest "invalid-ack" => sub {
     my $server = spawn_server();
     subtest "gap" => sub {
@@ -792,15 +809,17 @@ package SpawnedProcess {
             undef $self->{pid};
         }
 
-        # fetch and close the log file
-        seek $self->{logfh}, 0, 0;
-        my $log = do {
-            local $/;
-            readline $self->{logfh};
-        };
-        close $self->{logfh};
-
-        print STDERR $log;
+        # fetch the log file, if the handle is still around (it is left open so finalize can be called more than once -- explicitly
+        # to read the server's output, and again from DESTROY -- but at global destruction it may already be gone)
+        my $log;
+        if ($self->{logfh}) {
+            seek $self->{logfh}, 0, 0;
+            $log = do {
+                local $/;
+                readline $self->{logfh};
+            };
+            print STDERR $log;
+        }
 
         return $log;
     }

@@ -53,6 +53,10 @@ provider h2o {
     /**
      *
      */
+    probe io_uring_read(struct st_h2o_io_uring_cmd_t *cmd);
+    /**
+     *
+     */
     probe io_uring_submit(struct st_h2o_io_uring_cmd_t *cmd);
     /**
      *
