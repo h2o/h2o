@@ -420,6 +420,8 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             balancer = h2o_balancer_create_rr();
         } else if (strcmp((*balancer_conf)->data.scalar, "least-conn") == 0) {
             balancer = h2o_balancer_create_lc();
+        } else if (strcmp((*balancer_conf)->data.scalar, "best-of-two") == 0) {
+            balancer = h2o_balancer_create_bo2();
         } else {
             h2o_configurator_errprintf(
                 cmd, node, "specified balancer is not supported. Currently supported ones are: round-robin, least-conn");
