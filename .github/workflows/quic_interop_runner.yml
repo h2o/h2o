@@ -1,0 +1,33 @@
+name: QUIC Interop Runner
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: [ubuntu-20.04]
+
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: recursive
+    - name: Login to Docker Hub
+      uses: docker/login-action@v1
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+      continue-on-error: false
+
+    - name: Build and deploy
+      run: |
+        if [ "${{ github.event_name }}" == "push" ]
+        then
+          echo "on push to $GITHUB_REF"
+          export TAG=latest
+          export PUBLISH=1
+        fi
+        misc/quic-interop-runner/deploy.sh
