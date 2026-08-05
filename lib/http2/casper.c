@@ -19,8 +19,10 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
-#define OPENSSL_SUPPRESS_DEPRECATED /* casper is legacy and we do not want to pay the cost of switchng away from SHA1_* */
+#define OPENSSL_SUPPRESS_DEPRECATED /* legacy SHA1_* path (used when OpenSSL < 3.0 or LibreSSL) — suppress its deprecation warnings */
 #endif
 #include <openssl/sha.h>
 #include "golombset.h"
@@ -39,16 +41,31 @@ struct st_h2o_http2_casper_t {
 
 static unsigned calc_key(h2o_http2_casper_t *casper, const char *path, size_t path_len)
 {
-    SHA_CTX ctx;
-    SHA1_Init(&ctx);
-    SHA1_Update(&ctx, path, path_len);
-
     union {
         unsigned key;
         unsigned char bytes[SHA_DIGEST_LENGTH];
     } md;
-    SHA1_Final(md.bytes, &ctx);
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_MD_CTX *ctx;
+    OSSL_LIB_CTX *octx;
+    EVP_MD *digest = NULL;
+    octx = OSSL_LIB_CTX_new();
+    digest = EVP_MD_fetch(octx, "sha1", NULL);
 
+    ctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(ctx, digest, NULL);
+    EVP_DigestUpdate(ctx, path, path_len);
+    EVP_DigestFinal_ex(ctx, md.bytes, NULL);
+    EVP_MD_CTX_free(ctx);
+    EVP_MD_free(digest);
+    OSSL_LIB_CTX_free(octx);
+#else
+    SHA_CTX ctx;
+    SHA1_Init(&ctx);
+    SHA1_Update(&ctx, path, path_len);
+
+    SHA1_Final(md.bytes, &ctx);
+#endif
     return md.key & ((1 << casper->capacity_bits) - 1);
 }
 
