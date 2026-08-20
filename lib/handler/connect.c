@@ -408,7 +408,7 @@ static int store_server_addresses(struct st_connect_generator_t *self, struct ad
         assert(self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list));
         if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, res->ai_addr)) {
             struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
-            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr_storage), res->ai_addrlen);
             memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
             dst->salen = res->ai_addrlen;
             ++num_added;

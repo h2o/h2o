@@ -38,7 +38,7 @@ extern const char *h2o_qpack_err_invalid_pseudo_header;
 
 /**
  * Field-section statistics accumulated by QPACK parse and flatten functions. Callers are responsible for initializing or resetting
- * the struct; QPACK functions *updates* the stats for the field section being processed. Counts and byte sums cover every field in
+ * the struct; QPACK functions *update* the stats for the field section being processed. Counts and byte sums cover every field in
  * the section, including pseudo-header fields (`:method`, `:status` etc.) and any synthesized fields the encoder adds
  * (`server`, `content-length`).
  */
