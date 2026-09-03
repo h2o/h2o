@@ -137,7 +137,6 @@ static void test_hpack(void)
         TEST("\x7f\x00", 127);
         TEST("\x7f\x01", 128);
         TEST("\x7f\x7f", 254);
-        TEST("\x7f\x81\x00", 128);
         TEST("\x7f\x80\x01", 255);
         TEST("\x7f\xff\xff\xff\x7f", 0xfffffff + 127);
         TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\x7f", INT64_MAX);
@@ -148,6 +147,12 @@ static void test_hpack(void)
         TEST("\x7f\xff\xff\xff\xff", H2O_HTTP2_ERROR_INCOMPLETE);
         TEST("\x7f\x81\xff\xff\xff\xff\xff\xff\xff\x7f", H2O_HTTP2_ERROR_COMPRESSION);
         TEST("\x7f\x80\xff\xff\xff\xff\xff\xff\xff\xff", H2O_HTTP2_ERROR_COMPRESSION);
+        /* non-minimal (overlong) encodings of a value that fits in fewer octets, RFC 7541 section 5.1; "\x7f\x01" and
+         * "\x7f\x80\x01" above are the minimal 2- and 3-octet encodings of 128 and 255 respectively, these are the same values
+         * padded out with a redundant trailing zero octet */
+        TEST("\x7f\x81\x00", H2O_HTTP2_ERROR_COMPRESSION);
+        TEST("\x7f\x80\x81\x00", H2O_HTTP2_ERROR_COMPRESSION);
+        TEST("\x7f\x80\x80\x80\x80\x80\x80\x80\x00", H2O_HTTP2_ERROR_COMPRESSION);
 #undef TEST
     }
 
