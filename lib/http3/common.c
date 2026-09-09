@@ -831,6 +831,12 @@ void h2o_quic_read_socket(h2o_quic_ctx_t *ctx, h2o_socket_t *sock)
             .msg_controllen = sizeof(dgrams[i].controlbuf),                                                                        \
         };                                                                                                                         \
         memset(&dgrams[i].destaddr, 0, sizeof(dgrams[i].destaddr));                                                                \
+        /* recvmmsg(2) does not touch msg_name for an unnamed AF_UNIX peer (the intra-node forwarding socketpair), so reset        \
+         * the family here rather than relying on the kernel -- otherwise it would be uninitialized stack garbage from a           \
+         * previous iteration instead of the AF_UNSPEC that marks a datagram as locally injected. Only the family is read          \
+         * before the kernel or the preprocess callback fills the rest in, so zeroing the whole sockaddr would be wasted           \
+         * work on a per-read hot path. */                                                                                         \
+        dgrams[i].srcaddr.sa.sa_family = AF_UNSPEC;                                                                                \
         dgrams[i].vec.iov_base = dgrams[i].buf;                                                                                    \
         dgrams[i].vec.iov_len = sizeof(dgrams[i].buf);                                                                             \
     } while (0)
