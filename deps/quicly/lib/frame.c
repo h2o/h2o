@@ -126,8 +126,7 @@ Error:
     return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
 }
 
-uint8_t *quicly_encode_close_frame(uint8_t *const base, uint64_t error_code, uint64_t offending_frame_type,
-                                   const char *reason_phrase)
+static size_t encode_close_frame(uint8_t *const base, uint64_t error_code, uint64_t offending_frame_type, const char *reason_phrase)
 {
     size_t offset = 0, reason_phrase_len = strlen(reason_phrase);
 
@@ -151,5 +150,16 @@ uint8_t *quicly_encode_close_frame(uint8_t *const base, uint64_t error_code, uin
 
 #undef PUSHV
 
-    return base + offset;
+    return offset;
+}
+
+size_t quicly_close_frame_capacity(uint64_t error_code, uint64_t offending_frame_type, const char *reason_phrase)
+{
+    return encode_close_frame(NULL, error_code, offending_frame_type, reason_phrase);
+}
+
+uint8_t *quicly_encode_close_frame(uint8_t *const base, uint64_t error_code, uint64_t offending_frame_type,
+                                   const char *reason_phrase)
+{
+    return base + encode_close_frame(base, error_code, offending_frame_type, reason_phrase);
 }

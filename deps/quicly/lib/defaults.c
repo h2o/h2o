@@ -36,6 +36,7 @@
 /* profile that employs IETF specified values */
 const quicly_context_t quicly_spec_context = {
     .initial_egress_max_udp_payload_size = DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,
+    .normalize_cc_mtu = 1,
     .loss = QUICLY_LOSS_SPEC_CONF,
     .transport_params =
         {
@@ -75,6 +76,7 @@ const quicly_context_t quicly_spec_context = {
 /* profile with a focus on reducing latency for the HTTP use case */
 const quicly_context_t quicly_performant_context = {
     .initial_egress_max_udp_payload_size = DEFAULT_INITIAL_EGRESS_MAX_UDP_PAYLOAD_SIZE,
+    .normalize_cc_mtu = 1,
     .loss = QUICLY_LOSS_PERFORMANT_CONF,
     .transport_params =
         {

@@ -69,7 +69,8 @@ static void hexdump(const char *title, const uint8_t *p, size_t l)
     }
 }
 
-static int save_session_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src);
+static int save_session_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src,
+                                  const ptls_save_ticket_properties_t *properties);
 static int on_client_hello_cb(ptls_on_client_hello_t *_self, ptls_t *tls, ptls_on_client_hello_parameters_t *params);
 
 static const char *session_file = NULL;
@@ -1131,8 +1132,12 @@ Exit:
     return 0;
 }
 
-int save_session_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
+int save_session_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src,
+                           const ptls_save_ticket_properties_t *properties)
 {
+    if (properties->early_data && properties->max_early_data_size != UINT32_MAX)
+        return -(int)QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
+
     free(session_info.tls_ticket.base);
     session_info.tls_ticket = ptls_iovec_init(malloc(src.len), src.len);
     memcpy(session_info.tls_ticket.base, src.base, src.len);
@@ -1218,9 +1223,9 @@ static void usage(const char *cmd)
            "  -k key-file               specifies the credentials to be used for running the\n"
            "                            server. If omitted, the command runs as a client.\n"
            "  -C <algo>[:<iw>[:<p>]]    specifies the congestion control algorithm (\"reno\"\n"
-           "                            (default), \"cubic\", or \"pico\"), as well as\n"
-           "                            initial congestion window size (in packets, default:\n"
-           "                            10) and use of pacing.\n"
+           "                            (default), \"cubic\", \"cubic-legacy\", \"pico\", or\n"
+           "                            \"cuback\"), as well as initial congestion window size\n"
+           "                            (in packets, default: 10) and use of pacing.\n"
            "  -d draft-number           specifies the draft version number to be used (e.g.,\n"
            "                            29)\n"
            "  --disable-ecn             turns off ECN support (default is on)\n"
@@ -1247,6 +1252,7 @@ static void usage(const char *cmd)
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
            "  -m <bytes>                max data (in bytes; default: 16MB)\n"
            "  --max-crypto-bytes <N>    maximum permitted length of a CRYPTO stream\n"
+           "  --no-normalize-cc-mtu     disables packet-size normalization of congestion-control growth\n"
            "  -N                        enforce HelloRetryRequest (client-only)\n"
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
@@ -1538,6 +1544,7 @@ int main(int argc, char **argv)
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
                                              {"max-crypto-bytes", required_argument, NULL, 0},
+                                             {"no-normalize-cc-mtu", no_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
                                              {"sockfd", required_argument, NULL, 0},
                                              {"exit-after-handshake", no_argument, NULL, 0},
@@ -1572,6 +1579,8 @@ int main(int argc, char **argv)
                     fprintf(stderr, "failed to parse max-crypto-bytes: %s\n", optarg);
                     exit(1);
                 }
+            } else if (strcmp(longopts[opt_index].name, "no-normalize-cc-mtu") == 0) {
+                ctx.normalize_cc_mtu = 0;
             } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {
                 ctx.enable_ratio.rapid_start = 255;
             } else if (strcmp(longopts[opt_index].name, "sockfd") == 0) {

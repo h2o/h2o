@@ -48,7 +48,6 @@ SET(PICOTLS_OPENSSL_FILES
 
 SET(QUICLY_LIBRARY_FILES
     lib/frame.c
-    lib/cc-reno.c
     lib/cc-cubic.c
     lib/cc-pico.c
     lib/defaults.c
@@ -126,9 +125,15 @@ TARGET_LINK_LIBRARIES(examples-echo quicly ${OPENSSL_CRYPTO_LIBRARIES} ${CMAKE_D
 
 ADD_EXECUTABLE(udpfw t/udpfw.c)
 
-ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} WITH_DTRACE=${WITH_DTRACE} PERL5LIB=${CMAKE_CURRENT_SOURCE_DIR} prove --exec "sh -c" -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t
+ADD_CUSTOM_TARGET(check
+    sh -c
+        "PERL5LIB='${CMAKE_CURRENT_SOURCE_DIR}'\${PERL5LIB:+:\$PERL5LIB} \
+         BINARY_DIR='${CMAKE_CURRENT_BINARY_DIR}' \
+         WITH_DTRACE=${WITH_DTRACE} \
+         exec prove --exec 'sh -c' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS cli udpfw test.t)
+    DEPENDS cli udpfw test.t
+    VERBATIM)
 
 ADD_CUSTOM_TARGET(format clang-format -i `git ls-files include lib src t | egrep '\\.[ch]$$'`)
 

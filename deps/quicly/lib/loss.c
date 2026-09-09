@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <math.h>
 #include "quicly/loss.h"
 
 quicly_error_t quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap_iter_t *iter, int64_t now, uint32_t max_ack_delay,
@@ -57,10 +58,8 @@ quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_
     /* This function ensures that the value returned in loss_time is when the next application timer should be set for loss
      * detection. if no timer is required, loss_time is set to INT64_MAX. */
 
-    const uint32_t delay_until_lost = ((loss->rtt.latest > loss->rtt.smoothed ? loss->rtt.latest : loss->rtt.smoothed) *
-                                           (1024 + loss->thresholds.time_based_percentile) +
-                                       1023) /
-                                      1024;
+    const float rtt_for_threshold = loss->rtt.latest > loss->rtt.smoothed ? (float)loss->rtt.latest : loss->rtt.smoothed;
+    const uint32_t delay_until_lost = (uint32_t)ceilf(rtt_for_threshold * (1024 + loss->thresholds.time_based_percentile) / 1024);
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
     quicly_error_t ret;
