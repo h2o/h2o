@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		081F00CA2918823200534A86 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 081F00C92918823200534A86 /* hpke.c */; };
+		0861F29B2FE29EFE0068D5B4 /* quiclb.c in Sources */ = {isa = PBXBuildFile; fileRef = 0861F29A2FE29EFE0068D5B4 /* quiclb.c */; };
+		0861F29C2FE8C0090068D5B4 /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 081F00C92918823200534A86 /* hpke.c */; };
 		08A835E22995E04100D872CE /* chacha20poly1305.h in Headers */ = {isa = PBXBuildFile; fileRef = 08A835E12995E04100D872CE /* chacha20poly1305.h */; };
 		08A835E32995E04100D872CE /* chacha20poly1305.h in Headers */ = {isa = PBXBuildFile; fileRef = 08A835E12995E04100D872CE /* chacha20poly1305.h */; };
 		08F0FDF62910F67A00EE657D /* hpke.c in Sources */ = {isa = PBXBuildFile; fileRef = 08F0FDF52910F67A00EE657D /* hpke.c */; };
@@ -207,6 +209,7 @@
 		081F00CE291A358800534A86 /* ptlsbcrypt.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ptlsbcrypt.h; sourceTree = "<group>"; };
 		085BDAE52B1D618E002851EA /* libaegis.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = libaegis.c; sourceTree = "<group>"; };
 		085BDAE62B1D6238002851EA /* libaegis.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = libaegis.h; sourceTree = "<group>"; };
+		0861F29A2FE29EFE0068D5B4 /* quiclb.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = quiclb.c; sourceTree = "<group>"; };
 		087F1A732B034AEB00E81AC1 /* FindMbedTLS.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = FindMbedTLS.cmake; sourceTree = "<group>"; };
 		0883D3272AEF8F2500B711CC /* fusion.cmake */ = {isa = PBXFileReference; lastKnownFileType = text; path = fusion.cmake; sourceTree = "<group>"; };
 		0883D32A2AF601A700B711CC /* mbedtls.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = mbedtls.c; sourceTree = "<group>"; };
@@ -475,6 +478,7 @@
 				106530C51D9B1A98005B2C60 /* openssl.c */,
 				106530E91D9B7C13005B2C60 /* picotls.c */,
 				0883D32D2AF6020300B711CC /* ptlsbench.c */,
+				0861F29A2FE29EFE0068D5B4 /* quiclb.c */,
 				106530E61D9B7AF6005B2C60 /* test.h */,
 				E9E3849C1F0748DD00D50990 /* util.h */,
 			);
@@ -821,6 +825,7 @@
 				E9F20BF222E34B480018D260 /* x25519.c in Sources */,
 				E9BC76E11EF3CCDE00EB7A09 /* poly1305.c in Sources */,
 				1059006A1DC8DFE300FB4085 /* hmac.c in Sources */,
+				0861F29C2FE8C0090068D5B4 /* hpke.c in Sources */,
 				1059006F1DC8E00B00FB4085 /* chash.c in Sources */,
 				105900B41DC943B500FB4085 /* gf128.c in Sources */,
 				105900641DC8DFA700FB4085 /* curve25519.c in Sources */,
@@ -869,6 +874,7 @@
 				E9BC76D41EF3A37200EB7A09 /* chacha20.c in Sources */,
 				081F00CA2918823200534A86 /* hpke.c in Sources */,
 				105900CB1DCBECEA00FB4085 /* drbg.c in Sources */,
+				0861F29B2FE29EFE0068D5B4 /* quiclb.c in Sources */,
 				105900CA1DCBECE500FB4085 /* curve25519.c in Sources */,
 				E99B75E41F5CE64E00CF503E /* pembase64.c in Sources */,
 			);
