@@ -4250,6 +4250,28 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
+    /* An envelope that arrived over the network has to name a concrete destination address. A forwarding node always
+     * knows the destination of what it forwards: `set_quic_sockopts` enables the destination-address cmsg on every QUIC
+     * listener and treats failure as fatal, so `h2o_quic_read_socket` only leaves the family AF_UNSPEC for a datagram that
+     * came off the intra-node socketpair, which carries no address at all. An AF_UNSPEC destination from a peer therefore
+     * cannot have been written by a peer.
+     *
+     * Dropping it closes two holes at once. The AF_UNSPEC arm of the switch below skips the destination-port check, so
+     * accepting such an envelope meant accepting a datagram whose claimed destination was never validated. And because
+     * AF_UNSPEC can never equal a listener's own family (always AF_INET or AF_INET6, per `setup_quic_socket`), it always
+     * took the sibling hand-off below -- to a sibling that reached the same conclusion and handed it straight back.
+     * Nothing bounded that: the hand-off is a raw write rather than a forwarding hop, so it consumes no ttl, and it
+     * returns before the receive path increments any counter, so the loop moved no metric. One datagram saturated a
+     * worker thread indefinitely.
+     *
+     * `srcaddr` still holds the kernel-reported outer source here -- it is overwritten with the encapsulated client
+     * address further down -- and `INIT_DGRAMS` (lib/http3/common.c) resets its family so that a socketpair arrival reads
+     * as AF_UNSPEC rather than as stack garbage. */
+    if ((srcaddr->sa.sa_family == AF_INET || srcaddr->sa.sa_family == AF_INET6) &&
+        encapsulated.destaddr.sa.sa_family == AF_UNSPEC) {
+        return 0; /* drop */
+    }
+
     /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
