@@ -44,7 +44,8 @@
 
 static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
-static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src,
+                                const ptls_save_ticket_properties_t *properties);
 static void add_header(h2o_iovec_t name, h2o_iovec_t value);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
@@ -233,10 +234,14 @@ static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, 
     return 0;
 }
 
-static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src,
+                                const ptls_save_ticket_properties_t *properties)
 {
     quicly_conn_t *conn = *ptls_get_data_ptr(tls);
     assert(quicly_get_tls(conn) == tls);
+
+    if (properties->early_data && properties->max_early_data_size != 0xffffffff)
+        return -(int)QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
 
     save_session(tls, &src, quicly_get_remote_transport_parameters(conn), NULL);
     return 0;
