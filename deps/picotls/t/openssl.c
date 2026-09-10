@@ -482,7 +482,7 @@ static void many_handshakes(void)
             case PTLS_ERROR_ASYNC_OPERATION: {
                 ptls_async_job_t *job = ptls_get_async_job(qat.conns[offending].tls);
                 assert(job->get_fd != NULL);
-                qat.conns[offending].wait_fd = job->get_fd(job);
+                qat.conns[offending].wait_fd = (int)job->get_fd(job);
                 assert(qat.conns[offending].wait_fd != -1);
             } break;
             default:

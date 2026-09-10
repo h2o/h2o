@@ -156,7 +156,7 @@ QUICLY_CALLBACK_TYPE(quicly_error_t, generate_resumption_token, quicly_conn_t *c
  * called to initialize a congestion controller for a new connection.
  * should in turn call one of the quicly_cc_*_init functions from cc.h with customized parameters.
  */
-QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int64_t now);
+QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int normalize_mtu, int64_t now);
 /**
  * reference counting.
  * delta must be either 1 or -1.
@@ -385,6 +385,11 @@ struct st_quicly_context_t {
      */
     unsigned expand_client_hello : 1;
     /**
+     * if CC growth should be normalized to the reference packet size rather than the path's maximum UDP payload size; enabled in
+     * the default contexts
+     */
+    unsigned normalize_cc_mtu : 1;
+    /**
      *
      */
     quicly_cid_encryptor_t *cid_encryptor;
@@ -480,6 +485,10 @@ struct st_quicly_conn_streamgroup_state_t {
          * Total number of packets that failed decryption.                                                                         \
          */                                                                                                                        \
         uint64_t decryption_failed;                                                                                                \
+        /**                                                                                                                        \
+         * Total number of packets received that were called out as duplicates.                                                    \
+         */                                                                                                                        \
+        uint64_t received_duplicate;                                                                                               \
         /**                                                                                                                        \
          * Total number of packets sent.                                                                                           \
          */                                                                                                                        \
@@ -720,6 +729,7 @@ typedef struct st_quicly_stats_t {
 #define QUICLY_STATS_FOREACH_NUM_PACKETS(apply)                                                                                    \
     apply(num_packets.received, "num-packets.received")                                                                            \
     apply(num_packets.decryption_failed, "num-packets.decryption-failed")                                                          \
+    apply(num_packets.received_duplicate, "num-packets.received-duplicate")                                                        \
     apply(num_packets.sent, "num-packets.sent")                                                                                    \
     apply(num_packets.lost, "num-packets.lost")                                                                                    \
     apply(num_packets.lost_time_threshold, "num-packets.lost-time-threshold")                                                      \

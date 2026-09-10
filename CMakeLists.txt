@@ -380,7 +380,6 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/cifra/x25519.c
     deps/quicly/lib/cc-cubic.c
     deps/quicly/lib/cc-pico.c
-    deps/quicly/lib/cc-reno.c
     deps/quicly/lib/defaults.c
     deps/quicly/lib/frame.c
     deps/quicly/lib/local_cid.c

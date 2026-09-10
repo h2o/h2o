@@ -60,8 +60,8 @@ struct st_first_octet_t {
 
 struct quicly_rtt_t {
     uint32_t minimum;
-    uint32_t smoothed;
-    uint32_t variance;
+    float smoothed;
+    float variance;
     uint32_t latest;
 };
 
@@ -124,12 +124,13 @@ for my $probe (@probes) {
             } elsif ($arch eq 'darwin') {
                 push @ap, map{"*(uint32_t *)copyin(arg$i + $_, 4)"} qw(0 4 12);
             } else {
-                push @ap, map{"arg${i}->$_"} qw(minimum smoothed latest);
+                push @ap, "arg${i}->minimum", "(uint32_t)(arg${i}->smoothed + 0.5)", "arg${i}->latest";
             }
         } elsif ($type eq 'struct st_quicly_stats_t *') {
             # build an array of [field-names => type-specifiers]
             my @fields;
-            push @fields, map {["rtt.$_" => '%u']} qw(minimum smoothed variance);
+            push @fields, ["rtt.minimum" => '%u'], ["rtt.smoothed" => '%u', '(uint32_t)'],
+                          ["rtt.variance" => '%u', '(uint32_t)'];
             push @fields, map {["cc.$_" => '%u']} qw(cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
             push @fields, map {["num_packets.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
             push @fields, map {["num_bytes.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent received);
@@ -140,9 +141,9 @@ for my $probe (@probes) {
             # generate @fmt, @ap
             push @fmt, map {my $n = $_->[0]; $n =~ tr/./_/; sprintf '"%s":%s', $n, $_->[1]} @fields;
             if ($arch eq 'linux') {
-                push @ap, map{"((struct st_quicly_stats_t *)arg$i)->" . $_->[0]} @fields;
+                push @ap, map{($_->[2] // '') . "((struct st_quicly_stats_t *)arg$i)->" . $_->[0]} @fields;
             } else {
-                push @ap, map{"arg${i}->" . $_->[0]} @fields;
+                push @ap, map{($_->[2] // '') . "arg${i}->" . $_->[0]} @fields;
             }
             # special handling of cc.type
             push @fmt, '"cc_type":"%s"';

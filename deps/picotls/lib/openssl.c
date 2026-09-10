@@ -1088,7 +1088,7 @@ static void async_sign_ctx_free(ptls_async_job_t *_self)
     free(self);
 }
 
-int async_sign_ctx_get_fd(ptls_async_job_t *_self)
+intptr_t async_sign_ctx_get_fd(ptls_async_job_t *_self)
 {
     struct async_sign_ctx *self = (void *)_self;
     OSSL_ASYNC_FD fds[1];
@@ -1097,7 +1097,7 @@ int async_sign_ctx_get_fd(ptls_async_job_t *_self)
     ASYNC_WAIT_CTX_get_all_fds(self->waitctx, NULL, &numfds);
     assert(numfds == 1);
     ASYNC_WAIT_CTX_get_all_fds(self->waitctx, fds, &numfds);
-    return (int)fds[0];
+    return (intptr_t)fds[0];
 }
 
 static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_t *scheme, EVP_MD_CTX *ctx, size_t siglen)

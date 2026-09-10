@@ -27,8 +27,9 @@ void deterministic_random_bytes(void *buf, size_t len)
     }
 }
 
-static int fake_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
+static int fake_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src, const ptls_save_ticket_properties_t *properties)
 {
+    (void)properties;
     return 0;
 }
 
