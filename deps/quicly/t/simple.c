@@ -29,7 +29,7 @@ static void test_handshake(void)
 {
     quicly_address_t dest, src;
     struct iovec packets[8];
-    uint8_t packetsbuf[PTLS_ELEMENTSOF(packets) * quic_ctx.transport_params.max_udp_payload_size];
+    uint8_t packetsbuf[(PTLS_ELEMENTSOF(packets) + 2) * quic_ctx.transport_params.max_udp_payload_size];
     size_t num_packets, num_decoded;
     quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(packets) * 4];
     int i;

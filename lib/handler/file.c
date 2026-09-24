@@ -70,10 +70,18 @@ struct st_h2o_sendfile_generator_t {
     } header_bufs;
 #if H2O_USE_IO_URING
     /**
-     * back pointer to the request which is necessary for splicing async; becomes NULL when the generator is stopped
+     * back pointer to the request which is necessary for async file I/O; becomes NULL when the generator is stopped
      */
     h2o_req_t *src_req;
     h2o_pipe_sender_t pipe_sender;
+    struct uring_reader {
+        off_t file_off;
+        size_t len;
+        size_t bytes_read;
+        unsigned async : 1;
+        unsigned complete : 1;
+        char buf[1];
+    } *uring_reader;
 #endif
 };
 
@@ -122,6 +130,18 @@ static int tm_is_lessthan(struct tm *x, struct tm *y)
 #undef CMP
 }
 
+#if H2O_USE_IO_URING
+
+static void discard_uring_reader(struct st_h2o_sendfile_generator_t *self)
+{
+    if (self->uring_reader != NULL) {
+        free(self->uring_reader);
+        self->uring_reader = NULL;
+    }
+}
+
+#endif
+
 static void close_file(struct st_h2o_sendfile_generator_t *self)
 {
     if (self->file.ref != NULL) {
@@ -137,11 +157,54 @@ static void on_generator_dispose(void *_self)
 {
     struct st_h2o_sendfile_generator_t *self = _self;
     close_file(self);
+#if H2O_USE_IO_URING
+    discard_uring_reader(self);
+#endif
+}
+
+static int do_sequential_read(h2o_sendvec_t *src, void *dst, size_t len)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t *file_chunk_at = &src->cb_arg[1];
+    size_t bytes_read = 0;
+    ssize_t rret;
+
+    /* read */
+    while (bytes_read < len) {
+        while ((rret = pread(self->file.ref->fd, dst + bytes_read, len - bytes_read, *file_chunk_at)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0)
+            return 0;
+        bytes_read += rret;
+        *file_chunk_at += rret;
+        src->len -= rret;
+    }
+
+    return 1;
+}
+
+static h2o_sendvec_random_read_result_t do_random_read_blocking(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_off = src->cb_arg[1] + chunk_off;
+    ssize_t rret;
+
+    while (len != 0) {
+        while ((rret = pread(self->file.ref->fd, dst, len, file_off)) == -1 && errno == EINTR)
+            ;
+        if (rret <= 0)
+            return H2O_SENDVEC_RANDOM_READ_ERROR;
+        file_off += rret;
+        dst = (char *)dst + rret;
+        len -= rret;
+    }
+
+    return H2O_SENDVEC_RANDOM_READ_SUCCESS;
 }
 
 #if H2O_USE_IO_URING
 
-static void do_stop_async_splice(h2o_generator_t *_self, h2o_req_t *req)
+static void do_stop_async(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     self->src_req = NULL;
@@ -172,28 +235,107 @@ static void do_proceed_on_splice_complete(h2o_io_uring_cmd_t *cmd)
     h2o_pipe_sender_send(self->src_req, &self->pipe_sender, cmd->result, send_state);
 }
 
-#endif
-
-static int do_pread(h2o_sendvec_t *src, void *dst, size_t len)
+static void on_uring_read_complete(h2o_io_uring_cmd_t *cmd)
 {
-    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
-    uint64_t *file_chunk_at = &src->cb_arg[1];
-    size_t bytes_read = 0;
-    ssize_t rret;
+    struct st_h2o_sendfile_generator_t *self = cmd->cb.data;
 
-    /* read */
-    while (bytes_read < len) {
-        while ((rret = pread(self->file.ref->fd, dst + bytes_read, len - bytes_read, *file_chunk_at)) == -1 && errno == EINTR)
-            ;
-        if (rret <= 0)
-            return 0;
-        bytes_read += rret;
-        *file_chunk_at += rret;
-        src->len -= rret;
+    if (self->src_req == NULL) {
+        assert(self->uring_reader->async);
+        h2o_mem_release_shared(self);
+        return;
     }
 
-    return 1;
+    if (cmd->result == 0 || (cmd->result < 0 && cmd->result != -EINTR))
+        goto Complete;
+
+    self->uring_reader->bytes_read += cmd->result > 0 ? cmd->result : 0;
+    if (self->uring_reader->bytes_read < self->uring_reader->len) {
+        /* read more */
+        h2o_io_uring_read(
+            self->src_req->conn->ctx->loop, self->file.ref->fd, self->uring_reader->buf + self->uring_reader->bytes_read,
+            self->uring_reader->len - self->uring_reader->bytes_read,
+            self->uring_reader->file_off + self->uring_reader->bytes_read, on_uring_read_complete, self);
+        return;
+    }
+
+Complete:
+    /* read is complete, notify downstream that it is now unblocked */
+    h2o_mem_release_shared(self);
+    self->uring_reader->complete = 1;
+    if (self->uring_reader->async)
+        self->src_req->_ostr_top->random_read_unblocked(self->src_req->_ostr_top);
 }
+
+/**
+ * This is a random read callback that calls preadv2(RWF_NOWAIT) to read data synchronously if available in the page cache. When
+ * data is not immediately available, it triggers an asynchronous read using io_uring, and the random_read_unblocked callback will
+ * be called upon completion. When this function is invoked again specifying the same range, it returns the data that was
+ * asynchronously read; otherwise, the cached data is discarded. Notably, this function might be called any time, even while an
+ * asynchronous read is already in flight; the user of this function is QUIC/H3 code building packets.
+ */
+static h2o_sendvec_random_read_result_t do_random_read_rwf_nowait(h2o_sendvec_t *src, void *dst, size_t len, size_t chunk_off)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)src->cb_arg[0];
+    uint64_t file_off = src->cb_arg[1] + chunk_off;
+    ssize_t rret;
+
+    assert(self->src_req != NULL && self->src_req->_ostr_top->random_read_unblocked != NULL);
+
+    /* if read using io_uring is complete, either use it or discard it */
+    if (self->uring_reader != NULL && self->uring_reader->complete) {
+        if (self->uring_reader->bytes_read < self->uring_reader->len) {
+            discard_uring_reader(self);
+            return H2O_SENDVEC_RANDOM_READ_ERROR;
+        }
+        if (file_off == self->uring_reader->file_off && len <= self->uring_reader->len) {
+            memcpy(dst, self->uring_reader->buf, len);
+            discard_uring_reader(self);
+            return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+        }
+        discard_uring_reader(self);
+    }
+    /* read from file but do not wait for disk I/O */
+    struct iovec iovec = {.iov_base = dst, .iov_len = len};
+    if ((rret = preadv2(self->file.ref->fd, &iovec, 1, file_off, RWF_NOWAIT)) == len)
+        return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+    if (!(rret > 0 || (rret == -1 && errno == EAGAIN))) {
+        if (rret == -1 && (errno == ENOTSUP || errno == EOPNOTSUPP))
+            h2o_req_log_error(self->src_req, "lib/handler/file.c",
+                              "preadv2(RWF_NOWAIT) is not supported; use `file.io_uring: splice` to disable the "
+                              "RWF_NOWAIT path");
+        return H2O_SENDVEC_RANDOM_READ_ERROR;
+    }
+    /* data was not immediatlely available, start async read if none is in flight */
+    if (self->uring_reader != NULL) {
+        assert(!self->uring_reader->complete);
+        return H2O_SENDVEC_RANDOM_READ_BLOCKED;
+    }
+    self->uring_reader = h2o_mem_alloc(offsetof(struct uring_reader, buf) + len);
+    self->uring_reader->file_off = file_off;
+    self->uring_reader->len = len;
+    self->uring_reader->bytes_read = 0;
+    self->uring_reader->async = 0;
+    self->uring_reader->complete = 0;
+    h2o_mem_addref_shared(self);
+    h2o_io_uring_read(self->src_req->conn->ctx->loop, self->file.ref->fd, self->uring_reader->buf, self->uring_reader->len,
+                      self->uring_reader->file_off, on_uring_read_complete, self);
+    /* if all data was read synchronously, return it; otherwise let the completion callback unblock quicly */
+    if (self->uring_reader->complete) {
+        if (self->uring_reader->bytes_read == len) {
+            memcpy(dst, self->uring_reader->buf, len);
+            discard_uring_reader(self);
+            return H2O_SENDVEC_RANDOM_READ_SUCCESS;
+        } else {
+            discard_uring_reader(self);
+            return H2O_SENDVEC_RANDOM_READ_ERROR;
+        }
+    } else {
+        self->uring_reader->async = 1;
+        return H2O_SENDVEC_RANDOM_READ_BLOCKED;
+    }
+}
+
+#endif
 
 #if defined(__linux__)
 static size_t do_sendfile(int sockfd, int filefd, off_t off, size_t len)
@@ -244,30 +386,51 @@ static size_t sendvec_sendfile(h2o_sendvec_t *src, int sockfd, size_t len)
 }
 #endif
 
-static void do_proceed(h2o_generator_t *_self, h2o_req_t *req)
+static void do_proceed_sendvec_with_callbacks(h2o_generator_t *_self, h2o_req_t *req, const h2o_sendvec_callbacks_t *callbacks)
 {
     struct st_h2o_sendfile_generator_t *self = (void *)_self;
     size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
 
-    /* if io_uring is to be used, addref so that the self would not be released, then call `h2o_io_uring_splice_file` */
-#if H2O_USE_IO_URING
-    if (h2o_pipe_sender_in_use(&self->pipe_sender)) {
-        h2o_mem_addref_shared(self);
-        h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
-                            bytes_to_send, 0, do_proceed_on_splice_complete, self);
-        return;
-    }
-#endif
-
-    static const h2o_sendvec_callbacks_t sendvec_callbacks = {.read_ = do_pread, .send_ = sendvec_sendfile};
     h2o_sendvec_t vec = {
-        .callbacks = &sendvec_callbacks, .len = bytes_to_send, .cb_arg[0] = (uint64_t)self, .cb_arg[1] = self->file.off};
+        .callbacks = callbacks,
+        .len = bytes_to_send,
+        .cb_arg[0] = (uint64_t)self,
+        .cb_arg[1] = self->file.off,
+    };
 
     self->file.off += vec.len;
     self->bytesleft -= vec.len;
 
     h2o_sendvec(req, &vec, 1, self->bytesleft != 0 ? H2O_SEND_STATE_IN_PROGRESS : H2O_SEND_STATE_FINAL);
 }
+
+static void do_proceed_sendvec(h2o_generator_t *_self, h2o_req_t *req)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {do_sequential_read, sendvec_sendfile, do_random_read_blocking};
+    do_proceed_sendvec_with_callbacks(_self, req, &callbacks);
+}
+
+#if H2O_USE_IO_URING
+
+static void do_proceed_rwf_nowait(h2o_generator_t *_self, h2o_req_t *req)
+{
+    static const h2o_sendvec_callbacks_t callbacks = {do_sequential_read, sendvec_sendfile, do_random_read_rwf_nowait};
+    do_proceed_sendvec_with_callbacks(_self, req, &callbacks);
+}
+
+static void do_proceed_async_splice(h2o_generator_t *_self, h2o_req_t *req)
+{
+    struct st_h2o_sendfile_generator_t *self = (void *)_self;
+    size_t bytes_to_send = self->bytesleft < H2O_PULL_SENDVEC_MAX_SIZE ? self->bytesleft : H2O_PULL_SENDVEC_MAX_SIZE;
+
+    assert(h2o_pipe_sender_in_use(&self->pipe_sender));
+    /* if io_uring is used, addref so that the self would not be released, then call `h2o_io_uring_splice` */
+    h2o_mem_addref_shared(self);
+    h2o_io_uring_splice(self->src_req->conn->ctx->loop, self->file.ref->fd, self->file.off, self->pipe_sender.fds[1], -1,
+                        bytes_to_send, 0, do_proceed_on_splice_complete, self);
+}
+
+#endif
 
 static void do_multirange_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
@@ -375,7 +538,7 @@ Opened:
     }
 
     self = h2o_mem_alloc_shared(&req->pool, sizeof(*self), on_generator_dispose);
-    self->super.proceed = do_proceed;
+    self->super.proceed = do_proceed_sendvec;
     self->super.stop = NULL;
     self->file.ref = fileref;
     self->file.off = 0;
@@ -389,12 +552,7 @@ Opened:
 #if H2O_USE_IO_URING
     self->src_req = req;
     h2o_pipe_sender_init(&self->pipe_sender);
-    int try_async_splice = (flags & H2O_FILE_FLAG_IO_URING) != 0 && self->bytesleft != 0;
-    if (try_async_splice && h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
-        self->super.stop = do_stop_async_splice;
-    } else if (try_async_splice) {
-        h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
-    }
+    self->uring_reader = NULL;
 #endif
 
     return self;
@@ -430,7 +588,7 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,
-                         h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get)
+                         h2o_iovec_t mime_type, h2o_mime_attributes_t *mime_attr, int is_get, int flags)
 {
     /* setup response */
     req->res.status = status;
@@ -483,14 +641,28 @@ static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *re
     if (self->ranged.range_count == 1)
         self->file.off = self->ranged.range_infos[0];
 
-    if (self->ranged.range_count < 2)
-        do_proceed(&self->super, req);
-    else {
+    if (self->ranged.range_count < 2) {
+#if H2O_USE_IO_URING
+        /* try using io_uring if requested: use of preadv2(RWF_NOWAIT) backed by asynchronous read is preferred, as it is faster
+         * than splice and avoids buffering when H3 is used */
+        if ((flags & H2O_FILE_FLAG_IO_URING_RWF_NOWAIT) != 0 && req->_ostr_top->random_read_unblocked != NULL) {
+            self->super.proceed = do_proceed_rwf_nowait;
+            self->super.stop = do_stop_async;
+        } else if ((flags & H2O_FILE_FLAG_IO_URING_SPLICE) != 0) {
+            if (h2o_pipe_sender_start(req->conn->ctx, &self->pipe_sender)) {
+                self->super.proceed = do_proceed_async_splice;
+                self->super.stop = do_stop_async;
+            } else {
+                h2o_req_log_error(req, "lib/handler/file.c", "failed to allocate a pipe for async I/O; falling back to blocking I/O");
+            }
+        }
+#endif
+    } else {
         self->ranged.multirange_buf = h2o_mem_alloc_pool(&req->pool, char, MAX_BUF_SIZE);
         self->bytesleft = 0;
         self->super.proceed = do_multirange_proceed;
-        do_multirange_proceed(&self->super, req);
     }
+    self->super.proceed(&self->super, req);
 }
 
 int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *path, h2o_iovec_t mime_type, int flags)
@@ -501,7 +673,7 @@ int h2o_file_send(h2o_req_t *req, int status, const char *reason, const char *pa
     if ((self = create_generator(req, path, strlen(path), &is_dir, flags)) == NULL)
         return -1;
     /* note: is_dir is not handled */
-    do_send_file(self, req, status, reason, mime_type, NULL, 1);
+    do_send_file(self, req, status, reason, mime_type, NULL, 1, flags);
     return 0;
 }
 
@@ -718,7 +890,7 @@ static void send_method_not_allowed(h2o_req_t *req)
 }
 
 static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h2o_req_t *req, h2o_iovec_t resolved_path,
-                                const char *rpath, size_t rpath_len, h2o_mimemap_type_t *mime_type)
+                                const char *rpath, size_t rpath_len, h2o_mimemap_type_t *mime_type, int flags)
 {
     enum { METHOD_IS_GET, METHOD_IS_HEAD, METHOD_IS_OTHER } method_type;
     size_t if_modified_since_header_index, if_none_match_header_index;
@@ -840,13 +1012,13 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
             generator->bytesleft = final_content_len;
         }
         do_send_file(generator, req, 206, "Partial Content", mime_type->data.mimetype, &h2o_mime_attributes_as_is,
-                     method_type == METHOD_IS_GET);
+                     method_type == METHOD_IS_GET, flags);
         return 0;
     }
 
 EntireFile:
     /* return file */
-    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET);
+    do_send_file(generator, req, 200, "OK", mime_type->data.mimetype, &mime_type->data.attr, method_type == METHOD_IS_GET, flags);
     return 0;
 
 NotModified:
@@ -961,7 +1133,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
 Opened:
     return serve_with_generator(generator, req, resolved_path, rpath, rpath_len,
-                                h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)));
+                                h2o_mimemap_get_type_by_extension(self->mimemap, h2o_get_filext(rpath, rpath_len)), self->flags);
 }
 
 static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
@@ -1079,7 +1251,8 @@ static int specific_handler_on_req(h2o_handler_t *_self, h2o_req_t *req)
         return 0;
     }
 
-    return serve_with_generator(generator, req, req->path_normalized, self->real_path.base, self->real_path.len, self->mime_type);
+    return serve_with_generator(generator, req, req->path_normalized, self->real_path.base, self->real_path.len, self->mime_type,
+                                self->flags);
 }
 
 h2o_handler_t *h2o_file_register_file(h2o_pathconf_t *pathconf, const char *real_path, h2o_mimemap_type_t *mime_type, int flags)
