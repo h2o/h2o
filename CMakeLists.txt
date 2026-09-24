@@ -416,6 +416,7 @@ SET(LIB_SOURCE_FILES
     lib/common/url.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
+    lib/common/balancer/best_of_two.c
     lib/common/absprio.c
 
     lib/core/config.c
@@ -521,6 +522,7 @@ SET(UNIT_TEST_SOURCE_FILES
     deps/picotest/picotest.c
     t/00unit/test.c
     t/00unit/lib/common/balancer/least_conn.c
+    t/00unit/lib/common/balancer/best_of_two.c
     t/00unit/lib/common/balancer/roundrobin.c
     t/00unit/lib/common/cache.c
     t/00unit/lib/common/hostinfo.c
@@ -559,6 +561,7 @@ SET(UNIT_TEST_SOURCE_FILES
 
 LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/balancer/least_conn.c
+    lib/common/balancer/best_of_two.c
     lib/common/balancer/roundrobin.c
     lib/common/cache.c
     lib/common/hostinfo.c
