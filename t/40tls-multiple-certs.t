@@ -34,19 +34,41 @@ hosts:
 EOT
 
 sub doit {
-    my ($algs, $expected) = @_;
-    my $resp = run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => "-sigalgs $algs" });
-    like $resp, qr/\nPeer signature type: $expected\n.*\nDONE/s, "$algs -> $expected";
+    my ($opts, $expected) = @_;
+    my $resp = run_openssl_client({ host => "127.0.0.1", port => $tls_port, opts => $opts });
+    like $resp, qr/\nPeer signature type: $expected\n/s, "$opts -> $expected";
 }
 
-subtest "use specified" => sub {
-    doit('RSA-PSS+SHA256', 'RSA-PSS');
-    doit('ECDSA+SHA256', 'ECDSA');
+subtest "TLS 1.3" => sub {
+    subtest "use specified" => sub {
+        doit('-tls1_3 -sigalgs RSA-PSS+SHA256', 'RSA-PSS');
+        doit('-tls1_3 -sigalgs ECDSA+SHA256', 'ECDSA');
+    };
+
+    subtest "prefer alternative" => sub {
+        doit('-tls1_3 -sigalgs RSA-PSS+SHA256:ECDSA+SHA256', 'ECDSA');
+        doit('-tls1_3 -sigalgs ECDSA+SHA256:RSA-PSS+SHA256', 'ECDSA');
+    };
 };
 
-subtest "prefer alternative" => sub {
-    doit('RSA-PSS+SHA256:ECDSA+SHA256', 'ECDSA');
-    doit('ECDSA+SHA256:RSA-PSS+SHA256', 'ECDSA');
+subtest "TLS 1.2" => sub {
+    subtest "use RSA" => sub {
+        my $resp = run_openssl_client({
+            host => "127.0.0.1",
+            port => $tls_port,
+            opts => "-tls1_2 -cipher ECDHE-RSA-AES128-GCM-SHA256"
+        });
+        like $resp, qr/Cipher is ECDHE-RSA-AES128-GCM-SHA256/, "cipher selected correctly";
+    };
+
+    subtest "use ECDSA" => sub {
+        my $resp = run_openssl_client({
+            host => "127.0.0.1",
+            port => $tls_port,
+            opts => "-tls1_2 -cipher ECDHE-ECDSA-AES128-GCM-SHA256"
+        });
+        like $resp, qr/Cipher is ECDHE-ECDSA-AES128-GCM-SHA256/, "cipher selected correctly";
+    };
 };
 
 # we do not have a way to specify the signature algorithms for QUIC, but at least make sure that it is possible to connect
