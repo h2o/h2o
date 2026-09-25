@@ -67,15 +67,25 @@ int64_t h2o_hpack_decode_int(const uint8_t **src, const uint8_t *src_end, unsign
     for (shift = 0; shift < 56; shift += 7) {
         if (*src == src_end)
             return H2O_HTTP2_ERROR_INCOMPLETE;
-        value += (uint64_t)(**src & 127) << shift;
-        if ((*(*src)++ & 128) == 0)
+        if ((**src & 128) == 0) {
+            /* terminating octet; a zero here is only legitimate as the very first continuation octet (shift == 0), where it's
+             * needed to represent a value equal to prefix_max. At any later position it means the whole octet was redundant, as
+             * the same value could have been encoded with one fewer octet by clearing the continuation bit one octet earlier
+             * instead (RFC 7541 section 5.1 calls such non-minimal encodings out as something implementations may reject). */
+            if (shift != 0 && (**src & 127) == 0)
+                return H2O_HTTP2_ERROR_COMPRESSION;
+            value += (uint64_t)(*(*src)++ & 127) << shift;
             return (int64_t)value;
+        }
+        value += (uint64_t)(*(*src)++ & 127) << shift;
     }
     /* handling the 9th octet */
     if (*src == src_end)
         return H2O_HTTP2_ERROR_INCOMPLETE;
     if ((**src & 128) != 0)
         return H2O_HTTP2_ERROR_COMPRESSION;
+    if ((**src & 127) == 0)
+        return H2O_HTTP2_ERROR_COMPRESSION; /* same non-minimal-encoding rejection as above; shift is always non-zero here */
     value += (uint64_t)(*(*src)++ & 127) << shift;
     if (value > (uint64_t)INT64_MAX)
         return H2O_HTTP2_ERROR_COMPRESSION;
