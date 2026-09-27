@@ -21,8 +21,10 @@
  */
 #include <limits.h>
 #include <stdlib.h>
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
 #ifndef H2O_NO_OPENSSL_SUPPRESS_DEPRECATED
-#define OPENSSL_SUPPRESS_DEPRECATED /* cache-digests is legacy and we do not want to pay the cost of switchng away from SHA256_*   \
+#define OPENSSL_SUPPRESS_DEPRECATED /* legacy SHA256_* path (used when OpenSSL < 3.0 or LibreSSL) — suppress its deprecation warnings \
                                      */
 #endif
 #include <openssl/sha.h>
@@ -145,16 +147,32 @@ void h2o_cache_digests_load_header(h2o_cache_digests_t **digests, const char *va
 
 static uint64_t calc_hash(const char *url, size_t url_len, const char *etag, size_t etag_len)
 {
-    SHA256_CTX ctx;
     union {
         unsigned char bytes[SHA256_DIGEST_LENGTH];
         uint64_t u64;
     } md;
+#if !defined(LIBRESSL_VERSION_NUMBER) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+    EVP_MD_CTX *ctx;
+    OSSL_LIB_CTX *octx;
+    EVP_MD *digest = NULL;
+    octx = OSSL_LIB_CTX_new();
+    digest = EVP_MD_fetch(octx, "sha256", NULL);
 
+    ctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(ctx, digest, NULL);
+    EVP_DigestUpdate(ctx, url, url_len);
+    EVP_DigestUpdate(ctx, etag, etag_len);
+    EVP_DigestFinal_ex(ctx, md.bytes, NULL);
+    EVP_MD_CTX_free(ctx);
+    EVP_MD_free(digest);
+    OSSL_LIB_CTX_free(octx);
+#else
+    SHA256_CTX ctx;
     SHA256_Init(&ctx);
     SHA256_Update(&ctx, url, url_len);
     SHA256_Update(&ctx, etag, etag_len);
     SHA256_Final(md.bytes, &ctx);
+#endif
 
     if (*(uint16_t *)"\xde\xad" == 0xdead)
         return md.u64;
