@@ -84,6 +84,21 @@ asan:
 		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
 
+# Undefined behaviour sanitizer, paired with ASan rather than replacing it. UBSan does not catch heap
+# or stack buffer overflows, so ASan is still doing that job here; what UBSan adds is the class of
+# faults ASan is blind to: signed integer overflow, shifts out of range, misaligned access, null
+# dereference, and out-of-bounds indices into fixed-size arrays. The codebase parses a lot of
+# length-prefixed input (HTTP, HTTP/3, and the framing in deps/), so that class is worth covering.
+# -fno-sanitize-recover=undefined makes the first report abort the run instead of being logged and
+# stepped over, and print_stacktrace=1 makes it point at a line rather than just an address.
+ubsan:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined" -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined" -DWITH_MPTCP=ON' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
+
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
 coverage:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404  \
@@ -122,4 +137,8 @@ enter:
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull optional-features
+# Every target here either runs a container or is an internal step; none of them produce a file named
+# after the target. Without this, a file that happens to be called `asan` or `coverage` would make make
+# treat the target as already up to date and silently skip the job.
+.PHONY: ALL ossl1.1.0+fuzz ossl1.1.1 ossl3.0 boringssl optional-features asan ubsan coverage \
+	_coverage_report _check _mount _do_check enter pull

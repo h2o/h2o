@@ -107,6 +107,11 @@ ENDIF ()
 
 OPTION(WITHOUT_LIBS "skip building libs even when possible" OFF)
 OPTION(BUILD_SHARED_LIBS "whether to build a shared library" OFF)
+# Both of these are passed by misc/docker-ci/check.mk but used to be read without ever being declared
+# here, which meant they only existed as untyped cache entries. BUILD_FUZZER is checked further down;
+# WITH_H2OLOG guards installing misc/h2olog, which the coverage job asks to skip.
+OPTION(BUILD_FUZZER "build the fuzz targets (requires clang and clang++)" OFF)
+OPTION(WITH_H2OLOG "install h2olog, the h2olog(1) log converter script" ON)
 
 FIND_PROGRAM(RUBY ruby)
 FIND_PROGRAM(BISON bison)
@@ -857,9 +862,6 @@ SET(STANDALONE_SOURCE_FILES
     src/main.c
     src/ssl.c)
 SET(STANDALONE_COMPILE_FLAGS "-DH2O_USE_LIBUV=0 -DQUICLY_USE_TRACER=1")
-IF (WITH_BROTLI)
-    SET(STANDALONE_COMPILE_FLAGS "${STANDALONE_COMPILE_FLAGS} -DH2O_USE_BROTLI=1")
-ENDIF (WITH_BROTLI)
 IF (WITH_NEVERBLEED)
     LIST(APPEND STANDALONE_SOURCE_FILES deps/neverbleed/neverbleed.c)
 ENDIF ()
@@ -948,7 +950,9 @@ IF (NOT WITHOUT_LIBS)
 ENDIF ()
 
 # h2olog is installed directly without fatpacking in misc/regen.pl, as it relies only on standard modules
-INSTALL(PROGRAMS misc/h2olog DESTINATION ${CMAKE_INSTALL_BINDIR})
+IF (WITH_H2OLOG)
+    INSTALL(PROGRAMS misc/h2olog DESTINATION ${CMAKE_INSTALL_BINDIR})
+ENDIF (WITH_H2OLOG)
 
 INSTALL(PROGRAMS share/h2o/annotate-backtrace-symbols share/h2o/fastcgi-cgi share/h2o/fetch-ocsp-response share/h2o/kill-on-close share/h2o/setuidgid share/h2o/start_server DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
 INSTALL(FILES share/h2o/ca-bundle.crt DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/h2o)
