@@ -25,6 +25,10 @@ jobs:
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: boringssl
             command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          # Exercises the compile-time switches that every other job leaves at their defaults, so that
+          # the neverbleed engine and the brotli handler are built in both configurations.
+          - name: neverbleed + brotli optional
+            command: make -f misc/docker-ci/check.mk optional-features BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: ASan (Ubuntu 24.04)
             command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: Coverage

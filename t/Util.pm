@@ -99,13 +99,19 @@ sub server_features {
     # lines, so that both missing coverage and newly-added feature gates require an explicit CI expectation update, instead of
     # silently changing which tests can be skipped.
     if ($ENV{EXPECTED_SERVER_FEATURES}) {
-        my $expected = join ", ", sort split /\s*,\s*/, $ENV{EXPECTED_SERVER_FEATURES};
-        my $actual = join ", ", sort grep { $features{$_} eq "YES" } keys %features;
-        BAIL_OUT join "\n",
-            "h2o server feature set mismatch",
-            "  expected features: $expected",
-            "  actual features: $actual"
-            if $expected ne $actual;
+        my %expected = map { $_ => 1 } grep { length } split /\s*,\s*/, $ENV{EXPECTED_SERVER_FEATURES};
+        my %actual = map { $_ => 1 } grep { $features{$_} eq "YES" } keys %features;
+        my @unexpected = sort grep { !$expected{$_} } keys %actual;
+        my @missing = sort grep { !$actual{$_} } keys %expected;
+        if (@unexpected || @missing) {
+            # Name the offending features rather than making the reader diff two sorted lists by eye. This is the usual
+            # failure mode when a build option or a new `#if` gate changes what the server advertises.
+            my @report;
+            push @report, "  unexpectedly advertised: " . join(", ", @unexpected) if @unexpected;
+            push @report, "  no longer advertised:     " . join(", ", @missing) if @missing;
+            push @report, "  update the corresponding SERVER_FEATURES_* variable in misc/docker-ci/check.mk";
+            BAIL_OUT join("\n", "h2o server feature set mismatch", @report);
+        }
     }
 
     \%features;

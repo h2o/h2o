@@ -5,7 +5,14 @@ CMAKE_ARGS=
 BUILD_ARGS=
 TEST_ENV=
 FUZZ_ASAN=ASAN_OPTIONS=detect_leaks=0
+# Feature sets that `h2o --version` must advertise, compared exactly by t/Util.pm. Whenever a build option
+# changes which `*: YES` lines the server prints, the matching variable here has to be updated as well,
+# otherwise the run bails out with a feature set mismatch.
 SERVER_FEATURES_UBUNTU2404=brotli,capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,mptcp,ssl-zerocopy,zstd
+# Same as above, for the `optional-features` target below, which compiles the brotli handler out.
+# `pledge` is absent from every set here because it is advertised only where pledge(2) exists; a runner on
+# such a platform (OpenBSD in particular) needs its own set that adds `pledge` to the baseline.
+SERVER_FEATURES_OPTIONAL_FEATURES=capabilities,dtrace,fusion,io_uring,ktls,libaegis,mruby,mptcp,ssl-zerocopy,zstd
 DOCKER_RUN_OPTS=--privileged \
 	--ulimit memlock=-1 \
 	-v `pwd`:$(SRC_DIR):ro \
@@ -57,6 +64,18 @@ boringssl:
 		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
 		TMP_SIZE='$(TMP_SIZE)'
 
+# The neverbleed engine and the brotli handler are both optional at compile time, and every other target leaves
+# them at their defaults (neverbleed out, brotli in). Build the opposite combination so that the code guarded by
+# WITH_NEVERBLEED in src/main.c, and the CMake plumbing that omits deps/neverbleed and the brotli sources, are
+# not only ever compiled one way. Neverbleed does not use brotli, so the two switches combine in one run.
+optional-features:
+	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
+		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
+		CMAKE_ARGS='-DWITH_NEVERBLEED=ON -DWITH_BROTLI=OFF -DWITH_MPTCP=ON' \
+		BUILD_ARGS='$(BUILD_ARGS)' \
+		TEST_ENV='SKIP_PROG_EXISTS=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_OPTIONAL_FEATURES) $(TEST_ENV)' \
+		TMP_SIZE='$(TMP_SIZE)'
+
 asan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
@@ -103,4 +122,4 @@ enter:
 pull:
 	docker pull $(CONTAINER_NAME)
 
-.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull
+.PHONY: fuzz _check _do-check _fuzz _do-fuzz-extra enter pull optional-features
