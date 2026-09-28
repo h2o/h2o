@@ -192,9 +192,10 @@ make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6
 - `t/README.md` - Test organization documentation
 
 **Dependencies:**
-- `deps/` - Vendored third-party libraries (29 subdirectories)
-  - Notable: picotls, quicly, brotli, mruby, yaml
+- `deps/` - Vendored third-party libraries (27 subdirectories)
+  - Notable: picotls, quicly, mruby, yaml, hiredis
 - `.gitmodules` - Git submodule configuration
+- libyaml and hiredis are taken from the system (pkg-config) when available, falling back to the vendored copies above. Brotli and zstd have no vendored copy and are always taken from the system, so `WITH_BROTLI`/`WITH_ZSTD` require `libbrotlidec`/`libbrotlienc`/`libzstd` to be discoverable by pkg-config.
 
 **Documentation and Examples:**
 - `doc/` - Generated documentation (HTML, man pages)
