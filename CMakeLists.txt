@@ -194,6 +194,28 @@ ENDIF (WITH_MPTCP)
 # neverbleed
 OPTION(WITH_NEVERBLEED "use neverbleed to protect private keys" OFF)
 
+# Neverbleed offloads private key operations to a separate process. It registers itself with
+# OpenSSL as a provider (OSSL_PROVIDER_add_builtin), which only exists in OpenSSL 3.0 and later.
+# The ENGINE API it used to rely on is deprecated in 3.0 and gone in 4.0, and LibreSSL never
+# implemented the provider API at all, so on that stack neverbleed cannot be built.
+IF (WITH_NEVERBLEED)
+    CMAKE_PUSH_CHECK_STATE()
+    CHECK_C_SOURCE_COMPILES("
+#include <openssl/opensslv.h>
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+#error provider API unavailable
+#endif
+int main(void) { return 0; }" NEVERBLEED_HAS_PROVIDER_API)
+    CMAKE_POP_CHECK_STATE()
+    IF (NOT NEVERBLEED_HAS_PROVIDER_API)
+        MESSAGE(FATAL_ERROR
+            "WITH_NEVERBLEED requires OpenSSL 3.0 or later, which provides the provider API that "
+            "neverbleed registers with. The OpenSSL version found was ${OPENSSL_VERSION}, and "
+            "LibreSSL does not implement the provider API. Configure with -DWITH_NEVERBLEED=OFF to "
+            "build without it.")
+    ENDIF ()
+ENDIF (WITH_NEVERBLEED)
+
 INCLUDE_DIRECTORIES(
     include
     deps/cloexec

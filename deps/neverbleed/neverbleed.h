@@ -24,7 +24,11 @@
 
 #include <pthread.h>
 #include <sys/un.h>
-#include <openssl/engine.h>
+#include <openssl/opensslv.h>
+
+#if !defined(OPENSSL_IS_BORINGSSL)
+#include <openssl/provider.h>
+#endif
 
 #ifdef __FreeBSD__
 #include <pthread_np.h>
@@ -46,7 +50,9 @@ extern "C" {
 #define NEVERBLEED_AUTH_TOKEN_SIZE 32
 
 typedef struct st_neverbleed_t {
-    ENGINE *engine;
+#if !defined(OPENSSL_IS_BORINGSSL)
+    OSSL_PROVIDER *provider;
+#endif
     pid_t daemon_pid;
     struct sockaddr_un sun_;
     pthread_key_t thread_key;
