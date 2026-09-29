@@ -3019,7 +3019,8 @@ static int parse_quic_enable_flag(h2o_configurator_command_t *cmd, yoml_t *node,
  */
 static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_quicly_context_egress_t *egress, yoml_t **ecn,
                                     yoml_t **pacing, yoml_t **respect_app_limited, yoml_t **jumpstart_default,
-                                    yoml_t **jumpstart_max, yoml_t **disengage_jumpstart, yoml_t **rapid_start)
+                                    yoml_t **jumpstart_max, yoml_t **disengage_jumpstart, yoml_t **rapid_start, yoml_t **abba,
+                                    yoml_t **normalize_mtu, yoml_t **initial_rtt, yoml_t **speculative_pto)
 {
     if (jumpstart_default != NULL &&
         h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32, &egress->default_jumpstart_packets) != 0)
@@ -3037,10 +3038,30 @@ static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_q
     } while (0)
     APPLY_FLAG(disengage_jumpstart, disengage_jumpstart);
     APPLY_FLAG(rapid_start, cc.rapid_start);
+    APPLY_FLAG(abba, cc.abba);
+    APPLY_FLAG(normalize_mtu, cc.normalize_mtu);
     APPLY_FLAG(ecn, ecn);
     APPLY_FLAG(pacing, pacing);
     APPLY_FLAG(respect_app_limited, respect_app_limited);
 #undef APPLY_FLAG
+    if (initial_rtt != NULL) {
+        if (h2o_configurator_scanf(cmd, *initial_rtt, "%" SCNu32, &egress->loss.default_initial_rtt) != 0)
+            return -1;
+        if (egress->loss.default_initial_rtt == 0) {
+            h2o_configurator_errprintf(cmd, *initial_rtt, "initial-rtt must be greater than 0");
+            return -1;
+        }
+    }
+    if (speculative_pto != NULL) {
+        unsigned v;
+        if (h2o_configurator_scanf(cmd, *speculative_pto, "%u", &v) != 0)
+            return -1;
+        if (v > 2) {
+            h2o_configurator_errprintf(cmd, *speculative_pto, "speculative-pto must be an integer between 0 and 2");
+            return -1;
+        }
+        egress->loss.num_speculative_ptos = (uint8_t)v;
+    }
 
     return 0;
 }
@@ -3048,14 +3069,15 @@ static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_q
 static int parse_quic_alternative_config(h2o_configurator_command_t *cmd, quicly_context_t *quic, yoml_t *node)
 {
     yoml_t **ratio, **cc, **initcwnd, **ecn, **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max,
-        **disengage_jumpstart, **rapid_start;
+        **disengage_jumpstart, **rapid_start, **abba, **normalize_mtu, **initial_rtt, **speculative_pto;
     unsigned v;
 
     if (h2o_configurator_parse_mapping(cmd, node, "ratio:s",
                                        "cc:s,initcwnd:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,jumpstart-max:s,"
-                                       "disengage-jumpstart:s,rapid-start:s",
+                                       "disengage-jumpstart:s,rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s",
                                        &ratio, &cc, &initcwnd, &ecn, &pacing, &respect_app_limited, &jumpstart_default,
-                                       &jumpstart_max, &disengage_jumpstart, &rapid_start) != 0)
+                                       &jumpstart_max, &disengage_jumpstart, &rapid_start, &abba, &normalize_mtu, &initial_rtt,
+                                       &speculative_pto) != 0)
         return -1;
     if (h2o_configurator_scanf(cmd, *ratio, "%u", &v) != 0)
         return -1;
@@ -3091,7 +3113,7 @@ static int parse_quic_alternative_config(h2o_configurator_command_t *cmd, quicly
         }
     }
     return apply_quic_egress_config(cmd, &quic->egress[1], ecn, pacing, respect_app_limited, jumpstart_default, jumpstart_max,
-                                    disengage_jumpstart, rapid_start);
+                                    disengage_jumpstart, rapid_start, abba, normalize_mtu, initial_rtt, speculative_pto);
 }
 
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -3336,19 +3358,20 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
                         **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing, **respect_app_limited,
                         **jumpstart_default, **jumpstart_max, **disengage_jumpstart, **non_resume_jumpstart_ratio,
-                        **resume_jumpstart_ratio, **rapid_start, **alternative;
+                        **resume_jumpstart_ratio, **rapid_start, **abba, **normalize_mtu, **initial_rtt, **speculative_pto,
+                        **alternative;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
                             "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,disengage-jumpstart:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,"
-                            "rapid-start:s,alternative:m",
+                            "rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s,alternative:m",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &qpack_decoder_table_capacity,
                             &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
                             &max_initial_handshake_packets, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
-                            &disengage_jumpstart, &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start,
-                            &alternative) != 0)
+                            &disengage_jumpstart, &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start, &abba,
+                            &normalize_mtu, &initial_rtt, &speculative_pto, &alternative) != 0)
                         return -1;
                     if (non_resume_jumpstart_ratio != NULL) {
                         h2o_configurator_errprintf(cmd, *non_resume_jumpstart_ratio,
@@ -3416,7 +3439,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         listener->quic.ctx->max_initial_handshake_packets = v;
                     }
                     if (apply_quic_egress_config(cmd, &listener->quic.ctx->egress[0], ecn, pacing, respect_app_limited,
-                                                 jumpstart_default, jumpstart_max, disengage_jumpstart, rapid_start) != 0)
+                                                 jumpstart_default, jumpstart_max, disengage_jumpstart, rapid_start, abba,
+                                                 normalize_mtu, initial_rtt, speculative_pto) != 0)
                         return -1;
                     if (alternative != NULL && parse_quic_alternative_config(cmd, listener->quic.ctx, *alternative) != 0)
                         return -1;
