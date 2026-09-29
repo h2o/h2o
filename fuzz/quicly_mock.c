@@ -464,6 +464,11 @@ quicly_error_t quicly_close(quicly_conn_t *conn, quicly_error_t err, const char 
     return 0;
 }
 
+int quicly_uses_alt_egress(quicly_conn_t *conn)
+{
+    return 0;
+}
+
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
     /* TODO: simulate delay */
