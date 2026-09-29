@@ -162,7 +162,7 @@ static void test_even(void)
     size_t num_sent, num_received;
     quicly_error_t ret;
 
-    quic_ctx.loss = lossconf;
+    quic_ctx.egress[0].loss = lossconf;
     init_cond_even(&cond_down);
     init_cond_even(&cond_up);
 
@@ -262,7 +262,7 @@ static void test_even(void)
     ok(quicly_get_state(server) == QUICLY_STATE_CONNECTED);
     ok(quicly_connection_is_ready(server));
 
-    quic_ctx.loss = (quicly_loss_conf_t)QUICLY_LOSS_SPEC_CONF;
+    quic_ctx.egress[0].loss = (quicly_loss_conf_t)QUICLY_LOSS_SPEC_CONF;
 }
 
 struct loss_cond_t loss_cond_down, loss_cond_up;
@@ -425,7 +425,7 @@ static void test_downstream(void)
         subtest("75%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    subtest("down-stats-75%", loss_check_stats, time_spent, 6, 8900, 21000, 2720, 3450, 15200);
+    subtest("down-stats-75%", loss_check_stats, time_spent, 6, 6500, 21000, 2720, 3450, 15200);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 2);
@@ -482,7 +482,8 @@ static void test_bidirectional(void)
         subtest("75%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    subtest("bidi-stats-75%", loss_check_stats, time_spent, 20, 180000, 233000, 61800, 88400, 690000);
+    /* Finer ACK-delay reporting and fractional RTT/PTO calculations change the recovery timing distribution. */
+    subtest("bidi-stats-75%", loss_check_stats, time_spent, 22, 180000, 233000, 40000, 88400, 690000);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 2);
@@ -490,7 +491,7 @@ static void test_bidirectional(void)
         subtest("50%", loss_core);
         time_spent[i] = quic_now - 1;
     }
-    subtest("bidi-stats-50%", loss_check_stats, time_spent, 0, 4865, 5850, 1064, 1285, 9600);
+    subtest("bidi-stats-50%", loss_check_stats, time_spent, 0, 3800, 5850, 850, 1285, 9600);
 
     for (i = 0; i != 100; ++i) {
         init_cond_rand(&loss_cond_down, 1, 4);

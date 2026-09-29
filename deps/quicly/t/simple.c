@@ -555,7 +555,9 @@ static void tiny_connection_window(void)
         ret = quicly_send(client, &dest, &src, &raw, &num_packets, rawbuf, sizeof(rawbuf));
         ok(ret == 0);
         ok(num_packets == 1);
-        ok(quicly_get_first_timeout(client) > quic_ctx.now->cb(quic_ctx.now));
+        double now;
+        quic_ctx.now->cb(quic_ctx.now, &now);
+        ok(quicly_get_first_timeout(client) > now);
         decode_packets(&decoded, &raw, 1);
         ok(num_packets == 1);
         ret = quicly_accept(&server, &quic_ctx, NULL, &fake_address.sa, &decoded, NULL, new_master_id(), NULL, NULL);

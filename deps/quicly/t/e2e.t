@@ -582,6 +582,18 @@ subtest "reset-stream-overflow" => sub {
     like $received, qr/^\x1c\x03\x04/, "responds with CONNECTION_CLOSE(FLOW_CONTROL_ERROR) for RESET_STREAM";
 };
 
+subtest "reset-stream-overflow-connection" => sub {
+    # Two RESET_STREAMs, each with a final_size fitting the 1000-byte stream window but together overrunning the 1500-byte
+    # connection-wide limit. The limits are set explicitly, as a change in the defaults could otherwise mask the check.
+    my $server = spawn_server(qw(-M 1000 -m 1500));
+    my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
+    $conn->send("\x04\x00\x00\x43\xe8" . "\x04\x04\x00\x43\xe8");
+    sleep 0.5;
+    ok !$server->is_dead(), "server process must be alive";
+    my $received = $conn->receive();
+    like $received, qr/^\x1c\x03\x04/, "responds with CONNECTION_CLOSE(FLOW_CONTROL_ERROR) for RESET_STREAM";
+};
+
 subtest "stream-open-after-connection-close" => sub {
     my $server = spawn_server(qw(-e /dev/stderr));
     my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);

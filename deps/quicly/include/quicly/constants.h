@@ -34,7 +34,7 @@ extern "C" {
 #define QUICLY_DEFAULT_MAX_ACK_DELAY 25 /* milliseconds */
 #define QUICLY_LOCAL_MAX_ACK_DELAY 25   /* milliseconds */
 #define QUICLY_DEFAULT_ACK_DELAY_EXPONENT 3
-#define QUICLY_LOCAL_ACK_DELAY_EXPONENT 10
+#define QUICLY_LOCAL_ACK_DELAY_EXPONENT 3
 #define QUICLY_MIN_INITIAL_DCID_LEN 8
 #define QUICLY_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT 2 /* If this transport parameter is absent, a default of 2 is assumed. (18.2) */
 /**
