@@ -2575,14 +2575,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* TCP; CC name is kept in the SSL config */
             ssl_config->cc.tcp = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
         } else {
-            /* QUIC; set quicly_context_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
+            /* QUIC; set quicly_cc_conf_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
             quicly_cc_type_t **cand;
             for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
                 if (strcasecmp((*cand)->name, (*cc_node)->data.scalar) == 0)
                     break;
             if (*cand != NULL) {
                 if (listener_is_new)
-                    listener->quic.ctx->init_cc = (*cand)->cc_init;
+                    listener->quic.ctx->egress[0].cc.init_cc = (*cand)->cc_init;
                 ssl_config->cc.quic = *cand;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
@@ -2600,7 +2600,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             uint32_t initcwnd_packets;
             if (h2o_configurator_scanf(cmd, *initcwnd_node, "%" SCNu32, &initcwnd_packets) != 0)
                 goto Error;
-            listener->quic.ctx->initcwnd_packets = initcwnd_packets;
+            listener->quic.ctx->egress[0].cc.initcwnd_packets = initcwnd_packets;
         }
     }
 
@@ -2995,16 +2995,17 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-static int parse_quic_enable_ratio(h2o_configurator_command_t *cmd, yoml_t *node, uint8_t *ratio)
+static int parse_quic_enable_flag(h2o_configurator_command_t *cmd, yoml_t *node, int *on)
 {
     assert(node->type == YOML_TYPE_SCALAR);
 
-    if (strcasecmp(node->data.scalar, "ON") == 0) {
-        *ratio = 255;
-    } else if (strcasecmp(node->data.scalar, "OFF") == 0) {
-        *ratio = 0;
-    } else if (sscanf(node->data.scalar, "%" SCNu8, ratio) != 1) {
-        h2o_configurator_errprintf(cmd, node, "argument must be `ON`, `OFF`, or an integer between 0 (never) and 255 (always)");
+    /* 0 and 255 are accepted for compatibility with the ratio-based configuration used by older versions */
+    if (strcasecmp(node->data.scalar, "ON") == 0 || strcmp(node->data.scalar, "255") == 0) {
+        *on = 1;
+    } else if (strcasecmp(node->data.scalar, "OFF") == 0 || strcmp(node->data.scalar, "0") == 0) {
+        *on = 0;
+    } else {
+        h2o_configurator_errprintf(cmd, node, "argument must be either of: `ON`, `OFF`");
         return -1;
     }
 
@@ -3264,6 +3265,15 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             &max_initial_handshake_packets, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
                             &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start) != 0)
                         return -1;
+                    if (non_resume_jumpstart_ratio != NULL) {
+                        h2o_configurator_errprintf(cmd, *non_resume_jumpstart_ratio,
+                                                   "`non-resume-jumpstart-ratio` has been removed");
+                        return -1;
+                    }
+                    if (resume_jumpstart_ratio != NULL) {
+                        h2o_configurator_errprintf(cmd, *resume_jumpstart_ratio, "`resume-jumpstart-ratio` has been removed");
+                        return -1;
+                    }
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
                         if (on == -1)
@@ -3322,23 +3332,25 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     }
                     if (jumpstart_default != NULL &&
                         h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
-                                               &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
+                                               &listener->quic.ctx->egress[0].default_jumpstart_packets) != 0)
                         return -1;
                     if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32,
-                                                                        &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
+                                                                        &listener->quic.ctx->egress[0].max_jumpstart_packets) != 0)
                         return -1;
-#define APPLY_RATIO(node, fld)                                                                                                     \
+#define APPLY_FLAG(node, fld)                                                                                                      \
     do {                                                                                                                           \
-        if (node != NULL && parse_quic_enable_ratio(cmd, *node, &listener->quic.ctx->enable_ratio.fld) != 0)                       \
-            return -1;                                                                                                             \
+        if (node != NULL) {                                                                                                        \
+            int on;                                                                                                                \
+            if (parse_quic_enable_flag(cmd, *node, &on) != 0)                                                                      \
+                return -1;                                                                                                         \
+            listener->quic.ctx->egress[0].fld = on;                                                                                \
+        }                                                                                                                          \
     } while (0)
-                    APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
-                    APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
-                    APPLY_RATIO(rapid_start, rapid_start);
-                    APPLY_RATIO(ecn, ecn);
-                    APPLY_RATIO(pacing, pacing);
-                    APPLY_RATIO(respect_app_limited, respect_app_limited);
-#undef APPLY_RATIO
+                    APPLY_FLAG(rapid_start, cc.rapid_start);
+                    APPLY_FLAG(ecn, ecn);
+                    APPLY_FLAG(pacing, pacing);
+                    APPLY_FLAG(respect_app_limited, respect_app_limited);
+#undef APPLY_FLAG
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
@@ -4178,7 +4190,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         }
         H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
-        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(node_id, *node_id); });
+        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_NUMBER(node_id, *node_id); });
         return 0;
     NodeFound:;
     } else {
@@ -4189,7 +4201,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
-                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_NUMBER(thread_id, thread_id); });
                 return 0;
             }
         } else {
@@ -4197,7 +4209,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
-                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_NUMBER(thread_id, thread_id); });
                 return 0;
             }
         }
@@ -4221,9 +4233,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
         PTLS_LOG(h2o, h3_packet_forward, {
             /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
-            PTLS_LOG_ELEMENT_UNSIGNED(num_packets, num_packets);
-            PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
-            PTLS_LOG_ELEMENT_SIGNED(fd, fd);
+            PTLS_LOG_ELEMENT_NUMBER(num_packets, num_packets);
+            PTLS_LOG_ELEMENT_NUMBER(num_bytes, num_bytes);
+            PTLS_LOG_ELEMENT_NUMBER(fd, fd);
         });
     }
 #endif
@@ -4284,7 +4296,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
     PTLS_LOG(h2o, h3_forwarded_packet_receive, {
         /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
-        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, msg->msg_iov[0].iov_len);
+        PTLS_LOG_ELEMENT_NUMBER(num_bytes, msg->msg_iov[0].iov_len);
     });
     return 1;
 }
@@ -4358,9 +4370,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token)
 {
-    int64_t age;
+    double now, age;
 
-    if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
+    ctx->super.quic->now->cb(ctx->super.quic->now, &now);
+    if ((age = now - token->issued_at) < 0)
         age = 0;
 
     token->address_mismatch =
