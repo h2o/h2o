@@ -1519,6 +1519,11 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
  */
 int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
 /**
+ * Returns a boolean indicating if the connection uses the alternative egress context (i.e., `quicly_context_t::egress[1]`). The
+ * context is chosen when the connection is created, and remains unchanged for the lifetime of the connection.
+ */
+int quicly_uses_alt_egress(quicly_conn_t *conn);
+/**
  *
  */
 void quicly_amend_ptls_context(ptls_context_t *ptls);

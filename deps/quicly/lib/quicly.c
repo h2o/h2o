@@ -5870,6 +5870,11 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc)
     return cc->cc_switch(&conn->egress.cc);
 }
 
+int quicly_uses_alt_egress(quicly_conn_t *conn)
+{
+    return conn->egress.alt_ctx;
+}
+
 static quicly_error_t do_send_closed(quicly_conn_t *conn, quicly_send_context_t *s)
 {
     assert(s->path_index == 0);
