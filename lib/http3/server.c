@@ -2426,7 +2426,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     }
     ++ctx->super.next_cid->master_id; /* FIXME check overlap */
     conn->skip_jumpstart_token_until =
-        quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_uses_alt_egress(qconn)].cc.initcwnd_packets,
+        quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_get_alt_egress(qconn)].cc.initcwnd_packets,
                                     ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
     h2o_http3_setup(&conn->h3, qconn);

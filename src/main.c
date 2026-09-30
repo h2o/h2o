@@ -1264,7 +1264,7 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     } else {
         /* per-host CC is applied only to connections using the default egress context, so that alternatives that require
          * different properties (e.g., L4S) can be tested */
-        if (ssl_config->cc.quic != NULL && !quicly_uses_alt_egress(conn))
+        if (ssl_config->cc.quic != NULL && quicly_get_alt_egress(conn) == 0)
             quicly_set_cc(conn, ssl_config->cc.quic);
     }
 
@@ -3066,54 +3066,83 @@ static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_q
     return 0;
 }
 
-static int parse_quic_alternative_config(h2o_configurator_command_t *cmd, quicly_context_t *quic, yoml_t *node)
+static int parse_quic_alternatives(h2o_configurator_command_t *cmd, quicly_context_t *quic, yoml_t *alternatives)
 {
-    yoml_t **ratio, **cc, **initcwnd, **ecn, **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max,
-        **disengage_jumpstart, **rapid_start, **abba, **normalize_mtu, **initial_rtt, **speculative_pto;
-    unsigned v;
+    unsigned ratio_sum = 0;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "ratio:s",
-                                       "cc:s,initcwnd:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,jumpstart-max:s,"
-                                       "disengage-jumpstart:s,rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s",
-                                       &ratio, &cc, &initcwnd, &ecn, &pacing, &respect_app_limited, &jumpstart_default,
-                                       &jumpstart_max, &disengage_jumpstart, &rapid_start, &abba, &normalize_mtu, &initial_rtt,
-                                       &speculative_pto) != 0)
-        return -1;
-    if (h2o_configurator_scanf(cmd, *ratio, "%u", &v) != 0)
-        return -1;
-    if (v > 255) {
-        h2o_configurator_errprintf(cmd, *ratio, "ratio must be an integer between 0 (never) and 255 (always)");
+    if (alternatives->data.sequence.size > QUICLY_NUM_ALT_EGRESS) {
+        h2o_configurator_errprintf(cmd, alternatives, "too many alternatives are specified (max: %d)", QUICLY_NUM_ALT_EGRESS);
         return -1;
     }
-    quic->alt_egress_ratio = (uint8_t)v;
 
-    /* the alternative starts as a copy of the default, then the properties being specified are applied; init_cc and
-     * initcwnd_packets are left unset unless specified, to be inherited from the default after `cc` and `initcwnd` of the `listen`
-     * directive are applied */
-    quic->egress[1] = quic->egress[0];
-    quic->egress[1].cc.init_cc = NULL;
-    quic->egress[1].cc.initcwnd_packets = 0;
-    if (cc != NULL) {
-        quicly_cc_type_t **cand;
-        for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
-            if (strcasecmp((*cand)->name, (*cc)->data.scalar) == 0)
-                break;
-        if (*cand == NULL) {
-            h2o_configurator_errprintf(cmd, *cc, "specified congestion controller is unknown or unsupported for QUIC");
+    for (size_t index = 0; index != alternatives->data.sequence.size; ++index) {
+        yoml_t *mapping = alternatives->data.sequence.elements[index];
+        if (mapping->type != YOML_TYPE_MAPPING) {
+            h2o_configurator_errprintf(cmd, mapping, "each alternative must be a mapping");
             return -1;
         }
-        quic->egress[1].cc.init_cc = (*cand)->cc_init;
-    }
-    if (initcwnd != NULL) {
-        if (h2o_configurator_scanf(cmd, *initcwnd, "%" SCNu32, &quic->egress[1].cc.initcwnd_packets) != 0)
+
+        yoml_t **ratio, **cc, **initcwnd, **ecn, **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max,
+            **disengage_jumpstart, **rapid_start, **abba, **normalize_mtu, **initial_rtt, **speculative_pto;
+        if (h2o_configurator_parse_mapping(
+                cmd, mapping, "ratio:s",
+                "cc:s,initcwnd:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,jumpstart-max:s,"
+                "disengage-jumpstart:s,rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s",
+                &ratio, &cc, &initcwnd, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
+                &disengage_jumpstart, &rapid_start, &abba, &normalize_mtu, &initial_rtt, &speculative_pto) != 0)
             return -1;
-        if (quic->egress[1].cc.initcwnd_packets == 0) {
-            h2o_configurator_errprintf(cmd, *initcwnd, "initcwnd must be greater than 0");
-            return -1;
+
+        { /* decode the ratio */
+            unsigned v;
+            if (h2o_configurator_scanf(cmd, *ratio, "%u", &v) != 0)
+                return -1;
+            if (v > 255) {
+                h2o_configurator_errprintf(cmd, *ratio, "ratio must be an integer between 0 (never) and 255 (always)");
+                return -1;
+            } else if (v + ratio_sum > 255) {
+                h2o_configurator_errprintf(cmd, *ratio, "sum of the ratios of the alternatives must not exceed 255");
+                return -1;
+            }
+            ratio_sum += v;
+            quic->alt_egress_ratio[index] = v;
         }
+
+        /* the alternative starts as a copy of the default, then the properties being specified are applied; init_cc and
+         * initcwnd_packets are left unset unless specified, to be inherited from the default after `cc` and `initcwnd` of the
+         * `listen` directive are applied */
+        struct st_quicly_context_egress_t *egress = &quic->egress[1 + index];
+        *egress = quic->egress[0];
+        egress->cc.init_cc = NULL;
+        egress->cc.initcwnd_packets = 0;
+
+        /* handle cc and initcwnd; they appear at quic level in only the alternative settings, hence not handled by
+         * `apply_quic_egress_config` */
+        if (cc != NULL) {
+            quicly_cc_type_t **cand;
+            for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
+                if (strcasecmp((*cand)->name, (*cc)->data.scalar) == 0)
+                    break;
+            if (*cand == NULL) {
+                h2o_configurator_errprintf(cmd, *cc, "specified congestion controller is unknown or unsupported for QUIC");
+                return -1;
+            }
+            egress->cc.init_cc = (*cand)->cc_init;
+        }
+        if (initcwnd != NULL) {
+            if (h2o_configurator_scanf(cmd, *initcwnd, "%" SCNu32, &egress->cc.initcwnd_packets) != 0)
+                return -1;
+            if (egress->cc.initcwnd_packets == 0) {
+                h2o_configurator_errprintf(cmd, *initcwnd, "initcwnd must be greater than 0");
+                return -1;
+            }
+        }
+
+        if (apply_quic_egress_config(cmd, egress, ecn, pacing, respect_app_limited, jumpstart_default, jumpstart_max,
+                                     disengage_jumpstart, rapid_start, abba, normalize_mtu, initial_rtt, speculative_pto) != 0)
+            return -1;
     }
-    return apply_quic_egress_config(cmd, &quic->egress[1], ecn, pacing, respect_app_limited, jumpstart_default, jumpstart_max,
-                                    disengage_jumpstart, rapid_start, abba, normalize_mtu, initial_rtt, speculative_pto);
+
+    return 0;
 }
 
 static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
@@ -3359,19 +3388,19 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing, **respect_app_limited,
                         **jumpstart_default, **jumpstart_max, **disengage_jumpstart, **non_resume_jumpstart_ratio,
                         **resume_jumpstart_ratio, **rapid_start, **abba, **normalize_mtu, **initial_rtt, **speculative_pto,
-                        **alternative;
+                        **alternatives;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
                             "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
                             "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
                             "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
                             "jumpstart-max:s,disengage-jumpstart:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,"
-                            "rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s,alternative:m",
+                            "rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,speculative-pto:s,alternatives:a",
                             &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &qpack_decoder_table_capacity,
                             &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
                             &max_initial_handshake_packets, &ecn, &pacing, &respect_app_limited, &jumpstart_default, &jumpstart_max,
                             &disengage_jumpstart, &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start, &abba,
-                            &normalize_mtu, &initial_rtt, &speculative_pto, &alternative) != 0)
+                            &normalize_mtu, &initial_rtt, &speculative_pto, &alternatives) != 0)
                         return -1;
                     if (non_resume_jumpstart_ratio != NULL) {
                         h2o_configurator_errprintf(cmd, *non_resume_jumpstart_ratio,
@@ -3442,7 +3471,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                                                  jumpstart_default, jumpstart_max, disengage_jumpstart, rapid_start, abba,
                                                  normalize_mtu, initial_rtt, speculative_pto) != 0)
                         return -1;
-                    if (alternative != NULL && parse_quic_alternative_config(cmd, listener->quic.ctx, *alternative) != 0)
+                    if (alternatives != NULL && parse_quic_alternatives(cmd, listener->quic.ctx, *alternatives) != 0)
                         return -1;
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
@@ -3453,13 +3482,15 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 freeaddrinfo(res);
                 return -1;
             }
-            /* fields of the alternative egress context left unset by `alternative` inherit the default, now that `cc` and
+            /* fields of the alternative egress contexts left unset by `alternatives` inherit the default, now that `cc` and
              * `initcwnd` of the `listen` directive have been applied */
             if (listener_is_new) {
-                if (listener->quic.ctx->egress[1].cc.init_cc == NULL)
-                    listener->quic.ctx->egress[1].cc.init_cc = listener->quic.ctx->egress[0].cc.init_cc;
-                if (listener->quic.ctx->egress[1].cc.initcwnd_packets == 0)
-                    listener->quic.ctx->egress[1].cc.initcwnd_packets = listener->quic.ctx->egress[0].cc.initcwnd_packets;
+                for (size_t i = 1; i < PTLS_ELEMENTSOF(listener->quic.ctx->egress); ++i) {
+                    if (listener->quic.ctx->egress[i].cc.init_cc == NULL)
+                        listener->quic.ctx->egress[i].cc.init_cc = listener->quic.ctx->egress[0].cc.init_cc;
+                    if (listener->quic.ctx->egress[i].cc.initcwnd_packets == 0)
+                        listener->quic.ctx->egress[i].cc.initcwnd_packets = listener->quic.ctx->egress[0].cc.initcwnd_packets;
+                }
             }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
