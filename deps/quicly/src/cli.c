@@ -26,8 +26,10 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <time.h>
 #include <sys/types.h>
 #include <getopt.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
@@ -51,6 +53,10 @@
 FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
 static int suppress_output = 0, send_datagram_frame = 0;
+static int delivery_stats = 0;
+static struct {
+    uint64_t next_at, bytes;
+} delivered;
 static int64_t enqueue_requests_at = 0, request_interval = 0;
 
 static void hexdump(const char *title, const uint8_t *p, size_t l)
@@ -154,7 +160,7 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             ", initial-packets-sent: %" PRIu64 ", 0rtt-packets-sent: %" PRIu64 ", handshake-packets-sent: %" PRIu64
             ", packets-lost: %" PRIu64 ", ack-received: %" PRIu64 ", ack-ecn-ect0: %" PRIu64 ", ack-ecn-ect1: %" PRIu64
             ", ack-ecn-ce: %" PRIu64 ", late-acked: %" PRIu64 ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64
-            ", paths-created %" PRIu64 ", paths-validated %" PRIu64 ", paths-promoted: %" PRIu64 ", srtt: %" PRIu32
+            ", paths-created %" PRIu64 ", paths-validated %" PRIu64 ", paths-promoted: %" PRIu64 ", srtt: %g"
             ", num-loss-episodes: %" PRIu32 ", num-ecn-loss-episodes: %" PRIu32 ", delivery-rate: %" PRIu64 ", cwnd: %" PRIu32
             ", cwnd-exiting-slow-start: %" PRIu32 ", slow-start-exit-at: %" PRId64 ", jumpstart-cwnd: %" PRIu32
             ", jumpstart-exit: %" PRIu32 ", jumpstart-prev-rate: %" PRIu64 ", jumpstart-prev-rtt: %" PRIu32
@@ -368,6 +374,31 @@ Sent:
     quicly_streambuf_ingress_shift(stream, len);
 }
 
+static uint64_t delivery_now(void)
+{
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        perror("clock_gettime");
+        exit(1);
+    }
+    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+static void advance_delivery_stats(uint64_t now)
+{
+    if (now < delivered.next_at)
+        return;
+    while (now >= delivered.next_at) {
+        printf("%" PRIu64 "\n", delivered.bytes);
+        delivered.bytes = 0;
+        delivered.next_at += 1000;
+    }
+    if (fflush(stdout) != 0 || ferror(stdout)) {
+        perror("writing delivery statistics");
+        exit(1);
+    }
+}
+
 static void client_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len)
 {
     struct st_stream_data_t *stream_data = stream->data;
@@ -377,6 +408,10 @@ static void client_on_receive(quicly_stream_t *stream, size_t off, const void *s
         return;
 
     if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
+        if (delivery_stats) {
+            advance_delivery_stats(delivery_now());
+            delivered.bytes += input.len;
+        }
         if (!suppress_output) {
             FILE *out = (stream_data->outfp == NULL) ? stdout : stream_data->outfp;
             fwrite(input.base, 1, input.len, out);
@@ -658,7 +693,8 @@ static quicly_error_t send_pending(int fd, quicly_conn_t *conn)
 
 static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
 {
-    printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
+    if (!delivery_stats)
+        printf("DATAGRAM: %.*s\n", (int)payload.len, payload.base);
     /* send responds with a datagram frame */
     if (!quicly_is_client(conn))
         quicly_send_datagram_frames(conn, &payload, 1);
@@ -712,6 +748,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
         perror("bind(2) failed");
         return 1;
     }
+    if (delivery_stats)
+        delivered.next_at = delivery_now() + 1000;
     ret = quicly_connect(&conn, &ctx, host, sa, NULL, &next_cid, resumption_token, &hs_properties, &resumed_transport_params, NULL);
     assert(ret == 0);
     ++next_cid.master_id;
@@ -727,10 +765,13 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                 timeout_at = enqueue_requests_at;
             if (timeout_at != INT64_MAX) {
                 quicly_context_t *ctx = quicly_get_context(conn);
-                int64_t delta = timeout_at - ctx->now->cb(ctx->now);
+                double now;
+                ctx->now->cb(ctx->now, &now);
+                double delta = timeout_at - now;
                 if (delta > 0) {
-                    tvbuf.tv_sec = delta / 1000;
-                    tvbuf.tv_usec = (delta % 1000) * 1000;
+                    int64_t delta_usec = ceil(delta * 1000);
+                    tvbuf.tv_sec = delta_usec / 1000000;
+                    tvbuf.tv_usec = delta_usec % 1000000;
                 } else {
                     tvbuf.tv_sec = 0;
                     tvbuf.tv_usec = 0;
@@ -739,10 +780,22 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
             } else {
                 tv = NULL;
             }
+            if (delivery_stats) {
+                uint64_t now = delivery_now();
+                advance_delivery_stats(now);
+                uint64_t wait = delivered.next_at + 999000 - now;
+                if (tv == NULL || (uint64_t)tv->tv_sec * 1000000 + tv->tv_usec > wait) {
+                    tvbuf.tv_sec = wait / 1000000;
+                    tvbuf.tv_usec = wait % 1000000;
+                    tv = &tvbuf;
+                }
+            }
             FD_ZERO(&readfds);
             FD_SET(fd, &readfds);
         } while (select(fd + 1, &readfds, NULL, NULL, tv) == -1 && errno == EINTR);
-        if (enqueue_requests_at <= ctx.now->cb(ctx.now))
+        double now;
+        ctx.now->cb(ctx.now, &now);
+        if (enqueue_requests_at <= now)
             enqueue_requests(conn);
         if (FD_ISSET(fd, &readfds)) {
             while (1) {
@@ -773,8 +826,10 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                     } else {
                         if (quicly_num_streams(conn) == 0) {
                             if (request_interval != 0 && client_gotsig != SIGTERM) {
-                                if (enqueue_requests_at == INT64_MAX)
-                                    enqueue_requests_at = ctx.now->cb(ctx.now) + request_interval;
+                                if (enqueue_requests_at == INT64_MAX) {
+                                    ctx.now->cb(ctx.now, &now);
+                                    enqueue_requests_at = ceil(now + request_interval);
+                                }
                             } else {
                                 static int close_called;
                                 if (!close_called) {
@@ -794,6 +849,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                 ech_save_retry_configs();
                 quicly_free(conn);
                 conn = NULL;
+                if (delivery_stats)
+                    advance_delivery_stats(delivery_now());
                 if (ret == QUICLY_ERROR_FREE_CONNECTION) {
                     return 0;
                 } else {
@@ -823,10 +880,12 @@ static void on_server_signal(int signo)
 static int validate_token(struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token, const char **err_desc)
 {
-    int64_t age;
+    double age;
 
     /* calculate and normalize age */
-    if ((age = ctx.now->cb(ctx.now) - token->issued_at) < 0)
+    double now;
+    ctx.now->cb(ctx.now, &now);
+    if ((age = now - token->issued_at) < 0)
         age = 0;
 
     /* type-specific checks */
@@ -914,10 +973,13 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
                     timeout_at = conn_to;
             }
             if (timeout_at != INT64_MAX) {
-                int64_t delta = timeout_at - ctx.now->cb(ctx.now);
+                double now;
+                ctx.now->cb(ctx.now, &now);
+                double delta = timeout_at - now;
                 if (delta > 0) {
-                    tvbuf.tv_sec = delta / 1000;
-                    tvbuf.tv_usec = (delta % 1000) * 1000;
+                    int64_t delta_usec = ceil(delta * 1000);
+                    tvbuf.tv_sec = delta_usec / 1000000;
+                    tvbuf.tv_usec = delta_usec % 1000000;
                 } else {
                     tvbuf.tv_sec = 0;
                     tvbuf.tv_usec = 0;
@@ -1035,7 +1097,9 @@ static int run_server(int fd, struct sockaddr *sa, socklen_t salen)
         {
             size_t i;
             for (i = 0; i != num_conns; ++i) {
-                if (quicly_get_first_timeout(conns[i]) <= ctx.now->cb(ctx.now)) {
+                double now;
+                ctx.now->cb(ctx.now, &now);
+                if (quicly_get_first_timeout(conns[i]) <= now) {
                     if (send_pending(fd, conns[i]) != 0) {
                         dump_stats(stderr, conns[i]);
                         quicly_free(conns[i]);
@@ -1256,11 +1320,17 @@ static void usage(const char *cmd)
            "  -N                        enforce HelloRetryRequest (client-only)\n"
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
+           "  --delivery-stats          replace response output with plaintext stream bytes\n"
+           "                            delivered per millisecond, summed across streams:\n"
+           "                            one integer per line, including zeros (client only).\n"
+           "                            Time starts before connect; output advances on I/O\n"
+           "                            and at least once per second while idle.\n"
            "  -p path                   path to request (can be set multiple times)\n"
            "  -P path                   path to request, store response to file (can be set\n"
            "                            multiple times)\n"
            "  -R                        require Retry (server only)\n"
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
+           "  --abba                    enables ABBA bandwidth adaptation\n"
            "  --rapid-start             turns on rapid start\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
@@ -1540,12 +1610,14 @@ int main(int argc, char **argv)
     static const struct option longopts[] = {{"ech-key", required_argument, NULL, 0},
                                              {"ech-configs", required_argument, NULL, 0},
                                              {"disable-ecn", no_argument, NULL, 0},
+                                             {"delivery-stats", no_argument, NULL, 0},
                                              {"disregard-app-limited", no_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
                                              {"max-crypto-bytes", required_argument, NULL, 0},
                                              {"no-normalize-cc-mtu", no_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
+                                             {"abba", no_argument, NULL, 0},
                                              {"sockfd", required_argument, NULL, 0},
                                              {"exit-after-handshake", no_argument, NULL, 0},
                                              {"calc-initial-secret", required_argument, NULL, 0},
@@ -1561,16 +1633,18 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "ech-configs") == 0) {
                 ech_setup_configs(optarg);
             } else if (strcmp(longopts[opt_index].name, "disable-ecn") == 0) {
-                ctx.enable_ratio.ecn = 0;
+                ctx.egress[0].ecn = 0;
+            } else if (strcmp(longopts[opt_index].name, "delivery-stats") == 0) {
+                delivery_stats = suppress_output = 1;
             } else if (strcmp(longopts[opt_index].name, "disregard-app-limited") == 0) {
-                ctx.enable_ratio.respect_app_limited = 0;
+                ctx.egress[0].respect_app_limited = 0;
             } else if (strcmp(longopts[opt_index].name, "jumpstart-default") == 0) {
-                if (sscanf(optarg, "%" SCNu32, &ctx.default_jumpstart_cwnd_packets) != 1) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.egress[0].default_jumpstart_packets) != 1) {
                     fprintf(stderr, "failed to parse default jumpstart size: %s\n", optarg);
                     exit(1);
                 }
             } else if (strcmp(longopts[opt_index].name, "jumpstart-max") == 0) {
-                if (sscanf(optarg, "%" SCNu32, &ctx.max_jumpstart_cwnd_packets) != 1) {
+                if (sscanf(optarg, "%" SCNu32, &ctx.egress[0].max_jumpstart_packets) != 1) {
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
                     exit(1);
                 }
@@ -1580,9 +1654,11 @@ int main(int argc, char **argv)
                     exit(1);
                 }
             } else if (strcmp(longopts[opt_index].name, "no-normalize-cc-mtu") == 0) {
-                ctx.normalize_cc_mtu = 0;
+                ctx.egress[0].cc.normalize_mtu = 0;
+            } else if (strcmp(longopts[opt_index].name, "abba") == 0) {
+                ctx.egress[0].cc.abba = 1;
             } else if (strcmp(longopts[opt_index].name, "rapid-start") == 0) {
-                ctx.enable_ratio.rapid_start = 255;
+                ctx.egress[0].cc.rapid_start = 1;
             } else if (strcmp(longopts[opt_index].name, "sockfd") == 0) {
                 if (sscanf(optarg, "%d", &fd) != 1) {
                     fprintf(stderr, "invalid argument passed to --sockfd\n");
@@ -1626,14 +1702,14 @@ int main(int argc, char **argv)
                 if (strcmp((*cc)->name, token) == 0)
                     break;
             if (*cc != NULL) {
-                ctx.init_cc = (*cc)->cc_init;
+                ctx.egress[0].cc.init_cc = (*cc)->cc_init;
             } else {
                 fprintf(stderr, "unknown congestion controller: %s\n", token);
                 exit(1);
             }
             /* initcwnd */
             if ((token = strsep(&buf, ":")) != NULL) {
-                if (sscanf(token, "%" SCNu32, &ctx.initcwnd_packets) != 1) {
+                if (sscanf(token, "%" SCNu32, &ctx.egress[0].cc.initcwnd_packets) != 1) {
                     fprintf(stderr, "invalid initcwnd value: %s\n", token);
                     exit(1);
                 }
@@ -1641,7 +1717,7 @@ int main(int argc, char **argv)
             /* pacing */
             if ((token = strsep(&buf, ":")) != NULL) {
                 if (strcmp(token, "p") == 0) {
-                    ctx.enable_ratio.pacing = 255;
+                    ctx.egress[0].pacing = 1;
                 } else {
                     fprintf(stderr, "invalid pacing value: %s\n", token);
                     exit(1);
@@ -1747,13 +1823,13 @@ int main(int argc, char **argv)
             enforce_retry = 1;
             break;
         case 'r':
-            if (sscanf(optarg, "%" SCNu32, &ctx.loss.default_initial_rtt) != 1) {
+            if (sscanf(optarg, "%" SCNu32, &ctx.egress[0].loss.default_initial_rtt) != 1) {
                 fprintf(stderr, "invalid argument passed to `-r`\n");
                 exit(1);
             }
             break;
         case 'S':
-            if (sscanf(optarg, "%" SCNu8, &ctx.loss.num_speculative_ptos) != 1) {
+            if (sscanf(optarg, "%" SCNu8, &ctx.egress[0].loss.num_speculative_ptos) != 1) {
                 fprintf(stderr, "invalid argument passed to `-S`\n");
                 exit(1);
             }

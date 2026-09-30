@@ -853,8 +853,8 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
 
     SOCKET_PROBE(WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
     H2O_LOG_SOCK(write_tls_record, sock, {
-        PTLS_LOG_ELEMENT_UNSIGNED(write_size, tls_write_size);
-        PTLS_LOG_ELEMENT_UNSIGNED(bytes_buffered, sock->ssl->output.buf.off);
+        PTLS_LOG_ELEMENT_NUMBER(write_size, tls_write_size);
+        PTLS_LOG_ELEMENT_NUMBER(bytes_buffered, sock->ssl->output.buf.off);
     });
     return tls_write_size;
 }
@@ -915,8 +915,8 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         size_t num_bytes = 0;
         for (size_t i = 0; i < bufcnt; ++i)
             num_bytes += bufs[i].len;
-        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(bufcnt, bufcnt);
+        PTLS_LOG_ELEMENT_NUMBER(num_bytes, num_bytes);
+        PTLS_LOG_ELEMENT_NUMBER(bufcnt, bufcnt);
         PTLS_LOG_ELEMENT_PTR(cb, cb);
     });
 

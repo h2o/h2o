@@ -41,9 +41,9 @@ typedef struct st_quicly_sent_packet_t {
      */
     uint64_t packet_number;
     /**
-     *
+     * time at which the packet was sent (or INFINITY for the end-of-iteration sentinel)
      */
-    int64_t sent_at;
+    double sent_at;
     /**
      * epoch to be acked in
      */
@@ -257,7 +257,7 @@ static int quicly_sentmap_is_open(quicly_sentmap_t *map);
 /**
  * prepares a write
  */
-quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch);
+quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, double now, uint8_t ack_epoch);
 /**
  * commits a write
  */
