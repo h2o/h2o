@@ -156,30 +156,62 @@ static void test_error_codes(void)
     ok(!QUICLY_ERROR_IS_QUIC_APPLICATION(a));
 }
 
-static uint16_t test_enable_with_ratio255_random_value;
-
-static void test_enable_with_ratio255_get_random(void *p, size_t len)
+static void test_select_with_ratio255(void)
 {
-    assert(len == sizeof(test_enable_with_ratio255_random_value));
-    memcpy(p, &test_enable_with_ratio255_random_value, sizeof(test_enable_with_ratio255_random_value));
+    { /* single slot */
+        uint8_t ratios[] = {0};
+        ok(do_select_with_ratio255(ratios, 1, 0) == 0);
+        ok(do_select_with_ratio255(ratios, 1, 254) == 0);
+        ratios[0] = 63;
+        ok(do_select_with_ratio255(ratios, 1, 0) == 1);
+        ok(do_select_with_ratio255(ratios, 1, 62) == 1);
+        ok(do_select_with_ratio255(ratios, 1, 63) == 0);
+        ratios[0] = 255;
+        ok(do_select_with_ratio255(ratios, 1, 0) == 1);
+        ok(do_select_with_ratio255(ratios, 1, 254) == 1);
+    }
+
+    { /* multiple slots, with a gap */
+        uint8_t ratios[] = {64, 0, 32};
+        ok(do_select_with_ratio255(ratios, 3, 0) == 1);
+        ok(do_select_with_ratio255(ratios, 3, 63) == 1);
+        ok(do_select_with_ratio255(ratios, 3, 64) == 3);
+        ok(do_select_with_ratio255(ratios, 3, 95) == 3);
+        ok(do_select_with_ratio255(ratios, 3, 96) == 0);
+        ok(do_select_with_ratio255(ratios, 3, 254) == 0);
+    }
+
+    { /* multiple slots adding up to 255 */
+        uint8_t ratios[] = {85, 85, 85};
+        ok(do_select_with_ratio255(ratios, 3, 84) == 1);
+        ok(do_select_with_ratio255(ratios, 3, 85) == 2);
+        ok(do_select_with_ratio255(ratios, 3, 170) == 3);
+        ok(do_select_with_ratio255(ratios, 3, 254) == 3);
+    }
 }
 
-static void test_enable_with_ratio255(void)
+static void test_egress_selection(void)
 {
-    test_enable_with_ratio255_random_value = 0;
-    ok(!enable_with_ratio255(0, test_enable_with_ratio255_get_random));
-    ok(enable_with_ratio255(255, test_enable_with_ratio255_get_random));
+    quicly_context_t ctx = quic_ctx;
 
-    test_enable_with_ratio255_random_value = 255;
-    ok(!enable_with_ratio255(0, test_enable_with_ratio255_get_random));
-    ok(enable_with_ratio255(255, test_enable_with_ratio255_get_random));
-
-    size_t num_enabled = 0;
-    for (test_enable_with_ratio255_random_value = 0; test_enable_with_ratio255_random_value < 0xffff;
-         ++test_enable_with_ratio255_random_value)
-        if (enable_with_ratio255(63, test_enable_with_ratio255_get_random))
-            ++num_enabled;
-    ok(num_enabled == 63 * (65535 / 255));
+    for (size_t alt = 0; alt <= QUICLY_NUM_ALT_EGRESS; ++alt) {
+        memset(ctx.alt_egress_ratio, 0, sizeof(ctx.alt_egress_ratio));
+        if (alt != 0) {
+            ctx.egress[alt] = ctx.egress[0];
+            ctx.egress[alt].pacing = 1; /* mark the slot to check that it is the one being used */
+            ctx.alt_egress_ratio[alt - 1] = 255;
+        }
+        quicly_conn_t *conn;
+        ok(quicly_connect(&conn, &ctx, "example.com", &fake_address.sa, NULL, new_master_id(), ptls_iovec_init(NULL, 0), NULL, NULL,
+                          NULL) == 0);
+        ok(quicly_get_alt_egress(conn) == alt);
+        ok(get_egress_context(conn) == &ctx.egress[alt]);
+        ok((conn->egress.pacer != NULL) == (alt != 0 || ctx.egress[0].pacing));
+        quicly_stats_t stats;
+        ok(quicly_get_stats(conn, &stats) == 0);
+        ok(stats.num_alt_egress == (alt != 0));
+        quicly_free(conn);
+    }
 }
 
 static void test_adjust_stream_frame_layout(void)
@@ -2195,7 +2227,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(quic_ctx.tls);
 
     subtest("error-codes", test_error_codes);
-    subtest("enable_with_ratio255", test_enable_with_ratio255);
+    subtest("select_with_ratio255", test_select_with_ratio255);
     subtest("next-packet-number", test_next_packet_number);
     subtest("address-token-codec", test_address_token_codec);
     subtest("ranges", test_ranges);
@@ -2217,6 +2249,7 @@ int main(int argc, char **argv)
     subtest("lossy", test_lossy);
     subtest("test-nondecryptable-initial", test_nondecryptable_initial);
     subtest("set_cc", test_set_cc);
+    subtest("egress-selection", test_egress_selection);
     subtest("cc-accel-context", test_cc_accel_context);
     subtest("ecn-index-from-bits", test_ecn_index_from_bits);
     subtest("resume-sendrate", test_resume_sendrate);

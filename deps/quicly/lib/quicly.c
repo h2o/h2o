@@ -433,7 +433,7 @@ struct st_quicly_conn_t {
         /**
          * the chosen entry of `quicly_context_t::egress[]`
          */
-        uint8_t alt_ctx : 1;
+        uint8_t alt_ctx;
         /**
          *
          */
@@ -605,17 +605,29 @@ const quicly_salt_t *quicly_get_salt(uint32_t protocol_version)
     }
 }
 
-static int enable_with_ratio255(uint8_t ratio, void (*random_bytes)(void *, size_t))
+static size_t do_select_with_ratio255(const uint8_t *ratios, size_t num_ratios, uint8_t r)
 {
-    if (ratio == 0)
-        return 0;
-    if (ratio == 255)
-        return 1;
+    assert(r < 255);
 
-    /* approximate using 255*257=256*256-1 */
+    unsigned acc = 0;
+    for (size_t i = 0; i < num_ratios; ++i) {
+        acc += ratios[i];
+        assert(acc <= 255 || !"sum of quicly_context_t::alt_egress_ratio[] must not exceed 255");
+        if (r < acc)
+            return i + 1;
+    }
+    return 0;
+}
+
+/**
+ * Given `num_ratios` probabilities each multiplied by 255, returns `i + 1` with the probability of `ratios[i]`, or 0 with the
+ * remaining probability. The sum of `ratios` must not exceed 255.
+ */
+static size_t select_with_ratio255(const uint8_t *ratios, size_t num_ratios, void (*random_bytes)(void *, size_t))
+{
     uint16_t r;
     random_bytes(&r, sizeof(r));
-    return r < ratio * 257u;
+    return do_select_with_ratio255(ratios, num_ratios, r * 255u >> 16); /* normalize to [0, 255) */
 }
 
 static void lock_now(quicly_conn_t *conn, int is_reentrant)
@@ -2264,9 +2276,12 @@ void quicly_free(quicly_conn_t *conn)
          ptls_log_conn_maybe_active(ptls_get_log_state(conn->crypto.tls), ptls_log_getsni_ptls(conn->crypto.tls))) != 0) {
         quicly_stats_t stats;
         if (quicly_get_stats(conn, &stats) == 0) {
-            QUICLY_PROBE(CONN_STATS, conn, conn->stash.now, &stats, sizeof(stats));
+            QUICLY_PROBE(CONN_STATS, conn, conn->stash.now, conn->egress.alt_ctx, &stats, sizeof(stats));
 #define EMIT_FIELD(fld, lit) PTLS_LOG__DO_ELEMENT_NUMBER(lit, stats.fld);
-            QUICLY_LOG_CONN(conn_stats, conn, { QUICLY_STATS_FOREACH(EMIT_FIELD); });
+            QUICLY_LOG_CONN(conn_stats, conn, {
+                PTLS_LOG_ELEMENT_NUMBER(alt_egress, conn->egress.alt_ctx);
+                QUICLY_STATS_FOREACH(EMIT_FIELD);
+            });
 #undef EMIT_FIELD
         }
     }
@@ -2826,8 +2841,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     memset(conn, 0, sizeof(*conn));
     conn->super.ctx = ctx;
     conn->super.data = appdata;
-    if (enable_with_ratio255(ctx->alt_egress_ratio, ctx->tls->random_bytes))
-        conn->egress.alt_ctx = 1;
+    conn->egress.alt_ctx = select_with_ratio255(ctx->alt_egress_ratio, QUICLY_NUM_ALT_EGRESS, ctx->tls->random_bytes);
     if (get_egress_context(conn)->pacing && (pacer = malloc(sizeof(*pacer))) == NULL) {
         ptls_free(tls);
         free(conn);
@@ -2836,7 +2850,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
     lock_now(conn, 0);
     conn->created_at = conn->stash.now;
     conn->super.stats.handshake_confirmed_msec = UINT64_MAX;
-    conn->super.stats.num_alt_egress = conn->egress.alt_ctx;
+    conn->super.stats.num_alt_egress = conn->egress.alt_ctx != 0;
     conn->crypto.tls = tls;
     if (new_path(conn, 0, remote_addr, local_addr) != 0) {
         unlock_now(conn);
@@ -3031,10 +3045,10 @@ quicly_error_t quicly_connect(quicly_conn_t **_conn, quicly_context_t *ctx, cons
     server_cid = quicly_get_remote_cid(conn);
     conn->super.original_dcid = *server_cid;
 
-    QUICLY_PROBE(CONNECT, conn, conn->stash.now, conn->super.version, (int)conn->egress.alt_ctx);
+    QUICLY_PROBE(CONNECT, conn, conn->stash.now, conn->super.version, conn->egress.alt_ctx);
     QUICLY_LOG_CONN(connect, conn, {
         PTLS_LOG_ELEMENT_NUMBER(version, conn->super.version);
-        PTLS_LOG_ELEMENT_BOOL(alt_egress, conn->egress.alt_ctx);
+        PTLS_LOG_ELEMENT_NUMBER(alt_egress, conn->egress.alt_ctx);
     });
 
     if ((ret = setup_handshake_space_and_flow(conn, QUICLY_EPOCH_INITIAL)) != 0)
@@ -5870,7 +5884,7 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc)
     return cc->cc_switch(&conn->egress.cc);
 }
 
-int quicly_uses_alt_egress(quicly_conn_t *conn)
+int quicly_get_alt_egress(quicly_conn_t *conn)
 {
     return conn->egress.alt_ctx;
 }
@@ -7374,7 +7388,7 @@ quicly_error_t quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct
 
     QUICLY_PROBE(ACCEPT, *conn, (*conn)->stash.now,
                  QUICLY_PROBE_HEXDUMP(packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len), address_token,
-                 (int)(*conn)->egress.alt_ctx);
+                 (*conn)->egress.alt_ctx);
     QUICLY_LOG_CONN(accept, *conn, {
         PTLS_LOG_ELEMENT_HEXDUMP(dcid, packet->cid.dest.encrypted.base, packet->cid.dest.encrypted.len);
         if (address_token != NULL) {
@@ -7394,7 +7408,7 @@ quicly_error_t quicly_accept(quicly_conn_t **conn, quicly_context_t *ctx, struct
                 break;
             }
         }
-        PTLS_LOG_ELEMENT_BOOL(alt_egress, (*conn)->egress.alt_ctx);
+        PTLS_LOG_ELEMENT_NUMBER(alt_egress, (*conn)->egress.alt_ctx);
     });
     QUICLY_PROBE(PACKET_RECEIVED, *conn, (*conn)->stash.now, pn, payload.base, payload.len, get_epoch(packet->octets.base[0]));
     QUICLY_LOG_CONN(packet_received, *conn, {

@@ -279,6 +279,11 @@ typedef struct st_quicly_salt_t {
     } retry;
 } quicly_salt_t;
 
+/**
+ * number of alternative egress contexts (i.e., `quicly_context_t::egress[1..QUICLY_NUM_ALT_EGRESS]`)
+ */
+#define QUICLY_NUM_ALT_EGRESS 3
+
 struct st_quicly_context_t {
     /**
      * tls context to use
@@ -385,11 +390,13 @@ struct st_quicly_context_t {
      */
     unsigned expand_client_hello : 1;
     /**
-     * probability of using egress[1], multiplied by 255. 0 (default) means never, 255 means always
+     * probability of using each alternative egress context, multiplied by 255; `alt_egress_ratio[i]` is the probability of using
+     * `egress[i + 1]`. The sum must not exceed 255; the remainder is the probability of using `egress[0]`. All zero (default)
+     * means `egress[0]` is always used.
      */
-    uint8_t alt_egress_ratio;
+    uint8_t alt_egress_ratio[QUICLY_NUM_ALT_EGRESS];
     /**
-     * egress settings (i.e., loss recovery and congestion control); has two slots and one is chosen based on `alt_egress_ratio`
+     * egress settings (i.e., loss recovery and congestion control); one is chosen for each connection based on `alt_egress_ratio`
      */
     struct st_quicly_context_egress_t {
         /**
@@ -426,7 +433,7 @@ struct st_quicly_context_t {
          * if CC should take app-limited into consideration
          */
         uint8_t respect_app_limited : 1;
-    } egress[2];
+    } egress[1 + QUICLY_NUM_ALT_EGRESS];
 };
 
 /**
@@ -638,7 +645,7 @@ struct st_quicly_conn_streamgroup_state_t {
      */                                                                                                                            \
     uint64_t num_jumpstart_applicable;                                                                                             \
     /**                                                                                                                            \
-     * Total number of connections that used the alternative egress context (i.e., `egress[1]`).                                   \
+     * Total number of connections that used an alternative egress context (i.e., not `egress[0]`).                                \
      */                                                                                                                            \
     uint64_t num_alt_egress
 
@@ -1519,10 +1526,11 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
  */
 int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
 /**
- * Returns a boolean indicating if the connection uses the alternative egress context (i.e., `quicly_context_t::egress[1]`). The
- * context is chosen when the connection is created, and remains unchanged for the lifetime of the connection.
+ * Returns the index of `quicly_context_t::egress[]` being used by the connection; i.e., 0 if the default egress context is being
+ * used, or a non-zero value if one of the alternatives is. The context is chosen when the connection is created, and remains
+ * unchanged for the lifetime of the connection.
  */
-int quicly_uses_alt_egress(quicly_conn_t *conn);
+int quicly_get_alt_egress(quicly_conn_t *conn);
 /**
  *
  */

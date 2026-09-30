@@ -38,9 +38,9 @@
  * generated.
  */
 provider quicly {
-    probe connect(struct st_quicly_conn_t *conn, int64_t at, uint32_t version, int alt_egress);
+    probe connect(struct st_quicly_conn_t *conn, int64_t at, uint32_t version, size_t alt_egress);
     probe accept(struct st_quicly_conn_t *conn, int64_t at, const char *dcid,
-                 struct st_quicly_address_token_plaintext_t *address_token, int alt_egress);
+                 struct st_quicly_address_token_plaintext_t *address_token, size_t alt_egress);
     probe free(struct st_quicly_conn_t *conn, int64_t at);
     probe send(struct st_quicly_conn_t *conn, int64_t at, int state, const char *dcid);
     probe receive(struct st_quicly_conn_t *conn, int64_t at, const char *dcid, const void *bytes, size_t bytes_len,
@@ -174,5 +174,5 @@ provider quicly {
 
     probe debug_message(struct st_quicly_conn_t *conn, const char *function, int line, const char *message);
 
-    probe conn_stats(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stats_t *stats, size_t size);
+    probe conn_stats(struct st_quicly_conn_t *conn, int64_t at, size_t alt_egress, struct st_quicly_stats_t *stats, size_t size);
 };
