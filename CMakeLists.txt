@@ -683,6 +683,9 @@ SET_TARGET_PROPERTIES(t-qif PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
+ADD_EXECUTABLE(webtransport-client t/webtransport-client.c)
+SET_TARGET_PROPERTIES(webtransport-client PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0" EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(webtransport-client libh2o-evloop ${EXTRA_LIBS})
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
 IF (WSLAY_FOUND)
@@ -904,7 +907,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t t-qif ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t t-qif webtransport-client ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
