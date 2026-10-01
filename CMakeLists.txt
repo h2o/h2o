@@ -550,6 +550,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
+    t/00unit/lib/http3/common.c
     t/00unit/lib/http3/frame.c
     t/00unit/lib/http3/qpack.c
     t/00unit/lib/http3/server.c
@@ -588,6 +589,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c
+    lib/http3/common.c
     lib/http3/frame.c
     lib/http3/qpack.c
     lib/http3/server.c)
