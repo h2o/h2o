@@ -134,9 +134,11 @@ static void test_scheduler(void)
 }
 
 #include "reliable-reset.c"
+#include "webtransport.c"
 
 void test_lib__http3_server(void)
 {
     subtest("scheduler", test_scheduler);
     subtest("reliable reset: real TLS and H3 lifecycle", test_h3_reliable_reset);
+    subtest("webtransport: native HTTP/3 backend", test_h3_webtransport);
 }
