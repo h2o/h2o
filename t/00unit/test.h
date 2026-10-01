@@ -62,6 +62,7 @@ void test_lib__common__time_c(void);
 void test_lib__common__timerwheel_c(void);
 void test_lib__common__url_c(void);
 void test_lib__common__absprio_c(void);
+void test_lib__common__webtransport_codec_c(void);
 void test_lib__core_config_c(void);
 void test_lib__core__headers_c(void);
 void test_lib__core__proxy_c(void);
