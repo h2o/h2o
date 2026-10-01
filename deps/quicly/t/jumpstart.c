@@ -30,6 +30,7 @@ struct test_jumpstart_action {
 static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jumpstart_action *actions, uint32_t final_cwnd)
 {
     static const uint32_t mtu = 1200;
+    static const quicly_cc_conf_t conf = {.initcwnd_packets = 10};
     quicly_loss_t loss = {.rtt = {.latest = 100, .smoothed = 100, .minimum = 100, .variance = 0}};
     quicly_cc_t cc;
     int64_t now = 1;
@@ -37,7 +38,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
     uint32_t packets_acked = 0, packets_inflight = 0;
     size_t ackcnt = 0;
 
-    init->cb(init, &cc, 10 * mtu, 0, now);
+    init->cb(init, &cc, &conf, mtu, now);
     ok(cc.cwnd == 10 * mtu);
     ok(cc.num_loss_episodes == 0);
 

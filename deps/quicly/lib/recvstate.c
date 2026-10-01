@@ -103,6 +103,9 @@ quicly_error_t quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at
     /* calculate bytes missing */
     *bytes_missing = eos_at - state->received.ranges[state->received.num_ranges - 1].end;
 
+    /* the stream ends where the reset says it does */
+    state->eos = eos_at;
+
     /* clear the received range */
     quicly_ranges_clear(&state->received);
 
