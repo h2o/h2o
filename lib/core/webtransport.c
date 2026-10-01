@@ -1276,7 +1276,9 @@ static void emit_stream_data(struct st_capsule_session_t *sess)
 
 static void do_send(struct st_capsule_session_t *sess)
 {
-    h2o_timer_unlink(&sess->egress.timer);
+    /* keep the timer if it is to run the deferred actions (see `on_timer`); it would call this function again */
+    if (!(sess->native_start_pending || sess->ingress.initial_pending || sess->egress.shutdown_pending))
+        h2o_timer_unlink(&sess->egress.timer);
 
     if (sess->egress.done || sess->egress.send_inflight || sess->egress.final_sent)
         return;
