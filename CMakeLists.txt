@@ -428,6 +428,7 @@ SET(LIB_SOURCE_FILES
     lib/core/proxy.c
     lib/core/request.c
     lib/core/util.c
+    lib/core/webtransport.c
 
     lib/handler/access_log.c
     lib/handler/compress.c
@@ -448,6 +449,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/throttle_resp.c
     lib/handler/self_trace.c
     lib/handler/server_timing.c
+    lib/handler/webtransport_echo.c
     lib/handler/status.c
     lib/handler/status/events.c
     lib/handler/status/memory.c
@@ -470,6 +472,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
+    lib/handler/configurator/webtransport_echo.c
     lib/handler/configurator/status.c
 
     lib/http1.c
@@ -608,7 +611,7 @@ LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
     deps/quicly/lib/remote_cid.c
     deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sentmap.c
-    deps/quicly/lib/streambuf.c
+    # streambuf.c stays: WebTransport uses quicly_sendbuf_*, and it only calls into quicly through the stream API the mock provides
     #deps/quicly/lib/cc-cubic.c
     #deps/quicly/lib/cc-reno.c
     #deps/quicly/lib/defaults.c
