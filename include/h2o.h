@@ -51,6 +51,7 @@ extern "C" {
 #include "h2o/time_.h"
 #include "h2o/token.h"
 #include "h2o/url.h"
+#include "h2o/webtransport.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
 #include "h2o/send_state.h"
@@ -492,6 +493,17 @@ struct st_h2o_globalconf_t {
          */
         size_t max_concurrent_streaming_requests_per_connection;
     } http3;
+
+    struct {
+        /**
+         * if WebTransport is advertised (experimental)
+         */
+        int enabled;
+        /**
+         * flow control limits being advertised for each session
+         */
+        h2o_webtransport_settings_t limits;
+    } webtransport;
 
     struct {
         /**
@@ -1005,6 +1017,18 @@ typedef struct st_h2o_conn_callbacks_t {
      * and thus the caller can call h2o_socket_export() and write cleartext to its fd.
      */
     h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
+    /**
+     * Returns the WebTransport flow control limits sent by the local endpoint and by the peer, if WebTransport using the capsule
+     * protocol has been negotiated on the connection; otherwise returns -1. The callback is optional.
+     */
+    int (*get_webtransport_settings)(h2o_conn_t *conn, h2o_webtransport_settings_t *local, h2o_webtransport_settings_t *remote);
+    /**
+     * Called by `h2o_webtransport_accept` for a request using a protocol that carries WebTransport streams natively. Returns the
+     * operations to be used for the streams of `session`, or NULL if the session cannot be established on the request. When
+     * successful, the protocol layer refers to `session` until `h2o_webtransport_native_t::detach` is called. The callback is
+     * optional.
+     */
+    const h2o_webtransport_native_t *(*webtransport_attach)(h2o_req_t *req, h2o_webtransport_session_t *session);
     /**
      * logging callbacks (all of them are optional)
      */
@@ -2054,6 +2078,13 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
 void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/webtransport_echo.c */
+/**
+ * registers a WebTransport echo handler, used for testing
+ */
+void h2o_webtransport_echo_register(h2o_pathconf_t *pathconf);
+void h2o_webtransport_echo_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/compress.c */
 

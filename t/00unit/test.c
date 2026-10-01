@@ -168,6 +168,7 @@ int main(int argc, char **argv)
         subtest("lib/common/time.c", test_lib__common__time_c);
         subtest("lib/common/timerwheel.c", test_lib__common__timerwheel_c);
         subtest("lib/common/absprio.c", test_lib__common__absprio_c);
+        subtest("lib/common/webtransport_codec.c", test_lib__common__webtransport_codec_c);
         subtest("lib/core/config.c", test_lib__core_config_c);
         subtest("lib/core/headers.c", test_lib__core__headers_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
@@ -193,6 +194,7 @@ int main(int argc, char **argv)
         test_loop = h2o_evloop_create();
 #endif
 
+        subtest("lib/core/webtransport.c", test_lib__core__webtransport_c);
         subtest("lib/t/test.c/loopback", test_loopback);
         subtest("lib/fastcgi.c", test_lib__handler__fastcgi_c);
         subtest("lib/file.c", test_lib__handler__file_c);

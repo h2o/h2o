@@ -164,8 +164,7 @@ static void detach_stream(struct st_h2o_http3client_req_t *req)
 static void close_stream(struct st_h2o_http3client_req_t *req, quicly_error_t err)
 {
     /* TODO are we expected to send two error codes? */
-    if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
-        quicly_reset_stream(req->quic, err);
+    h2o_quic_reset_stream(req->quic, err);
     if (!quicly_recvstate_transfer_complete(&req->quic->recvstate))
         quicly_request_stop(req->quic, err);
     detach_stream(req);
@@ -643,8 +642,7 @@ static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
     if ((req = qs->data) == NULL)
         return;
 
-    if (!quicly_sendstate_transfer_complete(&req->quic->sendstate))
-        quicly_reset_stream(req->quic, err);
+    h2o_quic_reset_stream(req->quic, err);
 
     if (req->proceed_req.bytes_inflight != SIZE_MAX)
         call_proceed_req(req, h2o_httpclient_error_io /* TODO better error code? */);

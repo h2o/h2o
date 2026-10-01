@@ -35,6 +35,14 @@
 #define H2O_HTTP2_SETTINGS_MAX_FRAME_SIZE 5
 #define H2O_HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE 6
 #define H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL 8
+/* WebTransport over HTTP/2 (draft-ietf-webtrans-http2-15) */
+#define H2O_HTTP2_SETTINGS_WT_ENABLED 0x2b60
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_DATA 0x2b61
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_UNI 0x2b62
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL 0x2b63
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAMS_UNI 0x2b64
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAMS_BIDI 0x2b65
+#define H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE 0x2b66
 
 /* defined as negated form of the error codes defined in HTTP2-spec section 7 */
 #define H2O_HTTP2_ERROR_NONE 0
@@ -63,6 +71,15 @@ typedef struct st_h2o_http2_settings_t {
     uint32_t max_concurrent_streams;
     uint32_t initial_window_size;
     uint32_t max_frame_size;
+    struct {
+        uint32_t enabled;
+        uint32_t initial_max_data;
+        uint32_t initial_max_stream_data_uni;
+        uint32_t initial_max_stream_data_bidi_local;
+        uint32_t initial_max_stream_data_bidi_remote;
+        uint32_t initial_max_streams_uni;
+        uint32_t initial_max_streams_bidi;
+    } webtransport;
 } h2o_http2_settings_t;
 
 extern const h2o_http2_settings_t H2O_HTTP2_SETTINGS_DEFAULT;

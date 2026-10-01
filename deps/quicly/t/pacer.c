@@ -42,6 +42,12 @@ static void test_calc_rate(void)
     /* guard against overflow */
     bytes_per_msec = quicly_pacer_calc_send_rate(2, 2147483648, 21);
     ok(bytes_per_msec == 204522253);
+
+    ok(quicly_pacer_calc_send_rate(2, 60000, 1.25f) == 96000);
+    ok(quicly_pacer_calc_send_rate(1, 100, 1.75f) == 58);
+    ok(quicly_pacer_calc_send_rate(2, 60000, 0.25f) == 480000);
+    ok(quicly_pacer_calc_send_rate(2, UINT32_MAX, 0.001f) == UINT32_MAX);
+    ok(quicly_pacer_calc_send_rate(2, UINT32_MAX, 1) == UINT32_MAX);
 }
 
 static const uint16_t mtu = 1200;
