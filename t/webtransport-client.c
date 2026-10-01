@@ -473,6 +473,10 @@ struct h3_stream {
     quicly_streambuf_t sb;
     int kind;
     struct wt_stream *wt;
+    /**
+     * length of the header of a WebTransport stream opened locally, delivered reliably when the stream is reset
+     */
+    size_t hdr_len;
 };
 
 static struct {
@@ -571,7 +575,8 @@ static void h3_on_receive(quicly_stream_t *qs, size_t off, const void *src, size
         return;
     ptls_iovec_t input = quicly_streambuf_ingress_get(qs);
     size_t input_len = input.len;
-    int fin = quicly_recvstate_transfer_complete(&qs->recvstate);
+    /* a transfer completed by a reset is reported by `h3_on_receive_reset` */
+    int fin = quicly_recvstate_transfer_complete(&qs->recvstate) && qs->recvstate.app_error_code == UINT64_MAX;
 
 Redo:
     switch (s->kind) {
@@ -675,6 +680,7 @@ static quicly_error_t h3_on_stream_open(quicly_stream_open_t *self, quicly_strea
     qs->callbacks = &h3_stream_callbacks;
     struct h3_stream *s = qs->data;
     s->wt = NULL;
+    s->hdr_len = 0;
     if (quicly_stream_is_client_initiated(qs->stream_id)) {
         s->kind = H3_STREAM_IGNORED; /* set by the caller */
     } else if (quicly_stream_is_unidirectional(qs->stream_id)) {
@@ -742,6 +748,7 @@ static struct wt_stream *h3_open_stream(int uni)
     uint8_t *end = h2o_webtransport_encode_stream_prefix(
         prefix, uni ? H2O_WEBTRANSPORT_H3_STREAM_TYPE_UNI : H2O_WEBTRANSPORT_H3_SIGNAL_BIDI, h3.connect->stream_id);
     quicly_streambuf_egress_write(qs, prefix, end - prefix);
+    ((struct h3_stream *)qs->data)->hdr_len = end - prefix;
     return stream;
 }
 
@@ -757,9 +764,18 @@ static void h3_send(struct wt_stream *stream, const void *data, size_t len, int 
 
 static void h3_reset(struct wt_stream *stream, uint32_t code)
 {
-    if (stream->quic != NULL)
-        quicly_reset_stream(stream->quic,
-                            QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(h2o_webtransport_h3_error_from_application(code)));
+    quicly_stream_t *qs = stream->quic;
+    if (qs == NULL || qs->sendstate.app_error_code != UINT64_MAX || quicly_sendstate_transfer_complete(&qs->sendstate))
+        return;
+    quicly_error_t err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(h2o_webtransport_h3_error_from_application(code));
+    /* deliver the header reliably, so that the server can associate the reset with the session */
+    quicly_error_t ret = quicly_streambuf_egress_reset(qs, err, ((struct h3_stream *)qs->data)->hdr_len);
+    if (ret == PTLS_ERROR_NOT_AVAILABLE) {
+        quicly_reset_stream(qs, err);
+    } else if (ret != 0) {
+        fprintf(stderr, "failed to reset stream: %" PRId64 "\n", (int64_t)ret);
+        exit(1);
+    }
 }
 
 static void h3_stop(struct wt_stream *stream, uint32_t code)
@@ -832,6 +848,7 @@ static int run_h3(void)
     h3.ctx.transport_params.max_stream_data.bidi_local = RECV_WINDOW;
     h3.ctx.transport_params.max_stream_data.bidi_remote = RECV_WINDOW;
     h3.ctx.transport_params.max_datagram_frame_size = 1500;
+    h3.ctx.transport_params.reset_stream_at = 1;
     h3.qpack_dec = h2o_qpack_create_decoder(0, 0);
     h2o_buffer_init(&h3.capsules, &h2o_socket_buffer_prototype);
 
