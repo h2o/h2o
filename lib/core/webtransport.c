@@ -92,10 +92,6 @@ struct st_capsule_stream_t {
          */
         unsigned stop_received : 1;
         /**
-         * if FIN has been emitted
-         */
-        unsigned fin_sent : 1;
-        /**
          * if the stream is locally initiated and its index is beyond the limit set by the peer
          */
         unsigned is_blocked : 1;
@@ -347,8 +343,11 @@ static void schedule_control(struct st_capsule_stream_t *stream)
 static void schedule_data(struct st_capsule_stream_t *stream)
 {
     struct st_capsule_session_t *sess = get_session(&stream->super);
-    if (stream->super.sendstate.pending.num_ranges == 0 || stream->send_aux.reset.state != SENDER_STATE_NONE ||
-        stream->send_aux.is_blocked || h2o_linklist_is_linked(&stream->send_aux.data_link))
+    quicly_sendstate_t *ss = &stream->super.sendstate;
+    int has_data =
+        ss->pending.num_ranges != 0 || (!quicly_sendstate_is_open(ss) && ss->eos_state == QUICLY_SENDSTATE_EOS_STATE_UNSENT);
+    if (!has_data || stream->send_aux.reset.state != SENDER_STATE_NONE || stream->send_aux.is_blocked ||
+        h2o_linklist_is_linked(&stream->send_aux.data_link))
         return;
     h2o_linklist_insert(&sess->egress.data_streams, &stream->send_aux.data_link);
     schedule_send(sess);
@@ -518,10 +517,13 @@ static void session_error(struct st_capsule_session_t *sess, quicly_error_t err)
 static void reset_stream_core(struct st_capsule_stream_t *stream, uint64_t error_code)
 {
     /* once FIN has been sent, WT_RESET_STREAM cannot be sent, as capsules are delivered in order */
-    if (stream->send_aux.reset.state != SENDER_STATE_NONE || stream->send_aux.fin_sent)
+    if (stream->send_aux.reset.state != SENDER_STATE_NONE || stream->super.sendstate.eos_state != QUICLY_SENDSTATE_EOS_STATE_UNSENT)
         return;
 
-    quicly_sendstate_reset(&stream->super.sendstate);
+    /* the bytes that have been sent are delivered, as the capsules are; the Reliable Size of WT_RESET_STREAM is therefore
+     * `size_inflight`, but the sendstate is reset with zero, as there is nothing left to retransmit */
+    if (quicly_sendstate_reset(&stream->super.sendstate, error_code, 0) != 0)
+        h2o_fatal("no memory");
     stream->send_aux.reset.state = SENDER_STATE_SEND;
     stream->send_aux.reset.error_code = error_code;
     if (h2o_linklist_is_linked(&stream->send_aux.data_link))
@@ -605,15 +607,15 @@ static quicly_error_t deliver_stream_data(struct st_capsule_session_t *sess, con
     if (stream == NULL)
         return 0;
 
-    uint64_t off = stream->recv_aux.bytes_received;
+    uint64_t off = stream->recv_aux.bytes_received, apply_off = off;
     size_t apply_len = len;
-    if ((ret = quicly_recvstate_update(&stream->super.recvstate, off, &apply_len, is_fin, 1)) != 0)
+    if ((ret = quicly_recvstate_update(&stream->super.recvstate, &apply_off, &apply_len, is_fin, 1)) != 0)
         return H2O_WEBTRANSPORT_ERROR_PROTOCOL;
     stream->recv_aux.bytes_received += len;
 
     if (apply_len != 0 || quicly_recvstate_transfer_complete(&stream->super.recvstate)) {
-        uint64_t buf_offset = off + len - apply_len - stream->super.recvstate.data_off;
-        stream->super.callbacks->on_receive(&stream->super, (size_t)buf_offset, src + len - apply_len, apply_len);
+        uint64_t buf_offset = apply_off - stream->super.recvstate.data_off;
+        stream->super.callbacks->on_receive(&stream->super, (size_t)buf_offset, src + (apply_off - off), apply_len);
         if (sess->closing)
             return ERROR_CLOSED_BY_APP;
         if ((stream = sess->ingress.stream) == NULL)
@@ -676,7 +678,8 @@ static quicly_error_t handle_reset_stream(struct st_capsule_session_t *sess, h2o
         return H2O_WEBTRANSPORT_ERROR_STREAM_STATE;
 
     uint64_t bytes_missing;
-    if (quicly_recvstate_reset(&stream->super.recvstate, stream->recv_aux.bytes_received, &bytes_missing) != 0)
+    if (quicly_recvstate_reset(&stream->super.recvstate, stream->recv_aux.bytes_received, stream->recv_aux.bytes_received,
+                               fields[1], &bytes_missing) != 0)
         return H2O_WEBTRANSPORT_ERROR_STREAM_STATE;
     assert(bytes_missing == 0);
     release_recv_credit(sess, stream);
@@ -1086,11 +1089,12 @@ static void encode_varint_capsule(struct st_capsule_session_t *sess, uint64_t ty
     h2o_webtransport_encode_varint_capsule(&sess->egress.buf, type, fields, num_fields);
 }
 
-static void push_inflight(struct st_capsule_session_t *sess, quicly_stream_id_t stream_id, uint64_t start, uint64_t end)
+static void push_inflight(struct st_capsule_session_t *sess, quicly_stream_id_t stream_id, uint64_t start, uint64_t end,
+                          uint8_t eos_type)
 {
     h2o_vector_reserve(NULL, &sess->egress.inflight, sess->egress.inflight.size + 1);
     sess->egress.inflight.entries[sess->egress.inflight.size++] =
-        (struct st_capsule_inflight_t){stream_id, {.start = start, .end = end}};
+        (struct st_capsule_inflight_t){stream_id, {.start = start, .end = end, .eos_type = eos_type}};
 }
 
 static void emit_stream_control(struct st_capsule_session_t *sess)
@@ -1109,7 +1113,9 @@ static void emit_stream_control(struct st_capsule_session_t *sess)
             uint64_t fields[] = {id, stream->send_aux.reset.error_code, stream->super.sendstate.size_inflight};
             encode_varint_capsule(sess, H2O_WEBTRANSPORT_CAPSULE_RESET_STREAM, fields, PTLS_ELEMENTSOF(fields));
             stream->send_aux.reset.state = SENDER_STATE_SENT;
-            push_inflight(sess, stream->super.stream_id, 0, 0); /* check if the stream can be destroyed after being sent */
+            stream->super.sendstate.eos_state = QUICLY_SENDSTATE_EOS_STATE_INFLIGHT;
+            push_inflight(sess, stream->super.stream_id, stream->super.sendstate.final_size, stream->super.sendstate.final_size,
+                          QUICLY_SENDSTATE_EOS_TYPE_RESET);
         }
         if (stream->recv_aux.stop_sending.state == SENDER_STATE_SEND) {
             uint64_t fields[] = {id, stream->recv_aux.stop_sending.error_code};
@@ -1174,7 +1180,9 @@ static void emit_data_blocked(struct st_capsule_session_t *sess)
 static int emit_stream_data_one(struct st_capsule_session_t *sess, struct st_capsule_stream_t *stream)
 {
     quicly_sendstate_t *ss = &stream->super.sendstate;
-    uint64_t off = ss->pending.ranges[0].start, id = (uint64_t)stream->super.stream_id;
+    /* when nothing but FIN remains to be sent, the stream ends where the capsule goes */
+    uint64_t off = ss->pending.num_ranges != 0 ? ss->pending.ranges[0].start : ss->final_size,
+             id = (uint64_t)stream->super.stream_id;
     size_t len;
     int wrote_all, is_fin;
 
@@ -1213,12 +1221,8 @@ static int emit_stream_data_one(struct st_capsule_session_t *sess, struct st_cap
         if (new_bytes > sess->egress.max_data.permitted - sess->egress.max_data.sent)
             len = ss->size_inflight + sess->egress.max_data.permitted - sess->egress.max_data.sent - off;
     }
-    { /* cap len to the current range, excluding the EOS position */
+    { /* cap len to the current range */
         uint64_t range_capacity = ss->pending.ranges[0].end - off;
-        if (off + range_capacity > ss->final_size) {
-            assert(range_capacity > 1);
-            range_capacity -= 1;
-        }
         if (len > range_capacity)
             len = range_capacity;
     }
@@ -1251,12 +1255,13 @@ UpdateState:
         sess->egress.max_data.sent += off + len - ss->size_inflight;
         ss->size_inflight = off + len;
     }
-    if (quicly_ranges_subtract(&ss->pending, off, off + len + is_fin) != 0 ||
+    if ((len != 0 && quicly_ranges_subtract(&ss->pending, off, off + len) != 0) ||
         (wrote_all && quicly_ranges_subtract(&ss->pending, ss->size_inflight, UINT64_MAX) != 0))
         h2o_fatal("no memory");
     if (is_fin)
-        stream->send_aux.fin_sent = 1;
-    push_inflight(sess, stream->super.stream_id, off, off + len + is_fin);
+        ss->eos_state = QUICLY_SENDSTATE_EOS_STATE_INFLIGHT;
+    push_inflight(sess, stream->super.stream_id, off, off + len,
+                  is_fin ? QUICLY_SENDSTATE_EOS_TYPE_FIN : QUICLY_SENDSTATE_EOS_TYPE_NONE);
 
     /* reschedule, being put at the tail for round-robin */
     schedule_data(stream);
@@ -1359,7 +1364,7 @@ static void on_generator_proceed(h2o_generator_t *generator, h2o_req_t *req)
         struct st_capsule_stream_t *stream;
         if ((stream = find_stream(sess, inflight->stream_id)) == NULL)
             continue;
-        if (stream->send_aux.reset.state == SENDER_STATE_NONE && inflight->args.start != inflight->args.end) {
+        { /* the bytes retired by a reset are not shifted, as `quicly_sendstate_reset` accounts them as acked */
             size_t bytes_to_shift;
             if (quicly_sendstate_acked(&stream->super.sendstate, &inflight->args, &bytes_to_shift) != 0)
                 h2o_fatal("no memory");

@@ -9,7 +9,7 @@ Sessions are accepted by handlers; at the moment, the only handler that does so 
 
 <p>
 The support is experimental.
-Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented; also, streams are reset using RESET_STREAM instead of RESET_STREAM_AT; therefore, the peer cannot determine to which session a stream belonged if the stream is reset before its header is received.
+Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented.
 </p>
 
 ? $ctx->{directive_list}->()->(sub {
@@ -29,6 +29,7 @@ EOT
 When set to <code>ON</code>, H2O advertises the support for WebTransport in the SETTINGS frame.
 Over HTTP/2, WebTransport is advertised along with the flow control limits of each session, and only on TLS connections.
 Over HTTP/3, it is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+Also, when set to <code>ON</code>, H2O offers the <a href="https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/">reset_stream_at</a> transport parameter of QUIC, and accepts sessions over HTTP/3 only from clients that offer it as well.
 </p>
 ? })
 

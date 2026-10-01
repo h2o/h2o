@@ -2213,15 +2213,32 @@ static quicly_error_t wt_from_h3_error(quicly_error_t err)
     return QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(app_error);
 }
 
+/**
+ * Resets the QUIC stream unless it has been reset already. RESET_STREAM_AT is used to deliver the header of a stream opened
+ * locally, so that the peer can associate the reset with the session (draft-ietf-webtrans-http3-16 section 4.4).
+ */
 static void wt_reset_quic(struct st_h2o_http3_server_wt_stream_t *ws, quicly_error_t code)
 {
     quicly_stream_t *qs = ws->quic;
 
     if (qs == NULL || ws->conn->wt.disposing)
         return;
-    if (quicly_stream_has_send_side(0, qs->stream_id) && qs->_send_aux.reset_stream.sender_state == QUICLY_SENDER_STATE_NONE &&
+    if (quicly_stream_has_send_side(0, qs->stream_id) && qs->sendstate.app_error_code == UINT64_MAX &&
         !quicly_sendstate_transfer_complete(&qs->sendstate))
-        quicly_reset_stream(qs, code);
+        h2o_http3_reset_stream_reliably(qs, code, ws->send.hdr_len);
+}
+
+/**
+ * mirrors the reset of the send side to the WebTransport stream, unless it has been reset already
+ */
+static void wt_mirror_send_reset(struct st_h2o_http3_server_wt_stream_t *ws, quicly_error_t err)
+{
+    quicly_sendstate_t *ss = &ws->super.sendstate;
+
+    if (ss->app_error_code != UINT64_MAX)
+        return;
+    if (quicly_sendstate_reset(ss, QUICLY_ERROR_GET_ERROR_CODE(err), 0) != 0)
+        h2o_fatal("no memory");
 }
 
 static void wt_stop_quic(struct st_h2o_http3_server_wt_stream_t *ws, quicly_error_t code)
@@ -2243,9 +2260,6 @@ static void wt_discard_input(struct st_h2o_http3_server_wt_stream_t *ws)
 
     if (qs == NULL || ws->conn->wt.disposing)
         return;
-    /* bytes_available cannot be used once the stream is reset */
-    if (quicly_recvstate_transfer_complete(&qs->recvstate) && qs->recvstate.eos == UINT64_MAX)
-        return;
     size_t bytes_available = quicly_recvstate_bytes_available(&qs->recvstate);
     if (bytes_available != 0)
         quicly_stream_sync_recvbuf(qs, bytes_available);
@@ -2257,7 +2271,7 @@ static void wt_mirror_update(struct st_h2o_http3_server_wt_stream_t *ws, uint64_
 {
     if (quicly_recvstate_transfer_complete(&ws->super.recvstate))
         return;
-    if (quicly_recvstate_update(&ws->super.recvstate, off, &len, is_fin, SIZE_MAX) != 0)
+    if (quicly_recvstate_update(&ws->super.recvstate, &off, &len, is_fin, SIZE_MAX) != 0)
         h2o_fatal("failed to update the receive state of a WebTransport stream");
 }
 
@@ -2265,7 +2279,8 @@ static void wt_mirror_eos(struct st_h2o_http3_server_wt_stream_t *ws)
 {
     quicly_recvstate_t *qr = &ws->quic->recvstate;
 
-    if (qr->eos != UINT64_MAX && ws->super.recvstate.eos == UINT64_MAX)
+    /* once a reset has been received, `eos` is the Reliable Size, which is mirrored by `wt_mirror_reset` */
+    if (qr->eos != UINT64_MAX && qr->app_error_code == UINT64_MAX && ws->super.recvstate.eos == UINT64_MAX)
         wt_mirror_update(ws, qr->eos - ws->recv.base, 0, 1);
 }
 
@@ -2286,7 +2301,7 @@ static void wt_mirror_all(struct st_h2o_http3_server_wt_stream_t *ws)
     quicly_recvstate_t *qr = &ws->quic->recvstate;
     uint64_t base = ws->recv.base;
 
-    if (quicly_recvstate_transfer_complete(qr)) {
+    if (quicly_recvstate_transfer_complete(qr) && qr->app_error_code == UINT64_MAX) {
         assert(qr->eos != UINT64_MAX);
         wt_mirror_update(ws, 0, qr->eos - base, 1);
         return;
@@ -2301,6 +2316,25 @@ static void wt_mirror_all(struct st_h2o_http3_server_wt_stream_t *ws)
         wt_mirror_update(ws, start - base, end - start, 0);
     }
     wt_mirror_eos(ws);
+}
+
+/**
+ * mirrors the reset received on the QUIC stream, after the header has been received
+ */
+static void wt_mirror_reset(struct st_h2o_http3_server_wt_stream_t *ws)
+{
+    quicly_recvstate_t *qr = &ws->quic->recvstate, *rs = &ws->super.recvstate;
+    uint64_t reliable_size = qr->eos > ws->recv.base ? qr->eos - ws->recv.base : 0, final_size, bytes_missing;
+
+    if (quicly_recvstate_transfer_complete(rs))
+        return;
+    /* the final size is not retained by the QUIC stream; any value covering the bytes that have been mirrored would do, as the
+     * WebTransport stream is not subject to flow control of its own */
+    final_size = rs->received.ranges[rs->received.num_ranges - 1].end;
+    if (final_size < reliable_size)
+        final_size = reliable_size;
+    if (quicly_recvstate_reset(rs, final_size, reliable_size, qr->app_error_code, &bytes_missing) != 0)
+        h2o_fatal("failed to reset the receive state of a WebTransport stream");
 }
 
 /**
@@ -2378,8 +2412,8 @@ static void wt_stream_open_peer(struct st_h2o_http3_server_wt_stream_t *ws)
         goto Exit;
     }
 
-    /* deliver the buffered bytes, unless the stream has been reset */
-    if (ws->pending_reset == 0 && ws->recv.buf != NULL) {
+    /* deliver the buffered bytes, which are those up to the Reliable Size if the stream has been reset */
+    if (ws->recv.buf != NULL) {
         quicly_recvstate_t *rs = &ws->super.recvstate;
         if (quicly_recvstate_transfer_complete(rs)) {
             /* deliver at once, so that the application sees all the bytes when it notices the end of the stream */
@@ -2535,7 +2569,8 @@ static void wt_on_send_shift(quicly_stream_t *qs, size_t delta)
         ws->send.hdr_unacked -= n;
         delta -= n;
     }
-    if (delta == 0 || ws->state != WT_STREAM_STATE_OPEN)
+    /* the bytes retired by a reset are not shifted, as `quicly_sendstate_reset` accounts them as acked */
+    if (delta == 0 || ws->state != WT_STREAM_STATE_OPEN || ws->super.sendstate.app_error_code != UINT64_MAX)
         return;
 
     quicly_sendstate_t *ss = &ws->super.sendstate;
@@ -2550,10 +2585,9 @@ static void wt_on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *
     size_t app_off, app_len;
     uint8_t *app_dst;
 
-    assert(ws->state == WT_STREAM_STATE_OPEN);
-
     if (off < ws->send.hdr_unacked) {
-        /* emit the (rest of the) header, followed by the payload */
+        /* emit the (rest of the) header, followed by the payload; only the header is emitted once the stream has been reset, as it
+         * is the Reliable Size */
         size_t n = ws->send.hdr_unacked - off;
         if (n > *len)
             n = *len;
@@ -2562,12 +2596,14 @@ static void wt_on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *
             *wrote_all = !ws->send.app_pending && off + n == ws->send.hdr_unacked;
             return;
         }
+        assert(ws->state == WT_STREAM_STATE_OPEN);
         app_off = 0;
         app_dst = (uint8_t *)dst + n;
         app_len = *len - n;
         ws->super.callbacks->on_send_emit(&ws->super, app_off, app_dst, &app_len, wrote_all);
         *len = n + app_len;
     } else {
+        assert(ws->state == WT_STREAM_STATE_OPEN);
         app_off = off - ws->send.hdr_unacked;
         app_len = *len;
         ws->super.callbacks->on_send_emit(&ws->super, app_off, dst, &app_len, wrote_all);
@@ -2587,7 +2623,7 @@ static void wt_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
     quicly_error_t app_err = wt_from_h3_error(err);
 
     /* quicly has reset the QUIC stream */
-    quicly_sendstate_reset(&ws->super.sendstate);
+    wt_mirror_send_reset(ws, app_err);
 
     switch (ws->state) {
     case WT_STREAM_STATE_PENDING:
@@ -2628,23 +2664,22 @@ static void wt_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_wt_stream_t *ws = qs->data;
 
-    /* mirror `quicly_recvstate_reset` */
-    if (!quicly_recvstate_transfer_complete(&ws->super.recvstate))
-        quicly_ranges_clear(&ws->super.recvstate.received);
-
     switch (ws->state) {
     case WT_STREAM_STATE_PENDING:
         if (ws->session_id == UINT64_MAX) {
             wt_stream_abandon(ws, H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
         } else {
+            /* the bytes up to the Reliable Size remain buffered, to be delivered before the reset */
+            wt_mirror_reset(ws);
             ws->pending_reset = wt_from_h3_error(err);
-            wt_stream_dispose_recvbuf(ws);
         }
         break;
     case WT_STREAM_STATE_OPEN:
+        wt_mirror_reset(ws);
         ws->super.callbacks->on_receive_reset(&ws->super, wt_from_h3_error(err));
         break;
     case WT_STREAM_STATE_ABANDONED:
+        wt_discard_input(ws);
         break;
     }
 }
@@ -2785,8 +2820,7 @@ static quicly_error_t wt_native_stream_sync_sendbuf(h2o_webtransport_stream_t *s
     int ret;
 
     if (!(ws->state == WT_STREAM_STATE_OPEN && qs != NULL && quicly_stream_has_send_side(0, qs->stream_id) &&
-          qs->_send_aux.reset_stream.sender_state == QUICLY_SENDER_STATE_NONE &&
-          !quicly_sendstate_transfer_complete(&qs->sendstate)))
+          qs->sendstate.app_error_code == UINT64_MAX && !quicly_sendstate_transfer_complete(&qs->sendstate)))
         return 0;
 
     if (activate)
@@ -2814,8 +2848,7 @@ static void wt_native_reset_stream(h2o_webtransport_stream_t *stream, quicly_err
 {
     struct st_h2o_http3_server_wt_stream_t *ws = (void *)stream;
 
-    quicly_sendstate_reset(&ws->super.sendstate);
-    /* TODO use RESET_STREAM_AT with the reliable size covering the header */
+    wt_mirror_send_reset(ws, err);
     if (ws->state == WT_STREAM_STATE_OPEN)
         wt_reset_quic(ws, wt_to_h3_error(err));
 }
@@ -2903,8 +2936,10 @@ static int handle_input_expect_headers_process_wt_connect(struct st_h2o_http3_se
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
+    /* the client is required to offer reset_stream_at as well (draft-ietf-webtrans-http3-16 section 3.1) */
     if (!(conn->h3.peer_settings.wt_enabled == 1 && !conn->h3.peer_settings.wt_enabled_duplicated &&
-          conn->h3.peer_settings.h3_datagram_rfc9297))
+          conn->h3.peer_settings.h3_datagram_rfc9297 &&
+          quicly_get_remote_transport_parameters(conn->h3.super.quic)->reset_stream_at))
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                            "WebTransport is not enabled by the client", err_desc);
 
@@ -3534,9 +3569,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_init_anchor(&conn->wt.streams);
     h2o_linklist_init_anchor(&conn->wt.scheduler.active);
     h2o_linklist_init_anchor(&conn->wt.scheduler.conn_blocked);
-    /* WebTransport over HTTP/3 requires the H3 DATAGRAM extension (draft-ietf-webtrans-http3-16 section 3.1) */
-    conn->h3.local_settings.wt_enabled =
-        conn->super.ctx->globalconf->webtransport.enabled && ctx->super.quic->transport_params.max_datagram_frame_size != 0;
+    /* WebTransport over HTTP/3 requires the H3 DATAGRAM extension and reset_stream_at (draft-ietf-webtrans-http3-16 section 3.1) */
+    conn->h3.local_settings.wt_enabled = conn->super.ctx->globalconf->webtransport.enabled &&
+                                         ctx->super.quic->transport_params.max_datagram_frame_size != 0 &&
+                                         ctx->super.quic->transport_params.reset_stream_at;
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     conn->num_streams_req_streaming = 0;
@@ -3604,6 +3640,8 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->ack_frequency = conf->http3.ack_frequency;
     quic->transport_params.max_datagram_frame_size = 1500; /* accept DATAGRAM frames; let the sender determine MTU, instead of being
                                                             * potentially too restrictive */
+    if (conf->webtransport.enabled)
+        quic->transport_params.reset_stream_at = 1; /* required by WebTransport */
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
