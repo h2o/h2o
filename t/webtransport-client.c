@@ -893,7 +893,9 @@ static int run_h3(void)
             }
             closing = 1;
         }
-        int64_t delay = quicly_get_first_timeout(h3.conn) - h3.ctx.now->cb(h3.ctx.now);
+        double quic_now;
+        h3.ctx.now->cb(h3.ctx.now, &quic_now);
+        int64_t delay = quicly_get_first_timeout(h3.conn) - (int64_t)quic_now;
         if (delay < 0)
             delay = 0;
         if (delay > 50)
