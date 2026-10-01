@@ -2006,6 +2006,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->qpack_blocked_ref = 0;
     stream->qpack_blocked_ever = 0;
     stream->req_streaming_eos_delivered = 0;
+    stream->datagram_flow_id = UINT64_MAX; /* read by pre_dispose_request even if the stream is disposed before SEND_HEADERS */
     stream->req_body = NULL;
     memset(&stream->stats, 0, sizeof(stream->stats));
 
