@@ -666,6 +666,27 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
     wt_on_request_dispose(stream);
 }
 
+/**
+ * Discards the input of a stream in CLOSE_WAIT as it becomes available, returning its credit, including the input buffered when the
+ * state was entered. After STOP_SENDING, the peer might still send the bytes below the Reliable Size of RESET_STREAM_AT.
+ */
+static void close_wait_discard_input(quicly_stream_t *qs)
+{
+    size_t bytes_available = quicly_recvstate_bytes_available(&qs->recvstate);
+    if (bytes_available != 0)
+        quicly_stream_sync_recvbuf(qs, bytes_available);
+}
+
+static void close_wait_on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+{
+    close_wait_discard_input(qs);
+}
+
+static void close_wait_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
+{
+    close_wait_discard_input(qs);
+}
+
 static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http3_server_stream_state state, int in_generator)
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -696,8 +717,8 @@ static void set_state(struct st_h2o_http3_server_stream_t *stream, enum h2o_http
                                                                        quicly_stream_noop_on_send_shift,
                                                                        quicly_stream_noop_on_send_emit,
                                                                        quicly_stream_noop_on_send_stop,
-                                                                       quicly_stream_noop_on_receive,
-                                                                       quicly_stream_noop_on_receive_reset};
+                                                                       close_wait_on_receive,
+                                                                       close_wait_on_receive_reset};
         stream->quic->callbacks = &close_wait_callbacks;
     } break;
     default:
@@ -726,9 +747,9 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
 {
     assert(stream->state < H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT);
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
-        /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
-         * as it is allowed and might be beneficial in case ACKs are lost */
-        if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
+        /* send STOP_SENDING unless a reset was received; we send STOP_SENDING even if all data up to EOS have been received, as it
+         * is allowed and might be beneficial in case ACKs are lost */
+        if (stream->quic->recvstate.app_error_code == UINT64_MAX)
             quicly_request_stop(stream->quic, stop_sending_code);
         cancel_qpack_decoder(stream);
         if (h2o_linklist_is_linked(&stream->link))
@@ -739,9 +760,8 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
         if (stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY)
             set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY, in_generator);
     } else {
-        if (quicly_stream_has_send_side(0, stream->quic->stream_id) &&
-            !quicly_sendstate_transfer_complete(&stream->quic->sendstate))
-            quicly_reset_stream(stream->quic, reset_code);
+        if (quicly_stream_has_send_side(0, stream->quic->stream_id))
+            h2o_quic_reset_stream(stream->quic, reset_code);
         set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT, in_generator);
     }
 }
@@ -997,11 +1017,7 @@ static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *str
     if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
         return stream->quic->recvstate.received.ranges[0].end;
 
-    /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
-     * byte count. */
-    if (stream->quic->recvstate.eos == UINT64_MAX)
-        return stream->quic->recvstate.data_off;
-
+    /* on reset, `eos` is the end of the bytes received contiguously */
     return stream->quic->recvstate.eos;
 }
 
@@ -1287,6 +1303,9 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
         return;
     if (stream->qpack_blocked_ref != 0)
         return;
+    /* A transfer completed by a reset is handled by `on_receive_reset`, which quicly calls after `on_receive`, and which discards
+     * the input left; the bytes available until then are processed as if the reset had arrived after them. */
+    int reset_received = stream->quic->recvstate.app_error_code != UINT64_MAX;
 
     { /* Process contiguous bytes in the receive buffer until one of the following conditions are reached:
        * a) connection- or stream-level error (i.e., state advanced to CLOSE_WAIT) is detected - in which case we exit,
@@ -1301,7 +1320,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                 const char *err_desc = NULL;
                 if ((err = stream->recvbuf.handle_input(stream, &src, src_end, in_generator, &err_desc)) != 0) {
                     if (err == H2O_HTTP3_ERROR_INCOMPLETE) {
-                        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
+                        if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate) || reset_received)
                             break;
                         err = H2O_HTTP3_ERROR_GENERAL_PROTOCOL;
                         err_desc = "incomplete frame";
@@ -1323,6 +1342,8 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
     }
 
     if (quicly_recvstate_transfer_complete(&stream->quic->recvstate)) {
+        if (reset_received)
+            return;
         if (stream->recvbuf.buf->size == 0 && (stream->recvbuf.handle_input == handle_input_expect_data ||
                                                stream->recvbuf.handle_input == handle_input_post_trailers)) {
             /* have complete request, advance the state and process the request */
@@ -1397,6 +1418,12 @@ static void on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
+    /* discard the input that has not been processed, returning its credit; quicly returns that of the bytes not delivered */
+    size_t bytes_available = quicly_recvstate_bytes_available(&qs->recvstate);
+    if (bytes_available != 0) {
+        h2o_buffer_consume(&stream->recvbuf.buf, bytes_available);
+        quicly_stream_sync_recvbuf(qs, bytes_available);
+    }
     shutdown_stream(stream, H2O_HTTP3_ERROR_NONE /* ignored */,
                     stream->state == H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS ? H2O_HTTP3_ERROR_REQUEST_REJECTED
                                                                                 : H2O_HTTP3_ERROR_REQUEST_CANCELLED,
@@ -1424,7 +1451,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    int reset_received = quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX;
+    int reset_received = stream->quic->recvstate.app_error_code != UINT64_MAX;
     if (errstr != NULL || reset_received) {
         close_request_streaming(stream);
         shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
@@ -1488,7 +1515,8 @@ static void run_delayed(h2o_timer_t *timer)
         while (!h2o_linklist_is_empty(&conn->delayed_streams.req_streaming)) {
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.req_streaming.next);
-            int is_end_stream = quicly_recvstate_transfer_complete(&stream->quic->recvstate);
+            int is_end_stream = quicly_recvstate_transfer_complete(&stream->quic->recvstate) &&
+                                stream->quic->recvstate.app_error_code == UINT64_MAX;
             assert(stream->req.process_called);
             assert(stream->req.write_req.cb != NULL);
             assert(stream->req_body != NULL);
@@ -3093,6 +3121,12 @@ static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *q
     return 0;
 }
 
+static int response_is_fully_inflight(struct st_h2o_http3_server_stream_t *stream)
+{
+    return quicly_sendstate_eos_type(&stream->quic->sendstate) == QUICLY_SENDSTATE_EOS_TYPE_FIN &&
+           stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size;
+}
+
 static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, quicly_send_context_t *s)
 {
 #define HAS_DATA_TO_SEND()                                                                                                         \
@@ -3163,8 +3197,7 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
             if ((ret = quicly_send_stream(stream->quic, s)) != 0)
                 goto Exit;
             ++stream->scheduler.call_cnt;
-            if (stream->quic->sendstate.size_inflight == stream->quic->sendstate.final_size &&
-                h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
+            if (response_is_fully_inflight(stream) && h2o_timeval_is_null(&stream->req.timestamps.response_end_at)) {
                 stream->req.timestamps.response_end_at = h2o_gettimeofday(stream->req.conn->ctx->loop);
                 if (h2o_timeval_is_null(&stream->req.timestamps.response_start_at)) {
                     stream->req.timestamps.response_start_at = stream->req.timestamps.response_end_at;

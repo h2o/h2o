@@ -106,6 +106,9 @@ void quicly_stream_sync_recvbuf(quicly_stream_t *stream, size_t shift_amount)
 
 int quicly_stream_can_send(quicly_stream_t *stream, int at_stream_level)
 {
+    /* the FIN or reset that ends the stream is still to be sent, regardless of flow control */
+    if (!quicly_sendstate_is_open(&stream->sendstate) && stream->sendstate.eos_state == QUICLY_SENDSTATE_EOS_STATE_UNSENT)
+        return 1;
     /* return if there is nothing to be sent */
     if (stream->sendstate.pending.num_ranges == 0)
         return 0;
@@ -138,12 +141,20 @@ void quicly_request_stop(quicly_stream_t *stream, quicly_error_t err)
     stream->_send_aux.stop_sending.sender_state = QUICLY_SENDER_STATE_SEND;
 }
 
+quicly_error_t quicly_set_reset_stream_at(quicly_stream_t *stream, quicly_error_t err, uint64_t reliable_size)
+{
+    /* the mock peer never offers reset_stream_at */
+    return PTLS_ERROR_NOT_AVAILABLE;
+}
+
 void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err)
 {
-    /* dispose sendbuf state */
-    quicly_sendstate_reset(&stream->sendstate);
+    assert(quicly_sendstate_eos_type(&stream->sendstate) != QUICLY_SENDSTATE_EOS_TYPE_RESET && "the stream has already been reset");
+    assert(!quicly_sendstate_transfer_complete(&stream->sendstate));
 
-    stream->_send_aux.reset_stream.sender_state = QUICLY_SENDER_STATE_SEND;
+    /* dispose sendbuf state; the stream now ends with RESET_STREAM, which `quicly_send_stream` emits */
+    int ret = quicly_sendstate_reset(&stream->sendstate, QUICLY_ERROR_GET_ERROR_CODE(err), 0);
+    assert(ret == 0);
 
     /* inline expansion of resched_stream_data() */
     /* TODO: consider streams_blocked? */
@@ -175,54 +186,56 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
 {
     /* quicly_send -> scheduler->do_send -> quicly_send_stream -> on_send_emit */
     uint8_t buff[1024];
-    uint64_t off = stream->sendstate.pending.ranges[0].start, end_off;
-    size_t capacity = sizeof(buff);
-    int wrote_all = 0, is_fin;
+    /* when nothing but the FIN or reset remains to be sent, the stream ends where the frame goes */
+    uint64_t off =
+        stream->sendstate.pending.num_ranges != 0 ? stream->sendstate.pending.ranges[0].start : stream->sendstate.final_size;
+    size_t len = 0;
+    int wrote_all = 0, is_eos;
     quicly_error_t ret;
 
-    if (!quicly_sendstate_is_open(&stream->sendstate) && off == stream->sendstate.final_size) {
-        /* special case for emitting FIN only */
-        end_off = off;
+    if (stream->sendstate.pending.num_ranges == 0 && stream->sendstate.app_error_code != UINT64_MAX) {
+        /* a reset is sent on its own, the bytes above the Reliable Size having been retired */
         wrote_all = 1;
-        is_fin = 1;
+        is_eos = 1;
+        goto UpdateState;
+    }
+    if (off == stream->sendstate.final_size) {
+        /* special case for emitting FIN only */
+        wrote_all = 1;
+        is_eos = 1;
         goto UpdateState;
     }
     { /* cap the capacity to the current range */
         uint64_t range_capacity = stream->sendstate.pending.ranges[0].end - off;
-        if (!quicly_sendstate_is_open(&stream->sendstate) && off + range_capacity > stream->sendstate.final_size) {
-            assert(range_capacity > 1); /* see the special case above */
-            range_capacity -= 1;
-        }
-        if (capacity > range_capacity)
-            capacity = range_capacity;
+        len = sizeof(buff) < range_capacity ? sizeof(buff) : range_capacity;
     }
-    size_t len = capacity;
     size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end);
     stream->callbacks->on_send_emit(stream, emit_off, buff, &len, &wrote_all);
-
-    end_off = off + len;
+    /* the application may reset the stream from within the callback; if it did, the frame is dropped */
+    if (quicly_sendstate_eos_type(&stream->sendstate) == QUICLY_SENDSTATE_EOS_TYPE_RESET)
+        return 0;
 
     /* determine if the frame incorporates FIN */
-    if (!quicly_sendstate_is_open(&stream->sendstate) && end_off == stream->sendstate.final_size) {
-        is_fin = 1;
-    } else {
-        is_fin = 0;
-    }
+    is_eos = off + len == stream->sendstate.final_size && stream->sendstate.app_error_code == UINT64_MAX;
 
 UpdateState:
     /* notify the fuzzing driver of stream send event */
     if (mquicly_context.on_stream_send != NULL) {
-        mquicly_context.on_stream_send->cb(mquicly_context.on_stream_send, stream->conn, stream, buff, off, len, is_fin);
+        mquicly_context.on_stream_send->cb(mquicly_context.on_stream_send, stream->conn, stream, buff, off, len, is_eos);
     }
-    if (stream->sendstate.size_inflight < end_off) {
-        stream->sendstate.size_inflight = end_off;
+    if (stream->sendstate.size_inflight < off + len) {
+        stream->sendstate.size_inflight = off + len;
     }
-    if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, end_off + is_fin)) != 0)
-        return ret;
+    if (len != 0) {
+        if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, off, off + len)) != 0)
+            return ret;
+    }
     if (wrote_all) {
         if ((ret = quicly_ranges_subtract(&stream->sendstate.pending, stream->sendstate.size_inflight, UINT64_MAX)) != 0)
             return ret;
     }
+    if (is_eos)
+        stream->sendstate.eos_state = QUICLY_SENDSTATE_EOS_STATE_INFLIGHT;
 
     return 0;
 }
