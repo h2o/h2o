@@ -202,6 +202,13 @@ void h2o_config_init(h2o_globalconf_t *config)
     config->http2.latency_optimization.max_additional_delay = 10;
     config->http2.latency_optimization.max_cwnd = 65535;
     config->http2.dos_delay = 100; /* 100ms processing delay when observing suspicious behavior */
+    config->webtransport.limits =
+        (h2o_webtransport_settings_t){.max_data = H2O_WEBTRANSPORT_DEFAULT_MAX_DATA,
+                                      .max_stream_data_uni = H2O_WEBTRANSPORT_DEFAULT_MAX_STREAM_DATA,
+                                      .max_stream_data_bidi_local = H2O_WEBTRANSPORT_DEFAULT_MAX_STREAM_DATA,
+                                      .max_stream_data_bidi_remote = H2O_WEBTRANSPORT_DEFAULT_MAX_STREAM_DATA,
+                                      .max_streams_uni = H2O_WEBTRANSPORT_DEFAULT_MAX_STREAMS,
+                                      .max_streams_bidi = H2O_WEBTRANSPORT_DEFAULT_MAX_STREAMS};
     config->http3.idle_timeout = quicly_spec_context.transport_params.max_idle_timeout;
     config->http3.active_stream_window_size = H2O_DEFAULT_HTTP3_ACTIVE_STREAM_WINDOW_SIZE;
     config->http3.allow_delayed_ack = 1;

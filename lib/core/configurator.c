@@ -600,6 +600,16 @@ static int on_config_http2_dos_delay(h2o_configurator_command_t *cmd, h2o_config
     return config_timeout(cmd, node, &ctx->globalconf->http2.dos_delay);
 }
 
+static int on_config_webtransport(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    ssize_t on;
+
+    if ((on = h2o_configurator_get_one_of(cmd, node, "OFF,ON")) == -1)
+        return -1;
+    ctx->globalconf->webtransport.enabled = (int)on;
+    return 0;
+}
+
 static int on_config_http3_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     return config_timeout(cmd, node, &ctx->globalconf->http3.idle_timeout);
@@ -1116,6 +1126,8 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http2-dos-delay",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http2_dos_delay);
+        h2o_configurator_define_command(&c->super, "webtransport",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_webtransport);
         h2o_configurator_define_command(&c->super, "http3-idle-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_idle_timeout);
