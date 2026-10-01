@@ -414,6 +414,7 @@ SET(LIB_SOURCE_FILES
     lib/common/timerwheel.c
     lib/common/token.c
     lib/common/url.c
+    lib/common/webtransport_codec.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
     lib/common/absprio.c
@@ -534,6 +535,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
     t/00unit/lib/common/absprio.c
+    t/00unit/lib/common/webtransport_codec.c
     t/00unit/lib/core/config.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
@@ -572,6 +574,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/timerwheel.c
     lib/common/url.c
     lib/common/absprio.c
+    lib/common/webtransport_codec.c
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
