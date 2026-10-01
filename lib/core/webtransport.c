@@ -650,7 +650,7 @@ static quicly_error_t begin_stream_capsule(struct st_capsule_session_t *sess, ui
         sess->ingress.state = INGRESS_STATE_STREAM_DATA;
         return 0;
     }
-    return is_fin ? deliver_stream_data(sess, NULL, 0, 1) : 0;
+    return is_fin ? deliver_stream_data(sess, (const uint8_t *)"", 0, 1) : 0;
 }
 
 static int is_valid_error_code(uint64_t code)
