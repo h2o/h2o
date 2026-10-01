@@ -134,6 +134,7 @@ static void on_stop_sending(quicly_stream_t *stream, quicly_error_t err);
 static void on_receive_reset(quicly_stream_t *stream, quicly_error_t err);
 static void server_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
 static void client_on_receive(quicly_stream_t *stream, size_t off, const void *src, size_t len);
+static void client_on_receive_reset(quicly_stream_t *stream, quicly_error_t err);
 
 static const quicly_stream_callbacks_t server_stream_callbacks = {quicly_streambuf_destroy,
                                                                   quicly_streambuf_egress_shift,
@@ -146,7 +147,7 @@ static const quicly_stream_callbacks_t server_stream_callbacks = {quicly_streamb
                                                                   quicly_streambuf_egress_emit,
                                                                   on_stop_sending,
                                                                   client_on_receive,
-                                                                  on_receive_reset};
+                                                                  client_on_receive_reset};
 
 static void dump_stats(FILE *fp, quicly_conn_t *conn)
 {
@@ -370,8 +371,28 @@ static void server_on_receive(quicly_stream_t *stream, size_t off, const void *s
     send_header(stream, is_http1, 404, "text/plain; charset=utf-8");
     send_str(stream, "not found\n");
 Sent:
-    quicly_streambuf_egress_shutdown(stream);
+    if (ctx.transport_params.reset_stream_at && quicly_get_remote_transport_parameters(stream->conn)->reset_stream_at) {
+        quicly_streambuf_t *sbuf = stream->data;
+        quicly_streambuf_egress_reset(stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(123), sbuf->egress.bytes_written);
+    } else {
+        quicly_streambuf_egress_shutdown(stream);
+    }
     quicly_streambuf_ingress_shift(stream, len);
+}
+
+static void client_on_receive_complete(quicly_stream_t *stream)
+{
+    struct st_stream_data_t *stream_data = stream->data;
+
+    if (stream_data->outfp != NULL)
+        fclose(stream_data->outfp);
+}
+
+static void client_on_receive_reset(quicly_stream_t *stream, quicly_error_t err)
+{
+    on_receive_reset(stream, err);
+    if (quicly_recvstate_transfer_complete(&stream->recvstate))
+        client_on_receive_complete(stream);
 }
 
 static uint64_t delivery_now(void)
@@ -420,10 +441,8 @@ static void client_on_receive(quicly_stream_t *stream, size_t off, const void *s
         quicly_streambuf_ingress_shift(stream, input.len);
     }
 
-    if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
-        if (stream_data->outfp != NULL)
-            fclose(stream_data->outfp);
-    }
+    if (quicly_recvstate_transfer_complete(&stream->recvstate))
+        client_on_receive_complete(stream);
 }
 
 static quicly_error_t on_stream_open(quicly_stream_open_t *self, quicly_stream_t *stream)
@@ -1332,6 +1351,9 @@ static void usage(const char *cmd)
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
            "  --abba                    enables ABBA bandwidth adaptation\n"
            "  --rapid-start             turns on rapid start\n"
+           "  --reliable-reset          advertise the reset_stream_at transport parameter;\n"
+           "                            when acting as a server, responses are then ended\n"
+           "                            by a reliable reset covering the whole body, not FIN\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
            "  --sockfd fd               specifies the UDP socket to be used\n"
@@ -1614,6 +1636,7 @@ int main(int argc, char **argv)
                                              {"disregard-app-limited", no_argument, NULL, 0},
                                              {"jumpstart-default", required_argument, NULL, 0},
                                              {"jumpstart-max", required_argument, NULL, 0},
+                                             {"reliable-reset", no_argument, NULL, 0},
                                              {"max-crypto-bytes", required_argument, NULL, 0},
                                              {"no-normalize-cc-mtu", no_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
@@ -1648,6 +1671,8 @@ int main(int argc, char **argv)
                     fprintf(stderr, "failed to parse max jumpstart size: %s\n", optarg);
                     exit(1);
                 }
+            } else if (strcmp(longopts[opt_index].name, "reliable-reset") == 0) {
+                ctx.transport_params.reset_stream_at = 1;
             } else if (strcmp(longopts[opt_index].name, "max-crypto-bytes") == 0) {
                 if (sscanf(optarg, "%" SCNu32, &ctx.max_crypto_bytes) != 1) {
                     fprintf(stderr, "failed to parse max-crypto-bytes: %s\n", optarg);
