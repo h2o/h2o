@@ -431,9 +431,6 @@
 		E9708B8A1E52C8560029E0A5 /* http2_debug_state.c in Sources */ = {isa = PBXBuildFile; fileRef = 080D35EA1D5E060D0029B7E5 /* http2_debug_state.c */; };
 		E9757709221BB7DC00D1EF74 /* http3_internal.h in Headers */ = {isa = PBXBuildFile; fileRef = E9757708221BB78C00D1EF74 /* http3_internal.h */; };
 		E97EC88D213CE3130086AD64 /* hpack.h in Headers */ = {isa = PBXBuildFile; fileRef = E97EC88C213CE3130086AD64 /* hpack.h */; };
-		E98042162238D35B008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
-		E98042172238D362008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
-		E98042182238D363008B9745 /* cc-reno.c in Sources */ = {isa = PBXBuildFile; fileRef = E98042152238D35B008B9745 /* cc-reno.c */; };
 		E980423A22463044008B9745 /* defaults.h in Headers */ = {isa = PBXBuildFile; fileRef = E980423822463044008B9745 /* defaults.h */; };
 		E980423B22463044008B9745 /* cc.h in Headers */ = {isa = PBXBuildFile; fileRef = E980423922463044008B9745 /* cc.h */; };
 		E980423D2246304F008B9745 /* defaults.c in Sources */ = {isa = PBXBuildFile; fileRef = E980423C2246304F008B9745 /* defaults.c */; };
@@ -1179,7 +1176,6 @@
 		E9757708221BB78C00D1EF74 /* http3_internal.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = http3_internal.h; sourceTree = "<group>"; };
 		E97EC88C213CE3130086AD64 /* hpack.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = hpack.h; sourceTree = "<group>"; };
 		E98041C22230C45E008B9745 /* 40http3.t */ = {isa = PBXFileReference; lastKnownFileType = text; path = 40http3.t; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.perl; };
-		E98042152238D35B008B9745 /* cc-reno.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = "cc-reno.c"; sourceTree = "<group>"; };
 		E980423822463044008B9745 /* defaults.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = defaults.h; sourceTree = "<group>"; };
 		E980423922463044008B9745 /* cc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cc.h; sourceTree = "<group>"; };
 		E980423C2246304F008B9745 /* defaults.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = defaults.c; sourceTree = "<group>"; };
@@ -2448,7 +2444,6 @@
 			children = (
 				E9DF012724E4CDEE0002EEC7 /* cc-cubic.c */,
 				0821950F2685262B00E3EFCF /* cc-pico.c */,
-				E98042152238D35B008B9745 /* cc-reno.c */,
 				E980423C2246304F008B9745 /* defaults.c */,
 				E901C3F0213E1C4000D17C93 /* frame.c */,
 				E98403C62485172E00E3A6B1 /* local_cid.c */,
@@ -3148,7 +3143,6 @@
 				10AA2EAC1A8DE0AE004322AC /* multithread.c in Sources */,
 				08790DDA1D80153600A04BC1 /* net.c in Sources */,
 				10F4180519CA75C500B6E31A /* configurator.c in Sources */,
-				E98042162238D35B008B9745 /* cc-reno.c in Sources */,
 				10FEF24E1D6FC8E200E11B1D /* gkc.c in Sources */,
 				E95E954022914F0600215ACD /* picotls-probes.d in Sources */,
 				E901C3FB213E1C4000D17C93 /* ranges.c in Sources */,
@@ -3248,7 +3242,6 @@
 				107D4D481B5880BC004A9B21 /* loader.c in Sources */,
 				E901C406213E1C5400D17C93 /* quicly.c in Sources */,
 				105534C11A3B911300627ECB /* hpack.c in Sources */,
-				E98042172238D362008B9745 /* cc-reno.c in Sources */,
 				107E34221C7FEE2200AEF5F8 /* brotli.c in Sources */,
 				E901C403213E1C5400D17C93 /* frame.c in Sources */,
 				105534C31A3B917000627ECB /* mimemap.c in Sources */,
@@ -3395,7 +3388,6 @@
 				08F320DF1E7A9CBB0038FA5A /* hiredis.c in Sources */,
 				E9708B5C1E52C80F0029E0A5 /* access_log.c in Sources */,
 				E919227925C9447D00C2D79B /* connect.c in Sources */,
-				E98042182238D363008B9745 /* cc-reno.c in Sources */,
 				100A55101C2BB15600C4E3E0 /* http_request.c in Sources */,
 				E9708B1E1E49BAC10029E0A5 /* blockwise.c in Sources */,
 				E9581B9E22F0022D00299E8A /* random.c in Sources */,

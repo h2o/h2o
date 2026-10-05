@@ -69,6 +69,7 @@ provider quicly {
     probe packet_acked(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, int is_late_ack);
     probe packet_lost(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, uint8_t packet_type);
     probe packet_decryption_failed(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
+    probe packet_received_duplicate(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, uint8_t packet_type);
 
     probe pto(struct st_quicly_conn_t *conn, int64_t at, size_t inflight, uint32_t cwnd, int8_t pto_count);
     probe cc_ack_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, size_t bytes_acked, uint32_t cwnd,

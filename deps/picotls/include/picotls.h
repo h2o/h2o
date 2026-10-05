@@ -779,7 +779,7 @@ typedef struct st_ptls_async_job_t {
     /**
      * optional callback returning a file descriptor that becomes readable when the job is complete
      */
-    int (*get_fd)(struct st_ptls_async_job_t *self);
+    intptr_t (*get_fd)(struct st_ptls_async_job_t *self);
     /**
      * optional callback for setting a completion callback
      */
@@ -817,9 +817,26 @@ typedef struct st_ptls_verify_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, encrypt_ticket, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src);
 /**
+ * properties of a session ticket being saved
+ */
+typedef struct st_ptls_save_ticket_properties_t {
+    /**
+     * lifetime of the ticket in seconds
+     */
+    uint32_t lifetime;
+    /**
+     * if set, the ticket contains an early_data extension
+     */
+    unsigned early_data : 1;
+    /**
+     * maximum amount of early data indicated by the server; valid only when `early_data` is set
+     */
+    uint32_t max_early_data_size;
+} ptls_save_ticket_properties_t;
+/**
  * saves a ticket (client-only)
  */
-PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input);
+PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input, const ptls_save_ticket_properties_t *properties);
 /**
  * event logging (incl. secret logging)
  */
@@ -1111,7 +1128,7 @@ typedef struct st_ptls_handshake_properties_t {
             size_t *max_early_data_size;
             /**
              * If early-data has been accepted by peer, or if the state is still unknown. The state changes anytime after handshake
-             * keys become available. Applications can peek the tri-state variable every time it calls `ptls_hanshake` or
+             * keys become available. Applications can peek the tri-state variable every time it calls `ptls_handshake` or
              * `ptls_handle_message` to determine the result at the earliest moment. This is an output parameter.
              */
             ptls_early_data_acceptance_t early_data_acceptance;
@@ -1755,7 +1772,9 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
  */
 int ptls_receive(ptls_t *tls, ptls_buffer_t *plaintextbuf, const void *input, size_t *len);
 /**
- * encrypts given buffer into multiple TLS records
+ * encrypts given buffer into multiple TLS records. During a TLS 1.3 handshake, this function can be used to send early data until
+ * the client starts processing the server's handshake messages; after that, it returns PTLS_ERROR_IN_PROGRESS until application
+ * traffic keys are available.
  */
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen);
 /**
