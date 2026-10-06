@@ -520,6 +520,10 @@ static void encoder_evict_one(h2o_qpack_encoder_t *qpack)
 {
     struct st_h2o_qpack_header_t *entry = *qpack->table.first;
 
+    /* evict only acknowledged entries not referenced by other unacknowledged sections (RFC 9204 Section 2.1.1); references from
+     * the section being built are not visible here */
+    assert(entry->abs_index <= qpack->largest_known_received && entry->abs_index < qpack->inflight_smallest_ref);
+
     qpack->table.num_bytes -= header_entry_size(entry);
     h2o_mem_release_shared(entry);
     *qpack->table.first++ = NULL;
