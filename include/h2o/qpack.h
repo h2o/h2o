@@ -110,11 +110,11 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 /**
  * Creates a QPACK encoder. When `refine_after_full` is false, the dynamic table is filled until full and then left unchanged;
  * when true, the encoder can refine the resident set after the fill phase.
- * @param encoder_buf buffer to store encoder stream data (i.e., Set Dynamic Table Capacity); can be NULL if `header_table_size` is
- *                    zero
+ * The capacity of the dynamic table is the smaller of `peer_max_table_capacity` and `local_max_table_capacity`.
+ * @param encoder_buf buffer to store encoder stream data (i.e., Set Dynamic Table Capacity); can be NULL if the capacity is zero
  */
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full,
-                                              h2o_byte_vector_t *encoder_buf);
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint64_t peer_max_table_capacity, uint32_t local_max_table_capacity,
+                                              uint64_t max_blocked, int refine_after_full, h2o_byte_vector_t *encoder_buf);
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 const h2o_qpack_stats_t *h2o_qpack_get_encoder_stats(h2o_qpack_encoder_t *qpack);
 /**

@@ -146,6 +146,10 @@ struct st_h2o_qpack_encoder_t {
      */
     int64_t largest_known_received;
     /**
+     * MaxEntries of the peer, used for encoding Required Insert Count (RFC 9204 Section 4.5.1.1)
+     */
+    uint64_t max_entries;
+    /**
      * SETTINGS_QPACK_BLOCKED_STREAMS
      */
     uint64_t max_blocked;
@@ -1006,6 +1010,8 @@ static int parse_decode_context(h2o_qpack_decoder_t *qpack, struct st_h2o_qpack_
         if (qpack->max_entries == 0)
             return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         const uint32_t full_range = 2 * qpack->max_entries;
+        if (ctx->req_insert_count > full_range)
+            return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
         uint64_t max_value = qpack->total_inserts + qpack->max_entries;
         uint64_t rounded = max_value / full_range * full_range;
         ctx->req_insert_count += rounded - 1;
@@ -1124,12 +1130,15 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full,
-                                              h2o_byte_vector_t *encoder_buf)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint64_t peer_max_table_capacity, uint32_t local_max_table_capacity,
+                                              uint64_t max_blocked, int refine_after_full, h2o_byte_vector_t *encoder_buf)
 {
+    uint32_t header_table_size =
+        peer_max_table_capacity < local_max_table_capacity ? (uint32_t)peer_max_table_capacity : local_max_table_capacity;
     h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
     header_table_init(&qpack->table, header_table_size);
     qpack->largest_known_received = 0;
+    qpack->max_entries = peer_max_table_capacity / 32;
     qpack->max_blocked = max_blocked;
     qpack->num_blocked = 0;
     memset(&qpack->inflight, 0, sizeof(qpack->inflight));
@@ -1817,7 +1826,7 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH * 2], *p = buf;
         /* largest_ref */
         *p = 0;
-        p = h2o_hpack_encode_int(p, ctx->largest_ref != 0 ? ctx->largest_ref + 1 : 0, 8);
+        p = h2o_hpack_encode_int(p, ctx->largest_ref != 0 ? ctx->largest_ref % (2 * ctx->qpack->max_entries) + 1 : 0, 8);
         /* delta base index */
         if (ctx->largest_ref <= ctx->base_index) {
             *p = 0;

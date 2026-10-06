@@ -54,7 +54,8 @@ static void do_test_simple(int use_enc_stream)
         enc_stream = alloca(sizeof(*enc_stream));
         memset(enc_stream, 0, sizeof(*enc_stream));
     }
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, enc_stream != NULL ? enc_stream : &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc =
+        h2o_qpack_create_encoder(4096, 4096, 10, 1, enc_stream != NULL ? enc_stream : &(h2o_byte_vector_t){NULL});
 
     {
         h2o_headers_t headers = {NULL};
@@ -128,7 +129,7 @@ static void test_response_fill_until_full(void)
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &enc_stream);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &enc_stream);
     h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
 
@@ -184,6 +185,84 @@ static void test_response_fill_until_full(void)
     h2o_qpack_destroy_encoder(enc);
 }
 
+static void test_required_insert_count_wraps(void)
+{
+    static const char *names[] = {"x-a", "x-b", "x-c", "x-d", "x-e"};
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(128, 10);
+    h2o_byte_vector_t enc_stream = {NULL};
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &enc_stream);
+    h2o_mem_pool_t pool;
+    uint64_t insert_count;
+    const uint8_t *p;
+    const char *err_desc = NULL;
+
+    h2o_mem_init_pool(&pool);
+
+    p = enc_stream.entries;
+    if (h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc) != 0)
+        goto Fail;
+    free(enc_stream.entries);
+
+    /* MaxEntries=4, so the Required Insert Count wraps every 8 inserts (RFC 9204 Section 4.5.1.1). Inserts beyond what the table
+     * holds are driven by refinement, repeating the pattern of test_response_swap with rotating roles: the first response of each
+     * 40-response cycle carries three headers, then the keeper repeats, then the newcomer replaces the victim, which costs an
+     * insert and a Duplicate. */
+    for (int n = 0; n != 200; ++n) {
+        int c = n / 40, i = n % 40;
+        const char *sent[3];
+        size_t num_sent = 0;
+        if (i == 0) {
+            sent[num_sent++] = names[c % 5];
+            sent[num_sent++] = names[(c + 1) % 5];
+            sent[num_sent++] = names[(c + 2) % 5];
+        } else {
+            sent[num_sent++] = names[(c + (i <= 30 ? 0 : 2)) % 5];
+        }
+        h2o_headers_t headers = {NULL};
+        for (size_t j = 0; j != num_sent; ++j) {
+            char *value = h2o_mem_alloc_pool(&pool, char, 20);
+            memset(value, sent[j][2], 20);
+            h2o_add_header_by_str(&pool, &headers, sent[j], strlen(sent[j]), 0, NULL, value, 20);
+        }
+
+        /* encode, then decode and acknowledge */
+        int64_t stream_id = n * 4;
+        enc_stream = (h2o_byte_vector_t){NULL};
+        h2o_iovec_t frame = h2o_qpack_flatten_response(enc, &pool, stream_id, &enc_stream, 200, headers.entries, headers.size, NULL,
+                                                       SIZE_MAX, h2o_iovec_init(NULL, 0), &(h2o_qpack_section_stats_t){0}, NULL);
+        h2o_iovec_t payload = get_payload(frame.base, frame.len);
+        p = enc_stream.entries;
+        if (h2o_qpack_decoder_handle_input(dec, &insert_count, &p, p + enc_stream.size, &err_desc) != 0)
+            goto Fail;
+        int status;
+        h2o_headers_t decoded = {NULL};
+        uint64_t blocked_ref;
+        uint8_t ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+        size_t ack_len = 0;
+        if (h2o_qpack_parse_response(&pool, dec, stream_id, &status, &decoded, &(h2o_iovec_t){NULL}, 0, &blocked_ref,
+                                     &(h2o_qpack_section_stats_t){0}, ack, &ack_len, (const uint8_t *)payload.base, payload.len,
+                                     &err_desc) != 0 ||
+            decoded.size != num_sent)
+            goto Fail;
+        p = ack;
+        if (h2o_qpack_encoder_handle_input(enc, &p, ack + ack_len, &err_desc) != 0)
+            goto Fail;
+
+        h2o_mem_clear_pool(&pool);
+    }
+
+    /* each insert is referenced by the section carrying it, so FullRange inserts mean that the Required Insert Count went round */
+    ok(dec->total_inserts >= 2 * dec->max_entries);
+    goto Exit;
+
+Fail:
+    ok(!"failed to round-trip");
+Exit:
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+    h2o_qpack_destroy_decoder(dec);
+}
+
 static void test_response_dont_compress(void)
 {
     h2o_mem_pool_t pool;
@@ -192,7 +271,7 @@ static void test_response_dont_compress(void)
     h2o_mem_init_pool(&pool);
 
     { /* short cookie / set-cookie use never-indexed, non-Huffman literals and are not inserted */
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         h2o_headers_t headers = {NULL};
         h2o_byte_vector_t enc_stream = {NULL};
         h2o_qpack_section_stats_t stats = {0};
@@ -231,7 +310,7 @@ static void test_response_dont_compress(void)
 
     { /* long set-cookie follows the normal fill-till-full path */
         h2o_byte_vector_t enc_stream = {NULL};
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &enc_stream);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &enc_stream);
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
         h2o_headers_t headers = {NULL};
         h2o_qpack_section_stats_t stats = {0};
@@ -1077,7 +1156,7 @@ static int shadow_cache_is_missing(struct st_h2o_qpack_shadow_cache_t *cache, ui
 
 static void test_shadow_cache(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 64, 10, 1, &(h2o_byte_vector_t){NULL});
 
     ok(enc->shadow_cache.sets != NULL);
     ok(shadow_cache_num_sets(&enc->shadow_cache) == 1);
@@ -1101,7 +1180,7 @@ static void test_shadow_cache(void)
 
 static void test_response_swap(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1158,7 +1237,7 @@ static void test_response_swap(void)
 
 static void test_request_shadow_evidence_ages(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1205,7 +1284,7 @@ static void test_request_shadow_evidence_ages(void)
 
 static void test_response_swap_respects_inflight(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1251,7 +1330,7 @@ static void test_encoder_stream_input(void)
 {
     note("section acknowledgement evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1269,7 +1348,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1295,7 +1374,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts non-last inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1317,7 +1396,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1335,7 +1414,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1361,7 +1440,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts multiple non-last inflight entries");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1387,6 +1466,7 @@ void test_lib__http3_qpack(void)
 {
     subtest("simple", test_simple);
     subtest("response-fill-until-full", test_response_fill_until_full);
+    subtest("required-insert-count-wraps", test_required_insert_count_wraps);
     subtest("response-dont-compress", test_response_dont_compress);
     subtest("shadow-cache", test_shadow_cache);
     subtest("response-swap", test_response_swap);

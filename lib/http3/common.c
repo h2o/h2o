@@ -1422,8 +1422,7 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
 {
     const uint8_t *src = payload, *src_end = src + length;
-    uint32_t header_table_size = 0;
-    uint64_t blocked_streams = 0;
+    uint64_t max_table_capacity = 0, blocked_streams = 0;
 
     assert(!h2o_http3_has_received_settings(conn));
 
@@ -1439,8 +1438,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             conn->peer_settings.max_field_section_size = value;
             break;
         case H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY:
-            header_table_size =
-                value < conn->qpack.ctx->encoder.table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder.table_capacity;
+            max_table_capacity = value;
             break;
         case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
             blocked_streams = value;
@@ -1466,8 +1464,8 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
     }
 
     h2o_byte_vector_t encoder_buf = {NULL};
-    conn->qpack.enc =
-        h2o_qpack_create_encoder(header_table_size, blocked_streams, conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
+    conn->qpack.enc = h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
+                                               conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
     if (encoder_buf.size != 0)
         h2o_http3_write_unistream(conn->_control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
     free(encoder_buf.entries);

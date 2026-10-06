@@ -71,7 +71,7 @@ static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
                       int refine_after_full, int use_hpack)
 {
     h2o_qpack_encoder_t *enc =
-        h2o_qpack_create_encoder(header_table_size, max_blocked, refine_after_full, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_create_encoder(header_table_size, header_table_size, max_blocked, refine_after_full, &(h2o_byte_vector_t){NULL});
     h2o_hpack_header_table_t hpack_table = {0};
     h2o_buffer_t *hpack_buf = NULL;
     hpack_table.hpack_capacity = header_table_size; /* never grown by flatten (it only shrinks), so set it up front */
