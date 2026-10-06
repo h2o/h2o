@@ -40,7 +40,6 @@ static h2o_iovec_t get_payload(const char *_src, size_t len)
 static void do_test_simple(int use_enc_stream)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
     h2o_mem_pool_t pool;
     h2o_byte_vector_t *enc_stream = NULL;
     h2o_iovec_t flattened;
@@ -55,6 +54,7 @@ static void do_test_simple(int use_enc_stream)
         enc_stream = alloca(sizeof(*enc_stream));
         memset(enc_stream, 0, sizeof(*enc_stream));
     }
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, enc_stream != NULL ? enc_stream : &(h2o_byte_vector_t){NULL});
 
     {
         h2o_headers_t headers = {NULL};
@@ -125,10 +125,10 @@ static void test_simple(void)
 static void test_response_fill_until_full(void)
 {
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &enc_stream);
     h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
 
@@ -192,7 +192,7 @@ static void test_response_dont_compress(void)
     h2o_mem_init_pool(&pool);
 
     { /* short cookie / set-cookie use never-indexed, non-Huffman literals and are not inserted */
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         h2o_headers_t headers = {NULL};
         h2o_byte_vector_t enc_stream = {NULL};
         h2o_qpack_section_stats_t stats = {0};
@@ -230,10 +230,10 @@ static void test_response_dont_compress(void)
     h2o_mem_init_pool(&pool);
 
     { /* long set-cookie follows the normal fill-till-full path */
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_byte_vector_t enc_stream = {NULL};
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &enc_stream);
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
         h2o_headers_t headers = {NULL};
-        h2o_byte_vector_t enc_stream = {NULL};
         h2o_qpack_section_stats_t stats = {0};
         h2o_add_header(&pool, &headers, H2O_TOKEN_SET_COOKIE, NULL, H2O_STRLIT("sid=0123456789abcdef0123456789"));
 
@@ -387,10 +387,11 @@ static void test_decode_referred(void)
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
 
     static const uint8_t instructions[] = {
-        0xc8, 3,   'a',  '\n', 'b',                 /* if-modified-since: a\nb (insert-with-static-nameref) */
-        0x43, 'c', '\n', 'd',  3,   'e', '\n', 'f', /* c\nd: e\nf              (insert-with-literal-name) */
-        0x81, 1,   '0',                             /* if-modified-since: 0    (insert-with-dynamic-nameref) */
-        0x81, 1,   '1',                             /* c\nd: 1                 (insert-with-dynamic-nameref) */
+        0x3f, 0xe1, 0x1f,                            /* Set Dynamic Table Capacity=4096 */
+        0xc8, 3,    'a',  '\n', 'b',                 /* if-modified-since: a\nb (insert-with-static-nameref) */
+        0x43, 'c',  '\n', 'd',  3,   'e', '\n', 'f', /* c\nd: e\nf              (insert-with-literal-name) */
+        0x81, 1,    '0',                             /* if-modified-since: 0    (insert-with-dynamic-nameref) */
+        0x81, 1,    '1',                             /* c\nd: 1                 (insert-with-dynamic-nameref) */
     };
 
     { /* feed the instructions */
@@ -796,6 +797,14 @@ static void test_decode_errors(void)
         h2o_qpack_destroy_decoder(dec);
     }
 
+    {
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+        /* RFC 9204 Section 3.2.3: the capacity is zero until Set Dynamic Table Capacity is received, regardless of SETTINGS. */
+        static const uint8_t input[] = {0xc0, 0}; /* Insert With Name Reference, Static Table, Index=0, empty value */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(input, sizeof(input)), h2o_qpack_err_header_exceeds_table_size);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
     note("field section prefix errors");
     {
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(32, 10);
@@ -949,10 +958,9 @@ static void test_decode_edge_cases(void)
         static const uint8_t input1[] = {2, 0}; /* RIC=1, Base=1 */
         static const uint8_t input2[] = {3, 0}; /* RIC=2, Base=2 */
         static const uint8_t inserts[] = {
-            0xc0,
-            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
-            0xc0,
-            0, /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0x3f, 0xe1, 0x1f, /* Set Dynamic Table Capacity=4096 */
+            0xc0, 0,          /* Insert With Name Reference, Static Table, Index=0, empty value */
+            0xc0, 0,          /* Insert With Name Reference, Static Table, Index=0, empty value */
         };
         const uint8_t *src = input1;
         uint64_t blocked_ref;
@@ -1069,7 +1077,7 @@ static int shadow_cache_is_missing(struct st_h2o_qpack_shadow_cache_t *cache, ui
 
 static void test_shadow_cache(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 10, 1);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 10, 1, &(h2o_byte_vector_t){NULL});
 
     ok(enc->shadow_cache.sets != NULL);
     ok(shadow_cache_num_sets(&enc->shadow_cache) == 1);
@@ -1093,7 +1101,7 @@ static void test_shadow_cache(void)
 
 static void test_response_swap(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1150,7 +1158,7 @@ static void test_response_swap(void)
 
 static void test_request_shadow_evidence_ages(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1197,7 +1205,7 @@ static void test_request_shadow_evidence_ages(void)
 
 static void test_response_swap_respects_inflight(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1243,7 +1251,7 @@ static void test_encoder_stream_input(void)
 {
     note("section acknowledgement evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1261,7 +1269,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1287,7 +1295,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts non-last inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1309,7 +1317,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1327,7 +1335,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1353,7 +1361,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts multiple non-last inflight entries");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 10, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 

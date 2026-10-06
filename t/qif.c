@@ -70,7 +70,8 @@ static h2o_iovec_t get_headers_payload(h2o_iovec_t frame)
 static int encode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_t max_blocked, int simulate_ack, int is_resp,
                       int refine_after_full, int use_hpack)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(header_table_size, max_blocked, refine_after_full);
+    h2o_qpack_encoder_t *enc =
+        h2o_qpack_create_encoder(header_table_size, max_blocked, refine_after_full, &(h2o_byte_vector_t){NULL});
     h2o_hpack_header_table_t hpack_table = {0};
     h2o_buffer_t *hpack_buf = NULL;
     hpack_table.hpack_capacity = header_table_size; /* never grown by flatten (it only shrinks), so set it up front */
@@ -384,6 +385,17 @@ static int decode_qif(FILE *inp, FILE *outp, uint32_t header_table_size, uint16_
     int ret;
 
     h2o_mem_init_pool(&pool);
+
+    /* QIF encoded files start with the dynamic table capacity set to the table size given on the command line; set it, as the
+     * decoder otherwise starts at zero (RFC 9204 Section 3.2.3) */
+    if (header_table_size != 0) {
+        uint8_t set_capacity[H2O_HPACK_ENCODE_INT_MAX_LENGTH] = {0x20};
+        const uint8_t *p = set_capacity, *end = h2o_hpack_encode_int(set_capacity, header_table_size, 5);
+        uint64_t insert_count;
+        const char *err_desc = NULL;
+        ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &p, end, &err_desc);
+        assert(ret == 0);
+    }
 
     while ((stream_id = read_int(inp, 8)) != UINT64_MAX) {
         uint64_t chunk_size = read_int(inp, 4);

@@ -323,7 +323,8 @@ h2o_qpack_decoder_t *h2o_qpack_create_decoder(uint32_t header_table_size, uint64
     qpack->total_inserts = 0;
     qpack->max_blocked = max_blocked;
     qpack->stats = (h2o_qpack_stats_t){0};
-    header_table_init(&qpack->table, qpack->header_table_size);
+    /* capacity starts at zero until the encoder sends Set Dynamic Table Capacity (RFC 9204 Section 3.2.3) */
+    header_table_init(&qpack->table, 0);
 
     return qpack;
 }
@@ -1123,7 +1124,8 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
     return 0;
 }
 
-h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full)
+h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64_t max_blocked, int refine_after_full,
+                                              h2o_byte_vector_t *encoder_buf)
 {
     h2o_qpack_encoder_t *qpack = h2o_mem_alloc(sizeof(*qpack));
     header_table_init(&qpack->table, header_table_size);
@@ -1140,6 +1142,17 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint32_t header_table_size, uint64
     qpack->table_min_score = -1; /* invalid; recomputed lazily by lookup_dynamic */
     qpack->inflight_smallest_ref = INT64_MAX;
     qpack->stats = (h2o_qpack_stats_t){0};
+
+    /* emit Set Dynamic Table Capacity, as the decoder's capacity starts at zero (RFC 9204 Section 3.2.3) */
+    if (header_table_size != 0) {
+        assert(encoder_buf != NULL);
+        h2o_vector_reserve(NULL, encoder_buf, encoder_buf->size + H2O_HPACK_ENCODE_INT_MAX_LENGTH);
+        encoder_buf->entries[encoder_buf->size] = 0x20;
+        encoder_buf->size =
+            h2o_hpack_encode_int(encoder_buf->entries + encoder_buf->size, header_table_size, 5) - encoder_buf->entries;
+        ++qpack->stats.num_instructions.dynamic_table_size_update;
+    }
+
     return qpack;
 }
 

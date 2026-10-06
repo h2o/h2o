@@ -1465,7 +1465,12 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         }
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams, conn->qpack.ctx->encoder.refine_after_full);
+    h2o_byte_vector_t encoder_buf = {NULL};
+    conn->qpack.enc =
+        h2o_qpack_create_encoder(header_table_size, blocked_streams, conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
+    if (encoder_buf.size != 0)
+        h2o_http3_write_unistream(conn->_control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
+    free(encoder_buf.entries);
     return 0;
 Malformed:
     *err_desc = "malformed SETTINGS frame";
