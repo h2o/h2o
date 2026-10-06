@@ -1688,6 +1688,20 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             hashcode = hash_field(name, value);
         /* try dynamic indexed */
         if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
+            /* Referencing an entry close to eviction would prevent it, and everything inserted after it, from being evicted until
+             * this section is acknowledged. When the table is full, duplicate such an entry and reference the duplicate instead
+             * (RFC 9204 Section 2.1.1.1); entries in the oldest quarter of the table are considered close to eviction. The entries
+             * evicted to make room for the duplicate (at most up to the entry itself) must not be referenced. */
+            struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[dynamic_index - ctx->qpack->table.base_offset];
+            size_t num_entries = ctx->qpack->table.last - ctx->qpack->table.first;
+            if (ctx->encoder_buf != NULL && !no_refine(ctx->qpack) &&
+                (ctx->qpack->table.num_bytes + header_entry_size(entry) > ctx->qpack->table.max_size ||
+                 num_entries >= encoder_max_entries(ctx->qpack)) &&
+                (size_t)(dynamic_index - ctx->qpack->table.base_offset) * 4 < num_entries &&
+                plan_room_for_swap(ctx, header_entry_size(entry), DBL_MAX, calc_smallest_blocking_ref(ctx)) != 0) {
+                duplicate_resident(ctx, entry);
+                dynamic_index = qpack_table_total_inserts(&ctx->qpack->table) - 1;
+            }
             flatten_dynamic_indexed(ctx, dynamic_index);
             return;
         }

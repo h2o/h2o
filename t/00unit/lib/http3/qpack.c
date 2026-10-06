@@ -1202,16 +1202,19 @@ static void test_response_swap(void)
     ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
     ack_encoder_section(enc, 1);
 
+    /* x-a, being the oldest entry, is duplicated when referenced, rather than when x-c replaces x-b */
+    int saw_duplicate = 0;
     for (int64_t stream_id = 2; stream_id != 32; ++stream_id) {
         h2o_byte_vector_t one_enc_stream = {NULL};
         size_t inflight_size = enc->inflight.size;
 
         flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-a", a_value);
+        if (one_enc_stream.size != 0 && (one_enc_stream.entries[0] & 0xe0) == 0)
+            saw_duplicate = 1;
         ok(enc->inflight.size == inflight_size + 1);
         ack_encoder_section(enc, stream_id);
     }
 
-    int saw_duplicate = 0;
     uint64_t inserts_before_swap = h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference;
     for (int64_t stream_id = 32; stream_id != 40 && !qpack_table_contains(enc, "x-c", c_value); ++stream_id) {
         h2o_byte_vector_t one_enc_stream = {NULL};
@@ -1321,6 +1324,75 @@ static void test_response_swap_respects_inflight(void)
             ack_encoder_section(enc, stream_id);
     }
     ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_duplicate_near_eviction(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
+    static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    /* fill the table with x-a (oldest) and x-b */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, 0);
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+
+    /* Each section references x-a before x-c. Referencing the oldest entry would pin the table and prevent x-c from replacing x-b;
+     * instead, x-a is duplicated, after which x-b can be evicted. */
+    headers = (h2o_headers_t){NULL};
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    for (int64_t stream_id = 4; stream_id != 4 * 10 && !qpack_table_contains(enc, "x-c", c_value); stream_id += 4) {
+        flatten_response_headers(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+        ack_encoder_section(enc, stream_id);
+    }
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(!qpack_table_contains(enc, "x-b", b_value));
+    ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_duplicate_near_eviction_while_referenced(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+
+    h2o_mem_init_pool(&pool);
+
+    /* insert x-a .. x-d (220 bytes) */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT("cccccccccccccccccccc"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-d"), 0, NULL, H2O_STRLIT("dddddddddddddddddddd"));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, 0);
+
+    /* x-b is referenced by a section that remains unacknowledged; the table is not full yet, so x-b is not duplicated */
+    flatten_response_one(enc, &pool, 4, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+
+    /* fill the table with x-e (275 bytes) */
+    flatten_response_one(enc, &pool, 8, &(h2o_byte_vector_t){NULL}, "x-e", "eeeeeeeeeeeeeeeeeeee");
+    ack_encoder_section(enc, 8);
+
+    /* x-b, being close to eviction, is duplicated by evicting x-a, even though x-b itself is still referenced */
+    flatten_response_one(enc, &pool, 12, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
+    ok(!qpack_table_contains(enc, "x-a", "aaaaaaaaaaaaaaaaaaaa"));
 
     h2o_mem_clear_pool(&pool);
     h2o_qpack_destroy_encoder(enc);
@@ -1472,6 +1544,8 @@ void test_lib__http3_qpack(void)
     subtest("response-swap", test_response_swap);
     subtest("request-shadow-evidence-ages", test_request_shadow_evidence_ages);
     subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
+    subtest("response-duplicate-near-eviction", test_response_duplicate_near_eviction);
+    subtest("response-duplicate-near-eviction-while-referenced", test_response_duplicate_near_eviction_while_referenced);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
