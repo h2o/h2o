@@ -37,7 +37,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
     uint32_t packets_acked = 0, packets_inflight = 0;
     size_t ackcnt = 0;
 
-    init->cb(init, &cc, 10 * mtu, now);
+    init->cb(init, &cc, 10 * mtu, 0, now);
     ok(cc.cwnd == 10 * mtu);
     ok(cc.num_loss_episodes == 0);
 
@@ -111,7 +111,7 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_LOST, 1200, 3},
                 {TEST_JUMPSTART_ACTION_END},
             },
-            15 * 1200 * QUICLY_RENO_BETA);
+            15 * 1200 * QUICLY_BETA_LOSS);
 
     /* regardless of how much we lose, we never go down below 1/2 IW */
     subtest("lower bound", test_jumpstart_pattern, init,

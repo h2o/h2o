@@ -38,11 +38,29 @@ extern "C" {
 #include "quicly/loss.h"
 
 #define QUICLY_MIN_CWND 2
-#define QUICLY_RENO_BETA 0.7
+/**
+ * Reference maximum UDP payload size used for packet-size-neutral congestion control. This is the midpoint of the maximum UDP
+ * payload sizes of IPv4 and IPv6 packets carried at an IP MTU of 1500 bytes.
+ */
+#define QUICLY_CC_REFERENCE_MTU 1462
+/**
+ * Default beta used when a packet is lost; 0.7 is used to achieve fairness with Cubic.
+ */
+#define QUICLY_BETA_LOSS 0.7
+/**
+ * Beta used by Reno.
+ */
+#define QUICLY_BETA_RENO 0.5
+/**
+ * Beta used when congestion is signalled by ECN-CE alone; 0.85 is the value recommended by RFC 8511 for congestion controllers
+ * using 0.7 as the loss-based factor.
+ */
+#define QUICLY_BETA_ECN 0.85
 
-#define QUICLY_RAPID_START_K (11. / 18)
-#define QUICLY_RAPID_START_ACK_FACTOR (QUICLY_RAPID_START_K * (1 - QUICLY_RENO_BETA))
-#define QUICLY_RAPID_START_LOSS_FACTOR (QUICLY_RENO_BETA + QUICLY_RAPID_START_ACK_FACTOR)
+/* factors defined by Rapid Start (see the I-D) */
+#define QUICLY_RAPID_START_K (2. / 3)
+#define QUICLY_RAPID_START_ACK_FACTOR(beta) (QUICLY_RAPID_START_K * (1 - (beta)))
+#define QUICLY_RAPID_START_LOSS_FACTOR(beta) ((beta) + QUICLY_RAPID_START_ACK_FACTOR(beta))
 
 /**
  * Holds pointers to concrete congestion control implementation functions.
@@ -54,8 +72,8 @@ typedef const struct st_quicly_cc_type_t quicly_cc_type_t;
  */
 struct st_quicly_cc_rapid_start_t {
     /**
-     * Until when the newest sample (i.e., `rtt_samples[0]`) is to be updated. 0 if rapid start is disabled. Once loss is observed,
-     * this field is set to -1 and `cwnd_floor` is sed.
+     * Until when the newest sample (i.e., `rtt_samples[0]`) is to be updated. Once congestion is observed, this field is set to -1
+     * and `recovery` is used; upon exiting that recovery period, it is set to 0, indicating that rapid start is disabled.
      */
     int64_t newest_rtt_sample_until;
     union {
@@ -65,10 +83,83 @@ struct st_quicly_cc_rapid_start_t {
          */
         uint32_t rtt_samples[4];
         /**
-         * Retains the lower limit CWND can be reduced during the first recovery phase.
+         * Values retained for the duration of the first recovery period.
          */
-        uint32_t cwnd_floor;
+        struct {
+            /**
+             * The cause of the recovery entry. Different factors are used based on the cause.
+             */
+            unsigned by_ecn : 1;
+            /**
+             * Retains the lower limit CWND can be reduced.
+             */
+            uint32_t cwnd_floor;
+        } recovery;
     };
+};
+
+/**
+ * State used exclusively by Cuback; see `quicly_cc_type_cuback`.
+ */
+struct st_quicly_cc_cuback_t {
+    /**
+     * Delivery rate in bytes per second observed at the last congestion event. As the bottleneck remains saturated, this is what
+     * converts the bytes being acked into the passage of time, which is the ack-driven substitute for the clock that Cubic reads.
+     * Set to 0 if bandwidth is unknown due to switching from another CC.
+     */
+    double bandwidth;
+    /**
+     * Cubic's cwnd_prior, in bytes.
+     */
+    uint32_t cwnd_prior;
+    /**
+     * Whether fast convergence is applied to the current epoch. When set, W_max is the midpoint between the cwnd_prior and
+     * cwnd_epoch.
+     */
+    unsigned fast_convergence : 1;
+    /**
+     * Whether the reduction that began the current epoch used QUICLY_BETA_ECN (i.e., ABE).
+     */
+    unsigned by_ecn : 1;
+};
+
+/**
+ * State used by the Cubic policy implemented by cc-pico.c; see `quicly_cc_type_cubic`.
+ */
+struct st_quicly_cc_cubic_t {
+    /**
+     * Reno-friendly congestion window estimate. Zero indicates that congestion avoidance has not yet been initialized from the
+     * post-recovery congestion window; until then, the remaining fields do not define a usable increase function.
+     */
+    double w_est;
+    /**
+     * Timestamp at which the current epoch began. Zero while the CUBIC clock is stopped. When resuming, `epoch_start` is set to the
+     * current time and `k` is recalculated.
+     */
+    int64_t epoch_start;
+    /**
+     * Time offset from the beginning of the epoch until cwnd reaches W_max. NaN indicates that (re)calculation is needed, either
+     * because its initialization is deferred or because the clock has been stopped (see above). Once calculated, K is negative when
+     * the epoch begins above W_max.
+     */
+    double k;
+    /**
+     * Congestion window before the reduction at the latest congestion event.
+     */
+    uint32_t cwnd_prior;
+    /**
+     * Whether fast convergence applies to the current epoch. When set, W_max is the midpoint of `cwnd_prior` and the post-reduction
+     * CWND retained in `quicly_cc_t::ssthresh`; otherwise W_max equals `cwnd_prior`.
+     */
+    unsigned fast_convergence : 1;
+    /**
+     * Whether the epoch adopted QUICLY_BETA_ECN (i.e., ABE).
+     */
+    unsigned by_ecn : 1;
+    /**
+     * Whether the sender is currently CC-limited.
+     */
+    unsigned cc_limited : 1;
 };
 
 typedef struct st_quicly_cc_t {
@@ -93,30 +184,33 @@ typedef struct st_quicly_cc_t {
      */
     unsigned episode_by_ecn : 1;
     /**
+     * Whether growth is normalized to QUICLY_CC_REFERENCE_MTU.
+     */
+    unsigned normalize_mtu : 1;
+    /**
      * State information specific to the congestion controller implementation.
      */
     union {
         /**
-         * State information for Reno congestion control.
+         * State information shared by Reno, Pico, Cubic, and Cuback.
          */
         struct {
             /**
-             * Stash of acknowledged bytes, used during congestion avoidance.
+             * Number of additional bytes that need to be acknowledged before increasing CWND by one MTU; zero means that the
+             * value needs to be initialized.
              */
-            uint32_t stash;
-        } reno;
-        /**
-         * State information for Pico.
-         */
-        struct {
+            uint32_t bytes_to_mtu_increase;
             /**
-             * Stash of acknowledged bytes, used during congestion avoidance.
+             * State used exclusively by each congestion controller.
              */
-            uint32_t stash;
-            /**
-             * Number of bytes required to be acked in order to increase CWND by 1 MTU.
-             */
-            uint32_t bytes_per_mtu_increase;
+            union {
+                /**
+                 * [pico] size of the ACK interval after which CWND is increased by one MTU
+                 */
+                uint32_t bytes_per_mtu_increase;
+                struct st_quicly_cc_cuback_t cuback;
+                struct st_quicly_cc_cubic_t cubic;
+            };
             /**
              * State to undo a recovery episode when all packets deemed lost are later acknowledged. The packet number range being
              * tracked for undo is: start_pn <= pn < recovery_end. `num_packets_lost` counts packets in that range that were
@@ -128,11 +222,16 @@ typedef struct st_quicly_cc_t {
                 uint32_t num_packets_lost;
                 uint32_t cwnd;
                 uint32_t ssthresh;
-                uint32_t bytes_per_mtu_increase;
+                uint32_t bytes_to_mtu_increase;
+                union {
+                    uint32_t bytes_per_mtu_increase;
+                    struct st_quicly_cc_cuback_t cuback;
+                    struct st_quicly_cc_cubic_t cubic;
+                };
             } undo;
         } pico;
         /**
-         * State information for CUBIC congestion control.
+         * State information for the legacy CUBIC congestion controller.
          */
         struct {
             /**
@@ -140,13 +239,17 @@ typedef struct st_quicly_cc_t {
              */
             double k;
             /**
-             * Last cwnd value before the latest congestion event.
+             * Effective W_max retained from the latest congestion event.
              */
             uint32_t w_max;
             /**
-             * W_max value from the previous congestion event.
+             * Congestion window before the reduction at the latest congestion event.
              */
-            uint32_t w_last_max;
+            uint32_t cwnd_prior;
+            /**
+             * Reno-friendly congestion window estimate.
+             */
+            double w_est;
             /**
              * Timestamp of the latest congestion event.
              */
@@ -242,10 +345,6 @@ struct st_quicly_cc_type_t {
     void (*cc_on_lost)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn, int64_t now,
                        uint32_t max_udp_payload_size);
     /**
-     * Called when persistent congestion is observed.
-     */
-    void (*cc_on_persistent_congestion)(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
-    /**
      * Called after a packet is sent.
      */
     void (*cc_on_sent)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
@@ -265,16 +364,22 @@ struct st_quicly_cc_type_t {
      * [optional] turns on rapid start
      */
     void (*enable_rapid_start)(quicly_cc_t *cc, int64_t now);
+    /**
+     * [optional] updates whether the sender is CC-limited
+     */
+    void (*cc_update_cc_limited)(quicly_cc_t *cc, int cc_limited, int64_t now);
 };
 
 /**
  * The type objects for each CC. These can be used for testing the type of each `quicly_cc_t`.
  */
-extern quicly_cc_type_t quicly_cc_type_reno, quicly_cc_type_cubic, quicly_cc_type_pico;
+extern quicly_cc_type_t quicly_cc_type_reno, quicly_cc_type_cubic, quicly_cc_type_cubic_legacy, quicly_cc_type_pico,
+    quicly_cc_type_cuback;
 /**
  * The factory methods for each CC.
  */
-extern struct st_quicly_init_cc_t quicly_cc_reno_init, quicly_cc_cubic_init, quicly_cc_pico_init;
+extern struct st_quicly_init_cc_t quicly_cc_reno_init, quicly_cc_cubic_init, quicly_cc_cubic_legacy_init, quicly_cc_pico_init,
+    quicly_cc_cuback_init;
 
 /**
  * A null-terminated list of all CC types.
@@ -286,10 +391,6 @@ extern quicly_cc_type_t *quicly_cc_all_types[];
  */
 uint32_t quicly_cc_calc_initial_cwnd(uint32_t max_packets, uint16_t max_udp_payload_size);
 
-void quicly_cc_reno_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
-                            int64_t now, uint32_t max_udp_payload_size);
-void quicly_cc_reno_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now);
-void quicly_cc_reno_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now);
 /**
  * Updates ECN counter when loss is observed.
  */
@@ -312,6 +413,10 @@ static void quicly_cc_init_rapid_start(struct st_quicly_cc_rapid_start_t *rs, in
  */
 static int quicly_cc_rapid_start_is_enabled(struct st_quicly_cc_rapid_start_t *rs);
 /**
+ * If rapid start is in recovery
+ */
+static int quicly_cc_rapid_start_is_in_recovery(struct st_quicly_cc_rapid_start_t *rs);
+/**
  * Updates heuristics needed to determine if slow start needs to be acclerated (i.e., 3x). Must not be called once the connection
  * enters the recovery period.
  */
@@ -321,14 +426,19 @@ static void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *
  */
 static int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt);
 /**
- *
+ * Ends rapid start and enters the first recovery period.
  */
-static void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t cwnd_floor);
+static void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, int by_ecn,
+                                                uint32_t cwnd_floor);
 /**
  * During the first recovery period, updates CWND. Must only be called during the first recovery period.
  */
 static void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t bytes_acked,
                                               uint32_t bytes_lost);
+/**
+ * Called upon exitting recovery, to disable rapid start.
+ */
+static void quicly_cc_rapid_start_exit_recovery(struct st_quicly_cc_rapid_start_t *rs);
 
 /* inline definitions */
 
@@ -387,9 +497,9 @@ inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint3
     if (in_recovery) {
         /* Propotional Rate Reduction: if a loss is observed due to jumpstart, CWND is adjusted so that it would become bytes that
          * passed through to the client during the jumpstart phase of exactly 1 RTT, when the last ACK for the jumpstart phase is
-         * received */
-        if (is_jumpstart_ack && cc->cwnd < cc->jumpstart.bytes_acked * QUICLY_RENO_BETA)
-            cc->cwnd = cc->jumpstart.bytes_acked * QUICLY_RENO_BETA;
+         * received (TODO use QUICLY_BETA_ECN?) */
+        if (is_jumpstart_ack && cc->cwnd < cc->jumpstart.bytes_acked * QUICLY_BETA_LOSS)
+            cc->cwnd = cc->jumpstart.bytes_acked * QUICLY_BETA_LOSS;
         return;
     }
 
@@ -427,6 +537,11 @@ inline void quicly_cc_init_rapid_start(struct st_quicly_cc_rapid_start_t *rs, in
 inline int quicly_cc_rapid_start_is_enabled(struct st_quicly_cc_rapid_start_t *rs)
 {
     return rs->newest_rtt_sample_until != 0;
+}
+
+inline int quicly_cc_rapid_start_is_in_recovery(struct st_quicly_cc_rapid_start_t *rs)
+{
+    return rs->newest_rtt_sample_until == -1;
 }
 
 inline void quicly_cc_rapid_start_update_rtt(struct st_quicly_cc_rapid_start_t *rs, const quicly_rtt_t *rtt, int64_t now)
@@ -482,21 +597,26 @@ inline int quicly_cc_rapid_start_use_3x(struct st_quicly_cc_rapid_start_t *rs, c
     return floor <= threshold;
 }
 
-inline void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t cwnd_floor)
+inline void quicly_cc_rapid_start_on_first_lost(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, int by_ecn,
+                                                uint32_t cwnd_floor)
 {
     if (rs->newest_rtt_sample_until == 0)
         return;
 
     assert(rs->newest_rtt_sample_until > 0);
     rs->newest_rtt_sample_until = -1;
+    rs->recovery.by_ecn = by_ecn != 0;
 
-    rs->cwnd_floor = *cwnd * (1. / 3) * QUICLY_RENO_BETA;
-    if (rs->cwnd_floor < cwnd_floor)
-        rs->cwnd_floor = cwnd_floor;
+    double beta = rs->recovery.by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
 
-    *cwnd *= QUICLY_RAPID_START_LOSS_FACTOR;
-    if (*cwnd < rs->cwnd_floor)
-        *cwnd = rs->cwnd_floor;
+    rs->recovery.cwnd_floor = *cwnd * (1. / 3) * beta;
+    if (rs->recovery.cwnd_floor < cwnd_floor)
+        rs->recovery.cwnd_floor = cwnd_floor;
+
+    /* the silence factor is identical to the loss factor */
+    *cwnd *= QUICLY_RAPID_START_LOSS_FACTOR(beta);
+    if (*cwnd < rs->recovery.cwnd_floor)
+        *cwnd = rs->recovery.cwnd_floor;
 }
 
 inline void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t *rs, uint32_t *cwnd, uint32_t bytes_acked,
@@ -507,9 +627,26 @@ inline void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t 
 
     assert(rs->newest_rtt_sample_until == -1);
 
-    *cwnd -= QUICLY_RAPID_START_ACK_FACTOR * bytes_acked + QUICLY_RAPID_START_LOSS_FACTOR * bytes_lost;
-    if (*cwnd < rs->cwnd_floor)
-        *cwnd = rs->cwnd_floor;
+    static const struct {
+        double ack, loss;
+    } factors[] = {
+#define ENTRY(beta) {QUICLY_RAPID_START_ACK_FACTOR(beta), QUICLY_RAPID_START_LOSS_FACTOR(beta)}
+        ENTRY(QUICLY_BETA_LOSS),
+        ENTRY(QUICLY_BETA_ECN),
+#undef ENTRY
+    };
+
+    uint32_t reduction = factors[rs->recovery.by_ecn].ack * bytes_acked + factors[rs->recovery.by_ecn].loss * bytes_lost;
+    assert(reduction <= *cwnd && "CWND never underflows");
+    *cwnd -= reduction;
+    if (*cwnd < rs->recovery.cwnd_floor)
+        *cwnd = rs->recovery.cwnd_floor;
+}
+
+inline void quicly_cc_rapid_start_exit_recovery(struct st_quicly_cc_rapid_start_t *rs)
+{
+    assert(rs->newest_rtt_sample_until == -1);
+    rs->newest_rtt_sample_until = 0;
 }
 
 #ifdef __cplusplus

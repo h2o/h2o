@@ -169,7 +169,7 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
             return;
     }
 
-    h2o_send_error_404(req, "File Not Found", "not found", 0);
+    h2o_send_error_404(req, "Not Found", "not found", 0);
 }
 
 static void setup_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)

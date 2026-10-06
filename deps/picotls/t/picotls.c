@@ -1220,7 +1220,7 @@ static int async_sign_certificate(ptls_sign_certificate_t *self, ptls_t *tls, pt
             int ret = sign_certificate(self, tls, NULL, selected_algorithm, &fakebuf, input, algorithms, num_algorithms);
             assert(ret == 0);
             ptls_buffer_dispose(&fakebuf);
-            async_ctx.super.destroy_ = (void (*)(ptls_async_job_t *))0xdeadbeef;
+            async_ctx.super.destroy_ = NULL;
             async_ctx.selected_algorithm = *selected_algorithm;
             *async = &async_ctx.super;
             --server_sc_callcnt;
@@ -1273,6 +1273,47 @@ static void test_full_handshake(void)
     test_full_handshake_impl(0, 0, 0);
 }
 
+static void test_send_fails_with_handshake_traffic_key(void)
+{
+    ptls_t *client = ptls_new(ctx, 0), *server = ptls_new(ctx_peer, 1);
+    ptls_buffer_t cbuf, sbuf;
+    uint8_t cbuf_small[16384], sbuf_small[16384];
+    size_t consumed;
+    int ret;
+
+    ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
+    ptls_buffer_init(&sbuf, sbuf_small, sizeof(sbuf_small));
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off != 0);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    ok(sbuf.off > 5);
+
+    size_t server_hello_len = 5 + ntoh16(sbuf.base + 3);
+    ok(server_hello_len <= sbuf.off);
+
+    cbuf.off = 0;
+    consumed = server_hello_len;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(consumed == server_hello_len);
+    ok(cbuf.off == 0);
+
+    ret = ptls_send(client, &cbuf, "hello", 5);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off == 0);
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_free(client);
+    ptls_free(server);
+}
+
 static void test_full_handshake_with_client_authentication(void)
 {
     test_full_handshake_impl(1, 0, 0);
@@ -1290,6 +1331,143 @@ static void test_hrr_handshake(void)
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_HRR, 0, 0, 0, 0);
     ok(server_sc_callcnt == 1);
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_HRR, 0, 0, 0, 0);
+}
+
+static size_t calc_server_hello_cipher_suite_offset(ptls_buffer_t *buf)
+{
+    size_t session_id_len_off = 5 + 4 + 2 + PTLS_HELLO_RANDOM_SIZE;
+    size_t cipher_off;
+
+    assert(buf->off > session_id_len_off);
+    assert(buf->base[0] == PTLS_CONTENT_TYPE_HANDSHAKE);
+    assert(buf->base[5] == PTLS_HANDSHAKE_TYPE_SERVER_HELLO);
+    cipher_off = session_id_len_off + 1 + buf->base[session_id_len_off];
+    assert(cipher_off + 2 <= buf->off);
+    return cipher_off;
+}
+
+static void test_hrr_selected_group_matches_ch1_key_share(void)
+{
+    static const uint8_t hrr[] = {0x16, 0x03, 0x03, 0x00, 0x38, 0x02, 0x00, 0x00, 0x34, 0x03, 0x03, 0xcf, 0x21, 0xad, 0x74, 0xe5,
+                                  0x9a, 0x61, 0x11, 0xbe, 0x1d, 0x8c, 0x02, 0x1e, 0x65, 0xb8, 0x91, 0xc2, 0xa2, 0x11, 0x16, 0x7a,
+                                  0xbb, 0x8c, 0x5e, 0x07, 0x9e, 0x09, 0xe2, 0xc8, 0xa8, 0x33, 0x9c, 0x00, 0x13, 0x01, 0x00, 0x00,
+                                  0x0c, 0x00, 0x2b, 0x00, 0x02, 0x03, 0x04, 0x00, 0x33, 0x00, 0x02, 0x00, 0x17};
+
+    ok(ctx->key_exchanges[0]->id == PTLS_GROUP_SECP256R1);
+    ptls_key_exchange_algorithm_t **key_exchanges_orig = ctx->key_exchanges, *key_exchanges[] = {ctx->key_exchanges[0], NULL};
+    ctx->key_exchanges = key_exchanges;
+
+    ptls_cipher_suite_t **cipher_suites_orig = ctx->cipher_suites,
+                        *cipher_suites[] = {find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), NULL};
+    ctx->cipher_suites = cipher_suites;
+
+    unsigned send_change_cipher_spec_orig = ctx->send_change_cipher_spec;
+    ctx->send_change_cipher_spec = 0;
+
+    ptls_t *client;
+    ptls_buffer_t cbuf;
+    uint8_t cbuf_small[16384];
+    size_t consumed;
+    int ret;
+
+    client = ptls_new(ctx, 0);
+    ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(cbuf.off != 0);
+    cbuf.off = 0;
+
+    consumed = sizeof(hrr);
+    ret = ptls_handshake(client, &cbuf, hrr, &consumed, NULL);
+    ok(ret == PTLS_ALERT_ILLEGAL_PARAMETER);
+    ok(consumed == sizeof(hrr));
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_free(client);
+
+    ctx->key_exchanges = key_exchanges_orig;
+    ctx->cipher_suites = cipher_suites_orig;
+    ctx->send_change_cipher_spec = send_change_cipher_spec_orig;
+}
+
+static void test_hrr_cipher_suite_mismatch(void)
+{
+    ptls_t *client = NULL, *server = NULL;
+    ptls_handshake_properties_t client_hs_prop = {{{{NULL}}}};
+    ptls_cipher_suite_t **client_cipher_suites_orig = ctx->cipher_suites, **server_cipher_suites_orig = ctx_peer->cipher_suites;
+    ptls_cipher_suite_t *client_cipher_suites[] = {find_cipher(ctx, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384),
+                                                   find_cipher(ctx, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), NULL};
+    ptls_cipher_suite_t *server_cipher_suites[] = {find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_256_GCM_SHA384),
+                                                   find_cipher(ctx_peer, PTLS_CIPHER_SUITE_AES_128_GCM_SHA256), NULL};
+    ptls_buffer_t cbuf, sbuf;
+    uint8_t cbuf_small[16384], sbuf_small[16384];
+    size_t consumed, cipher_off;
+    int ret;
+
+    if (client_cipher_suites[0] == NULL || client_cipher_suites[1] == NULL || server_cipher_suites[0] == NULL ||
+        server_cipher_suites[1] == NULL) {
+        note("skipping test because the backend does not provide both sha384 and sha256 TLS 1.3 cipher suites");
+        return;
+    }
+
+    /* Limit the negotiation to two cipher suites that use different hash algorithms. With SHA-384 selected by HRR, rewriting the
+     * final ServerHello to SHA-256 tests that the client enforces the HRR/ServerHello cipher-suite match before switching hashes. */
+    ctx->cipher_suites = client_cipher_suites;
+    ctx_peer->cipher_suites = server_cipher_suites;
+
+    /* Force HRR while keeping the context key-exchange configuration unchanged. */
+    client_hs_prop.client.negotiate_before_key_exchange = 1;
+
+    client = ptls_new(ctx, 0);
+    server = ptls_new(ctx_peer, 1);
+    ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
+    ptls_buffer_init(&sbuf, sbuf_small, sizeof(sbuf_small));
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_hs_prop);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    cipher_off = calc_server_hello_cipher_suite_offset(&sbuf);
+    ok(sbuf.base[cipher_off] == (PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 >> 8));
+    ok(sbuf.base[cipher_off + 1] == (PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 & 0xff));
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, &client_hs_prop);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    ok(consumed == sbuf.off);
+    sbuf.off = 0;
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    cipher_off = calc_server_hello_cipher_suite_offset(&sbuf);
+    ok(sbuf.base[cipher_off] == (PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 >> 8));
+    ok(sbuf.base[cipher_off + 1] == (PTLS_CIPHER_SUITE_AES_256_GCM_SHA384 & 0xff));
+
+    /* Mutate only the final ServerHello cipher-suite field. The replacement suite is still in the client's offer, but it no longer
+     * matches the HRR cipher suite, so the client should abort with illegal_parameter. */
+    sbuf.base[cipher_off] = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 >> 8;
+    sbuf.base[cipher_off + 1] = PTLS_CIPHER_SUITE_AES_128_GCM_SHA256 & 0xff;
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == PTLS_ALERT_ILLEGAL_PARAMETER);
+
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&cbuf);
+    ptls_free(server);
+    ptls_free(client);
+    ctx->cipher_suites = client_cipher_suites_orig;
+    ctx_peer->cipher_suites = server_cipher_suites_orig;
 }
 
 static void test_hrr_stateless_handshake(void)
@@ -1311,13 +1489,25 @@ static int on_copy_ticket(ptls_encrypt_ticket_t *self, ptls_t *tls, int is_encry
 }
 
 static ptls_iovec_t saved_tickets[8] = {{NULL}};
+static ptls_save_ticket_properties_t saved_ticket_properties;
 
-static int on_save_ticket(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
+static int on_save_ticket(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src, const ptls_save_ticket_properties_t *properties)
 {
     memmove(saved_tickets + 1, saved_tickets, sizeof(saved_tickets[0]) * (PTLS_ELEMENTSOF(saved_tickets) - 1));
     saved_tickets[0].base = malloc(src.len);
     memcpy(saved_tickets[0].base, src.base, src.len);
     saved_tickets[0].len = src.len;
+    saved_ticket_properties = *properties;
+    return 0;
+}
+
+static int on_observe_ticket(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src,
+                             const ptls_save_ticket_properties_t *properties)
+{
+    (void)self;
+    (void)tls;
+    (void)src;
+    saved_ticket_properties = *properties;
     return 0;
 }
 
@@ -1744,6 +1934,53 @@ static void test_ech_null_configs_no_ech(void)
     ptls_buffer_dispose(&sbuf);
 }
 
+static void test_ech_short_payload(void)
+{
+    /* This ClientHello is tied to ECH_CONFIG_LIST and the matching ECH_PRIVATE_KEY from t/test.h. The HPKE enc value is valid for
+     * that key and config, which lets the server create the ECH AEAD context before it rejects the one-byte ECH payload. */
+    static const uint8_t ch[] = {
+        0x16, 0x03, 0x03, 0x01, 0x03, 0x01, 0x00, 0x00, 0xff, 0x03, 0x03, 0x6d, 0x64, 0xb4, 0x65, 0x77, 0xf2,
+        0xdd, 0x12, 0x97, 0xbe, 0x68, 0x53, 0x75, 0x3b, 0x27, 0x2f, 0xc9, 0xdc, 0x08, 0x3b, 0xa4, 0x7b, 0x93,
+        0x38, 0xc3, 0x9a, 0x11, 0xdb, 0xcc, 0xe1, 0xcd, 0x0d, 0x00, 0x00, 0x06, 0x13, 0x02, 0x13, 0x01, 0x13,
+        0x03, 0x01, 0x00, 0x00, 0xd0, 0xfe, 0x0d, 0x00, 0x4c, 0x00, 0x00, 0x02, 0x00, 0x02, 0x12, 0x00, 0x41,
+        0x04, 0xbf, 0x48, 0x7c, 0xf7, 0x08, 0xde, 0xe8, 0x38, 0x2e, 0xf6, 0x17, 0x75, 0x11, 0xe6, 0xc6, 0xe2,
+        0x8b, 0x62, 0xa4, 0xca, 0xe1, 0x44, 0xab, 0x8a, 0x8a, 0x9b, 0xdb, 0xa7, 0x4a, 0x7c, 0x1c, 0xa7, 0x8d,
+        0xcc, 0xce, 0x92, 0xbe, 0x68, 0xd0, 0x1c, 0x79, 0xf1, 0xe5, 0x72, 0xd5, 0x65, 0x29, 0x84, 0xde, 0xba,
+        0xc6, 0xdd, 0x41, 0x72, 0x39, 0x21, 0xb5, 0x35, 0x34, 0x5c, 0xa4, 0x46, 0x4c, 0x6d, 0x00, 0x01, 0xe3,
+        0x00, 0x33, 0x00, 0x47, 0x00, 0x45, 0x00, 0x17, 0x00, 0x41, 0x04, 0x42, 0x12, 0x82, 0x06, 0xc3, 0x6e,
+        0x34, 0xfa, 0xac, 0xae, 0x44, 0xb0, 0xc3, 0x6b, 0xf5, 0xc0, 0xff, 0xf9, 0x07, 0xdd, 0x93, 0x86, 0x90,
+        0xfc, 0x8b, 0xac, 0xce, 0x9e, 0x9a, 0xf8, 0xcd, 0xb6, 0x93, 0xcd, 0x5e, 0x77, 0x61, 0x36, 0xf3, 0xdd,
+        0xd7, 0x48, 0x6d, 0x84, 0xa3, 0xbd, 0x45, 0x1c, 0x19, 0x5d, 0xf5, 0xf6, 0xc7, 0x06, 0xc4, 0x7d, 0x88,
+        0xed, 0xc6, 0x41, 0x24, 0x00, 0xd2, 0x20, 0x00, 0x00, 0x00, 0x10, 0x00, 0x0e, 0x00, 0x00, 0x0b, 0x65,
+        0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x2e, 0x63, 0x6f, 0x6d, 0x00, 0x2b, 0x00, 0x03, 0x02, 0x03, 0x04,
+        0x00, 0x0d, 0x00, 0x0e, 0x00, 0x0c, 0x08, 0x05, 0x08, 0x04, 0x05, 0x03, 0x04, 0x03, 0x04, 0x01, 0x02,
+        0x01, 0x00, 0x0a, 0x00, 0x04, 0x00, 0x02, 0x00, 0x17};
+    struct st_decoded_ech_config_t decoded;
+    ptls_t *server;
+    ptls_buffer_t sbuf;
+    size_t consumed;
+    int ret;
+
+    ok(ctx_peer->ech.server.create_opener != NULL);
+    ret = client_decode_ech_config_list(ctx_peer, &decoded, ptls_iovec_init(ECH_CONFIG_LIST, sizeof(ECH_CONFIG_LIST) - 1));
+    ok(ret == 0);
+    ok(decoded.id == 0x12);
+    ok(decoded.kem != NULL && decoded.kem->id == PTLS_HPKE_KEM_P256_SHA256);
+    ok(decoded.cipher != NULL && decoded.cipher->id.kdf == PTLS_HPKE_HKDF_SHA384 &&
+       decoded.cipher->id.aead == PTLS_HPKE_AEAD_AES_256_GCM);
+
+    server = ptls_new(ctx_peer, 1);
+    ptls_buffer_init(&sbuf, "", 0);
+
+    consumed = sizeof(ch);
+    ret = ptls_handshake(server, &sbuf, ch, &consumed, NULL);
+    ok(ret == PTLS_ALERT_DECODE_ERROR);
+    ok(consumed == sizeof(ch));
+
+    ptls_free(server);
+    ptls_buffer_dispose(&sbuf);
+}
+
 static void do_test_pre_shared_key(int mode)
 {
     ptls_context_t ctx_client = *ctx;
@@ -1970,6 +2207,7 @@ static void test_handshake_api(void)
     ctx_peer->max_early_data_size = 8192;
 
     memset(saved_tickets, 0, sizeof(saved_tickets));
+    saved_ticket_properties = (ptls_save_ticket_properties_t){0};
 
     ptls_buffer_init(&cbuf, "", 0);
     ptls_buffer_init(&sbuf, "", 0);
@@ -1994,6 +2232,9 @@ static void test_handshake_api(void)
     ok(ret == 0);
     ok(cbuf.off != 0);
     ok(ptls_handshake_is_complete(client));
+    ok(saved_ticket_properties.lifetime == 86400);
+    ok(saved_ticket_properties.early_data);
+    ok(saved_ticket_properties.max_early_data_size == 8192);
     ok(memcmp(client_secrets[0][2], server_secrets[1][2], PTLS_MAX_DIGEST_SIZE) == 0);
     ok(memcmp(client_secrets[1][2], server_secrets[0][2], PTLS_MAX_DIGEST_SIZE) == 0);
     ok(memcmp(client_secrets[0][3], server_secrets[1][3], PTLS_MAX_DIGEST_SIZE) == 0);
@@ -2003,6 +2244,40 @@ static void test_handshake_api(void)
     ok(sbuf.off == 0);
     ok(ptls_handshake_is_complete(server));
     ok(memcmp(client_secrets[1][3], server_secrets[0][3], PTLS_MAX_DIGEST_SIZE) == 0);
+
+    /* Pass the decoded ticket properties to the ticket callback. */
+    ptls_save_ticket_t observe_ticket = {on_observe_ticket};
+    uint8_t nst_without_early_data[] = {PTLS_HANDSHAKE_TYPE_NEW_SESSION_TICKET, 0, 0, 14, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0};
+    uint8_t nst_with_early_data[] = {PTLS_HANDSHAKE_TYPE_NEW_SESSION_TICKET, 0, 0, 22, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 8, 0,
+                                     PTLS_EXTENSION_TYPE_EARLY_DATA,         0, 4, 0,  0, 0, 0};
+    ctx->save_ticket = &observe_ticket;
+    cbuf.off = 0;
+    memset(coffs, 0, sizeof(coffs));
+    saved_ticket_properties = (ptls_save_ticket_properties_t){.max_early_data_size = UINT32_MAX, .early_data = 1};
+    ret = ptls_handle_message(client, &cbuf, coffs, 3, nst_without_early_data, sizeof(nst_without_early_data), NULL);
+    ok(ret == 0);
+    ok(!saved_ticket_properties.early_data);
+    ok(saved_ticket_properties.max_early_data_size == 0);
+    ret = ptls_handle_message(client, &cbuf, coffs, 3, nst_with_early_data, sizeof(nst_with_early_data), NULL);
+    ok(ret == 0);
+    ok(saved_ticket_properties.early_data);
+    ok(saved_ticket_properties.max_early_data_size == 0);
+    nst_with_early_data[sizeof(nst_with_early_data) - 1] = 1;
+    ret = ptls_handle_message(client, &cbuf, coffs, 3, nst_with_early_data, sizeof(nst_with_early_data), NULL);
+    ok(ret == 0);
+    ok(saved_ticket_properties.early_data);
+    ok(saved_ticket_properties.lifetime == 1);
+    ok(saved_ticket_properties.max_early_data_size == 1);
+    ctx->save_ticket = &save_ticket;
+
+    /* Custom record layers do not support TLS KeyUpdate. */
+    uint8_t key_update[] = {PTLS_HANDSHAKE_TYPE_KEY_UPDATE, 0, 0, 1, 0};
+    ok(handle_key_update(client, NULL, ptls_iovec_init(key_update, sizeof(key_update))) == PTLS_ALERT_UNEXPECTED_MESSAGE);
+    key_update[4] = 1;
+    ok(handle_key_update(client, NULL, ptls_iovec_init(key_update, sizeof(key_update))) == PTLS_ALERT_UNEXPECTED_MESSAGE);
+    key_update[4] = 2;
+    ok(handle_key_update(client, NULL, ptls_iovec_init(key_update, sizeof(key_update))) == PTLS_ALERT_UNEXPECTED_MESSAGE);
+    ok(handle_key_update(client, NULL, ptls_iovec_init(key_update, PTLS_HANDSHAKE_HEADER_SIZE)) == PTLS_ALERT_UNEXPECTED_MESSAGE);
 
     ptls_free(client);
     ptls_free(server);
@@ -2204,6 +2479,7 @@ static void test_handshake_api(void)
 static void test_all_handshakes_core(void)
 {
     subtest("full-handshake", test_full_handshake);
+    subtest("send-fails-with-handshake-traffic-key", test_send_fails_with_handshake_traffic_key);
     subtest("full-handshake+client-auth", test_full_handshake_with_client_authentication);
     subtest("hrr-handshake", test_hrr_handshake);
     /* resumption does not work when the client offers ECH but the server does not recognize that */
@@ -2258,6 +2534,7 @@ static void test_all_handshakes(void)
         subtest("ech-config-mismatch", test_ech_config_mismatch);
         subtest("ech-hrr-accept-sh-reject", test_ech_hrr_accept_sh_reject);
         subtest("ech-null-configs-no-ech", test_ech_null_configs_no_ech);
+        subtest("ech-short-payload", test_ech_short_payload);
         test_client_ech_configs = ptls_iovec_init(NULL, 0);
     }
 
@@ -2652,6 +2929,8 @@ void test_picotls(void)
     subtest("tls-block16", test_tlsblock16);
     subtest("ech", test_ech);
     subtest("fragmented-message", test_fragmented_message);
+    subtest("hrr-cipher-suite-mismatch", test_hrr_cipher_suite_mismatch);
+    subtest("hrr-selected-group-matches-ch1-key-share", test_hrr_selected_group_matches_ch1_key_share);
     subtest("handshake", test_all_handshakes);
     subtest("quic", test_quic);
     subtest("legacy-ch", test_legacy_ch);

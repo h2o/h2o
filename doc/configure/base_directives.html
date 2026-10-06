@@ -592,6 +592,28 @@ If omitted, the permission of the socket file will reflect the umask of the call
 </code></pre>
 </div>
 
+<h4 id="listen-mptcp">Listening on a Multipath TCP socket</h4>
+<p>
+If the <code>type</code> attribute is set to <code>mptcp</code>, h2o will listen on a Multipath TCP socket, instead of a TCP one.
+Support for this listener type is available only in worker mode and when h2o is built with <code>-DWITH_MPTCP=ON</code>.
+</p>
+
+<div class="example">
+<div class="caption">Example. Listen Directive for Multipath TCP</div>
+<pre><code># accept HTTPS on port 443 with Multipath TCP
+listen:
+  type: mptcp
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+</code></pre>
+</div>
+
+
+<p>
+Multipath TCP is fully backwards compatible with regular TCP clients.
+</p>
 
 </dd>
 <dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
