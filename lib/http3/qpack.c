@@ -1802,6 +1802,8 @@ static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpac
     ctx->qpack = qpack;
     ctx->pool = pool;
     ctx->stream_id = stream_id;
+    /* At the limit of blocked sections, encode without using the encoder stream; then nothing is inserted and only acknowledged
+     * entries are referenced, so the section cannot block (RFC 9204 Section 2.1.2). */
     ctx->encoder_buf = qpack != NULL && qpack->num_blocked < qpack->max_blocked ? encoder_buf : NULL;
     ctx->headers_buf = (h2o_byte_vector_t){NULL};
     ctx->base_index = qpack != NULL ? qpack_table_total_inserts(&qpack->table) - 1 : 0;

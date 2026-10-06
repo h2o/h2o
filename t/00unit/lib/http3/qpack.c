@@ -187,7 +187,7 @@ static void test_response_fill_until_full(void)
 
 static void test_required_insert_count_wraps(void)
 {
-    static const char *names[] = {"x-a", "x-b", "x-c", "x-d", "x-e"};
+    static const char *names[] = {"x-a", "x-b"};
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(128, 10);
     h2o_byte_vector_t enc_stream = {NULL};
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &enc_stream);
@@ -203,20 +203,17 @@ static void test_required_insert_count_wraps(void)
         goto Fail;
     free(enc_stream.entries);
 
-    /* MaxEntries=4, so the Required Insert Count wraps every 8 inserts (RFC 9204 Section 4.5.1.1). Inserts beyond what the table
-     * holds are driven by refinement, repeating the pattern of test_response_swap with rotating roles: the first response of each
-     * 40-response cycle carries three headers, then the keeper repeats, then the newcomer replaces the victim, which costs an
-     * insert and a Duplicate. */
-    for (int n = 0; n != 200; ++n) {
-        int c = n / 40, i = n % 40;
-        const char *sent[3];
+    /* MaxEntries=4, so the Required Insert Count wraps every 8 inserts (RFC 9204 Section 4.5.1.1). The first section fills the
+     * table with x-a and x-b; each subsequent section references the oldest of the two, which is duplicated as the table is full,
+     * so every section inserts once. */
+    for (int n = 0; n != 20; ++n) {
+        const char *sent[2];
         size_t num_sent = 0;
-        if (i == 0) {
-            sent[num_sent++] = names[c % 5];
-            sent[num_sent++] = names[(c + 1) % 5];
-            sent[num_sent++] = names[(c + 2) % 5];
+        if (n == 0) {
+            sent[num_sent++] = names[0];
+            sent[num_sent++] = names[1];
         } else {
-            sent[num_sent++] = names[(c + (i <= 30 ? 0 : 2)) % 5];
+            sent[num_sent++] = names[(n - 1) % 2];
         }
         h2o_headers_t headers = {NULL};
         for (size_t j = 0; j != num_sent; ++j) {
@@ -251,6 +248,7 @@ static void test_required_insert_count_wraps(void)
         h2o_mem_clear_pool(&pool);
     }
 
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 19);
     /* each insert is referenced by the section carrying it, so FullRange inserts mean that the Required Insert Count went round */
     ok(dec->total_inserts >= 2 * dec->max_entries);
     goto Exit;
@@ -1077,6 +1075,19 @@ static int handle_decoder_stream_instruction(h2o_qpack_encoder_t *enc, const uin
     return ret;
 }
 
+static int handle_decoder_stream_error(h2o_qpack_encoder_t *enc, const uint8_t *src, size_t len)
+{
+    const uint8_t *p = src;
+    const char *err_desc = NULL;
+    return h2o_qpack_encoder_handle_input(enc, &p, src + len, &err_desc);
+}
+
+static size_t encode_insert_count_increment(uint8_t *outbuf, int64_t increment)
+{
+    outbuf[0] = 0;
+    return h2o_hpack_encode_int(outbuf, increment, 6) - outbuf;
+}
+
 static void add_inflight(h2o_qpack_encoder_t *enc, int64_t stream_id, int64_t largest_ref)
 {
     h2o_vector_reserve(NULL, &enc->inflight, enc->inflight.size + 1);
@@ -1183,53 +1194,39 @@ static void test_response_swap(void)
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
-    h2o_byte_vector_t enc_stream = {NULL};
     static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
     static const char b_value[] = "bbbbbbbbbbbbbbbbbbbb";
     static const char c_value[] = "cccccccccccccccccccc";
+    int64_t stream_id = 0;
 
     h2o_mem_init_pool(&pool);
 
-    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT(a_value));
-    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
-    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
-    flatten_response_headers(enc, &pool, 1, &enc_stream, headers.entries, headers.size);
-    ok(enc->table.last - enc->table.first == 2);
-    ok(qpack_table_contains(enc, "x-a", a_value));
-    ok(qpack_table_contains(enc, "x-b", b_value));
-    ok(!shadow_cache_is_missing(&enc->shadow_cache, hash_field(headers.entries[2].name, headers.entries[2].value)));
-    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == 2);
-    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
-    ack_encoder_section(enc, 1);
-
-    /* x-a, being the oldest entry, is duplicated when referenced, rather than when x-c replaces x-b */
-    int saw_duplicate = 0;
-    for (int64_t stream_id = 2; stream_id != 32; ++stream_id) {
-        h2o_byte_vector_t one_enc_stream = {NULL};
-        size_t inflight_size = enc->inflight.size;
-
-        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-a", a_value);
-        if (one_enc_stream.size != 0 && (one_enc_stream.entries[0] & 0xe0) == 0)
-            saw_duplicate = 1;
-        ok(enc->inflight.size == inflight_size + 1);
+    /* insert x-a and reference it while the table has room, so that it scores high without being duplicated */
+    for (; stream_id != 4 * 31; stream_id += 4) {
+        flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-a", a_value);
         ack_encoder_section(enc, stream_id);
     }
 
-    uint64_t inserts_before_swap = h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference;
-    for (int64_t stream_id = 32; stream_id != 40 && !qpack_table_contains(enc, "x-c", c_value); ++stream_id) {
-        h2o_byte_vector_t one_enc_stream = {NULL};
-        size_t inflight_size = enc->inflight.size;
+    /* fill the table with x-b, recording x-c as shadow evidence */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT(b_value));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    flatten_response_headers(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, stream_id);
+    stream_id += 4;
+    ok(qpack_table_contains(enc, "x-a", a_value));
+    ok(qpack_table_contains(enc, "x-b", b_value));
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == 2);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
 
-        flatten_response_one(enc, &pool, stream_id, &one_enc_stream, "x-c", c_value);
-        if (one_enc_stream.size != 0 && (one_enc_stream.entries[0] & 0xe0) == 0)
-            saw_duplicate = 1;
+    /* x-c replaces x-b; x-a, being older than x-b, is kept by duplicating it */
+    for (int i = 0; i != 10 && !qpack_table_contains(enc, "x-c", c_value); ++i, stream_id += 4) {
+        size_t inflight_size = enc->inflight.size;
+        flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-c", c_value);
         if (enc->inflight.size != inflight_size)
             ack_encoder_section(enc, stream_id);
     }
-
-    ok(saw_duplicate);
-    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate != 0);
-    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == inserts_before_swap + 1);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.insert_without_name_reference == 3);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
     ok(qpack_table_contains(enc, "x-a", a_value));
     ok(!qpack_table_contains(enc, "x-b", b_value));
     ok(qpack_table_contains(enc, "x-c", c_value));
@@ -1398,6 +1395,98 @@ static void test_response_duplicate_near_eviction_while_referenced(void)
     h2o_qpack_destroy_encoder(enc);
 }
 
+static void test_response_duplicate_near_eviction_waits_for_insert_ack(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+
+    h2o_mem_init_pool(&pool);
+
+    /* fill the table with x-a (oldest) and x-b, then release the references without acknowledging the inserts */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ok(handle_decoder_stream_instruction(enc, buf, h2o_qpack_decoder_send_stream_cancel(NULL, buf, 0)) == 0);
+
+    /* x-a is not evictable until its insertion is acknowledged, so it is not duplicated */
+    flatten_response_one(enc, &pool, 4, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+
+    /* once acknowledged (and the reference above released), it is */
+    ack_encoder_section(enc, 4);
+    ok(handle_decoder_stream_instruction(enc, buf, encode_insert_count_increment(buf, 1)) == 0);
+    flatten_response_one(enc, &pool, 8, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_duplicate_near_eviction_oldest_quarter(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+
+    h2o_mem_init_pool(&pool);
+
+    /* fill the table with five entries (275 bytes), x-a being the oldest */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT("cccccccccccccccccccc"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-d"), 0, NULL, H2O_STRLIT("dddddddddddddddddddd"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-e"), 0, NULL, H2O_STRLIT("eeeeeeeeeeeeeeeeeeee"));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, 0);
+    ok(enc->table.last - enc->table.first == 5);
+
+    /* x-c, being in the middle, is referenced as is */
+    flatten_response_one(enc, &pool, 4, &(h2o_byte_vector_t){NULL}, "x-c", "cccccccccccccccccccc");
+    ack_encoder_section(enc, 4);
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+
+    /* x-a, being in the oldest quarter, is duplicated */
+    flatten_response_one(enc, &pool, 8, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_duplicate_near_eviction_blocked_limit(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 1, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+
+    h2o_mem_init_pool(&pool);
+
+    /* fill the table with x-a (oldest) and x-b */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, 0);
+
+    /* x-a is duplicated; the section referencing the duplicate is blocking and remains unacknowledged */
+    flatten_response_one(enc, &pool, 4, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
+
+    /* at the limit of one blocked section, x-b (now the oldest) is not duplicated */
+    flatten_response_one(enc, &pool, 8, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
+
+    /* once the sections are acknowledged, it is */
+    ack_encoder_section(enc, 4);
+    ack_encoder_section(enc, 8);
+    flatten_response_one(enc, &pool, 12, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 2);
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
 static void test_response_swap_waits_for_insert_ack(void)
 {
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
@@ -1422,8 +1511,7 @@ static void test_response_swap_waits_for_insert_ack(void)
     ok(!qpack_table_contains(enc, "x-c", c_value));
 
     /* once the inserts are acknowledged by Insert Count Increment, x-c gets in */
-    buf[0] = 0;
-    ok(handle_decoder_stream_instruction(enc, buf, h2o_hpack_encode_int(buf, 2, 6) - buf) == 0);
+    ok(handle_decoder_stream_instruction(enc, buf, encode_insert_count_increment(buf, 2)) == 0);
     flatten_response_one(enc, &pool, 4 * 10, &(h2o_byte_vector_t){NULL}, "x-c", c_value);
     ok(qpack_table_contains(enc, "x-c", c_value));
 
@@ -1565,6 +1653,43 @@ static void test_encoder_stream_input(void)
 
         h2o_qpack_destroy_encoder(enc);
     }
+
+    note("insert count increment (RFC 9204 Section 4.4.3)");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_mem_pool_t pool;
+        h2o_headers_t headers = {NULL};
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+
+        h2o_mem_init_pool(&pool);
+        h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+        h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+        flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+        ok(enc->table.last - enc->table.first == 2);
+
+        ok(handle_decoder_stream_error(enc, buf, encode_insert_count_increment(buf, 0)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+        ok(handle_decoder_stream_error(enc, buf, encode_insert_count_increment(buf, 3)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+        ok(handle_decoder_stream_instruction(enc, buf, encode_insert_count_increment(buf, 2)) == 0);
+        ok(enc->largest_known_received == 2);
+        ok(handle_decoder_stream_error(enc, buf, encode_insert_count_increment(buf, 1)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+
+        h2o_mem_clear_pool(&pool);
+        h2o_qpack_destroy_encoder(enc);
+    }
+
+    note("section acknowledgement without an outstanding section (RFC 9204 Section 4.4.1)");
+    {
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+
+        add_inflight(enc, 4, 1);
+
+        ok(handle_decoder_stream_error(enc, buf, encode_section_ack(buf, 8)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+        ok(handle_decoder_stream_instruction(enc, buf, encode_section_ack(buf, 4)) == 0);
+        ok(handle_decoder_stream_error(enc, buf, encode_section_ack(buf, 4)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+
+        h2o_qpack_destroy_encoder(enc);
+    }
 }
 
 void test_lib__http3_qpack(void)
@@ -1579,6 +1704,9 @@ void test_lib__http3_qpack(void)
     subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
     subtest("response-duplicate-near-eviction", test_response_duplicate_near_eviction);
     subtest("response-duplicate-near-eviction-while-referenced", test_response_duplicate_near_eviction_while_referenced);
+    subtest("response-duplicate-near-eviction-waits-for-insert-ack", test_response_duplicate_near_eviction_waits_for_insert_ack);
+    subtest("response-duplicate-near-eviction-oldest-quarter", test_response_duplicate_near_eviction_oldest_quarter);
+    subtest("response-duplicate-near-eviction-blocked-limit", test_response_duplicate_near_eviction_blocked_limit);
     subtest("response-swap-waits-for-insert-ack", test_response_swap_waits_for_insert_ack);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
