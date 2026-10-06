@@ -1385,7 +1385,9 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
         struct st_h2o_qpack_header_t *entry = *slot;
         size_t entry_size = header_entry_size(entry);
 
-        if (entry->abs_index >= smallest_blocking_ref)
+        /* An entry is evictable only if its insertion has been acknowledged and it is not referenced by unacknowledged sections,
+         * including the one being built (RFC 9204 Section 2.1.1). */
+        if (entry->abs_index > ctx->qpack->largest_known_received || entry->abs_index >= smallest_blocking_ref)
             return 0;
         if (!candidate_beats_entry(candidate_score, entry)) {
             needed += entry_size;

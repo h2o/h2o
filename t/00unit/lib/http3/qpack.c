@@ -1398,6 +1398,39 @@ static void test_response_duplicate_near_eviction_while_referenced(void)
     h2o_qpack_destroy_encoder(enc);
 }
 
+static void test_response_swap_waits_for_insert_ack(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {NULL};
+    uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+    static const char c_value[] = "cccccccccccccccccccc";
+
+    h2o_mem_init_pool(&pool);
+
+    /* fill the table with x-a and x-b, recording x-c as shadow evidence */
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    h2o_add_header_by_str(&pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT(c_value));
+    flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+
+    /* Stream Cancellation releases the references without acknowledging the inserts (RFC 9204 Section 4.4.2), so x-a and x-b are
+     * not evictable and x-c cannot replace them */
+    ok(handle_decoder_stream_instruction(enc, buf, h2o_qpack_decoder_send_stream_cancel(NULL, buf, 0)) == 0);
+    for (int64_t stream_id = 4; stream_id != 4 * 10; stream_id += 4)
+        flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-c", c_value);
+    ok(!qpack_table_contains(enc, "x-c", c_value));
+
+    /* once the inserts are acknowledged by Insert Count Increment, x-c gets in */
+    buf[0] = 0;
+    ok(handle_decoder_stream_instruction(enc, buf, h2o_hpack_encode_int(buf, 2, 6) - buf) == 0);
+    flatten_response_one(enc, &pool, 4 * 10, &(h2o_byte_vector_t){NULL}, "x-c", c_value);
+    ok(qpack_table_contains(enc, "x-c", c_value));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
 static void test_encoder_stream_input(void)
 {
     note("section acknowledgement evicts the only inflight entry");
@@ -1546,6 +1579,7 @@ void test_lib__http3_qpack(void)
     subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
     subtest("response-duplicate-near-eviction", test_response_duplicate_near_eviction);
     subtest("response-duplicate-near-eviction-while-referenced", test_response_duplicate_near_eviction_while_referenced);
+    subtest("response-swap-waits-for-insert-ack", test_response_swap_waits_for_insert_ack);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);
