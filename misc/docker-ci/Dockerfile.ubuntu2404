@@ -26,7 +26,6 @@ RUN apt-get install --yes \
 	libedit-dev \
 	libelf-dev \
 	libev-dev \
-	libnghttp2-dev \
 	libpsl-dev \
 	libssl-dev \
 	libtool \
@@ -36,8 +35,6 @@ RUN apt-get install --yes \
 	memcached \
 	net-tools \
 	netcat-openbsd \
-	nghttp2-client \
-	nghttp2-server \
 	nodejs \
 	php-cgi \
 	pkgconf \
@@ -70,29 +67,38 @@ ENV PERL_CPANM_OPT="--mirror https://cpan.metacpan.org/"
 RUN cpanm -n Test::More Starlet Protocol::HTTP2 Test::TCP
 RUN cpanm -n NLNETLABS/Net-DNS-1.36.tar.gz # Net-DNS 1.39 has issues around use of alarm, fork, etc.
 
-# curl with ngtcp2
+# openssl 3.5
 RUN mkdir -p /opt/src \
-	&& git clone --depth 1 --branch openssl-3.0.10+quic https://github.com/quictls/openssl /opt/src/quictls \
-	&& cd /opt/src/quictls \
-	&& ./config enable-tls1_3 no-shared --prefix=/usr/local/quictls \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://github.com/openssl/openssl/releases/download/openssl-3.5.1/openssl-3.5.1.tar.gz | tar xzf - \
+	&& cd /opt/src/openssl-3.5.1 \
+	&& ./config --prefix=/usr/local/openssl-3.5 no-shared \
 	&& make install clean
+
+# HTTP/3 stack: nghttp3, ngtcp2, nghttp2 (h2load), curl
 RUN mkdir -p /opt/src \
-	&& git clone --depth 1 --branch v1.1.0 https://github.com/ngtcp2/nghttp3 /opt/src/nghttp3 \
-	&& cd /opt/src/nghttp3 \
-	&& autoreconf -fi \
-	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
-	&& make install clean
-RUN mkdir -p /opt/src \
-	&& git clone --depth 1 --branch v1.2.0 https://github.com/ngtcp2/ngtcp2 /opt/src/ngtcp2 \
-	&& cd /opt/src/ngtcp2 \
-	&& autoreconf -fi \
-	&& PKG_CONFIG_PATH=/usr/local/quictls/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://github.com/ngtcp2/nghttp3/releases/download/v1.18.0/nghttp3-1.18.0.tar.bz2 | tar xjf - \
+	&& cd nghttp3-1.18.0 \
+	&& ./configure --enable-lib-only --disable-shared \
 	&& make install clean
 RUN mkdir -p /opt/src \
 	&& cd /opt/src \
-	&& wget --quiet -O - https://curl.se/download/curl-8.6.0.tar.bz2 | tar xjf - \
-	&& cd curl-8.6.0 \
-	&& USE_CURL_SSLKEYLOGFILE=true ./configure --disable-shared --with-nghttp2 --with-ngtcp2 --with-nghttp3 --with-openssl=/usr/local/quictls \
+	&& wget --quiet -O - https://github.com/ngtcp2/ngtcp2/releases/download/v1.25.0/ngtcp2-1.25.0.tar.bz2 | tar xjf - \
+	&& cd ngtcp2-1.25.0 \
+	&& PKG_CONFIG_PATH=/usr/local/openssl-3.5/lib64/pkgconfig ./configure --enable-lib-only --disable-shared \
+	&& make install clean
+RUN mkdir -p /opt/src \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://github.com/nghttp2/nghttp2/releases/download/v1.69.0/nghttp2-1.69.0.tar.bz2 | tar xjf - \
+	&& cd nghttp2-1.69.0 \
+	&& PKG_CONFIG_PATH=/usr/local/openssl-3.5/lib64/pkgconfig:/usr/local/lib/pkgconfig ./configure --disable-shared --enable-app --enable-http3 \
+	&& make install clean
+RUN mkdir -p /opt/src \
+	&& cd /opt/src \
+	&& wget --quiet -O - https://curl.se/download/curl-8.22.0.tar.bz2 | tar xjf - \
+	&& cd curl-8.22.0 \
+	&& USE_CURL_SSLKEYLOGFILE=true ./configure --disable-shared --with-nghttp2 --with-ngtcp2 --with-nghttp3 --with-openssl=/usr/local/openssl-3.5 \
 	&& make install clean
 
 # boringssl
@@ -115,14 +121,6 @@ RUN mkdir -p /opt/src && cd /opt/src && wget -O - https://github.com/Mbed-TLS/mb
   && cd mbedtls-3.5.1 && mkdir -p build && cd build \
   && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local && make install \
   && make clean
-
-# openssl 3.5
-RUN mkdir -p /opt/src \
-	&& cd /opt/src \
-	&& wget --quiet -O - https://github.com/openssl/openssl/releases/download/openssl-3.5.1/openssl-3.5.1.tar.gz | tar xzf - \
-	&& cd /opt/src/openssl-3.5.1 \
-	&& ./config --prefix=/usr/local/openssl-3.5 no-shared \
-	&& make install clean
 
 # use dumb-init
 RUN wget -O /usr/local/bin/dumb-init https://github.com/Yelp/dumb-init/releases/download/v1.2.1/dumb-init_1.2.1_amd64 \
