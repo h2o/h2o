@@ -1820,10 +1820,7 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
         ctx->base_index = 0;
     } else {
         int is_blocking = 0;
-        /* adjust largest reference to achieve more compact representation on wire without risking blocking */
-        if (ctx->largest_ref < ctx->qpack->largest_known_received) {
-            ctx->largest_ref = ctx->qpack->largest_known_received;
-        } else if (ctx->largest_ref > ctx->qpack->largest_known_received) {
+        if (ctx->largest_ref > ctx->qpack->largest_known_received) {
             assert(ctx->qpack->num_blocked < ctx->qpack->max_blocked);
             ++ctx->qpack->num_blocked;
             is_blocking = 1;
