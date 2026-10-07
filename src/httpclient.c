@@ -1036,7 +1036,7 @@ int main(int argc, char **argv)
             *slot = *named;
         } break;
         case OPT_HTTP3_NO_ECN:
-            h3ctx.quic.enable_ratio.ecn = 0;
+            h3ctx.quic.egress[0].ecn = 0;
             break;
         case OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY:
             if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder_table_capacity) != 1) {

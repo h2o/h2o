@@ -27,8 +27,10 @@
 #include "quicly.h"
 #include "quicly/defaults.h"
 #include "h2o/memory.h"
+#include "h2o/quic_stream.h"
 #include "h2o/socket.h"
 #include "h2o/qpack.h"
+#include "h2o/webtransport.h"
 
 #define H2O_HTTP3_FRAME_TYPE_DATA 0
 #define H2O_HTTP3_FRAME_TYPE_HEADERS 1
@@ -298,6 +300,15 @@ typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
     void (*qpack_unblock_streams)(h2o_http3_conn_t *conn, uint64_t insert_count);
+    /**
+     * Optional. Offered a peer-initiated unidirectional stream whose type is not one of HTTP/3's, once the type has been read (and
+     * its bytes consumed) from a stream that has not been reset. Returns non-zero to adopt the stream: the callee replaces
+     * `qs->callbacks` and `qs->data` and takes ownership of `*recvbuf` (setting it to NULL), which holds the bytes following the
+     * type, starting at `qs->recvstate.data_off` (only `quicly_recvstate_bytes_available` of them are valid). The callee may
+     * process them synchronously, as it is invoked from within the stream's receive callback. Returns zero to refuse the stream
+     * with STOP_SENDING (H3_STREAM_CREATION_ERROR), as done when this callback is absent.
+     */
+    int (*adopt_unistream)(h2o_http3_conn_t *conn, quicly_stream_t *qs, uint64_t type, h2o_buffer_t **recvbuf);
 } h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
@@ -323,7 +334,30 @@ struct st_h2o_http3_conn_t {
     struct {
         uint64_t max_field_section_size;
         unsigned h3_datagram : 1;
+        /**
+         * set only by the RFC 9297 codepoint, not by draft-03 (WebTransport requires the former)
+         */
+        unsigned h3_datagram_rfc9297 : 1;
+        /**
+         * set if SETTINGS_WT_ENABLED appeared more than once
+         */
+        unsigned wt_enabled_duplicated : 1;
+        /**
+         * raw values, validated when a WebTransport session is requested rather than by the SETTINGS parser, so that connections
+         * not using WebTransport keep ignoring these settings
+         */
+        uint64_t wt_enabled;
+        uint64_t enable_connect_protocol;
     } peer_settings;
+    /**
+     * SETTINGS sent by this endpoint in addition to the default ones; to be set before `h2o_http3_setup`
+     */
+    struct {
+        /**
+         * advertise SETTINGS_WT_ENABLED=1; the caller is responsible for also offering QUIC datagrams
+         */
+        unsigned wt_enabled : 1;
+    } local_settings;
     struct {
         struct {
             struct st_h2o_http3_ingress_unistream_t *control;
@@ -480,6 +514,13 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
  */
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
 /**
+ * Resets the send side of a stream, retaining the first `reliable_size` bytes by RESET_STREAM_AT if the peer supports it, otherwise
+ * (or if `reliable_size` is zero) by RESET_STREAM. The send side must not have been reset, by the application or by quicly upon
+ * STOP_SENDING (see `h2o_quic_reset_stream`). Returns 1 if RESET_STREAM_AT is used, in which case the bytes below
+ * `qs->sendstate.final_size` (which might exceed `reliable_size`) can still be emitted and shifted.
+ */
+int h2o_http3_reset_stream_reliably(quicly_stream_t *qs, quicly_error_t err, uint64_t reliable_size);
+/**
  * Enqueue GOAWAY frame crafted for graceful shutdown
  */
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn);
@@ -505,6 +546,11 @@ uint64_t h2o_http3_decode_h3_datagram(h2o_iovec_t *payload, const void *_src, si
  * have to be guaranteed.
  */
 static uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length);
+/**
+ * Returns non-zero if the frame starting at `src` is WT_STREAM and this endpoint advertised WebTransport. Anywhere but at the very
+ * first bytes of a request stream, that is a connection error of type H3_FRAME_ERROR (draft-ietf-webtrans-http3-16 section 4.3).
+ */
+static int h2o_http3_is_wt_stream_frame(h2o_http3_conn_t *conn, const uint8_t *src, const uint8_t *src_end);
 
 /* inline definitions */
 
@@ -516,6 +562,11 @@ inline int h2o_http3_has_received_settings(h2o_http3_conn_t *conn)
 inline uint64_t h2o_http3_calc_min_flow_control_size(size_t max_headers_length)
 {
     return 8 /* max. type field */ + 8 /* max. length field */ + max_headers_length;
+}
+
+inline int h2o_http3_is_wt_stream_frame(h2o_http3_conn_t *conn, const uint8_t *src, const uint8_t *src_end)
+{
+    return conn->local_settings.wt_enabled && quicly_decodev(&src, src_end) == H2O_WEBTRANSPORT_H3_SIGNAL_BIDI;
 }
 
 #endif

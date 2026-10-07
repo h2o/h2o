@@ -63,7 +63,7 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic.tls = &h3ctx->tls;
     h3ctx->quic.transport_params.max_streams_uni = 10;
     if (!use_ecn)
-        h3ctx->quic.enable_ratio.ecn = 0;
+        h3ctx->quic.egress[0].ecn = 0;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
     ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
     h3ctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(

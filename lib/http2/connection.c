@@ -61,13 +61,52 @@ static void enqueue_goaway(h2o_http2_conn_t *conn, int errnum, h2o_iovec_t addit
     }
 }
 
+/**
+ * Returns the WebTransport limits that we advertise, being capped to the 32-bit range of the SETTINGS parameters.
+ */
+static h2o_webtransport_settings_t get_local_webtransport_settings(h2o_http2_conn_t *conn)
+{
+    h2o_webtransport_settings_t settings = conn->super.ctx->globalconf->webtransport.limits;
+#define CAP(member)                                                                                                                \
+    do {                                                                                                                           \
+        if (settings.member > UINT32_MAX)                                                                                          \
+            settings.member = UINT32_MAX;                                                                                          \
+    } while (0)
+    CAP(max_data);
+    CAP(max_stream_data_uni);
+    CAP(max_stream_data_bidi_local);
+    CAP(max_stream_data_bidi_remote);
+    CAP(max_streams_uni);
+    CAP(max_streams_bidi);
+#undef CAP
+    return settings;
+}
+
 static void enqueue_server_preface(h2o_http2_conn_t *conn)
 {
     /* Send settings and initial window update */
-    h2o_http2_settings_kvpair_t settings[] = {
+    h2o_http2_settings_kvpair_t settings[9] = {
         {H2O_HTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, conn->super.ctx->globalconf->http2.max_streams},
         {H2O_HTTP2_SETTINGS_ENABLE_CONNECT_PROTOCOL, 1}};
-    h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
+    size_t nr_settings = 2;
+    /* WebTransport requires extended CONNECT and TLS (draft-ietf-webtrans-http2-15 sections 3.1, 13) */
+    if (conn->super.ctx->globalconf->webtransport.enabled && conn->sock->ssl != NULL) {
+        h2o_webtransport_settings_t wt = get_local_webtransport_settings(conn);
+        settings[nr_settings++] = (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_ENABLED, 1};
+        settings[nr_settings++] = (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_DATA, wt.max_data};
+        settings[nr_settings++] =
+            (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_UNI, wt.max_stream_data_uni};
+        settings[nr_settings++] =
+            (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL, wt.max_stream_data_bidi_local};
+        settings[nr_settings++] = (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE,
+                                                                wt.max_stream_data_bidi_remote};
+        settings[nr_settings++] = (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAMS_UNI, wt.max_streams_uni};
+        settings[nr_settings++] =
+            (h2o_http2_settings_kvpair_t){H2O_HTTP2_SETTINGS_WT_INITIAL_MAX_STREAMS_BIDI, wt.max_streams_bidi};
+        conn->webtransport_enabled = 1;
+    }
+    assert(nr_settings <= PTLS_ELEMENTSOF(settings));
+    h2o_http2_encode_settings_frame(&conn->_write.buf, settings, nr_settings);
     h2o_http2_encode_window_update_frame(
         &conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
 }
@@ -120,6 +159,14 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn)
         h2o_http2_encode_goaway_frame(&conn->_write.buf, INT32_MAX, H2O_HTTP2_ERROR_NONE,
                                       (h2o_iovec_t){H2O_STRLIT("graceful shutdown")});
         h2o_http2_conn_request_write(conn);
+        /* ask the WebTransport sessions to drain, as they are long-lived (draft-ietf-webtrans-http2-15 section 6.13) */
+        if (conn->webtransport_enabled) {
+            h2o_http2_stream_t *stream;
+            kh_foreach_value(conn->streams, stream, {
+                if (stream->req.is_tunnel_req)
+                    h2o_webtransport_notify_shutdown(&stream->req);
+            });
+        }
     }
 
     h2o_timer_link(conn->super.ctx->loop, 1000, &conn->_graceful_shutdown_timeout);
@@ -533,8 +580,9 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     stream->req.req_body_bytes_received += payload.len;
 
-    /* check size */
-    if (stream->req.req_body_bytes_received > conn->super.ctx->globalconf->max_request_entity_size) {
+    /* check size; WebTransport sessions are exempt, as they are long-lived and are subject to their own flow control */
+    if (stream->req.req_body_bytes_received > conn->super.ctx->globalconf->max_request_entity_size &&
+        !(stream->req.is_tunnel_req && h2o_webtransport_is_request(&stream->req))) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
         return;
@@ -1783,6 +1831,25 @@ static void on_dos_process_delay(h2o_timer_t *timer)
     run_pending_requests(conn);
 }
 
+static int get_webtransport_settings(h2o_conn_t *_conn, h2o_webtransport_settings_t *local, h2o_webtransport_settings_t *remote)
+{
+    h2o_http2_conn_t *conn = (void *)_conn;
+
+    if (!conn->webtransport_enabled)
+        return -1;
+
+    *local = get_local_webtransport_settings(conn);
+    *remote = (h2o_webtransport_settings_t){
+        .max_data = conn->peer_settings.webtransport.initial_max_data,
+        .max_stream_data_uni = conn->peer_settings.webtransport.initial_max_stream_data_uni,
+        .max_stream_data_bidi_local = conn->peer_settings.webtransport.initial_max_stream_data_bidi_local,
+        .max_stream_data_bidi_remote = conn->peer_settings.webtransport.initial_max_stream_data_bidi_remote,
+        .max_streams_uni = conn->peer_settings.webtransport.initial_max_streams_uni,
+        .max_streams_bidi = conn->peer_settings.webtransport.initial_max_streams_bidi,
+    };
+    return 0;
+}
+
 static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts, h2o_socket_t *sock, struct timeval connected_at)
 {
     static const h2o_conn_callbacks_t callbacks = {
@@ -1798,6 +1865,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
         .foreach_request = foreach_request,
         .request_shutdown = initiate_graceful_shutdown,
         .get_rtt = get_rtt,
+        .get_webtransport_settings = get_webtransport_settings,
         .log_ = {{
             .transport =
                 {
