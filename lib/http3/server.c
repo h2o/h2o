@@ -1724,6 +1724,10 @@ static void write_response(struct st_h2o_http3_server_stream_t *stream, h2o_iove
         stream->req.res.content_length, datagram_flow_id, &stream->stats.resp.qpack, &serialized_header_len);
     stream->req.header_bytes_sent += serialized_header_len;
     stream->stats.resp.headers_frame_bytes += serialized_header_len;
+    /* The encoder instructions are queued before the HEADERS frame that depends on them, and the scheduler sends the control and
+     * QPACK streams ahead of the request streams; therefore, request streams cannot consume the connection-level flow-control
+     * credit needed for sending the instructions (RFC 9204 Section 2.1.3). A deadlock is still possible if the peer withholds the
+     * stream-level credit of the encoder stream until it consumes request streams, but that is a remote possibility. */
     if (encoder_buf.size != 0)
         h2o_http3_write_unistream(get_conn(stream)->h3._control_streams.egress.qpack_encoder, encoder_buf.entries,
                                   encoder_buf.size);
