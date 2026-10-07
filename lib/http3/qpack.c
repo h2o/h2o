@@ -45,7 +45,8 @@ struct st_h2o_qpack_header_t {
     h2o_iovec_t _name_buf;
     unsigned soft_errors;
     /**
-     * Decayed frequency of this exact (name,value) pair while it is resident in the dynamic table.
+     * Decayed frequency of this exact (name,value) pair while it is resident in the dynamic table. Zero means that the entry has
+     * been superseded by its duplicate, to which the frequency has been carried over; otherwise it is never zero; see `freq_add`.
      */
     float freq;
     /**
@@ -502,7 +503,7 @@ static struct st_h2o_qpack_shadow_slot_t *shadow_cache_get(h2o_qpack_encoder_t *
  */
 static void demote_entry(h2o_qpack_encoder_t *qpack, const struct st_h2o_qpack_header_t *entry)
 {
-    if (no_refine(qpack))
+    if (no_refine(qpack) || entry->freq == 0)
         return;
     struct st_h2o_qpack_shadow_slot_t *shadow =
         shadow_cache_get(qpack, hash_field(entry->name, h2o_iovec_init(entry->value, entry->value_len)));
@@ -1331,6 +1332,7 @@ static struct st_h2o_qpack_header_t *do_alloc_entry(h2o_qpack_encoder_t *qpack, 
     }
     entry->value_len = value.len;
     entry->soft_errors = soft_errors;
+    assert(freq != 0);
     entry->freq = freq;
     entry->bytes_saved = bytes_saved;
     entry->abs_index = qpack_table_total_inserts(&qpack->table);
@@ -1375,9 +1377,11 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
     int64_t relative_index = qpack_table_total_inserts(&ctx->qpack->table) - 1 - entry->abs_index;
     struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
-    /* The frequency travels with the clone; the original is evicted mechanically (without demotion) as the tail is consumed. */
-    emit_duplicate(ctx->qpack, ctx->pool, ctx->encoder_buf, relative_index);
+    /* Mark the original as superseded then insert the new entry into the table. */
+    entry->freq = 0;
     encoder_insert(ctx->qpack, clone, entry->abs_index + 1);
+
+    emit_duplicate(ctx->qpack, ctx->pool, ctx->encoder_buf, relative_index);
 }
 
 static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
@@ -1469,7 +1473,8 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
         /* compare values */
         if (h2o_memis(value.base, value.len, entry->value, entry->value_len)) {
             *is_exact = 1;
-            if (!no_refine(qpack)) {
+            /* a superseded entry (matched only by an acked-only lookup that cannot see its duplicate yet) stays superseded */
+            if (!no_refine(qpack) && entry->freq != 0) {
                 entry->freq += qpack->freq_add;
                 /* the hit raises this entry's score, possibly lifting the minimum; a stale bound would rarely reject */
                 qpack->table_min_score = -1;
