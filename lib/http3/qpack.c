@@ -725,8 +725,12 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
     }
 
 Exit:
-    if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+    if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         ret = 0;
+    } else if (ret != 0) {
+        /* any failure to interpret an instruction received on the encoder stream (RFC 9204 Section 6) */
+        ret = H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM;
+    }
     if (ret == 0 && old_total_inserts != qpack->total_inserts)
         *insert_count = qpack->total_inserts;
     return (int)ret;
