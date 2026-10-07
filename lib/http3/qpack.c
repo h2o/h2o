@@ -1385,7 +1385,7 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
 }
 
 static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
-                                  int64_t smallest_blocking_ref)
+                                  int64_t smallest_blocking_ref, const struct st_h2o_qpack_header_t *replaced)
 {
     size_t available = ctx->qpack->table.max_size - ctx->qpack->table.num_bytes, needed = candidate_size;
     /* Also free an entry slot, not just bytes: the max-entries limit can bind before the byte capacity does. */
@@ -1402,7 +1402,7 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
          * including the one being built (RFC 9204 Section 2.1.1). */
         if (entry->abs_index > ctx->qpack->largest_known_received || entry->abs_index >= smallest_blocking_ref)
             return 0;
-        if (!candidate_beats_entry(candidate_score, entry)) {
+        if (entry != replaced && !candidate_beats_entry(candidate_score, entry)) {
             needed += entry_size;
             ++need_slots; /* a kept entry is re-added by Duplicate, so it consumes a slot too */
         }
@@ -1416,25 +1416,34 @@ static int64_t plan_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
     return evict_upto;
 }
 
+/**
+ * Makes room for a candidate by evicting entries from the tail, keeping the entries the candidate does not beat by relocating them
+ * to the head. `replaced` is the resident that the candidate is a Duplicate of (or NULL); being superseded by the candidate, it is
+ * freed regardless of its score, and neither demoted nor relocated. Returns the end of the range to be evicted, or 0 if there is
+ * no room.
+ */
 static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, size_t candidate_size, double candidate_score,
-                                  int64_t smallest_blocking_ref)
+                                  int64_t smallest_blocking_ref, const struct st_h2o_qpack_header_t *replaced)
 {
     int64_t evict_upto;
 
-    /* the lookup_dynamic walk that precedes every swap attempt leaves the cached minimum valid */
-    assert(ctx->qpack->table_min_score >= 0);
-    int needs_room = ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size ||
-                     (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) >= encoder_max_entries(ctx->qpack);
-    if (needs_room && candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
-        return 0;
-    if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) == 0)
+    /* Fast reject. It does not apply when a resident is replaced, as that one is freed regardless of its score. Otherwise, the
+     * lookup_dynamic walk that precedes the swap attempt leaves the cached minimum valid. */
+    if (replaced == NULL) {
+        assert(ctx->qpack->table_min_score >= 0);
+        int needs_room = ctx->qpack->table.num_bytes + candidate_size > ctx->qpack->table.max_size ||
+                         (size_t)(ctx->qpack->table.last - ctx->qpack->table.first) >= encoder_max_entries(ctx->qpack);
+        if (needs_room && candidate_score <= ctx->qpack->table_min_score * QPACK_SWAP_MARGIN)
+            return 0;
+    }
+    if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref, replaced)) == 0)
         return 0;
     /* The whole range [base_offset, evict_upto) at the tail is going to be removed. Demote the entries the candidate beats (they
      * are being dropped) first, before any eviction happens below; demotion is encoder-internal, so unlike the physical eviction it
      * does not need to be interleaved with the inserts. */
     for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
-        if (candidate_beats_entry(candidate_score, entry))
+        if (entry != replaced && candidate_beats_entry(candidate_score, entry))
             demote_entry(ctx->qpack, entry);
     }
     /* Relocate the entries that are kept by emitting Duplicate and cloning them to the head; this mechanically evicts the range
@@ -1443,7 +1452,7 @@ static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
         if (abs_index < ctx->qpack->table.base_offset)
             continue;
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
-        if (!candidate_beats_entry(candidate_score, entry))
+        if (entry != replaced && !candidate_beats_entry(candidate_score, entry))
             duplicate_resident(ctx, entry);
     }
     return evict_upto;
@@ -1708,16 +1717,25 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
         /* try dynamic indexed */
         if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
             /* Referencing an entry close to eviction would prevent it, and everything inserted after it, from being evicted until
-             * this section is acknowledged. When the table is full, duplicate such an entry and reference the duplicate instead
-             * (RFC 9204 Section 2.1.1.1); entries in the oldest quarter of the table are considered close to eviction. The entries
-             * evicted to make room for the duplicate (at most up to the entry itself) must not be referenced. */
+             * this section is acknowledged. When the table is full, such an entry is duplicated and the duplicate is referenced
+             * instead (RFC 9204 Section 2.1.1.1); entries in the oldest quarter of the table are considered close to eviction. As
+             * the duplicate is an insert, room is made for it like for any other candidate, scored by the entry it supersedes, from
+             * the entries up to the entry itself (which has to remain until the Duplicate is emitted): the ones it beats are
+             * dropped, the others are kept by being duplicated as well. If that room cannot be made, because some of those entries
+             * cannot be evicted yet, the field is emitted as a literal without referencing the entry. */
             struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[dynamic_index - ctx->qpack->table.base_offset];
             size_t num_entries = ctx->qpack->table.last - ctx->qpack->table.first;
             if (ctx->encoder_buf != NULL && !no_refine(ctx->qpack) &&
                 (ctx->qpack->table.num_bytes + header_entry_size(entry) > ctx->qpack->table.max_size ||
                  num_entries >= encoder_max_entries(ctx->qpack)) &&
-                (size_t)(dynamic_index - ctx->qpack->table.base_offset) * 4 < num_entries &&
-                plan_room_for_swap(ctx, header_entry_size(entry), DBL_MAX, calc_smallest_blocking_ref(ctx)) != 0) {
+                (size_t)(dynamic_index - ctx->qpack->table.base_offset) * 4 < num_entries) {
+                int64_t smallest_blocking_ref = calc_smallest_blocking_ref(ctx);
+                if (smallest_blocking_ref > dynamic_index + 1)
+                    smallest_blocking_ref = dynamic_index + 1;
+                if (make_room_for_swap(ctx, header_entry_size(entry), entry_score(entry), smallest_blocking_ref, entry) == 0) {
+                    emit_literal(ctx, static_index, -1, name, value, dont_compress);
+                    return;
+                }
                 duplicate_resident(ctx, entry);
                 dynamic_index = qpack_table_total_inserts(&ctx->qpack->table) - 1;
             }
@@ -1763,7 +1781,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
             size_t bytes_saved = emit_literal(ctx, static_index, dynamic_index, name, value, dont_compress);
             double candidate_score = (double)shadow->freq * bytes_saved / candidate_size;
             if (bytes_saved != 0 && shadow->freq >= ctx->qpack->freq_add * QPACK_REPEAT_THRESHOLD &&
-                (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) != 0) {
+                (evict_upto = make_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref, NULL)) != 0) {
                 /* Promote instead: undo the literal just emitted, then insert and reference. make_room_for_swap may have evicted or
                  * relocated the name reference, so re-resolve it. */
                 ctx->headers_buf.size = backup.headers_size;

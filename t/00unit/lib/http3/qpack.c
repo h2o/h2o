@@ -1395,6 +1395,77 @@ static void test_response_duplicate_near_eviction_while_referenced(void)
     h2o_qpack_destroy_encoder(enc);
 }
 
+/* inserts x-a .. x-d (220 bytes), then references x-a while the table has room, so that it scores higher than x-b */
+static void fill_with_hot_tail(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool)
+{
+    h2o_headers_t headers = {NULL};
+
+    h2o_add_header_by_str(pool, &headers, H2O_STRLIT("x-a"), 0, NULL, H2O_STRLIT("aaaaaaaaaaaaaaaaaaaa"));
+    h2o_add_header_by_str(pool, &headers, H2O_STRLIT("x-b"), 0, NULL, H2O_STRLIT("bbbbbbbbbbbbbbbbbbbb"));
+    h2o_add_header_by_str(pool, &headers, H2O_STRLIT("x-c"), 0, NULL, H2O_STRLIT("cccccccccccccccccccc"));
+    h2o_add_header_by_str(pool, &headers, H2O_STRLIT("x-d"), 0, NULL, H2O_STRLIT("dddddddddddddddddddd"));
+    flatten_response_headers(enc, pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
+    ack_encoder_section(enc, 0);
+    for (int64_t stream_id = 4; stream_id != 16; stream_id += 4) {
+        flatten_response_one(enc, pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+        ack_encoder_section(enc, stream_id);
+    }
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+}
+
+static void test_response_duplicate_near_eviction_keeps_unbeaten(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+
+    h2o_mem_init_pool(&pool);
+
+    fill_with_hot_tail(enc, &pool);
+
+    /* fill the table with x-e (275 bytes) */
+    flatten_response_one(enc, &pool, 16, &(h2o_byte_vector_t){NULL}, "x-e", "eeeeeeeeeeeeeeeeeeee");
+    ack_encoder_section(enc, 16);
+
+    /* x-b, being close to eviction, is duplicated; x-a, which x-b does not beat, is kept by being duplicated as well */
+    flatten_response_one(enc, &pool, 20, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 2);
+    ok(enc->table.last - enc->table.first == 5);
+    ok(h2o_memis((*enc->table.first)->name->base, (*enc->table.first)->name->len, H2O_STRLIT("x-c")));
+    ok(qpack_table_contains(enc, "x-a", "aaaaaaaaaaaaaaaaaaaa"));
+    ok(qpack_table_contains(enc, "x-b", "bbbbbbbbbbbbbbbbbbbb"));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
+static void test_response_duplicate_near_eviction_literal_without_room(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+
+    h2o_mem_init_pool(&pool);
+
+    fill_with_hot_tail(enc, &pool);
+
+    /* x-b is referenced by a section that remains unacknowledged; the table is not full yet, so x-b is not duplicated */
+    flatten_response_one(enc, &pool, 16, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(enc->inflight.size == 1);
+
+    /* fill the table with x-e (275 bytes) */
+    flatten_response_one(enc, &pool, 20, &(h2o_byte_vector_t){NULL}, "x-e", "eeeeeeeeeeeeeeeeeeee");
+    ack_encoder_section(enc, 20);
+
+    /* x-b, being close to eviction, cannot be duplicated: room can be made only from x-a, which x-b does not beat; therefore x-b is
+     * emitted as a literal without being referenced */
+    flatten_response_one(enc, &pool, 24, &(h2o_byte_vector_t){NULL}, "x-b", "bbbbbbbbbbbbbbbbbbbb");
+    ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+    ok(enc->inflight.size == 1);
+    ok(qpack_table_contains(enc, "x-a", "aaaaaaaaaaaaaaaaaaaa"));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
 static void test_response_duplicate_near_eviction_waits_for_insert_ack(void)
 {
     h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
@@ -1410,12 +1481,13 @@ static void test_response_duplicate_near_eviction_waits_for_insert_ack(void)
     flatten_response_headers(enc, &pool, 0, &(h2o_byte_vector_t){NULL}, headers.entries, headers.size);
     ok(handle_decoder_stream_instruction(enc, buf, h2o_qpack_decoder_send_stream_cancel(NULL, buf, 0)) == 0);
 
-    /* x-a is not evictable until its insertion is acknowledged, so it is not duplicated */
+    /* x-a is not evictable until its insertion is acknowledged, so it is not duplicated; nor is it referenced, as it is close to
+     * eviction */
     flatten_response_one(enc, &pool, 4, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
     ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 0);
+    ok(enc->inflight.size == 0);
 
-    /* once acknowledged (and the reference above released), it is */
-    ack_encoder_section(enc, 4);
+    /* once acknowledged, it is */
     ok(handle_decoder_stream_instruction(enc, buf, encode_insert_count_increment(buf, 1)) == 0);
     flatten_response_one(enc, &pool, 8, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
     ok(h2o_qpack_get_encoder_stats(enc)->num_instructions.duplicate == 1);
@@ -1704,6 +1776,8 @@ void test_lib__http3_qpack(void)
     subtest("response-swap-respects-inflight", test_response_swap_respects_inflight);
     subtest("response-duplicate-near-eviction", test_response_duplicate_near_eviction);
     subtest("response-duplicate-near-eviction-while-referenced", test_response_duplicate_near_eviction_while_referenced);
+    subtest("response-duplicate-near-eviction-keeps-unbeaten", test_response_duplicate_near_eviction_keeps_unbeaten);
+    subtest("response-duplicate-near-eviction-literal-without-room", test_response_duplicate_near_eviction_literal_without_room);
     subtest("response-duplicate-near-eviction-waits-for-insert-ack", test_response_duplicate_near_eviction_waits_for_insert_ack);
     subtest("response-duplicate-near-eviction-oldest-quarter", test_response_duplicate_near_eviction_oldest_quarter);
     subtest("response-duplicate-near-eviction-blocked-limit", test_response_duplicate_near_eviction_blocked_limit);
