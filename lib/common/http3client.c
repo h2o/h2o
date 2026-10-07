@@ -703,6 +703,9 @@ static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
     if (!quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
         quicly_request_stop(req->quic, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
         notify_response_error(req, h2o_httpclient_error_io);
+    } else if (req->qpack_blocked_ref != 0) {
+        /* the response has been received but is blocked by QPACK */
+        notify_response_error(req, h2o_httpclient_error_io);
     }
     detach_stream(req);
     destroy_request(req);
@@ -717,8 +720,9 @@ static quicly_error_t on_receive_process_bytes(struct st_h2o_http3client_req_t *
 
     do {
         if ((ret = req->handle_input(req, src, src_end, is_eos ? ERROR_EOS : 0, err_desc)) != 0) {
+            /* a frame is incomplete if more bytes are needed, which is an error at EOS, or if it is blocked by QPACK */
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
-                ret = is_eos ? H2O_HTTP3_ERROR_FRAME : 0;
+                ret = is_eos && req->qpack_blocked_ref == 0 ? H2O_HTTP3_ERROR_FRAME : 0;
             break;
         }
     } while (*src != src_end);
@@ -732,6 +736,10 @@ static void handle_receive_result(struct st_h2o_http3client_req_t *req, size_t b
     if (bytes_consumed != 0)
         quicly_stream_sync_recvbuf(req->quic, bytes_consumed);
     req->recvbuf.prev_bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+
+    /* if blocked by QPACK, wait for the encoder stream even if all bytes have been received */
+    if (req->qpack_blocked_ref != 0)
+        return;
 
     /* cleanup */
     if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
