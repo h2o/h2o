@@ -1291,7 +1291,7 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
 
 static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
 {
-    if (conn->qpack.ctx->decoder_table_capacity == 0)
+    if (conn->qpack.ctx->decoder.table_capacity == 0)
         return 0;
     uint64_t max_blocked = quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
     assert(max_blocked == 0 || get_callbacks(conn)->qpack_unblock_streams != NULL ||
@@ -1321,9 +1321,9 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
-        if (conn->qpack.ctx->decoder_table_capacity != 0) {
+        if (conn->qpack.ctx->decoder.table_capacity != 0) {
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
-            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder_table_capacity);
+            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder.table_capacity);
         }
         if (max_blocked_streams != 0) {
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS);
@@ -1351,7 +1351,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
+    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder.table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
@@ -1433,8 +1433,7 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
 int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
 {
     const uint8_t *src = payload, *src_end = src + length;
-    uint32_t header_table_size = 0;
-    uint64_t blocked_streams = 0;
+    uint64_t max_table_capacity = 0, blocked_streams = 0;
 
     assert(!h2o_http3_has_received_settings(conn));
 
@@ -1450,8 +1449,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             conn->peer_settings.max_field_section_size = value;
             break;
         case H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY:
-            header_table_size =
-                value < conn->qpack.ctx->encoder_table_capacity ? (uint32_t)value : conn->qpack.ctx->encoder_table_capacity;
+            max_table_capacity = value;
             break;
         case H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS:
             blocked_streams = value;
@@ -1476,7 +1474,12 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         }
     }
 
-    conn->qpack.enc = h2o_qpack_create_encoder(header_table_size, blocked_streams);
+    h2o_byte_vector_t encoder_buf = {NULL};
+    conn->qpack.enc = h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
+                                               conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
+    if (encoder_buf.size != 0)
+        h2o_http3_write_unistream(conn->_control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
+    free(encoder_buf.entries);
     return 0;
 Malformed:
     *err_desc = "malformed SETTINGS frame";
@@ -1496,10 +1499,8 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
-void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len)
+void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *bytes, size_t len)
 {
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
-
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
