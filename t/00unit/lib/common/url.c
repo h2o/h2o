@@ -798,6 +798,36 @@ static void test_resolve(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_host_to_sun(void)
+{
+    struct sockaddr_un sa;
+    char host[sizeof("unix:") - 1 + sizeof(sa.sun_path) + 1];
+    const char *err;
+
+    err = h2o_url_host_to_sun(h2o_iovec_init(H2O_STRLIT("example.com")), &sa);
+    ok(err == h2o_url_host_to_sun_err_is_not_unix_socket);
+
+    err = h2o_url_host_to_sun(h2o_iovec_init(H2O_STRLIT("unix:/")), &sa);
+    ok(err == NULL);
+    ok(sa.sun_family == AF_UNIX);
+    ok(strcmp(sa.sun_path, "/") == 0);
+
+    /* longest path that fits in sun_path together with the terminating NUL */
+    memcpy(host, "unix:", 5);
+    memset(host + 5, 'a', sizeof(sa.sun_path) - 1);
+    err = h2o_url_host_to_sun(h2o_iovec_init(host, 5 + sizeof(sa.sun_path) - 1), &sa);
+    ok(err == NULL);
+    ok(strlen(sa.sun_path) == sizeof(sa.sun_path) - 1);
+
+    /* paths that would not leave room for the terminating NUL are rejected */
+    memset(host + 5, 'a', sizeof(sa.sun_path));
+    err = h2o_url_host_to_sun(h2o_iovec_init(host, 5 + sizeof(sa.sun_path)), &sa);
+    ok(err != NULL && err != h2o_url_host_to_sun_err_is_not_unix_socket);
+    memset(host + 5, 'a', sizeof(sa.sun_path) + 1);
+    err = h2o_url_host_to_sun(h2o_iovec_init(host, 5 + sizeof(sa.sun_path) + 1), &sa);
+    ok(err != NULL && err != h2o_url_host_to_sun_err_is_not_unix_socket);
+}
+
 void test_lib__common__url_c(void)
 {
     subtest("normalize_path", test_normalize_path);
@@ -805,4 +835,5 @@ void test_lib__common__url_c(void)
     subtest("parse", test_parse);
     subtest("parse_relative", test_parse_relative);
     subtest("resolve", test_resolve);
+    subtest("host_to_sun", test_host_to_sun);
 }
