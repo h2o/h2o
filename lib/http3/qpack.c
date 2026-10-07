@@ -175,8 +175,9 @@ struct st_h2o_qpack_encoder_t {
     float freq_add;
     /**
      * Minimum score among the resident dynamic-table entries, used as the swap fast-reject bound. Negative means invalid: it is
-     * invalidated on insert and recomputed lazily for free while `lookup_dynamic` next walks the table to find a match. It covers
-     * all residents (not just the evictable ones), which only weakens the reject, never makes it admit something it shouldn't.
+     * invalidated on insert and on hit (which raises a score), and recomputed lazily for free while `lookup_dynamic` next walks the
+     * table to find a match. It covers all residents (not just the evictable ones), which only weakens the reject, never makes it
+     * admit something it shouldn't.
      */
     double table_min_score;
     /**
@@ -1444,9 +1445,9 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
 {
     size_t i;
     int64_t name_found = -1;
-    /* When the cached minimum resident score has been invalidated (by an insert), recompute it for free during this walk, so the
-     * swap fast-reject has a live bound without a second pass. Skipped on the acked-only (no-insert) path, when refinement is
-     * off/frozen, and when the cached value is still valid. */
+    /* When the cached minimum resident score has been invalidated (by an insert or a hit), recompute it for free during this walk,
+     * so the swap fast-reject has a live bound without a second pass. Skipped on the acked-only (no-insert) path, when refinement
+     * is off/frozen, and when the cached value is still valid. */
     int track_score = !acked_only && !no_refine(qpack) && qpack->table_min_score < 0;
     double min_score = DBL_MAX;
 
@@ -1464,8 +1465,11 @@ static int64_t lookup_dynamic(h2o_qpack_encoder_t *qpack, const h2o_iovec_t *nam
         /* compare values */
         if (h2o_memis(value.base, value.len, entry->value, entry->value_len)) {
             *is_exact = 1;
-            if (!no_refine(qpack))
+            if (!no_refine(qpack)) {
                 entry->freq += qpack->freq_add;
+                /* the hit raises this entry's score, possibly lifting the minimum; a stale bound would rarely reject */
+                qpack->table_min_score = -1;
+            }
             return i;
         }
         if (name_found == -1)
