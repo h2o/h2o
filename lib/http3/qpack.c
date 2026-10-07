@@ -1375,7 +1375,7 @@ static void duplicate_resident(struct st_h2o_qpack_flatten_context_t *ctx, struc
     int64_t relative_index = qpack_table_total_inserts(&ctx->qpack->table) - 1 - entry->abs_index;
     struct st_h2o_qpack_header_t *clone = clone_entry(ctx->qpack, entry);
 
-    /* The frequency travels with the clone; the original is evicted mechanically (without demotion) as the prefix is consumed. */
+    /* The frequency travels with the clone; the original is evicted mechanically (without demotion) as the tail is consumed. */
     emit_duplicate(ctx->qpack, ctx->pool, ctx->encoder_buf, relative_index);
     encoder_insert(ctx->qpack, clone, entry->abs_index + 1);
 }
@@ -1425,15 +1425,15 @@ static int64_t make_room_for_swap(struct st_h2o_qpack_flatten_context_t *ctx, si
         return 0;
     if ((evict_upto = plan_room_for_swap(ctx, candidate_size, candidate_score, smallest_blocking_ref)) == 0)
         return 0;
-    /* The whole prefix [base_offset, evict_upto) is going to be removed. Demote the entries the candidate beats (they are being
-     * dropped) up front, before any eviction happens below; demotion is encoder-internal, so unlike the physical eviction it does
-     * not need to be interleaved with the inserts. */
+    /* The whole range [base_offset, evict_upto) at the tail is going to be removed. Demote the entries the candidate beats (they
+     * are being dropped) first, before any eviction happens below; demotion is encoder-internal, so unlike the physical eviction it
+     * does not need to be interleaved with the inserts. */
     for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
         struct st_h2o_qpack_header_t *entry = ctx->qpack->table.first[abs_index - ctx->qpack->table.base_offset];
         if (candidate_beats_entry(candidate_score, entry))
             demote_entry(ctx->qpack, entry);
     }
-    /* Relocate the entries that are kept by emitting Duplicate and cloning them to the tail; this mechanically evicts the prefix
+    /* Relocate the entries that are kept by emitting Duplicate and cloning them to the head; this mechanically evicts the range
      * (the originals are released without demotion, as their frequency now lives in the clones). */
     for (int64_t abs_index = ctx->qpack->table.base_offset; abs_index < evict_upto; ++abs_index) {
         if (abs_index < ctx->qpack->table.base_offset)
@@ -1655,9 +1655,9 @@ static size_t emit_literal(struct st_h2o_qpack_flatten_context_t *ctx, int32_t s
 
 /**
  * Emits the insert of (name, value) onto the encoder stream, registers it in the dynamic table (inheriting the frequency carried by
- * `shadow`, or starting fresh when NULL) while evicting the table prefix below `evict_upto`, then references the new entry from the
- * header block. `dynamic_index` is the name-only dynamic match to reference, or < 0 to emit the name literally. The entry is scored
- * by the size it actually took on the wire.
+ * `shadow`, or starting fresh when NULL) while evicting the entries below `evict_upto` from the tail, then references the new entry
+ * from the header block. `dynamic_index` is the name-only dynamic match to reference, or < 0 to emit the name literally. The entry
+ * is scored by the size it actually took on the wire.
  */
 static void emit_insert_and_reference(struct st_h2o_qpack_flatten_context_t *ctx, int32_t static_index, int64_t dynamic_index,
                                       const h2o_iovec_t *name, h2o_iovec_t value, struct st_h2o_qpack_shadow_slot_t *shadow,
