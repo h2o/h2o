@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include "../../test.h"
 #include "../../../../lib/http3/server.c"
+#include "conn-state.c"
 
 struct sched_node_t {
     struct st_h2o_http3_req_scheduler_node_t super;
@@ -136,4 +137,5 @@ static void test_scheduler(void)
 void test_lib__http3_server(void)
 {
     subtest("scheduler", test_scheduler);
+    subtest("conn_state", test_conn_state);
 }
