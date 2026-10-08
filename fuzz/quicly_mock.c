@@ -464,10 +464,17 @@ quicly_error_t quicly_close(quicly_conn_t *conn, quicly_error_t err, const char 
     return 0;
 }
 
+int quicly_get_alt_egress(quicly_conn_t *conn)
+{
+    return 0;
+}
+
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
     /* TODO: simulate delay */
-    return conn->super.ctx->now->cb(conn->super.ctx->now) + 1;
+    double now;
+    conn->super.ctx->now->cb(conn->super.ctx->now, &now);
+    return (int64_t)now + 1;
 }
 
 void quicly_free(quicly_conn_t *conn)

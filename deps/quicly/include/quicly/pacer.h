@@ -23,6 +23,7 @@
 #define quicly_pacer_h
 
 #include <assert.h>
+#include <math.h>
 #include <stddef.h>
 #include <inttypes.h>
 
@@ -68,7 +69,7 @@ static void quicly_pacer_consume_window(quicly_pacer_t *pacer, size_t delta);
 /**
  * Calculates the flow rate as `bytes_per_msec`. The returned value is no less than 1.
  */
-static uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, uint32_t rtt);
+static uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, float rtt);
 
 /* inline definitions */
 
@@ -136,9 +137,9 @@ inline void quicly_pacer_consume_window(quicly_pacer_t *pacer, size_t delta)
     pacer->bytes_sent += delta;
 }
 
-inline uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, uint32_t rtt)
+inline uint32_t quicly_pacer_calc_send_rate(uint32_t multiplier, uint32_t cwnd, float rtt)
 {
-    uint64_t ret = ((uint64_t)cwnd * multiplier + rtt - 1) / rtt;
+    double ret = ceil((double)cwnd * multiplier / rtt);
     if (ret > UINT32_MAX)
         ret = UINT32_MAX;
     return ret;

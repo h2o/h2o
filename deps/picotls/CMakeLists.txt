@@ -28,6 +28,10 @@ IF (WITH_FUSION)
 ENDIF ()
 OPTION(WITH_AEGIS "enable AEGIS (requires libaegis)" ${WITH_AEGIS})
 OPTION(WITH_MBEDTLS "enable MBEDTLS" ${WITH_MBEDTLS})
+# The picotls libraries are declared without STATIC/SHARED keywords, so the
+# standard BUILD_SHARED_LIBS variable selects the library type. Surface it as
+# an option for discoverability; the default (OFF) preserves static builds.
+OPTION(BUILD_SHARED_LIBS "build picotls libraries as shared libraries" OFF)
 
 SET(CMAKE_C_FLAGS "-std=c99 -Wall -O2 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 INCLUDE_DIRECTORIES(
@@ -207,6 +211,10 @@ IF (WITH_MBEDTLS)
     message(STATUS "mbedtls libraries: ${MBEDTLS_LIBRARIES}")
     INCLUDE_DIRECTORIES(${MBEDTLS_INCLUDE_DIRS})
     ADD_LIBRARY(picotls-mbedtls lib/mbedtls.c lib/mbedtls_sign.c)
+    # Record the dependencies on the target itself: shared builds need them
+    # resolved at link time (DT_NEEDED/import libraries), and static consumers
+    # inherit them transitively instead of having to repeat them.
+    TARGET_LINK_LIBRARIES(picotls-mbedtls picotls-core ${MBEDTLS_LIBRARIES})
     ADD_EXECUTABLE(test-mbedtls.t
         deps/picotest/picotest.c
         ${CORE_TEST_FILES}
@@ -226,6 +234,20 @@ IF (NOT WITH_FUSION)
 ENDIF ()
 
 ADD_CUSTOM_TARGET(check env BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR} prove --exec '' -v ${CMAKE_CURRENT_BINARY_DIR}/*.t t/*.t WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} DEPENDS ${TEST_EXES} cli)
+
+# The picotls headers carry no dllexport/dllimport annotations, so DLL builds
+# on Windows would otherwise produce no import library. Exporting all symbols
+# is CMake's supported mechanism for unannotated code. Note the standard
+# limitation: consumers of global *data* symbols across the DLL boundary would
+# still need __declspec(dllimport); picotls's public API is function-based.
+# The property has no effect on static or non-Windows builds.
+FOREACH (PICOTLS_LIBRARY_TARGET
+        picotls-core picotls-minicrypto picotls-openssl picotls-fusion picotls-mbedtls)
+    IF (TARGET ${PICOTLS_LIBRARY_TARGET})
+        SET_TARGET_PROPERTIES(${PICOTLS_LIBRARY_TARGET} PROPERTIES
+            WINDOWS_EXPORT_ALL_SYMBOLS ON)
+    ENDIF ()
+ENDFOREACH ()
 
 IF (CMAKE_SYSTEM_NAME STREQUAL "Linux")
      SET(CMAKE_C_FLAGS "-D_GNU_SOURCE -pthread ${CMAKE_C_FLAGS}")
