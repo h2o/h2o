@@ -417,6 +417,15 @@ static int dynamic_table_size_update(h2o_qpack_decoder_t *qpack, int64_t max_siz
     return 0;
 }
 
+/**
+ * Literals on the encoder stream are bounded by the same limit as a request (see assert_literal_length). Peers are not trusted to
+ * stay within the limit, as the receive window of the encoder stream is not always that small (e.g., the HTTP/3 client).
+ */
+static int literal_length_is_too_long(int64_t len)
+{
+    return len > (int64_t)h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
+}
+
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **_src, const uint8_t *src_end,
                                    const char **err_desc)
 {
@@ -437,6 +446,11 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             int value_is_huff = (*src & 0x80) != 0;
             if ((ret = decode_int(&value_len, &src, src_end, 7)) != 0)
                 goto Exit;
+            if (literal_length_is_too_long(value_len)) {
+                *err_desc = h2o_qpack_err_header_value_too_long;
+                ret = H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM;
+                goto Exit;
+            }
             if (!(src + value_len <= src_end))
                 goto Exit;
             ret = insert_with_name_reference(qpack, name_is_static, name_index, value_is_huff, src, value_len, err_desc);
@@ -448,6 +462,11 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             int name_is_huff = (*src & 0x20) != 0;
             if ((ret = decode_int(&name_len, &src, src_end, 5)) != 0)
                 goto Exit;
+            if (literal_length_is_too_long(name_len)) {
+                *err_desc = h2o_qpack_err_header_name_too_long;
+                ret = H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM;
+                goto Exit;
+            }
             if (!(src + name_len < src_end))
                 goto Exit;
             const uint8_t *name = src;
@@ -455,6 +474,11 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
             int value_is_huff = (*src & 0x80) != 0;
             if ((ret = decode_int(&value_len, &src, src_end, 7)) != 0)
                 goto Exit;
+            if (literal_length_is_too_long(value_len)) {
+                *err_desc = h2o_qpack_err_header_value_too_long;
+                ret = H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM;
+                goto Exit;
+            }
             if (!(src + value_len <= src_end))
                 goto Exit;
             ret = insert_without_name_reference(qpack, name_is_huff, name, name_len, value_is_huff, src, value_len, err_desc);

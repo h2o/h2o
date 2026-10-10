@@ -614,6 +614,26 @@ static void test_decode_errors(void)
 {
     note("encoder stream errors");
     {
+        /* Literals longer than h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN) are rejected as soon as their length is
+         * decoded, rather than reaching assert_literal_length; only the length prefixes are supplied. */
+        h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(0, 10);
+        static const uint8_t ref_value[] = {0xc0, 0x7f, 0xa1, 0xd0, 0x19}; /* Insert With Name Reference, value length 420000 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(ref_value, sizeof(ref_value)), h2o_qpack_err_header_value_too_long);
+        static const uint8_t lit_value[] = {0x41, 'x', 0x7f, 0xa1, 0xd0, 0x19}; /* Insert With Literal Name, value length 420000 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(lit_value, sizeof(lit_value)), h2o_qpack_err_header_value_too_long);
+        static const uint8_t lit_name[] = {0x5f, 0x81, 0xd1, 0x19}; /* Insert With Literal Name, name length 420000 */
+        do_test_decoder_stream_error(dec, h2o_iovec_init(lit_name, sizeof(lit_name)), h2o_qpack_err_header_name_too_long);
+        /* the same instruction delivered in full, as a peer can when the encoder stream has a 1 MiB receive window */
+        size_t full_len = sizeof(lit_value) + 420000;
+        uint8_t *full = h2o_mem_alloc(full_len);
+        memcpy(full, lit_value, sizeof(lit_value));
+        memset(full + sizeof(lit_value), 'a', 420000);
+        do_test_decoder_stream_error(dec, h2o_iovec_init(full, full_len), h2o_qpack_err_header_value_too_long);
+        free(full);
+        h2o_qpack_destroy_decoder(dec);
+    }
+
+    {
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(31, 10);
         /* RFC 9204 Section 4.3.1: capacity greater than the decoder's maximum dynamic table capacity is invalid. */
         static const uint8_t input[] = {0x3f, 0x01}; /* Set Dynamic Table Capacity=32 */
