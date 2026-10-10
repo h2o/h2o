@@ -58,9 +58,8 @@ void h2o_qpack_destroy_decoder(h2o_qpack_decoder_t *qpack);
 /**
  * This function processes a stream of QPACK encoder instructions provided in [*src, src_end), and updates `*src` to point to the
  * beginning of the first partial instruction being found.
- * This decoder does not enforce its own limits to the instruction size. Instead, it relies on the caller's receive window to be
- * set to `h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN)` and flow control to block encoder instructions that exceed that
- * (see the assert_literal_length function in lib/http3/qpack.c).
+ * Names and values longer than `h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN)` are rejected as soon as their length is
+ * decoded, with H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM, regardless of the receive window of the encoder stream.
  */
 int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_count, const uint8_t **src, const uint8_t *src_end,
                                    const char **err_desc);
