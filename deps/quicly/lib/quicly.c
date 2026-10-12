@@ -805,6 +805,11 @@ static struct st_quicly_context_egress_t *get_egress_context(quicly_conn_t *conn
     return &conn->super.ctx->egress[conn->egress.alt_ctx];
 }
 
+static int is_l4s(quicly_conn_t *conn)
+{
+    return get_egress_context(conn)->ecn == QUICLY_ECN_MODE_L4S;
+}
+
 static void ack_frequency_set_next_update_at(quicly_conn_t *conn)
 {
     if (conn->super.remote.transport_params.min_ack_delay_usec != UINT64_MAX)
@@ -2900,7 +2905,7 @@ static quicly_conn_t *create_connection(quicly_context_t *ctx, uint32_t protocol
         conn->egress.pacer = pacer;
         quicly_pacer_reset(conn->egress.pacer);
     }
-    conn->egress.ecn.state = get_egress_context(conn)->ecn ? QUICLY_ECN_PROBING : QUICLY_ECN_OFF;
+    conn->egress.ecn.state = get_egress_context(conn)->ecn != QUICLY_ECN_MODE_OFF ? QUICLY_ECN_PROBING : QUICLY_ECN_OFF;
     quicly_linklist_init(&conn->egress.pending_streams.blocked.uni);
     quicly_linklist_init(&conn->egress.pending_streams.blocked.bidi);
     quicly_linklist_init(&conn->egress.pending_streams.control);
@@ -3677,18 +3682,13 @@ static uint32_t calc_pacer_send_rate(quicly_conn_t *conn)
 
     if (conn->egress.cc.num_loss_episodes == 0) {
         if (quicly_cc_in_jumpstart(&conn->egress.cc)) {
-            multiplier = 1;
+            multiplier = 1024;
         } else {
-            multiplier = quicly_cc_rapid_start_use_3x(&conn->egress.cc.rapid_start, &conn->egress.loss.rtt) ? 3 : 2;
+            multiplier = quicly_cc_rapid_start_use_3x(&conn->egress.cc.rapid_start, &conn->egress.loss.rtt) ? 3072 : 2048;
         }
     } else {
-        /* We use of 2x during congestion avoidance, which is different from Linux using 1.25x. The rationale behind this choice is
-         * that 1.25x is not sufficiently aggressive immediately after a loss event. Following a loss event, the congestion window
-         * (CWND) is halved (i.e., beta), but the RTT remains high for one RTT and SRTT can remain high even loger, since it is a
-         * moving average adjusted with each ACK received. Consequently, if the multiplier is set to 1.25x, the calculated send rate
-         * could drop to as low as 1.25 * 1/2 = 0.625. By using a 2x multiplier, the send rate is guaranteed to become no less than
-         * that immediately before the loss event, which would have been the link throughput. */
-        multiplier = 2;
+        struct st_quicly_context_egress_t *ctx = get_egress_context(conn);
+        multiplier = is_l4s(conn) ? ctx->pacing_multiplier_l4s : ctx->pacing_multiplier;
     }
 
     return quicly_pacer_calc_send_rate(multiplier, conn->egress.cc.cwnd, conn->egress.loss.rtt.smoothed);
@@ -5633,7 +5633,10 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     }
 
     /* disable ECN if zero packets where acked in the first 3 PTO of the connection during which all sent packets are ECT(0) */
-    if (conn->egress.ecn.state == QUICLY_ECN_PROBING && conn->created_at + 3. * conn->egress.loss.rtt.smoothed < conn->stash.now) {
+    if (conn->egress.ecn.state == QUICLY_ECN_PROBING &&
+        conn->created_at + 3 * quicly_rtt_get_pto(&conn->egress.loss.rtt, conn->super.remote.transport_params.max_ack_delay,
+                                                  conn->egress.loss.conf->min_pto) <
+            conn->stash.now) {
         update_ecn_state(conn, QUICLY_ECN_OFF);
         /* TODO reset CC? */
     }
@@ -5656,13 +5659,26 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
 
     s->dcid = get_dcid(conn, s->path_index);
 
-    /* send handshake flows; when PTO fires...
-     *  * quicly running as a client sends either a Handshake probe (or data) if the handshake keys are available, or else an
-     *    Initial probe (or data).
-     *  * quicly running as a server sends both Initial and Handshake probes (or data) if the corresponding keys are available. */
+    /* send handshake flows */
     if (s->path_index == 0) {
-        if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only,
-                                       min_packets_to_send != 0 && (!quicly_is_client(conn) || conn->handshake == NULL))) != 0)
+        int may_send_initial_probe = 0;
+        if (min_packets_to_send != 0) {
+            if (quicly_is_client(conn)) {
+                /* client: once it has the handshake keys, so does the server; hence omit the initial probes */
+                if (conn->handshake == NULL)
+                    may_send_initial_probe = 1;
+            } else {
+                /* server: once the client has received ServerHello, stop bundling Initial probes with Handshake probes. Otherwise,
+                 * a client waiting for an offloaded key derivation to complete and cannot make progress might ACK the Initial
+                 * probes. The ACK resets the PTO count and triggers another probe without backing off. */
+                quicly_stream_t *initial_stream;
+                if (conn->handshake == NULL ||
+                    ((initial_stream = quicly_get_stream(conn, (quicly_stream_id_t)-1 - QUICLY_EPOCH_INITIAL)) != NULL &&
+                     initial_stream->sendstate.acked.ranges[0].end < initial_stream->sendstate.size_inflight))
+                    may_send_initial_probe = 1;
+            }
+        }
+        if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_INITIAL, s, ack_only, may_send_initial_probe)) != 0)
             goto Exit;
         if ((ret = send_handshake_flow(conn, QUICLY_EPOCH_HANDSHAKE, s, ack_only, min_packets_to_send != 0)) != 0)
             goto Exit;
@@ -5791,10 +5807,10 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
 Exit:
     if (ret == QUICLY_ERROR_SENDBUF_FULL) {
         ret = 0;
-        /* when the buffer becomes full for the first time, try to use jumpstart; acting after the buffer becomes full does not
+        /* When the buffer becomes full for the first time, try to use jumpstart; acting after the buffer becomes full does not
          * delay switch to jump start, assuming that the buffer provided by the caller of quicly_send is no greater than the burst
-         * size of the pacer (10 packets) */
-        if (conn->egress.try_jumpstart && conn->egress.loss.rtt.minimum != FLT_MAX) {
+         * size of the pacer (10 packets). PTO is excluded, as the send window is then capped to the probes regardless of CWND. */
+        if (conn->egress.try_jumpstart && conn->egress.loss.rtt.minimum != FLT_MAX && !restrict_sending) {
             conn->egress.try_jumpstart = 0;
             conn->super.stats.jumpstart.new_rtt = 0;
             conn->super.stats.jumpstart.cwnd = 0;
@@ -6035,7 +6051,7 @@ Exit:
 
 uint8_t quicly_send_get_ecn_bits(quicly_conn_t *conn)
 {
-    return conn->egress.ecn.state == QUICLY_ECN_OFF ? 0 : 2; /* NON-ECT or ECT(0) */
+    return conn->egress.ecn.state == QUICLY_ECN_OFF ? 0 : is_l4s(conn) ? 1 : 2; /* NON-ECT, ECT(1), or ECT(0) */
 }
 
 size_t quicly_send_close_invalid_token(quicly_context_t *ctx, uint32_t protocol_version, ptls_iovec_t dest_cid,
@@ -6329,6 +6345,52 @@ static quicly_error_t handle_reset_stream_frame(quicly_conn_t *conn, struct st_q
     return 0;
 }
 
+/**
+ * Validates the ECN counts carried by an ACK frame (RFC 9000, Section 13.4.2) and returns their increases.
+ */
+static void handle_ecn_feedback(quicly_conn_t *conn, uint8_t epoch, const quicly_ack_frame_t *frame, int is_ack_ecn,
+                                quicly_cc_ecn_counts_t *increases)
+{
+    *increases = (quicly_cc_ecn_counts_t){0};
+
+    /* return if ECN is already turned off, PN belongs to the previous path, or if the ACK is not advancing */
+    if (conn->egress.ecn.state == QUICLY_ECN_OFF || frame->largest_acknowledged < conn->egress.pn_path_start ||
+        frame->largest_acknowledged < conn->egress.loss.largest_acked_packet_plus1.per_epoch[epoch])
+        return;
+
+    /* the slot of `ecn_counts` where packets not marked CE should be counted: ECT(1) for L4S, ECT(0) otherwise */
+    const size_t ect_index = is_l4s(conn);
+
+    /* if the peer signal is suspicious, turn off ECN */
+    if (!is_ack_ecn || frame->ecn_counts[!ect_index] != 0 || frame->ecn_counts[ect_index] + frame->ecn_counts[2] == 0 ||
+        frame->ecn_counts[ect_index] < conn->egress.ecn.counts[epoch][ect_index] ||
+        frame->ecn_counts[2] < conn->egress.ecn.counts[epoch][2] ||
+        frame->ecn_counts[ect_index] + frame->ecn_counts[2] > conn->egress.packet_number) {
+        update_ecn_state(conn, QUICLY_ECN_OFF);
+        return;
+    }
+
+    /* validation complete; calculate the increase */
+    increases->ce = frame->ecn_counts[2] - conn->egress.ecn.counts[epoch][2];
+    increases->total = frame->ecn_counts[ect_index] - conn->egress.ecn.counts[epoch][ect_index] + increases->ce;
+
+    /* update counters */
+    conn->super.stats.num_packets.acked_ecn_counts[ect_index] += increases->total - increases->ce;
+    conn->super.stats.num_packets.acked_ecn_counts[2] += increases->ce;
+    conn->egress.ecn.counts[epoch][ect_index] = frame->ecn_counts[ect_index];
+    conn->egress.ecn.counts[epoch][2] = frame->ecn_counts[2];
+
+    /* call probing done if ECN reporting has been observed the first time */
+    if (conn->egress.ecn.state == QUICLY_ECN_PROBING && increases->total != 0)
+        update_ecn_state(conn, QUICLY_ECN_ON);
+
+    if (increases->ce != 0) {
+        QUICLY_PROBE(ECN_CONGESTION, conn, conn->stash.now, conn->super.stats.num_packets.acked_ecn_counts[2]);
+        QUICLY_LOG_CONN(ecn_congestion, conn,
+                        { PTLS_LOG_ELEMENT_NUMBER(ce_count, conn->super.stats.num_packets.acked_ecn_counts[2]); });
+    }
+}
+
 static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_handle_payload_state_t *state)
 {
     quicly_ack_frame_t frame;
@@ -6464,6 +6526,11 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
         quicly_ratemeter_on_ack(&conn->egress.ratemeter, conn->stash.now, conn->super.stats.num_bytes.ack_received,
                                 largest_newly_acked.pn);
 
+    /* ECN feedback is processed before the loss detection engine updates the largest acknowledged, and before OnPacketAckedCC, as
+     * L4S feeds it to the marking estimator. */
+    quicly_cc_ecn_counts_t ecn_counts;
+    handle_ecn_feedback(conn, state->epoch, &frame, state->frame_type == QUICLY_FRAME_TYPE_ACK_ECN, &ecn_counts);
+
     /* Update loss detection engine on ack. The function uses ack_delay only when the largest_newly_acked is also the largest acked
      * so far. So, it does not matter if the ack_delay being passed in does not apply to the largest_newly_acked. */
     quicly_loss_on_ack_received(&conn->egress.loss, largest_newly_acked.pn, largest_late_acked, conn->egress.packet_number,
@@ -6473,13 +6540,12 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
                                                        : QUICLY_LOSS_ACK_RECEIVED_KIND_NON_ACK_ELICITING);
 
     /* OnPacketAcked and OnPacketAckedCC */
-    if (bytes_acked > 0) {
-        conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
-                                          (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), cc_limited,
-                                          conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size);
-        QUICLY_PROBE(QUICTRACE_CC_ACK, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
-                     conn->egress.loss.sentmap.bytes_in_flight);
-    }
+    conn->egress.cc.type->cc_on_acked(&conn->egress.cc, &conn->egress.loss, (uint32_t)bytes_acked, frame.largest_acknowledged,
+                                      (uint32_t)(conn->egress.loss.sentmap.bytes_in_flight + bytes_acked), cc_limited,
+                                      conn->egress.packet_number, conn->stash.now, conn->egress.max_udp_payload_size,
+                                      conn->egress.ecn.state != QUICLY_ECN_OFF && is_l4s(conn) ? &ecn_counts : NULL);
+    QUICLY_PROBE(QUICTRACE_CC_ACK, conn, conn->stash.now, &conn->egress.loss.rtt, conn->egress.cc.cwnd,
+                 conn->egress.loss.sentmap.bytes_in_flight);
 
     QUICLY_PROBE(CC_ACK_RECEIVED, conn, conn->stash.now, frame.largest_acknowledged, bytes_acked, conn->egress.cc.cwnd,
                  conn->egress.loss.sentmap.bytes_in_flight);
@@ -6495,37 +6561,9 @@ static quicly_error_t handle_ack_frame(quicly_conn_t *conn, struct st_quicly_han
                                        conn->initial == NULL && conn->handshake == NULL, on_loss_detected)) != 0)
         return ret;
 
-    /* ECN */
-    if (conn->egress.ecn.state != QUICLY_ECN_OFF && largest_newly_acked.pn != UINT64_MAX) {
-        /* if things look suspicious (ECT(1) count becoming non-zero), turn ECN off */
-        if (frame.ecn_counts[1] != 0)
-            update_ecn_state(conn, QUICLY_ECN_OFF);
-        /* TODO: maybe compare num_packets.acked vs. sum(ecn_counts) to see if any packet has been received as NON-ECT? */
-
-        /* ECN validation succeeds if at least one packet is acked using one of the expected marks during the probing period */
-        if (conn->egress.ecn.state == QUICLY_ECN_PROBING && frame.ecn_counts[0] + frame.ecn_counts[2] > 0)
-            update_ecn_state(conn, QUICLY_ECN_ON);
-
-        /* check if congestion should be reported */
-        int report_congestion =
-            conn->egress.ecn.state != QUICLY_ECN_OFF && frame.ecn_counts[2] > conn->egress.ecn.counts[state->epoch][2];
-
-        /* update counters */
-        for (size_t i = 0; i < PTLS_ELEMENTSOF(frame.ecn_counts); ++i) {
-            if (frame.ecn_counts[i] > conn->egress.ecn.counts[state->epoch][i]) {
-                conn->super.stats.num_packets.acked_ecn_counts[i] += frame.ecn_counts[i] - conn->egress.ecn.counts[state->epoch][i];
-                conn->egress.ecn.counts[state->epoch][i] = frame.ecn_counts[i];
-            }
-        }
-
-        /* report congestion */
-        if (report_congestion) {
-            QUICLY_PROBE(ECN_CONGESTION, conn, conn->stash.now, conn->super.stats.num_packets.acked_ecn_counts[2]);
-            QUICLY_LOG_CONN(ecn_congestion, conn,
-                            { PTLS_LOG_ELEMENT_NUMBER(ce_count, conn->super.stats.num_packets.acked_ecn_counts[2]); });
-            notify_congestion_to_cc(conn, 0, largest_newly_acked.pn);
-        }
-    }
+    /* ECN: report CE as congestion; for L4S, the counts have already been fed to the marking estimator through `cc_on_acked` */
+    if (ecn_counts.ce != 0)
+        notify_congestion_to_cc(conn, 0, frame.largest_acknowledged);
 
     setup_next_send(conn);
 
@@ -8208,6 +8246,7 @@ quicly_error_t quicly_decrypt_address_token(ptls_aead_context_t *aead, quicly_ad
             case 20: /* ipv6 */
                 plaintext->remote.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
                 memcpy(&plaintext->remote.sin6.sin6_addr, src, 16);
+                src += 16;
                 if ((ret = ptls_decode32(&plaintext->remote.sin6.sin6_scope_id, &src, end)) != 0)
                     goto Exit;
                 portaddr = &plaintext->remote.sin6.sin6_port;

@@ -30,14 +30,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/select.h>
+#include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
 #include <openssl/pem.h>
 #include "picotls.h"
 #include "picotls/openssl.h"
 
+#define RECV_OFFSET_INTERVAL 15000
+
 struct statistics {
-    uint64_t next_at, bytes;
+    uint64_t next_at, bytes, received;
 };
 
 static void fail(const char *fmt, ...)
@@ -58,17 +61,23 @@ static uint64_t get_now(void)
     return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
+static void flush_stdout(void)
+{
+    fflush(stdout);
+    if (ferror(stdout))
+        fail("writing statistics: %s", strerror(errno));
+}
+
 static void advance_statistics(struct statistics *s, uint64_t now)
 {
     if (now < s->next_at)
         return;
     while (now >= s->next_at) {
-        printf("%" PRIu64 "\n", s->bytes);
+        printf("{\"type\":\"delivered\",\"bytes\":%" PRIu64 "}\n", s->bytes);
         s->bytes = 0;
         s->next_at += 1000;
     }
-    if (fflush(stdout) != 0 || ferror(stdout))
-        fail("writing statistics: %s", strerror(errno));
+    flush_stdout();
 }
 
 static void configure_socket(int fd, const char *cc, unsigned long pacing)
@@ -80,6 +89,12 @@ static void configure_socket(int fd, const char *cc, unsigned long pacing)
         fail("TCP_CONGESTION %s: %s", cc, strerror(errno));
     if (pacing != 0 && setsockopt(fd, SOL_SOCKET, SO_MAX_PACING_RATE, &pacing, sizeof(pacing)) != 0)
         fail("SO_MAX_PACING_RATE: %s", strerror(errno));
+    /* The benchmark harness always ends a capture by killing this process; force close() (including the implicit one at
+     * process exit) to send an immediate RST instead of lingering through a graceful FIN/retransmit teardown, so a killed
+     * connection doesn't keep emitting packets that the next capture's tunulator could pick up on the same TUN. */
+    struct linger lin = {.l_onoff = 1, .l_linger = 0};
+    if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &lin, sizeof(lin)) != 0)
+        fail("SO_LINGER: %s", strerror(errno));
 }
 
 static void send_plaintext(ptls_t *tls, ptls_buffer_t *out, const void *bytes, size_t len)
@@ -139,6 +154,16 @@ static void run_connection(int fd, ptls_context_t *ctx, int is_server, struct st
                 break;
             if (len < 0 && errno != EINTR && errno != EAGAIN && errno != EWOULDBLOCK)
                 fail("read: %s", strerror(errno));
+            if (len > 0 && !is_server) {
+                /* emit a recv-offset event for each multiple of RECV_OFFSET_INTERVAL being read */
+                uint64_t now = get_now();
+                advance_statistics(stats, now);
+                for (uint64_t o = (stats->received + RECV_OFFSET_INTERVAL - 1) / RECV_OFFSET_INTERVAL * RECV_OFFSET_INTERVAL;
+                     o < stats->received + len; o += RECV_OFFSET_INTERVAL)
+                    printf("{\"type\":\"recv-offset\",\"offset\":%" PRIu64 ",\"at\":%" PRIu64 "}\n", o, now);
+                flush_stdout();
+                stats->received += len;
+            }
             for (size_t off = 0; len > 0 && off < (size_t)len;) {
                 size_t consumed = len - off;
                 if (!ptls_handshake_is_complete(tls)) {
@@ -208,8 +233,10 @@ static void usage(const char *cmd)
            "  -p                enable TCP pacing with a 1 Gbit/s ceiling (default: disabled)\n"
            "  -h                print this help\n"
            "\n"
-           "Client stdout: one integer per millisecond, followed by a newline, counting delivered\n"
-           "plaintext bytes. Time starts before connect; empty milliseconds emit 0.\n"
+           "Client stdout: JSON lines; {\"type\":\"delivered\",\"bytes\":N} per millisecond, counting\n"
+           "delivered plaintext bytes, and {\"type\":\"recv-offset\",\"offset\":N,\"at\":T} when the TCP\n"
+           "stream byte at each multiple of 15000 is read from the socket (T: CLOCK_MONOTONIC in\n"
+           "microseconds). Time starts before connect; empty milliseconds emit 0.\n"
            "Output advances on I/O and at least once per second while idle.\n"
            "IPv4 only. The client does not verify certificates.\n",
            cmd, cmd);

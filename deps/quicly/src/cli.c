@@ -49,6 +49,7 @@
 #include "../deps/picotls/t/util.h"
 
 #define MAX_BURST_PACKETS 10
+#define RECV_OFFSET_INTERVAL 15000
 
 FILE *quicly_trace_fp = NULL;
 static unsigned verbosity = 0;
@@ -161,11 +162,11 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             ", packets-lost: %" PRIu64 ", ack-received: %" PRIu64 ", ack-ecn-ect0: %" PRIu64 ", ack-ecn-ect1: %" PRIu64
             ", ack-ecn-ce: %" PRIu64 ", late-acked: %" PRIu64 ", bytes-received: %" PRIu64 ", bytes-sent: %" PRIu64
             ", paths-created %" PRIu64 ", paths-validated %" PRIu64 ", paths-promoted: %" PRIu64 ", srtt: %g"
-            ", num-loss-episodes: %" PRIu32 ", num-ecn-loss-episodes: %" PRIu32 ", delivery-rate: %" PRIu64 ", cwnd: %" PRIu32
-            ", cwnd-exiting-slow-start: %" PRIu32 ", slow-start-exit-at: %" PRId64 ", jumpstart-cwnd: %" PRIu32
-            ", jumpstart-exit: %" PRIu32 ", jumpstart-prev-rate: %" PRIu64 ", jumpstart-prev-rtt: %" PRIu32
-            ", token-sent-rate: %" PRIu64 ", token-sent-rtt: %" PRIu32 ", ack-frequency-frames-sent: %" PRIu64
-            ", ack-frequency-frames-received: %" PRIu64 "\n",
+            ", num-loss-episodes: %" PRIu32 ", num-ecn-loss-episodes: %" PRIu32 ", num-prague-reductions: %" PRIu64
+            ", delivery-rate: %" PRIu64 ", cwnd: %" PRIu32 ", cwnd-exiting-slow-start: %" PRIu32 ", slow-start-exit-at: %" PRId64
+            ", jumpstart-cwnd: %" PRIu32 ", jumpstart-exit: %" PRIu32 ", jumpstart-prev-rate: %" PRIu64
+            ", jumpstart-prev-rtt: %" PRIu32 ", token-sent-rate: %" PRIu64 ", token-sent-rtt: %" PRIu32
+            ", ack-frequency-frames-sent: %" PRIu64 ", ack-frequency-frames-received: %" PRIu64 "\n",
             stats.num_packets.received, stats.num_packets.initial_received, stats.num_packets.zero_rtt_received,
             stats.num_packets.handshake_received, stats.num_packets.received_ecn_counts[0],
             stats.num_packets.received_ecn_counts[1], stats.num_packets.received_ecn_counts[2], stats.num_packets.decryption_failed,
@@ -174,10 +175,10 @@ static void dump_stats(FILE *fp, quicly_conn_t *conn)
             stats.num_packets.acked_ecn_counts[0], stats.num_packets.acked_ecn_counts[1], stats.num_packets.acked_ecn_counts[2],
             stats.num_packets.late_acked, stats.num_bytes.received, stats.num_bytes.sent, stats.num_paths.created,
             stats.num_paths.validated, stats.num_paths.promoted, stats.rtt.smoothed, stats.cc.num_loss_episodes,
-            stats.cc.num_ecn_loss_episodes, stats.delivery_rate.smoothed, stats.cc.cwnd, stats.cc.cwnd_exiting_slow_start,
-            stats.cc.exit_slow_start_at, stats.jumpstart.cwnd, stats.cc.cwnd_exiting_jumpstart, stats.jumpstart.prev_rate,
-            stats.jumpstart.prev_rtt, stats.token_sent.rate, stats.token_sent.rtt, stats.num_frames_sent.ack_frequency,
-            stats.num_frames_received.ack_frequency);
+            stats.cc.num_ecn_loss_episodes, stats.cc.num_prague_reductions, stats.delivery_rate.smoothed, stats.cc.cwnd,
+            stats.cc.cwnd_exiting_slow_start, stats.cc.exit_slow_start_at, stats.jumpstart.cwnd, stats.cc.cwnd_exiting_jumpstart,
+            stats.jumpstart.prev_rate, stats.jumpstart.prev_rtt, stats.token_sent.rate, stats.token_sent.rtt,
+            stats.num_frames_sent.ack_frequency, stats.num_frames_received.ack_frequency);
 }
 
 static int validate_path(const char *path)
@@ -386,16 +387,10 @@ static uint64_t delivery_now(void)
 
 static void advance_delivery_stats(uint64_t now)
 {
-    if (now < delivered.next_at)
-        return;
     while (now >= delivered.next_at) {
-        printf("%" PRIu64 "\n", delivered.bytes);
+        printf("{\"type\":\"delivered\",\"bytes\":%" PRIu64 "}\n", delivered.bytes);
         delivered.bytes = 0;
         delivered.next_at += 1000;
-    }
-    if (fflush(stdout) != 0 || ferror(stdout)) {
-        perror("writing delivery statistics");
-        exit(1);
     }
 }
 
@@ -409,8 +404,14 @@ static void client_on_receive(quicly_stream_t *stream, size_t off, const void *s
 
     if ((input = quicly_streambuf_ingress_get(stream)).len != 0) {
         if (delivery_stats) {
-            advance_delivery_stats(delivery_now());
+            uint64_t now = delivery_now(), data_off = stream->recvstate.data_off;
+            advance_delivery_stats(now);
             delivered.bytes += input.len;
+            /* emit a recv-offset event for each multiple of RECV_OFFSET_INTERVAL being delivered */
+            for (uint64_t o = (data_off + RECV_OFFSET_INTERVAL - 1) / RECV_OFFSET_INTERVAL * RECV_OFFSET_INTERVAL;
+                 o < data_off + input.len; o += RECV_OFFSET_INTERVAL)
+                printf("{\"type\":\"recv-offset\",\"offset\":%" PRIu64 ",\"at\":%" PRIu64 "}\n", o, now);
+            fflush(stdout);
         }
         if (!suppress_output) {
             FILE *out = (stream_data->outfp == NULL) ? stdout : stream_data->outfp;
@@ -783,6 +784,7 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
             if (delivery_stats) {
                 uint64_t now = delivery_now();
                 advance_delivery_stats(now);
+                fflush(stdout);
                 uint64_t wait = delivered.next_at + 999000 - now;
                 if (tv == NULL || (uint64_t)tv->tv_sec * 1000000 + tv->tv_usec > wait) {
                     tvbuf.tv_sec = wait / 1000000;
@@ -1320,17 +1322,22 @@ static void usage(const char *cmd)
            "  -N                        enforce HelloRetryRequest (client-only)\n"
            "  -n                        enforce version negotiation (client-only)\n"
            "  -O                        suppress output\n"
-           "  --delivery-stats          replace response output with plaintext stream bytes\n"
-           "                            delivered per millisecond, summed across streams:\n"
-           "                            one integer per line, including zeros (client only).\n"
-           "                            Time starts before connect; output advances on I/O\n"
-           "                            and at least once per second while idle.\n"
+           "  --delivery-stats          replace response output with JSON lines (client only):\n"
+           "                            {\"type\":\"delivered\",\"bytes\":N} per millisecond,\n"
+           "                            counting plaintext stream bytes delivered, summed\n"
+           "                            across streams, including zeros, and\n"
+           "                            {\"type\":\"recv-offset\",\"offset\":N,\"at\":T} when the\n"
+           "                            stream byte at each multiple of 15000 is delivered (T:\n"
+           "                            CLOCK_MONOTONIC in microseconds). Time starts before\n"
+           "                            connect; output advances on I/O and at least once per\n"
+           "                            second while idle.\n"
            "  -p path                   path to request (can be set multiple times)\n"
            "  -P path                   path to request, store response to file (can be set\n"
            "                            multiple times)\n"
            "  -R                        require Retry (server only)\n"
            "  -r [initial-pto]          initial PTO (in milliseconds)\n"
            "  --abba                    enables ABBA bandwidth adaptation\n"
+           "  --l4s                     enables L4S; CUBACK must be used\n"
            "  --rapid-start             turns on rapid start\n"
            "  -S [num-speculative-ptos] number of speculative PTOs\n"
            "  -s session-file           file to load / store the session ticket\n"
@@ -1356,6 +1363,14 @@ static void usage(const char *cmd)
            "                            header packets, DCID length must be supplied\n"
            "  --encrypt-packet secret   given a packet without encryption applied, emits a\n"
            "                            packet encrypted using the given traffic secret\n"
+           "  --decrypt-packet-batch secret[:dcid-length]\n"
+           "                            same as --decrypt-packet, but for a sequence of packets\n"
+           "                            in order, each prefixed by a 2-byte big-endian length,\n"
+           "                            emitting each payload likewise (empty when the packet\n"
+           "                            cannot be processed); full packet numbers are recovered\n"
+           "                            from the preceding packets. When AEAD decryption fails\n"
+           "                            (e.g., the packet is truncated), the bytes decrypted\n"
+           "                            without verification are emitted, warning only once\n"
            "\n",
            cmd);
 }
@@ -1475,14 +1490,21 @@ UnexpectedType:
     return SIZE_MAX;
 }
 
-static int cmd_encrypt_packet(int is_enc, const char *secret_dcid_len)
+/**
+ * `--encrypt-packet` and `--decrypt-packet` read one packet from stdin and write the result to stdout. `--decrypt-packet-batch`
+ * reads a sequence of packets, each prefixed by its length as a 2-byte big-endian integer, and writes the payload of each, prefixed
+ * likewise; a packet that cannot be processed yields an empty payload.
+ */
+static int cmd_encrypt_packet(int is_enc, int is_batch, const char *secret_dcid_len)
 {
     quicly_crypto_engine_t *engine = &quicly_default_crypto_engine;
     ptls_cipher_suite_t *cs = &ptls_openssl_aes128gcmsha256;
-    ptls_cipher_context_t *header_protect;
-    ptls_aead_context_t *packet_protect;
+    ptls_cipher_context_t *header_protect = NULL;
+    ptls_aead_context_t *packet_protect = NULL;
     uint8_t buf[1500] = {}, secret[PTLS_MAX_DIGEST_SIZE];
     size_t inlen, pn_off, packet_size, short_header_dcid_len = 0, epoch;
+    uint64_t next_pn = 0;
+    int aead_failure_warned = 0;
 
     { /* decode secret and dcid length */
         const char *separator = strchr(secret_dcid_len, ':');
@@ -1498,67 +1520,105 @@ static int cmd_encrypt_packet(int is_enc, const char *secret_dcid_len)
         }
     }
 
-    /* read the packet */
-    inlen = fread(buf, 1, sizeof(buf) - cs->aead->tag_size, stdin);
-    if (ferror(stdin)) {
-        perror("I/O error");
-        return 1;
-    } else if (!feof(stdin)) {
-        fprintf(stderr, "Unexpected amount of input.\n");
-        return 1;
-    }
-    if ((pn_off = determine_pn_offset(ptls_iovec_init(buf, inlen), &packet_size, &epoch, short_header_dcid_len)) == SIZE_MAX)
-        return 1;
-    if (packet_size - pn_off < QUICLY_MAX_PN_SIZE + cs->aead->tag_size) {
-        fprintf(stderr, "encrypted part of the packet is too small.\n");
-        return 1;
-    }
+    do {
+        uint8_t lenbuf[2], plaintext[sizeof(buf)] = {0};
+        ptls_iovec_t output = ptls_iovec_init(NULL, 0);
 
-    /* setup crypto */
-    if (engine->setup_cipher(engine, NULL, epoch, is_enc, &header_protect, &packet_protect, cs->aead, cs->hash, secret) != 0) {
-        fprintf(stderr, "Crypto faiure.\n");
-        return 1;
-    }
+        /* read the packet; in batch mode, it is prefixed by its length */
+        size_t len = sizeof(buf) - cs->aead->tag_size;
+        if (is_batch) {
+            if (fread(lenbuf, 1, sizeof(lenbuf), stdin) != sizeof(lenbuf))
+                break;
+            if (lenbuf[0] * 256 + lenbuf[1] > len) {
+                fprintf(stderr, "Packet is too large.\n");
+                return 1;
+            }
+            len = lenbuf[0] * 256 + lenbuf[1];
+        }
+        inlen = fread(buf, 1, len, stdin);
+        if (ferror(stdin)) {
+            perror("I/O error");
+            return 1;
+        } else if (is_batch ? inlen != len : !feof(stdin)) {
+            fprintf(stderr, "Unexpected amount of input.\n");
+            return 1;
+        }
+        if ((pn_off = determine_pn_offset(ptls_iovec_init(buf, inlen), &packet_size, &epoch, short_header_dcid_len)) == SIZE_MAX)
+            goto PacketError;
+        if (packet_size - pn_off < QUICLY_MAX_PN_SIZE + cs->aead->tag_size) {
+            fprintf(stderr, "encrypted part of the packet is too small.\n");
+            goto PacketError;
+        }
 
-    if (is_enc) {
-        /* packet size can be greater than the input, in which case PADDING frames will be appended. However, it cannot exceed the
-         * size of the buffer. */
-        if (packet_size > sizeof(buf)) {
-            fprintf(stderr, "Length field value is too large.\n");
+        /* setup crypto */
+        if (packet_protect == NULL &&
+            engine->setup_cipher(engine, NULL, epoch, is_enc, &header_protect, &packet_protect, cs->aead, cs->hash, secret) != 0) {
+            fprintf(stderr, "Crypto faiure.\n");
             return 1;
         }
-        if ((buf[0] & 3) + 1 != QUICLY_SEND_PN_SIZE) {
-            fprintf(stderr, "Unexpected packet number size\n");
+
+        if (is_enc) {
+            /* packet size can be greater than the input, in which case PADDING frames will be appended. However, it cannot exceed
+             * the size of the buffer. */
+            if (packet_size > sizeof(buf)) {
+                fprintf(stderr, "Length field value is too large.\n");
+                goto PacketError;
+            }
+            if ((buf[0] & 3) + 1 != QUICLY_SEND_PN_SIZE) {
+                fprintf(stderr, "Unexpected packet number size\n");
+                goto PacketError;
+            }
+            engine->encrypt_packet(engine, NULL, header_protect, packet_protect, ptls_iovec_init(buf, packet_size), 0,
+                                   pn_off + QUICLY_SEND_PN_SIZE, buf[pn_off] * 256 + buf[pn_off + 1], 0);
+            output = ptls_iovec_init(buf, packet_size);
+        } else {
+            if (packet_size > inlen) {
+                fprintf(stderr, "Length field value is too large.\n");
+                goto PacketError;
+            }
+            /* unprotect header protection */
+            uint8_t hpmask[5] = {};
+            ptls_cipher_init(header_protect, buf + pn_off + QUICLY_MAX_PN_SIZE);
+            ptls_cipher_encrypt(header_protect, hpmask, hpmask, sizeof(hpmask));
+            buf[0] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(buf[0]) ? 0xf : 0x1f);
+            size_t pn_len = (buf[0] & 0x3) + 1;
+            uint32_t truncated_pn = 0;
+            for (int i = 0; i < pn_len; ++i) {
+                buf[pn_off + i] ^= hpmask[i + 1];
+                truncated_pn = (truncated_pn << 8) | buf[pn_off + i];
+            }
+            uint64_t pn = quicly_determine_packet_number(truncated_pn, pn_len * 8, next_pn);
+            if (pn >= next_pn)
+                next_pn = pn + 1;
+            /* decrypt; in batch mode, failure is tolerated and the unverified payload is emitted, as the caller might have
+             * truncated the packet and replaced the tag with a dummy */
+            if (ptls_aead_decrypt(packet_protect, plaintext, buf + pn_off + pn_len, packet_size - (pn_off + pn_len), pn, buf,
+                                  pn_off + pn_len) == SIZE_MAX) {
+                if (!is_batch) {
+                    fprintf(stderr, "AEAD decryption failed.\n");
+                    goto PacketError;
+                }
+                if (!aead_failure_warned) {
+                    fprintf(stderr, "AEAD decryption failed; emitting payloads without verification (warned only once)\n");
+                    aead_failure_warned = 1;
+                }
+            }
+            output = ptls_iovec_init(plaintext, packet_size - (pn_off + pn_len + cs->aead->tag_size));
+        }
+        goto Emit;
+
+    PacketError:
+        /* in batch mode, a packet that cannot be processed yields an empty result */
+        if (!is_batch)
             return 1;
+    Emit:
+        if (is_batch) {
+            lenbuf[0] = output.len >> 8;
+            lenbuf[1] = output.len;
+            fwrite(lenbuf, 1, sizeof(lenbuf), stdout);
         }
-        engine->encrypt_packet(engine, NULL, header_protect, packet_protect, ptls_iovec_init(buf, packet_size), 0,
-                               pn_off + QUICLY_SEND_PN_SIZE, buf[pn_off] * 256 + buf[pn_off + 1], 0);
-        fwrite(buf, 1, packet_size, stdout);
-    } else {
-        if (packet_size > inlen) {
-            fprintf(stderr, "Length field value is too large.\n");
-            return 1;
-        }
-        /* unprotect header protection */
-        uint8_t hpmask[5] = {};
-        ptls_cipher_init(header_protect, buf + pn_off + QUICLY_MAX_PN_SIZE);
-        ptls_cipher_encrypt(header_protect, hpmask, hpmask, sizeof(hpmask));
-        buf[0] ^= hpmask[0] & (QUICLY_PACKET_IS_LONG_HEADER(buf[0]) ? 0xf : 0x1f);
-        size_t pn_len = (buf[0] & 0x3) + 1;
-        uint64_t pn = 0;
-        for (int i = 0; i < pn_len; ++i) {
-            buf[pn_off + i] ^= hpmask[i + 1];
-            pn = (pn << 8) | buf[pn_off + i];
-        }
-        /* decrypt */
-        if (ptls_aead_decrypt(packet_protect, buf + pn_off + pn_len, buf + pn_off + pn_len, packet_size - (pn_off + pn_len), pn,
-                              buf, pn_off + pn_len) == SIZE_MAX) {
-            fprintf(stderr, "AEAD decryption failed.\n");
-            return 1;
-        }
-        /* print */
-        fwrite(buf + pn_off + pn_len, 1, packet_size - (pn_off + pn_len + cs->aead->tag_size), stdout);
-    }
+        fwrite(output.base, 1, output.len, stdout);
+    } while (is_batch);
 
     return 0;
 }
@@ -1618,11 +1678,13 @@ int main(int argc, char **argv)
                                              {"no-normalize-cc-mtu", no_argument, NULL, 0},
                                              {"rapid-start", no_argument, NULL, 0},
                                              {"abba", no_argument, NULL, 0},
+                                             {"l4s", no_argument, NULL, 0},
                                              {"sockfd", required_argument, NULL, 0},
                                              {"exit-after-handshake", no_argument, NULL, 0},
                                              {"calc-initial-secret", required_argument, NULL, 0},
                                              {"decrypt-packet", required_argument, NULL, 0},
                                              {"encrypt-packet", required_argument, NULL, 0},
+                                             {"decrypt-packet-batch", required_argument, NULL, 0},
                                              {NULL}};
     while ((ch = getopt_long(argc, argv, "a:b:B:c:C:Dd:k:Ee:f:Gi:I:K:l:M:m:NnOp:P:Rr:S:s:u:U:Vvw:W:x:X:y:h", longopts,
                              &opt_index)) != -1) {
@@ -1633,7 +1695,10 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "ech-configs") == 0) {
                 ech_setup_configs(optarg);
             } else if (strcmp(longopts[opt_index].name, "disable-ecn") == 0) {
-                ctx.egress[0].ecn = 0;
+                ctx.egress[0].ecn = QUICLY_ECN_MODE_OFF;
+            } else if (strcmp(longopts[opt_index].name, "l4s") == 0) {
+                ctx.egress[0].ecn = QUICLY_ECN_MODE_L4S;
+                ctx.egress[0].pacing = 1;
             } else if (strcmp(longopts[opt_index].name, "delivery-stats") == 0) {
                 delivery_stats = suppress_output = 1;
             } else if (strcmp(longopts[opt_index].name, "disregard-app-limited") == 0) {
@@ -1669,9 +1734,11 @@ int main(int argc, char **argv)
             } else if (strcmp(longopts[opt_index].name, "calc-initial-secret") == 0) {
                 return cmd_calc_initial_secret(optarg);
             } else if (strcmp(longopts[opt_index].name, "decrypt-packet") == 0) {
-                return cmd_encrypt_packet(0, optarg);
+                return cmd_encrypt_packet(0, 0, optarg);
             } else if (strcmp(longopts[opt_index].name, "encrypt-packet") == 0) {
-                return cmd_encrypt_packet(1, optarg);
+                return cmd_encrypt_packet(1, 0, optarg);
+            } else if (strcmp(longopts[opt_index].name, "decrypt-packet-batch") == 0) {
+                return cmd_encrypt_packet(0, 1, optarg);
             } else {
                 assert(!"unexpected longname");
             }

@@ -26,28 +26,28 @@ static void test_calc_rate(void)
 {
     uint64_t bytes_per_msec;
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(2, 50 * 1200, 10);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2048, 50 * 1200, 10);
     ok(bytes_per_msec == 12000); /* send 60KB packets in 5ms */
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(2, 100 * 1200, 10);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2048, 100 * 1200, 10);
     ok(bytes_per_msec == 24000); /* 2x CWND, 2x flow rate */
 
-    bytes_per_msec = quicly_pacer_calc_send_rate(2, 50 * 1200, 100);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2048, 50 * 1200, 100);
     ok(bytes_per_msec == 1200); /* 10x RTT, 1/10 flow rate */
 
     /* half the rate as above, due to multiplier being 1x */
-    bytes_per_msec = quicly_pacer_calc_send_rate(1, 50 * 1200, 100);
+    bytes_per_msec = quicly_pacer_calc_send_rate(1024, 50 * 1200, 100);
     ok(bytes_per_msec == 600);
 
     /* guard against overflow */
-    bytes_per_msec = quicly_pacer_calc_send_rate(2, 2147483648, 21);
+    bytes_per_msec = quicly_pacer_calc_send_rate(2048, 2147483648, 21);
     ok(bytes_per_msec == 204522253);
 
-    ok(quicly_pacer_calc_send_rate(2, 60000, 1.25f) == 96000);
-    ok(quicly_pacer_calc_send_rate(1, 100, 1.75f) == 58);
-    ok(quicly_pacer_calc_send_rate(2, 60000, 0.25f) == 480000);
-    ok(quicly_pacer_calc_send_rate(2, UINT32_MAX, 0.001f) == UINT32_MAX);
-    ok(quicly_pacer_calc_send_rate(2, UINT32_MAX, 1) == UINT32_MAX);
+    ok(quicly_pacer_calc_send_rate(2048, 60000, 1.25f) == 96000);
+    ok(quicly_pacer_calc_send_rate(1024, 100, 1.75f) == 58);
+    ok(quicly_pacer_calc_send_rate(2048, 60000, 0.25f) == 480000);
+    ok(quicly_pacer_calc_send_rate(2048, UINT32_MAX, 0.001f) == UINT32_MAX);
+    ok(quicly_pacer_calc_send_rate(2048, UINT32_MAX, 1) == UINT32_MAX);
 }
 
 static const uint16_t mtu = 1200;

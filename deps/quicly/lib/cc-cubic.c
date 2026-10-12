@@ -67,9 +67,13 @@ static uint32_t update_w_est(quicly_cc_t *cc, uint32_t bytes, uint32_t max_udp_p
 
 /* TODO: Avoid increase if sender was application limited. */
 static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                           int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
+                           int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size,
+                           const quicly_cc_ecn_counts_t *l4s)
 {
     assert(inflight >= bytes);
+    /* ECN counters can advance without packets being newly acknowledged; L4S is not supported. */
+    if (bytes == 0)
+        return;
     /* Do not increase congestion window while in recovery (but jumpstart may do something different). */
     if (largest_acked < cc->recovery_end) {
         quicly_cc_jumpstart_on_acked(cc, 1, bytes, largest_acked, inflight, next_pn);

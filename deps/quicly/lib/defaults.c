@@ -67,7 +67,9 @@ const quicly_context_t quicly_spec_context = {
                     .initcwnd_packets = DEFAULT_INITCWND_PACKETS,
                     .normalize_mtu = 1,
                 },
-            .ecn = 1,
+            .pacing_multiplier = QUICLY_DEFAULT_PACING_MULTIPLIER,
+            .pacing_multiplier_l4s = QUICLY_DEFAULT_PACING_MULTIPLIER_L4S,
+            .ecn = QUICLY_ECN_MODE_CLASSIC,
             .respect_app_limited = 1,
         },
 };
@@ -106,7 +108,9 @@ const quicly_context_t quicly_performant_context = {
                     .initcwnd_packets = DEFAULT_INITCWND_PACKETS,
                     .normalize_mtu = 1,
                 },
-            .ecn = 1,
+            .pacing_multiplier = QUICLY_DEFAULT_PACING_MULTIPLIER,
+            .pacing_multiplier_l4s = QUICLY_DEFAULT_PACING_MULTIPLIER_L4S,
+            .ecn = QUICLY_ECN_MODE_CLASSIC,
             .respect_app_limited = 1,
         },
 };

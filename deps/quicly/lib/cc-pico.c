@@ -374,6 +374,72 @@ static void cubic_on_acked(struct st_quicly_cc_cubic_t *state, uint32_t *cwnd, u
     }
 }
 
+static double prague_rtt_virt(double srtt)
+{
+    return srtt > 25 ? srtt : 25;
+}
+
+static int prague_is_running(const struct st_quicly_cc_prague_t *prague)
+{
+    return !isnan(prague->update_at);
+}
+
+static void prague_start(struct st_quicly_cc_prague_t *prague, double srtt, int64_t now, double beta)
+{
+    prague->update_at = now + prague_rtt_virt(srtt);
+    prague->acked = prague->marked = 0;
+    prague->beta = beta;
+}
+
+static void prague_stop(struct st_quicly_cc_prague_t *prague)
+{
+    *prague = (struct st_quicly_cc_prague_t){.alpha = NAN, .update_at = NAN, .beta = NAN};
+}
+
+static void prague_on_acked(struct st_quicly_cc_prague_t *prague, double srtt, int64_t now, const quicly_cc_ecn_counts_t *counts)
+{
+    assert(prague_is_running(prague));
+    assert(counts->ce <= counts->total);
+
+    prague->acked += counts->total;
+    prague->marked += counts->ce;
+    if (now >= prague->update_at && prague->acked != 0) {
+        double frac = (double)prague->marked / prague->acked;
+        prague->alpha = isnan(prague->alpha) ? frac : prague->alpha + (frac - prague->alpha) / 16;
+        prague->acked = prague->marked = 0;
+        prague->update_at = now + prague_rtt_virt(srtt);
+    }
+}
+
+/**
+ * Prague's additive increase: `cwnd += unmarked * ai_per_rtt / cwnd` for each ACK, where `ai_per_rtt` is one MTU divided by M^2
+ * (M = virtual RTT / SRTT). Only whole MTUs are added to CWND; the fraction is carried.
+ */
+static uint32_t prague_grow(struct st_quicly_cc_prague_t *prague, uint32_t cwnd, int normalize_mtu, double srtt, uint32_t bytes,
+                            uint32_t mtu, const quicly_cc_ecn_counts_t *l4s)
+{
+    double unmarked = bytes;
+    if (l4s->ce != 0)
+        unmarked *= (double)(l4s->total - l4s->ce) / l4s->total; /* estimate from the packet ratio */
+
+    double m = prague_rtt_virt(srtt) / srtt, bytes_per_mtu = cwnd * m * m;
+    if (normalize_mtu)
+        bytes_per_mtu *= (double)mtu / QUICLY_CC_REFERENCE_MTU;
+    prague->increase_carry += unmarked / bytes_per_mtu;
+
+    uint32_t num_mtus = (uint32_t)prague->increase_carry;
+    prague->increase_carry -= num_mtus;
+    return quicly_u32_add_saturating(cwnd, num_mtus * mtu);
+}
+
+static int in_prague_ca(const quicly_cc_t *cc)
+{
+    if (!prague_is_running(&cc->state.pico.prague))
+        return 0;
+    assert(cc->type == &quicly_cc_type_cuback);
+    return cc->state.pico.cuback.by_ecn;
+}
+
 static int abba_enabled(const quicly_cc_t *cc)
 {
     return cc->conf->abba && (cc->type == &quicly_cc_type_cubic || cc->type == &quicly_cc_type_cuback);
@@ -416,7 +482,8 @@ static void abba_on_congestion(struct st_quicly_cc_abba_t *state, uint32_t cwnd,
     };
 }
 
-static void abba_on_acked(struct st_quicly_cc_abba_t *state, uint32_t cwnd, const quicly_rtt_t *rtt, int in_recovery, int by_ecn)
+static void abba_on_acked(struct st_quicly_cc_abba_t *state, uint32_t cwnd, const quicly_rtt_t *rtt, int in_recovery, int by_ecn,
+                          double beta)
 {
     if (state->high.cwnd == 0 || rtt->latest == 0)
         return;
@@ -447,8 +514,8 @@ static void abba_on_acked(struct st_quicly_cc_abba_t *state, uint32_t cwnd, cons
 
     /* Beyond Wh * (2 - beta), adopt RTT proportional to CWND without lowering the RTT target already being pursued. Use the
      * recent RTT floor if it is higher, or if no model exists. Leave an already proportional model unchanged, so its predicted
-     * RTT rises with CWND while RTT stays flat. Wh is the actual congestion window, not a Wmax adjusted by the policy. */
-    double beta = QUICLY_USE_ABE && by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
+     * RTT rises with CWND while RTT stays flat. Wh is the actual congestion window, not a Wmax adjusted by the policy. beta is the
+     * factor of the reduction that started the current period. */
     if (state->b != 0 && cwnd > state->high.cwnd * (2 - beta)) {
         double rtt_target = quicly_rtt_get_floor(rtt);
         if (!isnan(state->b)) {
@@ -461,10 +528,16 @@ static void abba_on_acked(struct st_quicly_cc_abba_t *state, uint32_t cwnd, cons
     }
 }
 
+/**
+ * @param by_ecn  whether the current period was started by ECN-CE, or NULL under L4S
+ */
 static uint32_t abba_on_growth(struct st_quicly_cc_abba_t *state, uint32_t cwnd, uint32_t cubic_cwnd, uint32_t acked,
-                               const quicly_rtt_t *rtt, uint32_t cwnd_prior, int by_ecn)
+                               const quicly_rtt_t *rtt, uint32_t cwnd_prior, const int *by_ecn)
 {
-    if (rtt->latest == 0 || acked == 0 || !(state->a > 0 && state->b >= 0 && rtt->latest < (double)state->a * cwnd + state->b))
+    if (acked == 0)
+        goto Exit;
+
+    if (rtt->latest == 0 || !(state->a > 0 && state->b >= 0 && rtt->latest < (double)state->a * cwnd + state->b))
         goto No_Accel;
 
     /* Wref is the window associated with latest RTT by the model, and its slope is flattened to 2/3 of the fitted slope. With one
@@ -477,11 +550,16 @@ static uint32_t abba_on_growth(struct st_quicly_cc_abba_t *state, uint32_t cwnd,
      * If congestion occurs below cwnd_prior, allow for another RTT of growth before its feedback arrives. Since beta^(-2/3)
      * is less than 1 / beta, ABBA's growth keeps CWND below cwnd_prior / beta at feedback, so reducing by beta yields a window
      * below cwnd_prior. Ordinary CUBIC/Cuback growth is still allowed to win and remains the policy's responsibility.
-     * These precomputed additive gains are pow(beta, -2. / 3) - 1 for loss and ECN, respectively. */
-    static const double max_gain[2] = {0.2684342882037154, 0.11443322021871727};
-    double beta = QUICLY_USE_ABE && by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
-    if (cwnd < cwnd_prior / beta && gain > max_gain[QUICLY_USE_ABE && by_ecn])
-        gain = max_gain[QUICLY_USE_ABE && by_ecn];
+     * These precomputed additive gains are pow(beta, -2. / 3) - 1 for loss and ECN, respectively. Under L4S, the gain is not
+     * limited, assuming that the queue is kept short enough for the model to remain flat, so that acceleration happens only beyond
+     * high * (2 - beta). */
+    if (by_ecn != NULL) {
+        static const double max_gain[2] = {0.2684342882037154, 0.11443322021871727};
+        int use_ecn_beta = QUICLY_USE_ABE && *by_ecn;
+        double beta = use_ecn_beta ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
+        if (cwnd < cwnd_prior / beta && gain > max_gain[use_ecn_beta])
+            gain = max_gain[use_ecn_beta];
+    }
 
     /* Compete with ordinary growth from the same pre-ACK CWND. */
     double increase = acked * gain + state->increase_remainder;
@@ -503,8 +581,10 @@ static uint32_t abba_on_growth(struct st_quicly_cc_abba_t *state, uint32_t cwnd,
     return new_cwnd;
 
 No_Accel:
-    /* Acceleration can put CWND ahead of CUBIC's independent Reno-friendly estimate. Falling back must not shrink it. */
     state->increase_remainder = 0;
+
+Exit:
+    /* Acceleration can put CWND ahead of CUBIC's independent Reno-friendly estimate. Falling back must not shrink it. */
     return cubic_cwnd > cwnd ? cubic_cwnd : cwnd;
 }
 
@@ -551,15 +631,29 @@ static uint32_t calc_bytes_per_mtu_increase(quicly_cc_t *cc, const quicly_loss_t
 }
 
 static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                          int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size)
+                          int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size,
+                          const quicly_cc_ecn_counts_t *l4s)
 {
     assert(inflight >= bytes);
 
+    /* Prague: the marking estimator runs regardless of loss recovery; CE itself is reported through `pico_on_lost`. */
+    if (prague_is_running(&cc->state.pico.prague)) {
+        if (l4s != NULL) {
+            prague_on_acked(&cc->state.pico.prague, loss->rtt.smoothed, now, l4s);
+        } else {
+            /* ECN validation failed: disable Prague */
+            prague_stop(&cc->state.pico.prague);
+            cc->state.pico.cuback.by_ecn = 0;
+        }
+    }
+
     /* In recovery period: CWND remains the same (but either jumpstart or rapid start may handle it differently). */
     if (largest_acked < cc->recovery_end) {
-        if (abba_enabled(cc))
-            abba_on_acked(&cc->state.pico.abba, cc->cwnd, &loss->rtt, 1,
-                          cc->type == &quicly_cc_type_cubic ? cc->state.pico.cubic.by_ecn : cc->state.pico.cuback.by_ecn);
+        if (abba_enabled(cc)) {
+            int by_ecn = cc->type == &quicly_cc_type_cubic ? cc->state.pico.cubic.by_ecn : cc->state.pico.cuback.by_ecn;
+            double beta = QUICLY_USE_ABE && by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
+            abba_on_acked(&cc->state.pico.abba, cc->cwnd, &loss->rtt, 1, by_ecn, beta);
+        }
         if (quicly_cc_rapid_start_is_active(&cc->rapid_start)) {
             if (cc->num_loss_episodes == 1) {
                 quicly_cc_rapid_start_on_recovery(&cc->rapid_start, &cc->cwnd, bytes, 0);
@@ -571,15 +665,31 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
         return;
     }
 
+    if (prague_is_running(&cc->state.pico.prague)) {
+        /* Prague: if this is the first ACK past recovery, stop ignoring CE after this ACK */
+        if (cc->state.pico.prague.ignore_ce_until == INFINITY)
+            cc->state.pico.prague.ignore_ce_until = now;
+    } else if (cc->type == &quicly_cc_type_cuback && l4s != NULL && cc->num_loss_episodes != 0) {
+        /* Prague: start the estimator once past the recovery that ended startup, so that it does not sample the overshoot of
+         * startup */
+        prague_start(&cc->state.pico.prague, loss->rtt.smoothed, now,
+                     QUICLY_USE_ABE && cc->state.pico.cuback.by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS);
+    }
+
     quicly_cc_jumpstart_on_acked(cc, 0, bytes, largest_acked, inflight, next_pn);
 
+    /* ABBA: update state */
     if (abba_enabled(cc) && cc->cwnd >= cc->ssthresh) {
         int was_fit = cc->state.pico.abba.a > 0;
-        abba_on_acked(&cc->state.pico.abba, cc->cwnd, &loss->rtt, 0,
-                      cc->type == &quicly_cc_type_cubic ? cc->state.pico.cubic.by_ecn : cc->state.pico.cuback.by_ecn);
+        int by_ecn = cc->type == &quicly_cc_type_cubic ? cc->state.pico.cubic.by_ecn : cc->state.pico.cuback.by_ecn;
+        double beta =
+            in_prague_ca(cc) ? cc->state.pico.prague.beta : QUICLY_USE_ABE && by_ecn ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS;
+        abba_on_acked(&cc->state.pico.abba, cc->cwnd, &loss->rtt, 0, by_ecn, beta);
         if (!was_fit && cc->state.pico.abba.a > 0)
             ++cc->num_accel_eligible_episodes;
     }
+
+    uint32_t pre_cwnd = cc->cwnd;
 
     /* Cubic: unlike other policies, congestion avoidance cannot be driven by bytes_to_mtu_increase. */
     if (cc->type == &quicly_cc_type_cubic && cc->cwnd >= cc->ssthresh) {
@@ -595,7 +705,6 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
             state->k = NAN;
         }
         uint32_t reference_mtu = cc->conf->normalize_mtu ? QUICLY_CC_REFERENCE_MTU : max_udp_payload_size;
-        uint32_t pre_cwnd = cc->cwnd;
         cubic_on_acked(state, &cc->cwnd, cc->ssthresh, bytes, cc_limited, loss->rtt.smoothed, now, max_udp_payload_size,
                        reference_mtu);
         if (abba_enabled(cc)) {
@@ -603,15 +712,14 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
                 cc->cwnd = pre_cwnd;
             if (cc_limited && state->cc_limited) {
                 uint32_t accel_cwnd =
-                    abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt, state->cwnd_prior, state->by_ecn);
+                    abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt, state->cwnd_prior,
+                                   &(int){state->by_ecn});
                 if (cc->cwnd < accel_cwnd) {
                     cc->cwnd_increase_accel += accel_cwnd - cc->cwnd;
                     cc->cwnd = accel_cwnd;
                 }
             }
         }
-        if (cc->cwnd > pre_cwnd)
-            cc->cwnd_increase_ca += cc->cwnd - pre_cwnd;
         goto Cleanup;
     }
 
@@ -624,8 +732,22 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     if (!cc_limited)
         goto Cleanup;
 
-    /* Apply this ACK to the current interval. One ACK can span multiple intervals. */
-    uint32_t pre_cwnd = cc->cwnd;
+    /* Prague: handle CWND increase in its own way. */
+    if (in_prague_ca(cc)) {
+        cc->cwnd =
+            prague_grow(&cc->state.pico.prague, cc->cwnd, cc->conf->normalize_mtu, loss->rtt.smoothed, bytes, max_udp_payload_size, l4s);
+        if (abba_enabled(cc)) {
+            uint32_t accel_cwnd = abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt,
+                                                 cc->state.pico.cuback.cwnd_prior, NULL);
+            if (cc->cwnd < accel_cwnd) {
+                cc->cwnd_increase_accel += accel_cwnd - cc->cwnd;
+                cc->cwnd = accel_cwnd;
+            }
+        }
+        goto Cleanup;
+    }
+
+    /* Ordinary addtive increase. */
     uint32_t bytes_available = bytes;
     if (cc->state.pico.bytes_to_mtu_increase == 0)
         cc->state.pico.bytes_to_mtu_increase = calc_bytes_per_mtu_increase(cc, loss, max_udp_payload_size);
@@ -639,17 +761,18 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     if (abba_enabled(cc) && pre_cwnd >= cc->ssthresh) {
         /* Keep the partially consumed Cuback interval even when acceleration supplies the larger window. */
-        uint32_t accel_cwnd = abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt,
-                                             cc->state.pico.cuback.cwnd_prior, cc->state.pico.cuback.by_ecn);
+        uint32_t accel_cwnd =
+            abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt, cc->state.pico.cuback.cwnd_prior,
+                           &(int){cc->state.pico.cuback.by_ecn});
         if (cc->cwnd < accel_cwnd) {
             cc->cwnd_increase_accel += accel_cwnd - cc->cwnd;
             cc->cwnd = accel_cwnd;
         }
     }
-    if (pre_cwnd >= cc->ssthresh && cc->cwnd > pre_cwnd)
-        cc->cwnd_increase_ca += cc->cwnd - pre_cwnd;
 
 Cleanup:
+    if (pre_cwnd >= cc->ssthresh && cc->cwnd > pre_cwnd)
+        cc->cwnd_increase_ca += cc->cwnd - pre_cwnd;
     if (cc->cwnd_maximum < cc->cwnd)
         cc->cwnd_maximum = cc->cwnd;
     if (quicly_cc_rapid_start_is_in_first_recovery(&cc->rapid_start))
@@ -659,7 +782,14 @@ Cleanup:
 static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t lost_pn, uint64_t next_pn,
                          int64_t now, uint32_t max_udp_payload_size)
 {
-    quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
+#define PRAGUE_REDUCTION() (bytes == 0 && prague_is_running(&cc->state.pico.prague))
+
+    /* Prague: ignore CE until the first sample completes, for a virtual RTT after a reduction, and until past recovery exit */
+    if (PRAGUE_REDUCTION() && (isnan(cc->state.pico.prague.alpha) || now <= cc->state.pico.prague.ignore_ce_until))
+        return;
+
+    if (!PRAGUE_REDUCTION())
+        quicly_cc__update_ecn_episodes(cc, bytes, lost_pn);
 
     /* Nothing to do if loss is in recovery window (modulo when exiting rapid start, in which case CWND is further reduced relative
      * to the number of bytes lost. */
@@ -678,8 +808,25 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
     /* Rapid Start: if recovery exits and the first CC event is a loss instead of an ack, call `pico_on_acked` to reflect recovery
      * exit to Rapid Start and related states, before entering the next recovery period in the following blocks. */
     if (quicly_cc_rapid_start_is_in_first_recovery(&cc->rapid_start))
-        pico_on_acked(cc, loss, 0, cc->recovery_end, (uint32_t)loss->sentmap.bytes_in_flight, 0, next_pn, now,
-                      max_udp_payload_size);
+        pico_on_acked(cc, loss, 0, cc->recovery_end, (uint32_t)loss->sentmap.bytes_in_flight, 0, next_pn, now, max_udp_payload_size,
+                      prague_is_running(&cc->state.pico.prague) ? &(quicly_cc_ecn_counts_t){0} : NULL /* keep Prague as is */);
+
+    /* Prague: past startup, reduce CWND without starting a loss episode or a recovery period. Additive increase does not stop
+     * (draft-briscoe-iccrg-prague-congestion-control-04, Section 2.4.3), and a loss that follows is acted on as a new episode,
+     * because the Prague reduction can be small. The reduction cannot be undone. */
+    if (PRAGUE_REDUCTION()) {
+        if (abba_enabled(cc))
+            abba_on_congestion(&cc->state.pico.abba, cc->cwnd, &loss->rtt, 1);
+        cc->state.pico.prague.ignore_ce_until = now + prague_rtt_virt(loss->rtt.smoothed);
+        cc->state.pico.prague.beta = 1 - cc->state.pico.prague.alpha / 2;
+        cc->cwnd = (uint32_t)(cc->cwnd * (double)cc->state.pico.prague.beta);
+        if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
+            cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
+        cc->state.pico.cuback.by_ecn = 1;
+        cc->state.pico.undo.num_packets_lost = 0;
+        ++cc->num_prague_reductions;
+        goto UpdateMetrics;
+    }
 
     double beta =
         cc->type == &quicly_cc_type_reno ? QUICLY_BETA_RENO : (QUICLY_USE_ABE && bytes == 0 ? QUICLY_BETA_ECN : QUICLY_BETA_LOSS);
@@ -717,6 +864,8 @@ static void pico_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
         abba_on_congestion(&cc->state.pico.abba, cc->cwnd, &loss->rtt, bytes == 0);
 
     cc->recovery_end = next_pn;
+    if (prague_is_running(&cc->state.pico.prague))
+        cc->state.pico.prague.ignore_ce_until = INFINITY; /* Prague: no reduction until recovery exit */
     ++cc->num_loss_episodes;
 
     /* end of slow start */
@@ -814,6 +963,8 @@ UpdateMetrics:
     cc->ssthresh = cc->cwnd;
     if (cc->cwnd_minimum > cc->cwnd)
         cc->cwnd_minimum = cc->cwnd;
+
+#undef PRAGUE_REDUCTION
 }
 
 static void pico_on_late_ack(quicly_cc_t *cc, uint64_t pn, int64_t now)
@@ -855,6 +1006,8 @@ static void pico_on_late_ack(quicly_cc_t *cc, uint64_t pn, int64_t now)
         cc->exit_slow_start_at = INT64_MAX;
         quicly_cc_jumpstart_reset(cc);
         cc->rapid_start.state = QUICLY_CC_RAPID_START_STATE_INACTIVE;
+        /* Prague: the estimator runs only past startup */
+        prague_stop(&cc->state.pico.prague);
     }
 }
 
@@ -866,6 +1019,7 @@ static void pico_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t by
 static void pico_init_pico_state(quicly_cc_t *cc)
 {
     /* Initialize the state overlaid by each policy implemented in this file. */
+    prague_stop(&cc->state.pico.prague);
     cc->state.pico.abba = (struct st_quicly_cc_abba_t){.a = 0, .b = NAN};
     cc->state.pico.bytes_to_mtu_increase = 0;
     if (cc->type == &quicly_cc_type_cuback) {

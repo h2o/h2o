@@ -17,6 +17,12 @@
  *   lengths for bandwidth and buffer accounting. Require nonnegative delay, positive rate, and buffers at least the TUN MTU.
  *   Optional CoDel marks ECN-capable packets or drops at the bottleneck before consuming bandwidth. Measure sojourn time excluding
  *   propagation delay and host scheduling jitter. With traces, inspect each packet only before its first transmission slot.
+ *   Optional DualPI2 follows Linux sch_dualpi2 with its default parameters, for traffic that uses only one of its queues (i.e.,
+ *   without competing traffic). The FIFO then serves as that queue, so neither the scheduler between the queues nor C-queue
+ *   protection is modelled. The PI controller is updated lazily at each event, using the queue state between events.
+ *   DualPI2 can be given a device buffer of N packets between it and the link, as a driver pulls packets from a qdisc whenever
+ *   the device has room. Packets are then marked or dropped when moving to the device buffer, and the link sends from the device
+ *   buffer.
  *
  * Event loop:
  *   Use one thread, nonblocking TUN I/O, CLOCK_MONOTONIC, and select() with a timeout to the earliest absolute deadline.
@@ -24,7 +30,14 @@
  *   due events between bounded read batches so continuous arrivals cannot starve timers. Retry interrupted I/O. Use
  *   nonblocking TUN writes and drop on EAGAIN, without queueing for retry or monitoring write readiness.
  *
+ * Packet log (-L):
+ *   Record the receive time, transport-segment length, and first bytes after the IPv4 header of every downstream packet into
+ *   fixed-size memory chunks, so that recording costs one copy and no I/O while emulating. Write the file only on SIGTERM.
+ *   Parsing (TCP sequence numbers, QUIC decryption) is left to offline tools.
+ *
  * Statistics:
+ *   Start trace playback and statistics when the first packet is received, so that they do not depend on how long the setup
+ *   (e.g., loading the trace) took.
  *   Use the current monotonic time when reading or writing each packet.
  *   In the select() loop, emit an object for each completed millisecond, including empty milliseconds after a late wakeup.
  *   Wake once per second to flush statistics when there is no I/O.
@@ -60,6 +73,7 @@
 #include <linux/if_tun.h>
 #include <math.h>
 #include <net/if.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -78,6 +92,8 @@
 #define READ_BATCH 32
 #define EVENT_BATCH 64
 #define TRACE_BYTES 1500
+#define PACKET_LOG_PREFIX 64
+#define PACKET_LOG_CHUNK_RECORDS 16384
 
 struct packet {
     struct packet *next;
@@ -102,13 +118,37 @@ struct codel {
 
 static const struct codel codel_defaults = {.target = 5 * NS_PER_MS, .interval = 100 * NS_PER_MS, .ecn = 1};
 
+/* Defaults of Linux sch_dualpi2. Alpha and beta are in Hz, applied to the queue delay in seconds at each update. */
+#define DUALPI2_TARGET (15 * NS_PER_MS)
+#define DUALPI2_TUPDATE (16 * NS_PER_MS)
+#define DUALPI2_ALPHA (41. / 256)
+#define DUALPI2_BETA (819. / 256)
+#define DUALPI2_STEP_THRESH NS_PER_MS
+#define DUALPI2_COUPLING 2
+
+struct dualpi2 {
+    /**
+     * the PI probability, which is used as is by the L-queue (multiplied by the coupling factor) and squared by the C-queue
+     */
+    double prob;
+    uint64_t last_qdelay, next_update;
+};
+
+enum discipline { DISCIPLINE_FIFO, DISCIPLINE_CODEL, DISCIPLINE_DUALPI2 };
+
 struct direction {
     struct queue delay, bottleneck;
     uint64_t delay_ns, rate, next_send;
     size_t capacity;
     double loss_probability;
-    int use_codel;
+    enum discipline discipline;
     struct codel codel;
+    struct dualpi2 dualpi2;
+    /**
+     * device buffer between the bottleneck queue and the link; `device_limit` is its size in packets, or zero if not used
+     */
+    struct queue device;
+    size_t device_limit, device_packets;
     struct {
         uint64_t *at, period, epoch;
         size_t count, index, remaining;
@@ -122,6 +162,23 @@ struct statistics {
     FILE *out;
 };
 
+struct packet_log_record {
+    uint64_t at;
+    uint16_t len;
+    uint8_t bytes[PACKET_LOG_PREFIX];
+} __attribute__((packed));
+
+struct packet_log_chunk {
+    struct packet_log_chunk *next; /* first member, so that `packet_log::tail` also points to the last chunk */
+    size_t count;
+    struct packet_log_record records[PACKET_LOG_CHUNK_RECORDS];
+};
+
+struct packet_log {
+    const char *path;
+    struct packet_log_chunk *head, **tail;
+};
+
 struct tunulator {
     int fd;
     size_t mtu;
@@ -129,7 +186,19 @@ struct tunulator {
     uint8_t server_ports[65536];
     struct direction dirs[2];
     struct statistics stats;
+    struct packet_log packet_log;
+    /**
+     * if the first packet has been received, i.e., if playback and statistics have started
+     */
+    int started;
 };
+
+static volatile sig_atomic_t got_sigterm;
+
+static void on_sigterm(int signo)
+{
+    got_sigterm = 1;
+}
 
 static void fail(const char *fmt, ...)
 {
@@ -288,6 +357,96 @@ static void codel_prepare(struct codel *c, struct queue *q, size_t mtu, uint64_t
     }
 }
 
+static int roll(double prob)
+{
+    uint32_t value;
+    random_bytes(&value, sizeof(value));
+    return value <= prob * UINT32_MAX;
+}
+
+/* Run the PI updates due by `now`, as Linux does every DUALPI2_TUPDATE. The queue does not change between events, so the queue
+ * delay at each update is that of the current head. */
+static void dualpi2_update(struct dualpi2 *s, struct queue *q, uint64_t now)
+{
+    if (s->next_update == 0)
+        s->next_update = now + DUALPI2_TUPDATE;
+    /* skip updates that do not change the state, i.e., those while idle at zero probability */
+    if (q->head == NULL && s->prob == 0 && s->last_qdelay == 0 && s->next_update <= now)
+        s->next_update += (now - s->next_update) / DUALPI2_TUPDATE * DUALPI2_TUPDATE + DUALPI2_TUPDATE;
+    for (; s->next_update <= now; s->next_update += DUALPI2_TUPDATE) {
+        uint64_t qdelay = q->head != NULL && q->head->at < s->next_update ? s->next_update - q->head->at : 0;
+        s->prob += (DUALPI2_ALPHA * ((double)qdelay - DUALPI2_TARGET) + DUALPI2_BETA * ((double)qdelay - s->last_qdelay)) /
+                   NS_PER_SEC;
+        if (s->prob < 0)
+            s->prob = 0;
+        if (s->prob > 1)
+            s->prob = 1;
+        s->last_qdelay = qdelay;
+    }
+}
+
+/* Apply DualPI2 marking and dropping at dequeue, leaving the selected packet at the head. ECT(1) and CE packets are L4S. Drops
+ * happen only with at least two MTUs queued behind the head, so a nonempty queue stays nonempty. */
+static void dualpi2_prepare(struct dualpi2 *s, struct queue *q, size_t mtu, uint64_t now)
+{
+    while (1) {
+        struct packet *p = q->head;
+        int l4s = (p->bytes[1] & 1) != 0, drop = 0;
+        if (q->bytes - p->len >= 2 * mtu) {
+            int overload = DUALPI2_COUPLING * s->prob > 1;
+            if (l4s && !overload) {
+                if (roll(DUALPI2_COUPLING * s->prob))
+                    mark_ce(p);
+            } else if (roll(s->prob) && roll(s->prob)) {
+                if (overload || !mark_ce(p))
+                    drop = 1;
+            } else if (l4s) {
+                mark_ce(p); /* L4S packets are always marked when overloaded and not dropped */
+            }
+        }
+        if (!drop) {
+            if (l4s && now - p->at > DUALPI2_STEP_THRESH)
+                mark_ce(p);
+            return;
+        }
+        free(dequeue(q));
+    }
+}
+
+static void prepare_head(struct direction *d, size_t mtu, uint64_t now)
+{
+    switch (d->discipline) {
+    case DISCIPLINE_FIFO:
+        break;
+    case DISCIPLINE_CODEL:
+        codel_prepare(&d->codel, &d->bottleneck, mtu, now);
+        break;
+    case DISCIPLINE_DUALPI2:
+        dualpi2_prepare(&d->dualpi2, &d->bottleneck, mtu, now);
+        break;
+    }
+}
+
+/**
+ * The queue that the link sends from.
+ */
+static struct queue *link_queue(struct direction *d)
+{
+    return d->device_limit != 0 ? &d->device : &d->bottleneck;
+}
+
+/**
+ * Moves packets from the bottleneck queue to the device buffer while the latter has room, applying the queue discipline to each.
+ */
+static void fill_device(struct direction *d, size_t mtu, uint64_t now)
+{
+    while (d->device_packets < d->device_limit && d->bottleneck.head != NULL) {
+        prepare_head(d, mtu, now);
+        enqueue(&d->device, dequeue(&d->bottleneck));
+        ++d->device_packets;
+    }
+}
+
 static void emit_statistics(struct statistics *s)
 {
     fputc('{', s->out);
@@ -321,6 +480,36 @@ static void count_bytes(struct statistics *s, uint64_t now, unsigned flow, unsig
     if ((b[0] | b[1] | b[2] | b[3]) == 0)
         s->active[s->num_active++] = flow;
     b[counter] += len;
+}
+
+static void record_packet(struct packet_log *log, const uint8_t *bytes, size_t len, uint64_t now)
+{
+    struct packet_log_chunk *chunk = (struct packet_log_chunk *)log->tail;
+    if (log->tail == &log->head || chunk->count == PACKET_LOG_CHUNK_RECORDS) {
+        if ((chunk = malloc(sizeof(*chunk))) == NULL)
+            fail("allocating packet log: %s", strerror(errno));
+        chunk->next = NULL;
+        chunk->count = 0;
+        *log->tail = chunk;
+        log->tail = &chunk->next;
+    }
+    struct packet_log_record *r = chunk->records + chunk->count++;
+    r->at = now;
+    r->len = len;
+    size_t copy = len < PACKET_LOG_PREFIX ? len : PACKET_LOG_PREFIX;
+    memcpy(r->bytes, bytes, copy);
+    memset(r->bytes + copy, 0, PACKET_LOG_PREFIX - copy);
+}
+
+static void write_packet_log(struct packet_log *log)
+{
+    FILE *fp = fopen(log->path, "wb");
+    if (fp == NULL)
+        fail("opening packet log %s: %s", log->path, strerror(errno));
+    for (struct packet_log_chunk *c = log->head; c != NULL; c = c->next)
+        fwrite(c->records, sizeof(c->records[0]), c->count, fp);
+    if (fclose(fp) != 0)
+        fail("writing packet log %s: %s", log->path, strerror(errno));
 }
 
 static void receive_packet(struct tunulator *t, uint8_t *bytes, size_t len, uint64_t now)
@@ -359,7 +548,14 @@ static void receive_packet(struct tunulator *t, uint8_t *bytes, size_t len, uint
         return;
     }
     unsigned flow = (proto == IPPROTO_TCP ? 65536 : 0) | port;
+    if (!t->started) {
+        t->started = 1;
+        t->stats.next_at = now + NS_PER_MS;
+        t->dirs[1].trace.epoch = now;
+    }
     count_bytes(&t->stats, now, flow, dir * 2, len);
+    if (dir == 1 && t->packet_log.path != NULL)
+        record_packet(&t->packet_log, bytes + iplen, len - iplen, now);
     if (bytes[8] <= 1)
         return;
 
@@ -390,10 +586,11 @@ static void receive_packet(struct tunulator *t, uint8_t *bytes, size_t len, uint
 
 static uint64_t send_at(struct direction *d)
 {
-    if (d->bottleneck.head == NULL)
+    struct queue *q = link_queue(d);
+    if (q->head == NULL)
         return UINT64_MAX;
     if (d->trace.at != NULL) {
-        uint64_t earliest = d->bottleneck.head->at;
+        uint64_t earliest = q->head->at;
         if (earliest >= d->trace.epoch + d->trace.period) {
             d->trace.epoch += (earliest - d->trace.epoch) / d->trace.period * d->trace.period;
             d->trace.index = 0;
@@ -406,7 +603,7 @@ static uint64_t send_at(struct direction *d)
         }
         return d->trace.epoch + d->trace.at[d->trace.index];
     }
-    return d->next_send > d->bottleneck.head->at ? d->next_send : d->bottleneck.head->at;
+    return d->next_send > q->head->at ? d->next_send : q->head->at;
 }
 
 static uint64_t next_event(struct direction *d)
@@ -445,40 +642,54 @@ static void send_packet(struct tunulator *t, unsigned dir, struct packet *p)
 static void run_event(struct tunulator *t, unsigned dir, uint64_t at)
 {
     struct direction *d = &t->dirs[dir];
+    if (d->discipline == DISCIPLINE_DUALPI2)
+        dualpi2_update(&d->dualpi2, &d->bottleneck, at);
     if (d->delay.head != NULL && d->delay.head->at <= at) {
         struct packet *p = dequeue(&d->delay);
-        if (d->capacity - d->bottleneck.bytes < t->mtu)
+        if (d->capacity - d->bottleneck.bytes < t->mtu) {
             free(p);
-        else
+        } else {
             enqueue(&d->bottleneck, p);
+            fill_device(d, t->mtu, at);
+        }
         return;
     }
 
+    struct queue *q = link_queue(d);
     if (d->trace.at != NULL) {
         size_t budget = TRACE_BYTES;
-        while (budget != 0 && d->bottleneck.head != NULL) {
+        while (budget != 0 && q->head != NULL) {
             if (d->trace.remaining == 0) {
-                if (d->use_codel)
-                    codel_prepare(&d->codel, &d->bottleneck, t->mtu, at);
-                d->trace.remaining = d->bottleneck.head->len;
+                if (q == &d->bottleneck)
+                    prepare_head(d, t->mtu, at);
+                d->trace.remaining = q->head->len;
             }
             size_t bytes = d->trace.remaining < budget ? d->trace.remaining : budget;
             d->trace.remaining -= bytes;
             budget -= bytes;
-            if (d->trace.remaining == 0)
-                send_packet(t, dir, dequeue(&d->bottleneck));
+            if (d->trace.remaining == 0) {
+                send_packet(t, dir, dequeue(q));
+                if (q == &d->device) {
+                    --d->device_packets;
+                    fill_device(d, t->mtu, at);
+                }
+            }
         }
         if (++d->trace.index == d->trace.count) {
             d->trace.index = 0;
             d->trace.epoch += d->trace.period;
         }
     } else {
-        if (d->use_codel)
-            codel_prepare(&d->codel, &d->bottleneck, t->mtu, at);
-        struct packet *p = dequeue(&d->bottleneck);
+        if (q == &d->bottleneck)
+            prepare_head(d, t->mtu, at);
+        struct packet *p = dequeue(q);
         uint64_t duration = p->len * NS_PER_SEC;
         d->next_send = at + duration / d->rate + (duration % d->rate != 0);
         send_packet(t, dir, p);
+        if (q == &d->device) {
+            --d->device_packets;
+            fill_device(d, t->mtu, at);
+        }
     }
 }
 
@@ -497,7 +708,7 @@ static void run_events(struct tunulator *t, uint64_t now)
 static void run_loop(struct tunulator *t)
 {
     uint8_t bytes[65536];
-    while (1) {
+    while (!got_sigterm) {
         run_events(t, get_now());
         for (unsigned i = 0; i < READ_BATCH; ++i) {
             ssize_t len = read(t->fd, bytes, sizeof(bytes));
@@ -513,7 +724,7 @@ static void run_loop(struct tunulator *t)
         }
         uint64_t now = get_now();
         advance_statistics(&t->stats, now);
-        uint64_t at = t->stats.next_at + NS_PER_SEC - NS_PER_MS;
+        uint64_t at = t->started ? t->stats.next_at + NS_PER_SEC - NS_PER_MS : now + NS_PER_SEC;
         for (unsigned i = 0; i < 2; ++i) {
             uint64_t event = next_event(&t->dirs[i]);
             if (event < at)
@@ -542,8 +753,24 @@ static uint64_t parse_number(const char *value, uint64_t min, uint64_t max, cons
 static int parse_queue_discipline(struct direction *d, const char *value)
 {
     struct codel c = codel_defaults;
-    int use_codel = strcmp(value, "fifo") != 0;
-    if (use_codel) {
+    size_t device_limit = 0;
+    enum discipline discipline = DISCIPLINE_CODEL;
+    if (strcmp(value, "fifo") == 0) {
+        discipline = DISCIPLINE_FIFO;
+    } else if (strncmp(value, "dualpi2", 7) == 0 && (value[7] == '\0' || value[7] == ':')) {
+        discipline = DISCIPLINE_DUALPI2;
+    }
+    if (discipline == DISCIPLINE_DUALPI2 && value[7] == ':') {
+        if (value[8] < '0' || value[8] > '9')
+            return 0;
+        char *end;
+        errno = 0;
+        unsigned long long n = strtoull(value + 8, &end, 10);
+        if (errno != 0 || n == 0 || n > 1000 || *end != '\0')
+            return 0;
+        device_limit = n;
+    }
+    if (discipline == DISCIPLINE_CODEL) {
         if (strncmp(value, "codel", 5) != 0)
             return 0;
         const char *p = value + 5;
@@ -570,8 +797,9 @@ static int parse_queue_discipline(struct direction *d, const char *value)
         if (*p != '\0')
             return 0;
     }
-    d->use_codel = use_codel;
+    d->discipline = discipline;
     d->codel = c;
+    d->device_limit = device_limit;
     return 1;
 }
 
@@ -667,31 +895,46 @@ static void usage(const char *cmd)
            "  -P <microseconds>   downstream propagation delay (default: 0)\n"
            "  -r <probability>    upstream random packet loss (0..1; default: 0)\n"
            "  -R <probability>    downstream random packet loss (0..1; default: 0)\n"
+           "  -L <file>           record every downstream packet in memory and write them to\n"
+           "                      the file on SIGTERM (see Packet log below)\n"
            "  -h                  print this help and exit\n"
            "\n"
            "peer-ip is the virtual IPv4 peer, followed by one or more local TCP/UDP server ports.\n"
            "Upstream means client-to-server; downstream means server-to-client.\n"
            "Directions have independent queues/rates; added base RTT is -p plus -P.\n"
            "All server ports share the same queue and rate in each direction.\n"
-           "Disciplines: fifo, codel[:target_ms:interval_ms], or codel/noecn[:target_ms:interval_ms].\n"
+           "Disciplines: fifo, codel[:target_ms:interval_ms], codel/noecn[:target_ms:interval_ms], or\n"
+           "dualpi2[:device_packets].\n"
            "CoDel defaults to a 5 ms target and 100 ms interval; times are positive integer milliseconds\n"
            "(up to 4294967295), with target below interval. Example: -Q codel:10:200.\n"
            "CoDel marks ECN-capable packets CE, otherwise drops; codel/noecn always drops.\n"
+           "dualpi2 follows Linux's DualPI2 with its default parameters, for traffic of only one\n"
+           "kind (L4S, i.e., ECT(1) or CE, or not), as there is only one queue. With device_packets\n"
+           "(1 to 1000), a device buffer of that many packets sits between DualPI2 and the link;\n"
+           "packets move to it whenever it has room, as a driver pulls packets from a qdisc.\n"
            "Marked packets consume bandwidth; dropped packets do not. Full buffers tail-drop.\n"
            "Its queue delay excludes propagation delay; buffer capacity still limits arrivals.\n"
            "Random losses occur after the bottleneck, consuming bandwidth.\n"
            "Trace files list millisecond timestamps, one per line, each allowing 1500 IP bytes.\n"
            "Repeated timestamps add capacity; unused capacity expires at that timestamp.\n"
            "Packets spanning entries are sent when their full length has been accounted for.\n"
-           "Playback starts with forwarding and repeats after the last timestamp plus 1 ms.\n"
+           "Playback starts when the first packet is received and repeats after the last\n"
+           "timestamp plus 1 ms.\n"
            "\n"
-           "Statistics: emit a JSON object containing only active flows each millisecond\n"
-           "on stdout, followed by a newline:\n"
+           "Statistics: emit a JSON object containing only active flows each millisecond,\n"
+           "starting when the first packet is received, on stdout, followed by a newline:\n"
            "  {\"u12345\":[2400,1200,80,80],\"t12347\":[1200,1200,0,0]}\n"
            "Keys are u (UDP) or t (TCP) followed by the client port. Arrays contain\n"
            "[up_received, up_sent, down_received, down_sent]\n"
            "IP bytes for that millisecond. Received is before drops; sent is a\n"
            "successful TUN write.\n"
+           "\n"
+           "Packet log: one record per downstream packet received: u64 receive time\n"
+           "(CLOCK_MONOTONIC ns), u16 transport segment length (IP length minus IP header),\n"
+           "and the first 64 bytes after the IPv4 header, zero-padded; integers are in host\n"
+           "byte order.\n"
+           "On SIGTERM, emit statistics up to that moment, write the packet log if -L is\n"
+           "given, and exit.\n"
            "\n"
            "Setup: route peer-ip through TUN with source 127.0.0.1, enable Linux\n"
            "route_localnet, and configure a fixed MTU. Do not assign peer-ip locally.\n"
@@ -711,12 +954,14 @@ int main(int argc, char **argv)
     for (unsigned i = 0; i < 2; ++i) {
         init_queue(&t->dirs[i].delay);
         init_queue(&t->dirs[i].bottleneck);
+        init_queue(&t->dirs[i].device);
         t->dirs[i].rate = UINT32_MAX;
         t->dirs[i].capacity = 100000;
     }
+    t->packet_log.tail = &t->packet_log.head;
     const char *path = NULL, *name = "tun0";
     int ch;
-    while ((ch = getopt(argc, argv, "t:n:b:B:q:Q:w:W:F:p:P:r:R:h")) != -1) {
+    while ((ch = getopt(argc, argv, "t:n:b:B:q:Q:w:W:F:p:P:r:R:L:h")) != -1) {
         switch (ch) {
         case 't':
             path = optarg;
@@ -755,6 +1000,9 @@ int main(int argc, char **argv)
                 fail("invalid random loss probability: %s", optarg);
             t->dirs[ch == 'R'].loss_probability = probability;
         } break;
+        case 'L':
+            t->packet_log.path = optarg;
+            break;
         case 'h':
             usage(argv[0]);
             free(t);
@@ -777,10 +1025,16 @@ int main(int argc, char **argv)
         if (t->dirs[i].capacity < t->mtu)
             fail("%s buffer must hold at least one MTU (%zu bytes)", i == 0 ? "upstream" : "downstream", t->mtu);
 
+    struct sigaction sa = {.sa_handler = on_sigterm};
+    sigemptyset(&sa.sa_mask);
+    if (sigaction(SIGTERM, &sa, NULL) != 0)
+        fail("sigaction: %s", strerror(errno));
+
     t->stats.out = stdout;
-    uint64_t now = get_now();
-    t->stats.next_at = now + NS_PER_MS;
-    t->dirs[1].trace.epoch = now;
+    t->stats.next_at = UINT64_MAX; /* until the first packet is received */
     run_loop(t);
+    advance_statistics(&t->stats, get_now());
+    if (t->packet_log.path != NULL)
+        write_packet_log(&t->packet_log);
     return EXIT_SUCCESS;
 }

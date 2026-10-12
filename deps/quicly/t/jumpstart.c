@@ -51,7 +51,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
             break;
         case TEST_JUMPSTART_ACTION_ACKED:
             cc.type->cc_on_acked(&cc, &loss, action->packets * mtu, packets_acked + action->packets - 1, packets_inflight * mtu, 1,
-                                 next_pn, action->now, mtu);
+                                 next_pn, action->now, mtu, NULL);
             packets_inflight -= action->packets;
             packets_acked += action->packets;
             ++ackcnt;

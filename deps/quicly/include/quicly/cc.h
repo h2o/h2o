@@ -150,7 +150,8 @@ struct st_quicly_cc_cuback_t {
      */
     unsigned fast_convergence : 1;
     /**
-     * Whether the reduction that began the current epoch used QUICLY_BETA_ECN (i.e., ABE).
+     * Whether the current epoch was started by CE. With classic ECN, the reduction used QUICLY_BETA_ECN (i.e., ABE); with L4S
+     * (i.e., once Prague's marking estimator has been initialized), the epoch uses Prague growth instead of the CUBACK curve.
      */
     unsigned by_ecn : 1;
 };
@@ -229,6 +230,45 @@ struct st_quicly_cc_cubic_t {
     unsigned cc_limited : 1;
 };
 
+/**
+ * Prague's marking estimator runs in both CUBACK and Prague growth modes.
+ */
+struct st_quicly_cc_prague_t {
+    /**
+     * NAN until the first sample completes.
+     */
+    float alpha;
+    /**
+     * NAN while the estimator is not running; otherwise the beta that ABBA uses during Prague growth: `1 - alpha / 2` of the latest
+     * Prague reduction, or until then, the beta that CUBACK uses for the congestion signal that ended startup.
+     */
+    float beta;
+    /**
+     * NAN while the estimator is not running; it starts past the recovery that ended startup, and stops if ECN is disabled.
+     */
+    double update_at;
+    uint64_t acked, marked;
+    double ignore_ce_until;
+    /**
+     * fraction of an MTU accumulated toward the next increase of Prague growth
+     */
+    double increase_carry;
+};
+
+/**
+ * Increase of the ECN counters reported by an ACK frame, in packets.
+ */
+typedef struct st_quicly_cc_ecn_counts_t {
+    /**
+     * packets newly reported as received with the ECT codepoint being used or with CE
+     */
+    uint64_t total;
+    /**
+     * subset of `total` reported as CE
+     */
+    uint64_t ce;
+} quicly_cc_ecn_counts_t;
+
 typedef struct st_quicly_cc_t {
     /**
      * Congestion controller type.
@@ -282,6 +322,7 @@ typedef struct st_quicly_cc_t {
              * Bandwidth adaptation state shared by CUBIC and Cuback.
              */
             struct st_quicly_cc_abba_t abba;
+            struct st_quicly_cc_prague_t prague;
             /**
              * State to undo a recovery episode when all packets deemed lost are later acknowledged. The packet number range being
              * tracked for undo is: start_pn <= pn < recovery_end. `num_packets_lost` counts packets in that range that were
@@ -408,6 +449,10 @@ typedef struct st_quicly_cc_t {
      * Total bytes added to CWND by ABBA's growth model; a subset of `cwnd_increase_ca`.
      */
     uint64_t cwnd_increase_accel;
+    /**
+     * total number of CWND reductions caused by Prague
+     */
+    uint64_t num_prague_reductions;
 } quicly_cc_t;
 
 struct st_quicly_cc_type_t {
@@ -420,10 +465,14 @@ struct st_quicly_cc_type_t {
      */
     struct st_quicly_init_cc_t *cc_init;
     /**
-     * Called when a packet is newly acknowledged.
+     * Called for each ACK frame being received.
+     * @param bytes  bytes newly acknowledged; can be zero
+     * @param l4s    increase of the ECN counters (can be zero) if L4S is used, otherwise NULL. A CC that supports L4S adopts the
+     *               scalable response once CE is reported, and abandons it once NULL is passed (i.e., ECN has been disabled).
      */
     void (*cc_on_acked)(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, uint64_t largest_acked, uint32_t inflight,
-                        int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size);
+                        int cc_limited, uint64_t next_pn, int64_t now, uint32_t max_udp_payload_size,
+                        const quicly_cc_ecn_counts_t *l4s);
     /**
      * Called when a packet is detected as lost.
      * @param bytes    bytes declared lost, or zero iff ECN_CE is observed
@@ -683,11 +732,10 @@ inline void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t 
     };
 
     int use_ecn_factor = QUICLY_USE_ABE && rs->by_ecn;
-    uint32_t reduction = factors[use_ecn_factor].ack * bytes_acked + factors[use_ecn_factor].loss * bytes_lost;
-    assert(reduction <= *cwnd && "CWND never underflows");
-    *cwnd -= reduction;
-    if (*cwnd < rs->cwnd_floor)
-        *cwnd = rs->cwnd_floor;
+    /* PTO probes are sent regardless of CWND, and those sent before the first loss is detected are acked within the recovery
+     * period. Therefore, the reduction can exceed CWND. */
+    double reduced = (double)*cwnd - factors[use_ecn_factor].ack * bytes_acked - factors[use_ecn_factor].loss * bytes_lost;
+    *cwnd = reduced > rs->cwnd_floor ? (uint32_t)reduced : rs->cwnd_floor;
 }
 
 inline void quicly_cc_rapid_start_exit_recovery(struct st_quicly_cc_rapid_start_t *rs)
