@@ -3343,8 +3343,8 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             if (listener_is_new == 0 && listener->fds.entries[0] != -1) {
                 int listener_protocol, expected_protocol = strcmp(type, "mptcp") == 0 ? IPPROTO_MPTCP : IPPROTO_TCP;
                 socklen_t listener_protocol_len = sizeof(listener_protocol);
-                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol, &listener_protocol_len) !=
-                    0) {
+                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol,
+                               &listener_protocol_len) != 0) {
                     h2o_configurator_errprintf(cmd, node, "failed to obtain listener socket protocol:%s", strerror(errno));
                     freeaddrinfo(res);
                     return -1;
