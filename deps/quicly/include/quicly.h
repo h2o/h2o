@@ -282,7 +282,7 @@ typedef struct st_quicly_salt_t {
 /**
  * number of alternative egress contexts (i.e., `quicly_context_t::egress[1..QUICLY_NUM_ALT_EGRESS]`)
  */
-#define QUICLY_NUM_ALT_EGRESS 3
+#define QUICLY_NUM_ALT_EGRESS 4
 
 /**
  * values of `quicly_context_t::egress[].ecn`
