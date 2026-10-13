@@ -126,6 +126,11 @@ static void cs_certificate(struct cs_fixture *f)
     assert(EVP_PKEY_CTX_set_ec_paramgen_curve_nid(keygen, NID_X9_62_prime256v1) == 1);
     assert(EVP_PKEY_keygen(keygen, &key) == 1);
     EVP_PKEY_CTX_free(keygen);
+    /* OpenSSL 1.0.2 otherwise encodes explicit curve parameters, which TLS 1.3 peers cannot map to secp256r1 */
+    EC_KEY *eckey = EVP_PKEY_get1_EC_KEY(key);
+    assert(eckey != NULL);
+    EC_KEY_set_asn1_flag(eckey, OPENSSL_EC_NAMED_CURVE);
+    EC_KEY_free(eckey);
     X509 *cert = X509_new();
     assert(cert != NULL && X509_set_version(cert, 2) == 1);
     assert(ASN1_INTEGER_set(X509_get_serialNumber(cert), 1) == 1);
