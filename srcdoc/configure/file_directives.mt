@@ -131,6 +131,7 @@ EOT
 By default, H2O uses system calls such as pread (2) or sendfile (2), which block if the file being read is not in the page cache.
 This can prevent H2O's worker threads from making progress on any connection handled by the affected thread.
 When this flag is enabled, H2O is no longer blocked by the I/O calls, as the data is asynchronously copied from disk to the page cache before h2o attempts to access it.
+When set to <code>splice</code>, H2O uses the io_uring splice path exclusively, including when serving files over HTTP/3. This mode avoids the HTTP/3 random-read path based on <code>preadv2(RWF_NOWAIT)</code>, which is not available on some filesystems.
 </p>
 ? })
 

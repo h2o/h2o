@@ -131,12 +131,15 @@ static int on_config_io_uring(h2o_configurator_command_t *cmd, h2o_configurator_
 {
     struct st_h2o_file_configurator_t *self = (void *)cmd->configurator;
 
-    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON")) {
+    switch (h2o_configurator_get_one_of(cmd, node, "OFF,ON,splice")) {
     case 0: /* off */
         self->vars->flags &= ~H2O_FILE_FLAG_IO_URING;
         break;
     case 1: /* on */
         self->vars->flags |= H2O_FILE_FLAG_IO_URING;
+        break;
+    case 2: /* splice */
+        self->vars->flags = (self->vars->flags & ~H2O_FILE_FLAG_IO_URING) | H2O_FILE_FLAG_IO_URING_SPLICE;
         break;
     default: /* error */
         return -1;

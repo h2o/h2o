@@ -85,15 +85,17 @@ subtest 'io_uring' => sub {
     subtest 'file.io_uring=off' => sub {
         run_tests('file.io_uring: OFF');
     };
-    for my $batch_size (qw(1 10)) {
-        for my $spare_pipes (qw(0 10)) {
-            subtest "(batch_size,spare_pipes)=($batch_size,$spare_pipes)" => sub {
-                run_tests(join "\n", <<"EOT");
-file.io_uring: ON
+    for my $mode (qw(ON splice)) {
+        for my $batch_size (qw(1 10)) {
+            for my $spare_pipes (qw(0 10)) {
+                subtest "(mode,batch_size,spare_pipes)=($mode,$batch_size,$spare_pipes)" => sub {
+                    run_tests(join "\n", <<"EOT");
+file.io_uring: $mode
 io_uring-batch-size: $batch_size
 max-spare-pipes: $spare_pipes
 EOT
-            };
+                };
+            }
         }
     }
 };

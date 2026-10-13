@@ -72,8 +72,18 @@ static int submit_commands(struct st_h2o_io_uring_t *io_uring, int can_delay)
         struct st_h2o_io_uring_cmd_t *cmd = pop_queue(&io_uring->submission);
         assert(cmd != NULL);
         H2O_PROBE(IO_URING_SUBMIT, cmd);
-        io_uring_prep_splice(sqe, cmd->splice_.fd_in, cmd->splice_.off_in, cmd->splice_.fd_out, cmd->splice_.off_out,
-                             cmd->splice_.nbytes, cmd->splice_.splice_flags);
+        switch (cmd->cmd_) {
+        case H2O_IO_URING_CMD_SPLICE:
+            io_uring_prep_splice(sqe, cmd->splice_.fd_in, cmd->splice_.off_in, cmd->splice_.fd_out, cmd->splice_.off_out,
+                                 cmd->splice_.nbytes, cmd->splice_.splice_flags);
+            break;
+        case H2O_IO_URING_CMD_READ:
+            io_uring_prep_read(sqe, cmd->read_.fd, cmd->read_.buf, cmd->read_.nbytes, cmd->read_.offset);
+            break;
+        default:
+            h2o_fatal("unexpected command type:%d", (int)cmd->cmd_);
+            break;
+        }
         sqe->user_data = (uint64_t)cmd;
         made_progress = 1;
     }
@@ -168,6 +178,7 @@ void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out
     *cmd = (struct st_h2o_io_uring_cmd_t){
         .cb.func = cb,
         .cb.data = data,
+        .cmd_ = H2O_IO_URING_CMD_SPLICE,
         .splice_.fd_in = fd_in,
         .splice_.off_in = off_in,
         .splice_.fd_out = fd_out,
@@ -176,6 +187,26 @@ void h2o_io_uring_splice(h2o_loop_t *loop, int fd_in, int64_t off_in, int fd_out
         .splice_.splice_flags = splice_flags,
     };
     H2O_PROBE(IO_URING_SPLICE, cmd);
+
+    start_command(loop, io_uring, cmd);
+}
+
+void h2o_io_uring_read(h2o_loop_t *loop, int fd, void *buf, unsigned nbytes, uint64_t offset, h2o_io_uring_cb cb, void *data)
+{
+    struct st_h2o_io_uring_t *io_uring = h2o_evloop__io_uring(loop);
+
+    /* build command */
+    struct st_h2o_io_uring_cmd_t *cmd = h2o_mem_alloc(sizeof(*cmd));
+    *cmd = (struct st_h2o_io_uring_cmd_t){
+        .cb.func = cb,
+        .cb.data = data,
+        .cmd_ = H2O_IO_URING_CMD_READ,
+        .read_.fd = fd,
+        .read_.buf = buf,
+        .read_.nbytes = nbytes,
+        .read_.offset = offset,
+    };
+    H2O_PROBE(IO_URING_READ, cmd);
 
     start_command(loop, io_uring, cmd);
 }
