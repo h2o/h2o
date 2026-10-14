@@ -748,6 +748,41 @@ static void test_server_streams(void)
     teardown();
 }
 
+static void test_send_order(void)
+{
+    h2o_webtransport_stream_t *s1, *s2, *s3, *s4;
+
+    setup(NULL, &(h2o_webtransport_settings_t){1000, 100, 100, 100, 4, 4});
+    ok(h2o_webtransport_open_stream(t.session, &s1, 1) == 0);
+    ok(h2o_webtransport_open_stream(t.session, &s2, 1) == 0);
+    ok(h2o_webtransport_open_stream(t.session, &s3, 1) == 0);
+    ok(h2o_webtransport_open_stream(t.session, &s4, 1) == 0);
+    take_events();
+    ok(s1->send_order == 0);
+
+    /* set before and after the data is scheduled */
+    h2o_webtransport_stream_set_send_order(s3, 2);
+    h2o_webtransport_streambuf_egress_write(s1, "a", 1);
+    h2o_webtransport_streambuf_egress_write(s2, "b", 1);
+    h2o_webtransport_streambuf_egress_write(s3, "c", 1);
+    h2o_webtransport_streambuf_egress_write(s4, "d", 1);
+    h2o_webtransport_stream_set_send_order(s2, 1);
+    h2o_webtransport_stream_set_send_order(s4, -1);
+    run_loop();
+    check_output("stream(11,\"c\") stream(7,\"b\") stream(3,\"a\") stream(15,\"d\")");
+
+    /* streams of the same send order take turns */
+    h2o_webtransport_stream_set_send_order(s2, 0);
+    h2o_webtransport_stream_set_send_order(s3, 0);
+    h2o_webtransport_streambuf_egress_write(s3, "c", 1);
+    h2o_webtransport_streambuf_egress_write(s1, "a", 1);
+    h2o_webtransport_streambuf_egress_write(s2, "b", 1);
+    run_loop();
+    check_output("stream(11,\"c\") stream(3,\"a\") stream(7,\"b\")");
+
+    teardown();
+}
+
 static void test_send_flow_control(void)
 {
     h2o_webtransport_stream_t *stream;
@@ -932,6 +967,7 @@ void test_lib__core__webtransport_c(void)
     subtest("stop-sending", test_stop_sending);
     subtest("local-reset-and-stop", test_local_reset_and_stop);
     subtest("server-streams", test_server_streams);
+    subtest("send-order", test_send_order);
     subtest("send-flow-control", test_send_flow_control);
     subtest("credit-update", test_credit_update);
     subtest("datagram", test_datagram);

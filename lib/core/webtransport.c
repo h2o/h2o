@@ -340,6 +340,26 @@ static void schedule_control(struct st_capsule_stream_t *stream)
     schedule_send(sess);
 }
 
+/**
+ * Links the stream to `egress.data_streams`, behind the streams of a higher or the same send order.
+ */
+static void link_data_stream(struct st_capsule_session_t *sess, struct st_capsule_stream_t *stream)
+{
+    h2o_linklist_t *at = &sess->egress.data_streams;
+
+    /* unless the send order is higher than that of the last stream, the stream goes to the tail */
+    if (!h2o_linklist_is_empty(at) &&
+        H2O_STRUCT_FROM_MEMBER(struct st_capsule_stream_t, send_aux.data_link, at->prev)->super.send_order <
+            stream->super.send_order) {
+        for (at = sess->egress.data_streams.next;
+             H2O_STRUCT_FROM_MEMBER(struct st_capsule_stream_t, send_aux.data_link, at)->super.send_order >=
+             stream->super.send_order;
+             at = at->next)
+            ;
+    }
+    h2o_linklist_insert(at, &stream->send_aux.data_link);
+}
+
 static void schedule_data(struct st_capsule_stream_t *stream)
 {
     struct st_capsule_session_t *sess = get_session(&stream->super);
@@ -349,7 +369,7 @@ static void schedule_data(struct st_capsule_stream_t *stream)
     if (!has_data || stream->send_aux.reset.state != SENDER_STATE_NONE || stream->send_aux.is_blocked ||
         h2o_linklist_is_linked(&stream->send_aux.data_link))
         return;
-    h2o_linklist_insert(&sess->egress.data_streams, &stream->send_aux.data_link);
+    link_data_stream(sess, stream);
     schedule_send(sess);
 }
 
@@ -1263,7 +1283,7 @@ UpdateState:
     push_inflight(sess, stream->super.stream_id, off, off + len,
                   is_fin ? QUICLY_SENDSTATE_EOS_TYPE_FIN : QUICLY_SENDSTATE_EOS_TYPE_NONE);
 
-    /* reschedule, being put at the tail for round-robin */
+    /* reschedule, being put behind the streams of the same send order for round-robin */
     schedule_data(stream);
     return 0;
 }
@@ -1499,6 +1519,16 @@ static void capsule_request_stop(h2o_webtransport_stream_t *_stream, quicly_erro
     request_stop_core(stream, QUICLY_ERROR_GET_ERROR_CODE(err));
 }
 
+static void capsule_stream_update_send_order(h2o_webtransport_stream_t *_stream)
+{
+    struct st_capsule_stream_t *stream = (struct st_capsule_stream_t *)_stream;
+
+    if (h2o_linklist_is_linked(&stream->send_aux.data_link)) {
+        h2o_linklist_unlink(&stream->send_aux.data_link);
+        link_data_stream(get_session(_stream), stream);
+    }
+}
+
 static void capsule_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_capsule_session_t *sess = (struct st_capsule_session_t *)_sess;
@@ -1596,6 +1626,11 @@ void h2o_webtransport_native_error(h2o_webtransport_session_t *_sess, quicly_err
     session_error((struct st_capsule_session_t *)_sess, err);
 }
 
+static void native_stream_update_send_order(h2o_webtransport_stream_t *stream)
+{
+    get_session(stream)->native->stream_update_send_order(stream);
+}
+
 static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_capsule_session_t *sess = (struct st_capsule_session_t *)_sess;
@@ -1612,23 +1647,17 @@ static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t
     }
 }
 
-static const h2o_webtransport_backend_t native_backend = {native_open_stream,
-                                                          native_stream_sync_sendbuf,
-                                                          native_stream_sync_recvbuf,
-                                                          native_reset_stream,
-                                                          native_request_stop,
-                                                          native_send_datagrams,
-                                                          capsule_drain,
-                                                          capsule_close};
+static const h2o_webtransport_backend_t native_backend = {
+    native_open_stream,  native_stream_sync_sendbuf,      native_stream_sync_recvbuf, native_reset_stream,
+    native_request_stop, native_stream_update_send_order, native_send_datagrams,      capsule_drain,
+    capsule_close,
+};
 
-static const h2o_webtransport_backend_t capsule_backend = {capsule_open_stream,
-                                                           capsule_stream_sync_sendbuf,
-                                                           capsule_stream_sync_recvbuf,
-                                                           capsule_reset_stream,
-                                                           capsule_request_stop,
-                                                           capsule_send_datagrams,
-                                                           capsule_drain,
-                                                           capsule_close};
+static const h2o_webtransport_backend_t capsule_backend = {
+    capsule_open_stream,  capsule_stream_sync_sendbuf,      capsule_stream_sync_recvbuf, capsule_reset_stream,
+    capsule_request_stop, capsule_stream_update_send_order, capsule_send_datagrams,      capsule_drain,
+    capsule_close,
+};
 
 int h2o_webtransport_is_request(h2o_req_t *req)
 {
