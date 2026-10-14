@@ -31,6 +31,10 @@ static struct {
     quicly_error_t close_err;
     struct wt_app_stream streams[16];
     size_t num_streams;
+    /**
+     * datagrams received by the client, and the size of the last one
+     */
+    size_t client_datagrams, client_datagram_len;
 } wt_app;
 
 struct wt_app_streambuf {
@@ -129,6 +133,8 @@ static int wt_handler(h2o_handler_t *self, h2o_req_t *req)
 
 static void wt_client_datagram(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
 {
+    ++wt_app.client_datagrams;
+    wt_app.client_datagram_len = payload.len;
 }
 static quicly_receive_datagram_frame_t wt_client_datagram_cb = {wt_client_datagram};
 
@@ -651,6 +657,29 @@ static void test_h3_webtransport_send_order(void)
     rr_dispose(f);
 }
 
+/* a datagram of the largest payload reported is delivered in one DATAGRAM frame */
+static void test_h3_webtransport_max_datagram(void)
+{
+    struct rr_fixture *f = wt_setup(1, 1, 1);
+    wt_send_complete_settings(f);
+    struct rr_client_stream *s = wt_open_session(f);
+
+    size_t max = h2o_webtransport_get_max_datagram_payload(wt_app.session);
+    printf("# max datagram payload: %zu\n", max);
+    ok(max > 1000 && max < 1500);
+
+    char payload[1500];
+    memset(payload, 'd', sizeof(payload));
+    h2o_iovec_t datagram = h2o_iovec_init(payload, max);
+    h2o_webtransport_send_datagrams(wt_app.session, &datagram, 1);
+    wt_steps(f);
+    ok(wt_app.client_datagrams == 1);
+    ok(wt_app.client_datagram_len == quicly_encodev_capacity(s->id / 4) + max);
+    wt_check_alive(f);
+
+    rr_dispose(f);
+}
+
 /* A stream whose turn comes when the datagrams have run out of space stays scheduled. Nothing else would schedule it again when it
  * has nothing in flight, as no ACK or loss of its data is to come. */
 static void test_h3_webtransport_sendbuf_full(void)
@@ -706,6 +735,7 @@ static void test_h3_webtransport(void)
     subtest("reset before header", test_h3_webtransport_reset_before_header);
     subtest("reliable reset", test_h3_webtransport_reliable_reset);
     subtest("send order", test_h3_webtransport_send_order);
+    subtest("max datagram", test_h3_webtransport_max_datagram);
     subtest("sendbuf full", test_h3_webtransport_sendbuf_full);
 }
 
