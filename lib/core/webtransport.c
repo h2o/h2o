@@ -1529,6 +1529,11 @@ static void capsule_stream_update_send_order(h2o_webtransport_stream_t *_stream)
     }
 }
 
+static size_t capsule_get_max_datagram_payload(h2o_webtransport_session_t *session)
+{
+    return MAX_DATAGRAM_SIZE;
+}
+
 static void capsule_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_capsule_session_t *sess = (struct st_capsule_session_t *)_sess;
@@ -1631,6 +1636,12 @@ static void native_stream_update_send_order(h2o_webtransport_stream_t *stream)
     get_session(stream)->native->stream_update_send_order(stream);
 }
 
+static size_t native_get_max_datagram_payload(h2o_webtransport_session_t *_sess)
+{
+    /* conservative while the datagrams are sent as capsules, before the datagram flow is set up */
+    return ((struct st_capsule_session_t *)_sess)->native->get_max_datagram_payload(_sess);
+}
+
 static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_capsule_session_t *sess = (struct st_capsule_session_t *)_sess;
@@ -1648,14 +1659,28 @@ static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t
 }
 
 static const h2o_webtransport_backend_t native_backend = {
-    native_open_stream,  native_stream_sync_sendbuf,      native_stream_sync_recvbuf, native_reset_stream,
-    native_request_stop, native_stream_update_send_order, native_send_datagrams,      capsule_drain,
+    native_open_stream,
+    native_stream_sync_sendbuf,
+    native_stream_sync_recvbuf,
+    native_reset_stream,
+    native_request_stop,
+    native_stream_update_send_order,
+    native_get_max_datagram_payload,
+    native_send_datagrams,
+    capsule_drain,
     capsule_close,
 };
 
 static const h2o_webtransport_backend_t capsule_backend = {
-    capsule_open_stream,  capsule_stream_sync_sendbuf,      capsule_stream_sync_recvbuf, capsule_reset_stream,
-    capsule_request_stop, capsule_stream_update_send_order, capsule_send_datagrams,      capsule_drain,
+    capsule_open_stream,
+    capsule_stream_sync_sendbuf,
+    capsule_stream_sync_recvbuf,
+    capsule_reset_stream,
+    capsule_request_stop,
+    capsule_stream_update_send_order,
+    capsule_get_max_datagram_payload,
+    capsule_send_datagrams,
+    capsule_drain,
     capsule_close,
 };
 

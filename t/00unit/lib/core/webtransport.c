@@ -847,6 +847,8 @@ static void test_datagram(void)
     check_events("datagram(\"one\") datagram(\"two\")");
     check_output("datagram(\"one\") datagram(\"two\")");
 
+    ok(h2o_webtransport_get_max_datagram_payload(t.session) == MAX_DATAGRAM_SIZE);
+
     teardown();
 }
 

@@ -363,6 +363,7 @@ struct st_h2o_webtransport_backend_t {
     void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*stream_update_send_order)(h2o_webtransport_stream_t *stream);
+    size_t (*get_max_datagram_payload)(h2o_webtransport_session_t *session);
     void (*send_datagrams)(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams);
     void (*drain)(h2o_webtransport_session_t *session);
     void (*close)(h2o_webtransport_session_t *session, uint32_t app_error, h2o_iovec_t reason);
@@ -380,6 +381,10 @@ typedef struct st_h2o_webtransport_native_t {
     void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*stream_update_send_order)(h2o_webtransport_stream_t *stream);
+    /**
+     * returns the largest payload of a datagram that fits in a packet of the connection
+     */
+    size_t (*get_max_datagram_payload)(h2o_webtransport_session_t *session);
     /**
      * Called asynchronously after `h2o_webtransport_accept` returns. The protocol layer starts delivering the streams opened by the
      * peer (including the ones that have been buffered) by calling `on_stream_open`.
@@ -445,6 +450,11 @@ static void h2o_webtransport_request_stop(h2o_webtransport_stream_t *stream, qui
  * connection, which take turns with the request streams.
  */
 static void h2o_webtransport_stream_set_send_order(h2o_webtransport_stream_t *stream, int64_t send_order);
+/**
+ * Returns the largest payload of a datagram that can be sent on the session. On HTTP/3 it is the payload of a DATAGRAM frame that
+ * fits in any packet of the connection, as larger ones are dropped.
+ */
+static size_t h2o_webtransport_get_max_datagram_payload(h2o_webtransport_session_t *session);
 /**
  * Sends datagrams. Datagrams might be dropped.
  */
@@ -535,6 +545,11 @@ inline void h2o_webtransport_stream_set_send_order(h2o_webtransport_stream_t *st
         return;
     stream->send_order = send_order;
     stream->session->_backend->stream_update_send_order(stream);
+}
+
+inline size_t h2o_webtransport_get_max_datagram_payload(h2o_webtransport_session_t *session)
+{
+    return session->_backend->get_max_datagram_payload(session);
 }
 
 inline void h2o_webtransport_send_datagrams(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams)
