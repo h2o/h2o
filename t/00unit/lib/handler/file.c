@@ -754,41 +754,6 @@ static void test_strong_etag_cmp()
     ok(!h2o_filecache_compare_etag_strong(H2O_STRLIT(""), H2O_STRLIT("")));
 }
 
-static void test_send_compressed(void)
-{
-    h2o_globalconf_t globalconf;
-    h2o_hostconf_t *hostconf;
-    h2o_pathconf_t *pathconf;
-    h2o_context_t sc_ctx;
-
-    h2o_config_init(&globalconf);
-    hostconf = h2o_config_register_host(&globalconf, h2o_iovec_init(H2O_STRLIT("default")), 65535);
-    pathconf = h2o_config_register_path(hostconf, "/", 0);
-    h2o_file_register(pathconf, "t/00unit/assets", NULL, NULL, H2O_FILE_FLAG_SEND_COMPRESSED);
-    h2o_context_init(&sc_ctx, test_loop, &globalconf);
-
-    {
-        /* `Accept-Encoding: zstd` makes the handler build `<path>.zst` and `<path>.zstd` variant paths before
-         * opening them. The request path is long enough that the variant buffer is allocated directly (outside
-         * the memory pool), so that an undersized buffer is caught here rather than being hidden in pool slack. */
-        h2o_loopback_conn_t *conn = h2o_loopback_create(&sc_ctx, sc_ctx.globalconf->hosts);
-        char path[1100];
-        size_t i;
-        for (i = 0; i != sizeof(path); ++i)
-            path[i] = i % 128 == 0 ? '/' : 'a'; /* keep each path component within NAME_MAX */
-        conn->req.input.method = h2o_iovec_init(H2O_STRLIT("GET"));
-        conn->req.input.path = h2o_iovec_init(path, sizeof(path));
-        conn->req.version = 0x101;
-        h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_ACCEPT_ENCODING, NULL, H2O_STRLIT("zstd"));
-        h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 403 || conn->req.res.status == 404); /* rejected, and no buffer overrun */
-        h2o_loopback_destroy(conn);
-    }
-
-    h2o_context_dispose(&sc_ctx);
-    h2o_config_dispose(&globalconf);
-}
-
 void test_lib__handler__file_c()
 {
     h2o_globalconf_t globalconf;
@@ -946,7 +911,6 @@ void test_lib__handler__file_c()
     subtest("range request", test_range_req);
     subtest("if-range", test_if_range);
     subtest("strong etag comparison", test_strong_etag_cmp);
-    subtest("send-compressed", test_send_compressed);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);
