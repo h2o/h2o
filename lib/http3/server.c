@@ -2124,6 +2124,23 @@ static const h2o_webtransport_stream_callbacks_t wt_noop_callbacks = {wt_noop_on
                                                                       wt_noop_on_send_emit, wt_noop_on_send_stop,
                                                                       wt_noop_on_receive,   wt_noop_on_receive_reset};
 
+/**
+ * Links the stream to `conn->wt.scheduler.active`, behind the streams of a higher or the same send order.
+ */
+static void wt_sched_activate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_wt_stream_t *ws)
+{
+#define SEND_ORDER(link) H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, sched_link, (link))->super.send_order
+    h2o_linklist_t *at = &conn->wt.scheduler.active;
+
+    /* unless the send order is higher than that of the last stream, the stream goes to the tail */
+    if (!h2o_linklist_is_empty(at) && SEND_ORDER(at->prev) < ws->super.send_order) {
+        for (at = conn->wt.scheduler.active.next; SEND_ORDER(at) >= ws->super.send_order; at = at->next)
+            ;
+    }
+    h2o_linklist_insert(at, &ws->sched_link);
+#undef SEND_ORDER
+}
+
 static struct st_h2o_http3_server_wt_stream_t *wt_stream_new(struct st_h2o_http3_server_conn_t *conn, quicly_stream_t *qs)
 {
     struct st_h2o_http3_server_wt_stream_t *ws = h2o_mem_alloc(sizeof(*ws));
@@ -3004,10 +3021,26 @@ static void wt_native_detach(h2o_webtransport_session_t *session)
     wt_reject_pending(conn, session_stream->quic->stream_id, H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
 }
 
-static const h2o_webtransport_native_t wt_native_ops = {
-    wt_native_open_stream,  wt_native_stream_sync_sendbuf, wt_native_stream_sync_recvbuf,
-    wt_native_reset_stream, wt_native_request_stop,        wt_native_start,
-    wt_native_detach};
+static void wt_native_stream_update_send_order(h2o_webtransport_stream_t *stream)
+{
+    struct st_h2o_http3_server_wt_stream_t *ws = (void *)stream;
+
+    /* a stream blocked by the connection-level flow control is ranked when it is unblocked */
+    if (ws->quic == NULL || !h2o_linklist_is_linked(&ws->sched_link) ||
+        (quicly_is_blocked(ws->conn->h3.super.quic) && !quicly_stream_can_send(ws->quic, 0)))
+        return;
+    h2o_linklist_unlink(&ws->sched_link);
+    wt_sched_activate(ws->conn, ws);
+}
+
+static const h2o_webtransport_native_t wt_native_ops = {wt_native_open_stream,
+                                                        wt_native_stream_sync_sendbuf,
+                                                        wt_native_stream_sync_recvbuf,
+                                                        wt_native_reset_stream,
+                                                        wt_native_request_stop,
+                                                        wt_native_stream_update_send_order,
+                                                        wt_native_start,
+                                                        wt_native_detach};
 
 static const h2o_webtransport_native_t *webtransport_attach(h2o_req_t *req, h2o_webtransport_session_t *session)
 {
@@ -3243,7 +3276,12 @@ static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn
     conn->scheduler.uni.active |= conn->scheduler.uni.conn_blocked;
     conn->scheduler.uni.conn_blocked = 0;
     req_scheduler_unblock_conn_blocked(&conn->scheduler.reqs, req_scheduler_compare_stream_id);
-    h2o_linklist_insert_list(&conn->wt.scheduler.active, &conn->wt.scheduler.conn_blocked);
+    while (!h2o_linklist_is_empty(&conn->wt.scheduler.conn_blocked)) {
+        struct st_h2o_http3_server_wt_stream_t *ws =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, sched_link, conn->wt.scheduler.conn_blocked.next);
+        h2o_linklist_unlink(&ws->sched_link);
+        wt_sched_activate(conn, ws);
+    }
 }
 
 static int scheduler_can_send(quicly_stream_scheduler_t *sched, quicly_conn_t *qc, int conn_is_saturated)
@@ -3372,7 +3410,7 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
             }
         } else if (!h2o_linklist_is_empty(&conn->wt.scheduler.active)) {
             conn->wt.scheduler_toggle = 0;
-            /* 1. dequeue the first active WebTransport stream (round-robin) */
+            /* 1. dequeue the first active WebTransport stream (of the highest send order, round-robin) */
             struct st_h2o_http3_server_wt_stream_t *ws =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, sched_link, conn->wt.scheduler.active.next);
             quicly_stream_t *qs = ws->quic;
@@ -3390,14 +3428,15 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                     h2o_linklist_insert(conn->wt.scheduler.active.next, &ws->sched_link);
                 goto Exit;
             }
-            /* 4. enqueue to the tail */
+            /* 4. enqueue behind the streams of the same send order */
             if (h2o_linklist_is_linked(&ws->sched_link))
                 h2o_linklist_unlink(&ws->sched_link);
             if (quicly_stream_can_send(qs, 1)) {
-                h2o_linklist_t *anchor = &conn->wt.scheduler.active;
-                if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(qs, 0))
-                    anchor = &conn->wt.scheduler.conn_blocked;
-                h2o_linklist_insert(anchor, &ws->sched_link);
+                if (quicly_is_blocked(conn->h3.super.quic) && !quicly_stream_can_send(qs, 0)) {
+                    h2o_linklist_insert(&conn->wt.scheduler.conn_blocked, &ws->sched_link);
+                } else {
+                    wt_sched_activate(conn, ws);
+                }
             }
         } else {
             break;
@@ -3449,7 +3488,7 @@ static void scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, q
             break;
         case ACTIVATE:
             if (!h2o_linklist_is_linked(&ws->sched_link))
-                h2o_linklist_insert(&conn->wt.scheduler.active, &ws->sched_link);
+                wt_sched_activate(conn, ws);
             break;
         case CONN_BLOCKED:
             if (h2o_linklist_is_linked(&ws->sched_link))
