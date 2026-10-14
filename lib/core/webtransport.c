@@ -547,6 +547,11 @@ void h2o_webtransport_native_error(h2o_webtransport_session_t *_sess, quicly_err
     session_error((struct st_capsule_session_t *)_sess, err);
 }
 
+static void native_stream_update_send_order(h2o_webtransport_stream_t *stream)
+{
+    get_session(stream)->native->stream_update_send_order(stream);
+}
+
 static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_capsule_session_t *sess = (struct st_capsule_session_t *)_sess;
@@ -563,14 +568,11 @@ static void native_send_datagrams(h2o_webtransport_session_t *_sess, h2o_iovec_t
     }
 }
 
-static const h2o_webtransport_backend_t native_backend = {native_open_stream,
-                                                          native_stream_sync_sendbuf,
-                                                          native_stream_sync_recvbuf,
-                                                          native_reset_stream,
-                                                          native_request_stop,
-                                                          native_send_datagrams,
-                                                          capsule_drain,
-                                                          capsule_close};
+static const h2o_webtransport_backend_t native_backend = {
+    native_open_stream,  native_stream_sync_sendbuf,      native_stream_sync_recvbuf, native_reset_stream,
+    native_request_stop, native_stream_update_send_order, native_send_datagrams,      capsule_drain,
+    capsule_close,
+};
 
 int h2o_webtransport_is_request(h2o_req_t *req)
 {
