@@ -3033,14 +3033,29 @@ static void wt_native_stream_update_send_order(h2o_webtransport_stream_t *stream
     wt_sched_activate(ws->conn, ws);
 }
 
-static const h2o_webtransport_native_t wt_native_ops = {wt_native_open_stream,
-                                                        wt_native_stream_sync_sendbuf,
-                                                        wt_native_stream_sync_recvbuf,
-                                                        wt_native_reset_stream,
-                                                        wt_native_request_stop,
-                                                        wt_native_stream_update_send_order,
-                                                        wt_native_start,
-                                                        wt_native_detach};
+static size_t wt_native_get_max_datagram_payload(h2o_webtransport_session_t *session)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, session->req);
+    quicly_conn_t *qc = get_conn(stream)->h3.super.quic;
+    const quicly_transport_parameters_t *remote = quicly_get_remote_transport_parameters(qc);
+
+    /* the packets quicly sends are not smaller than the initial size, unless the peer requires so */
+    uint64_t packet_size = quicly_get_context(qc)->initial_egress_max_udp_payload_size;
+    if (packet_size > remote->max_udp_payload_size)
+        packet_size = remote->max_udp_payload_size;
+    /* the frame fits in a short header packet having a CID of the longest size */
+    uint64_t frame_size = packet_size - (1 + QUICLY_MAX_CID_LEN_V1 + QUICLY_SEND_PN_SIZE + QUICLY_AEAD_TAG_SIZE);
+    if (frame_size > remote->max_datagram_frame_size)
+        frame_size = remote->max_datagram_frame_size;
+    /* the frame type, the length of the payload (two bytes, below 16384), then the quarter stream ID */
+    uint64_t overhead = 1 + 2 + quicly_encodev_capacity(stream->quic->stream_id / 4);
+    return frame_size > overhead ? (size_t)(frame_size - overhead) : 0;
+}
+
+static const h2o_webtransport_native_t wt_native_ops = {
+    wt_native_open_stream,  wt_native_stream_sync_sendbuf,      wt_native_stream_sync_recvbuf,      wt_native_reset_stream,
+    wt_native_request_stop, wt_native_stream_update_send_order, wt_native_get_max_datagram_payload, wt_native_start,
+    wt_native_detach};
 
 static const h2o_webtransport_native_t *webtransport_attach(h2o_req_t *req, h2o_webtransport_session_t *session)
 {
