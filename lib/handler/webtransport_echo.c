@@ -32,6 +32,8 @@
  * The query string of the CONNECT request can be used to exercise other paths:
  *
  * - `open-bidi=N` / `open-uni=N`: the server opens N streams, each sending "stream <id>\n" then FIN
+ * - `delay=<ms>`: the streams of `open-bidi` / `open-uni` are opened that much later, from a timer, outside the handling of any
+ *   input
  * - `drain`: the server sends WT_DRAIN_SESSION immediately
  * - `close=<code>`: the server closes the session with the given error code, once the first bidirectional stream opened by the
  *   client is fully echoed
@@ -54,6 +56,11 @@ struct st_echo_session_t {
     h2o_webtransport_stream_t *opening_sink_for;
     uint32_t close_code;
     unsigned close_requested : 1;
+    /**
+     * opens the greeting streams after `delay`
+     */
+    h2o_timer_t greeting_timer;
+    uint64_t greeting_bidi, greeting_uni;
 };
 
 struct st_echo_stream_t {
@@ -226,12 +233,18 @@ static void on_receive_datagram(h2o_webtransport_session_t *session, h2o_iovec_t
 
 static void on_drain(h2o_webtransport_session_t *session)
 {
+    struct st_echo_session_t *sess = session->data;
+    if (h2o_timer_is_linked(&sess->greeting_timer))
+        h2o_timer_unlink(&sess->greeting_timer);
     h2o_webtransport_close(session, 0, h2o_iovec_init(NULL, 0));
 }
 
 static void on_close(h2o_webtransport_session_t *session, quicly_error_t err, h2o_iovec_t reason)
 {
-    /* nothing to do; the session object is allocated from the memory pool of the request */
+    /* the session object is allocated from the memory pool of the request */
+    struct st_echo_session_t *sess = session->data;
+    if (h2o_timer_is_linked(&sess->greeting_timer))
+        h2o_timer_unlink(&sess->greeting_timer);
 }
 
 static const h2o_webtransport_session_callbacks_t session_callbacks = {on_stream_open, on_receive_datagram, on_drain, on_close};
@@ -251,6 +264,13 @@ static void open_greeting_streams(h2o_webtransport_session_t *session, int uni, 
                 h2o_webtransport_request_stop(stream, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0));
         }
     }
+}
+
+static void on_greeting_timer(h2o_timer_t *timer)
+{
+    struct st_echo_session_t *sess = H2O_STRUCT_FROM_MEMBER(struct st_echo_session_t, greeting_timer, timer);
+    open_greeting_streams(sess->wt, 0, sess->greeting_bidi);
+    open_greeting_streams(sess->wt, 1, sess->greeting_uni);
 }
 
 /**
@@ -296,7 +316,7 @@ static int get_query_number(h2o_req_t *req, const char *name, uint64_t max_value
 
 static int on_req(h2o_handler_t *self, h2o_req_t *req)
 {
-    uint64_t num_bidi = 0, num_uni = 0, close_code = 0;
+    uint64_t num_bidi = 0, num_uni = 0, close_code = 0, delay = 0;
     int close_requested;
     h2o_iovec_t unused;
 
@@ -305,18 +325,25 @@ static int on_req(h2o_handler_t *self, h2o_req_t *req)
 
     if (get_query_number(req, "open-bidi", MAX_STREAMS_OPENED_BY_QUERY, &num_bidi) < 0 ||
         get_query_number(req, "open-uni", MAX_STREAMS_OPENED_BY_QUERY, &num_uni) < 0 ||
+        get_query_number(req, "delay", 10000, &delay) < 0 ||
         (close_requested = get_query_number(req, "close", UINT32_MAX, &close_code)) < 0) {
         h2o_send_error_400(req, "Bad Request", "invalid query", 0);
         return 0;
     }
 
     struct st_echo_session_t *sess = h2o_mem_alloc_pool(&req->pool, *sess, 1);
-    *sess = (struct st_echo_session_t){.close_code = (uint32_t)close_code, .close_requested = close_requested};
+    *sess = (struct st_echo_session_t){
+        .close_code = (uint32_t)close_code, .close_requested = close_requested, .greeting_bidi = num_bidi, .greeting_uni = num_uni};
+    h2o_timer_init(&sess->greeting_timer, on_greeting_timer);
     if ((sess->wt = h2o_webtransport_accept(req, &session_callbacks, sess, h2o_iovec_init(NULL, 0))) == NULL)
         return 0;
 
-    open_greeting_streams(sess->wt, 0, num_bidi);
-    open_greeting_streams(sess->wt, 1, num_uni);
+    if (delay != 0) {
+        h2o_timer_link(req->conn->ctx->loop, delay, &sess->greeting_timer);
+    } else {
+        open_greeting_streams(sess->wt, 0, num_bidi);
+        open_greeting_streams(sess->wt, 1, num_uni);
+    }
     if (get_query_param(req, "drain", &unused))
         h2o_webtransport_drain(sess->wt);
 

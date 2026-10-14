@@ -61,6 +61,7 @@ The query string of the request can be used to exercise other code paths:
 </p>
 <ul>
 <li><code>open-bidi=N</code> and <code>open-uni=N</code>: the server opens N (up to 100) streams, each sending <code>stream &lt;id&gt;</code> and a newline before closing</li>
+<li><code>delay=MS</code>: the streams of <code>open-bidi</code> and <code>open-uni</code> are opened MS milliseconds (up to 10000) later, from a timer</li>
 <li><code>drain</code>: the server drains the session immediately</li>
 <li><code>close=CODE</code>: the server closes the session with the given error code, once the first bidirectional stream opened by the client has been echoed</li>
 </ul>

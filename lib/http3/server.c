@@ -2746,6 +2746,7 @@ static quicly_error_t wt_native_open_stream(h2o_webtransport_session_t *session,
     if (ws->state != WT_STREAM_STATE_OPEN)
         return H2O_WEBTRANSPORT_ERROR_SESSION_GONE; /* the session has been closed by the callback */
 
+    h2o_quic_schedule_timer(&conn->h3.super); /* the open may be outside a quicly callback */
     *stream = &ws->super;
     return 0;
 }
@@ -2770,7 +2771,11 @@ static quicly_error_t wt_native_stream_sync_sendbuf(h2o_webtransport_stream_t *s
         activate = 1;
     }
 
-    return quicly_stream_sync_sendbuf(qs, activate);
+    if ((ret = quicly_stream_sync_sendbuf(qs, activate)) != 0)
+        return ret;
+    /* the application may write outside a quicly callback, e.g. from a timer; make sure that what it wrote gets sent */
+    h2o_quic_schedule_timer(&ws->conn->h3.super);
+    return 0;
 }
 
 static void wt_native_stream_sync_recvbuf(h2o_webtransport_stream_t *stream, size_t shift_amount)
@@ -2788,16 +2793,20 @@ static void wt_native_reset_stream(h2o_webtransport_stream_t *stream, quicly_err
 
     quicly_sendstate_reset(&ws->super.sendstate);
     /* TODO use RESET_STREAM_AT with the reliable size covering the header */
-    if (ws->state == WT_STREAM_STATE_OPEN)
+    if (ws->state == WT_STREAM_STATE_OPEN) {
         wt_reset_quic(ws, wt_to_h3_error(err));
+        h2o_quic_schedule_timer(&ws->conn->h3.super);
+    }
 }
 
 static void wt_native_request_stop(h2o_webtransport_stream_t *stream, quicly_error_t err)
 {
     struct st_h2o_http3_server_wt_stream_t *ws = (void *)stream;
 
-    if (ws->state == WT_STREAM_STATE_OPEN)
+    if (ws->state == WT_STREAM_STATE_OPEN) {
         wt_stop_quic(ws, wt_to_h3_error(err));
+        h2o_quic_schedule_timer(&ws->conn->h3.super);
+    }
 }
 
 static void wt_native_start(h2o_webtransport_session_t *session)
