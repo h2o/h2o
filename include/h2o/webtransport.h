@@ -306,6 +306,10 @@ struct st_h2o_webtransport_stream_t {
      * receive-side state (offsets exclude any framing added by the transport)
      */
     quicly_recvstate_t recvstate;
+    /**
+     * the send order (read-only; see `h2o_webtransport_stream_set_send_order`)
+     */
+    int64_t send_order;
     void *data;
 };
 
@@ -358,6 +362,7 @@ struct st_h2o_webtransport_backend_t {
     void (*stream_sync_recvbuf)(h2o_webtransport_stream_t *stream, size_t shift_amount);
     void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    void (*stream_update_send_order)(h2o_webtransport_stream_t *stream);
     void (*send_datagrams)(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams);
     void (*drain)(h2o_webtransport_session_t *session);
     void (*close)(h2o_webtransport_session_t *session, uint32_t app_error, h2o_iovec_t reason);
@@ -374,6 +379,7 @@ typedef struct st_h2o_webtransport_native_t {
     void (*stream_sync_recvbuf)(h2o_webtransport_stream_t *stream, size_t shift_amount);
     void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
     void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    void (*stream_update_send_order)(h2o_webtransport_stream_t *stream);
     /**
      * Called asynchronously after `h2o_webtransport_accept` returns. The protocol layer starts delivering the streams opened by the
      * peer (including the ones that have been buffered) by calling `on_stream_open`.
@@ -432,6 +438,13 @@ static void h2o_webtransport_reset_stream(h2o_webtransport_stream_t *stream, qui
  * Asks the peer to stop sending; `err` must be an application error.
  */
 static void h2o_webtransport_request_stop(h2o_webtransport_stream_t *stream, quicly_error_t err);
+/**
+ * Sets the send order of the stream, as `sendOrder` of the WebTransport API of W3C: when the congestion or flow control of the
+ * session (or of the connection that carries it) is the limit, data of streams with a higher send order is sent first, and streams
+ * of the same send order take turns. The default is zero. On HTTP/3, the order applies among the WebTransport streams of the
+ * connection, which take turns with the request streams.
+ */
+static void h2o_webtransport_stream_set_send_order(h2o_webtransport_stream_t *stream, int64_t send_order);
 /**
  * Sends datagrams. Datagrams might be dropped.
  */
@@ -514,6 +527,14 @@ inline void h2o_webtransport_reset_stream(h2o_webtransport_stream_t *stream, qui
 inline void h2o_webtransport_request_stop(h2o_webtransport_stream_t *stream, quicly_error_t err)
 {
     stream->session->_backend->request_stop(stream, err);
+}
+
+inline void h2o_webtransport_stream_set_send_order(h2o_webtransport_stream_t *stream, int64_t send_order)
+{
+    if (stream->send_order == send_order)
+        return;
+    stream->send_order = send_order;
+    stream->session->_backend->stream_update_send_order(stream);
 }
 
 inline void h2o_webtransport_send_datagrams(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams)
