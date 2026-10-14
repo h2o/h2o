@@ -90,6 +90,19 @@ for my $proto (@protocols) {
             ], "received");
         };
 
+        subtest "server-initiated streams opened from a timer" => sub {
+            # written outside the handling of any input, the data must still be sent at once rather than at the next packet or
+            # timeout of the connection
+            my $started = Time::HiRes::time;
+            my ($out, $status) = run_client($server, $proto, "-e 2", "/echo?open-uni=2&delay=100");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "server-uni[$first_server_uni] fin \"stream $first_server_uni\\n\"",
+                "server-uni[@{[ $first_server_uni + 4 ]}] fin \"stream @{[ $first_server_uni + 4 ]}\\n\"",
+            ], "received");
+            cmp_ok Time::HiRes::time - $started, '<', 2, "without waiting for a timeout";
+        };
+
         subtest "reset and stop-sending are mirrored" => sub {
             my ($out, $status) = run_client($server, $proto, "", "/echo", "bidi-reset:7", "bidi-stop:9");
             is $status, 0, "exit status";
