@@ -878,7 +878,7 @@ static quicly_error_t handle_capsule_payload(struct st_capsule_session_t *sess, 
         if (payload.len != 0)
             return H2O_WEBTRANSPORT_ERROR_PROTOCOL;
         if (sess->super.callbacks->on_drain != NULL) {
-            sess->super.callbacks->on_drain(&sess->super);
+            sess->super.callbacks->on_drain(&sess->super, 1);
             if (sess->closing)
                 return ERROR_CLOSED_BY_APP;
         }
@@ -1364,7 +1364,7 @@ static void on_timer(h2o_timer_t *timer)
     if (sess->egress.shutdown_pending) {
         sess->egress.shutdown_pending = 0;
         if (!sess->closing && sess->super.callbacks->on_drain != NULL)
-            sess->super.callbacks->on_drain(&sess->super);
+            sess->super.callbacks->on_drain(&sess->super, 0);
     }
 
     do_send(sess);

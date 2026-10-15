@@ -166,9 +166,9 @@ static void app_on_receive_datagram(h2o_webtransport_session_t *session, h2o_iov
         h2o_webtransport_send_datagrams(session, &payload, 1);
 }
 
-static void app_on_drain(h2o_webtransport_session_t *session)
+static void app_on_drain(h2o_webtransport_session_t *session, int by_peer)
 {
-    record("drain");
+    record("drain(%s)", by_peer ? "peer" : "local");
 }
 
 static void app_on_close(h2o_webtransport_session_t *session, quicly_error_t err, h2o_iovec_t reason)
@@ -914,7 +914,7 @@ static void test_drain(void)
     note("by peer");
     setup(NULL, NULL);
     feed("\x80\x00\x78\xae\x00", 5, 0);
-    check_events("drain");
+    check_events("drain(peer)");
     check_output("");
     teardown();
 
@@ -933,7 +933,7 @@ static void test_drain(void)
     h2o_webtransport_notify_shutdown(&t.req);
     run_loop();
     check_output("drain");
-    check_events("drain");
+    check_events("drain(local)");
     teardown();
 }
 
