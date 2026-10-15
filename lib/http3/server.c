@@ -3212,8 +3212,13 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 continue;
             }
             /* 3. send; `ws` might be freed if the stream is destroyed, but that does not happen while sending */
-            if ((ret = quicly_send_stream(qs, s)) != 0)
+            if ((ret = quicly_send_stream(qs, s)) != 0) {
+                /* The stream has been dequeued. When the datagrams have run out of space, put it back (at the head, as its turn is
+                 * not over), like quicly's default scheduler does; otherwise it would not be sent until its state changes. */
+                if (ret == QUICLY_ERROR_SENDBUF_FULL && quicly_stream_can_send(qs, 1) && !h2o_linklist_is_linked(&ws->sched_link))
+                    h2o_linklist_insert(conn->wt.scheduler.active.next, &ws->sched_link);
                 goto Exit;
+            }
             /* 4. enqueue to the tail */
             if (h2o_linklist_is_linked(&ws->sched_link))
                 h2o_linklist_unlink(&ws->sched_link);
