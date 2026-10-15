@@ -595,6 +595,65 @@ static void test_h3_webtransport_reliable_reset(void)
     rr_dispose(f);
 }
 
+/* Returns if the WebTransport streams scheduled for sending are those given, in order. */
+static int wt_sched_is(struct rr_fixture *f, h2o_webtransport_stream_t **expected, size_t num_expected)
+{
+    size_t i = 0;
+    for (h2o_linklist_t *l = f->server->wt.scheduler.active.next; l != &f->server->wt.scheduler.active; l = l->next, ++i) {
+        struct st_h2o_http3_server_wt_stream_t *ws = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, sched_link, l);
+        printf("# scheduled: %" PRId64 "\n", ws->super.stream_id);
+        if (i >= num_expected || &ws->super != expected[i])
+            return 0;
+    }
+    return i == num_expected;
+}
+
+/* A stream whose turn comes when the datagrams have run out of space stays scheduled. Nothing else would schedule it again when it
+ * has nothing in flight, as no ACK or loss of its data is to come. */
+static void test_h3_webtransport_sendbuf_full(void)
+{
+    struct rr_fixture *f = wt_setup(1, 1, 1);
+    wt_send_complete_settings(f);
+    wt_open_session(f);
+
+    static uint8_t bulk[4000];
+    memset(bulk, 'b', sizeof(bulk));
+    h2o_webtransport_stream_t *s[2];
+    quicly_stream_id_t ids[2];
+    for (size_t i = 0; i != 2; ++i) {
+        ok(h2o_webtransport_open_stream(wt_app.session, s + i, 1) == 0);
+        ids[i] = s[i]->stream_id;
+        ok(h2o_webtransport_streambuf_egress_write(s[i], bulk, i == 0 ? sizeof(bulk) : 1) == 0);
+        ok(h2o_webtransport_streambuf_egress_shutdown(s[i]) == 0);
+    }
+    ok(wt_sched_is(f, s, 2));
+
+    /* the first stream fills the only datagram allowed; the second then gets SENDBUF_FULL */
+    struct rr_packets batch;
+    quicly_address_t dest, src;
+    batch.count = 1;
+    ok(quicly_send(f->server->h3.super.quic, &dest, &src, batch.packets, &batch.count, batch.bytes, sizeof(batch.bytes)) == 0);
+    ok(batch.count == 1);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[1], s[0]}, 2));
+    rr_deliver(f, 0, &batch);
+
+    /* both streams are delivered */
+    wt_steps(f);
+    for (size_t i = 0; i != 2; ++i) {
+        struct rr_client_stream *cs = wt_client_stream(f, ids[i]);
+        uint8_t expected[sizeof(bulk) + 16],
+            *p = h2o_webtransport_encode_stream_prefix(expected, H2O_WEBTRANSPORT_H3_STREAM_TYPE_UNI, 0);
+        size_t len = i == 0 ? sizeof(bulk) : 1;
+        memcpy(p, bulk, len);
+        p += len;
+        ok(cs != NULL && wt_client_received(cs, expected, p - expected, 1));
+    }
+    ok(h2o_linklist_is_empty(&f->server->wt.scheduler.active));
+    wt_check_alive(f);
+
+    rr_dispose(f);
+}
+
 static void test_h3_webtransport(void)
 {
     subtest("gating", test_h3_webtransport_gating);
@@ -603,6 +662,7 @@ static void test_h3_webtransport(void)
     subtest("session gone", test_h3_webtransport_session_gone);
     subtest("reset before header", test_h3_webtransport_reset_before_header);
     subtest("reliable reset", test_h3_webtransport_reliable_reset);
+    subtest("sendbuf full", test_h3_webtransport_sendbuf_full);
 }
 
 #else
