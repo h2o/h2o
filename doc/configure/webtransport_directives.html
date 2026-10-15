@@ -74,6 +74,9 @@ Over HTTP/3, at most one session is permitted on each connection, as the flow co
 <li><a href="configure/webtransport_directives.html#webtransport">
 <code>webtransport</code>
 </a></li>
+<li><a href="configure/webtransport_directives.html#webtransport-legacy-drafts">
+<code>webtransport-legacy-drafts</code>
+</a></li>
 <li><a href="configure/webtransport_directives.html#webtransport.echo">
 <code>webtransport.echo</code>
 </a></li>
@@ -105,6 +108,32 @@ Also, when set to <code>ON</code>, H2O offers the <a href="https://datatracker.i
 <dd>global</dd>
 <dt>Default:</dt>
 <dd><code><pre>webtransport: OFF</pre></code>
+</dl>
+
+<div id="webtransport-legacy-drafts" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/webtransport_directives.html#webtransport-legacy-drafts"><code>"webtransport-legacy-drafts"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the handshakes of earlier drafts of WebTransport over HTTP/3 are accepted as well.
+
+</p>
+
+<p>
+Current browsers speak earlier drafts than draft-16 when establishing a session: they send <code>:protocol</code> <code>webtransport</code> instead of <code>webtransport-h3</code>, signal WebTransport with the SETTINGS of draft-02 (<code>SETTINGS_ENABLE_WEBTRANSPORT</code>), draft-07 (<code>SETTINGS_WEBTRANSPORT_MAX_SESSIONS</code>) or draft-14 (<code>SETTINGS_WT_MAX_SESSIONS</code>), and do not necessarily offer the <code>reset_stream_at</code> transport parameter.
+When this directive is <code>ON</code> and <code>webtransport</code> is <code>ON</code>, H2O also advertises the SETTINGS of draft-02 and draft-07, without which these browsers do not send their extended CONNECT, and accepts such clients.
+The session is then carried as in draft-16, which these drafts share the streams and capsules of; a stream is reset with RESET_STREAM if the client did not offer <code>reset_stream_at</code>.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>webtransport-legacy-drafts: ON</pre></code>
 </dl>
 
 <div id="webtransport.echo" class="directive-head">
