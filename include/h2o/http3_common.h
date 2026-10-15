@@ -348,6 +348,10 @@ struct st_h2o_http3_conn_t {
          * not using WebTransport keep ignoring these settings
          */
         uint64_t wt_enabled;
+        /**
+         * raw values of the SETTINGS of earlier drafts (see H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02)
+         */
+        uint64_t wt_enable_draft02, wt_max_sessions_draft07, wt_max_sessions_draft14;
         uint64_t enable_connect_protocol;
     } peer_settings;
     /**
@@ -358,6 +362,11 @@ struct st_h2o_http3_conn_t {
          * advertise SETTINGS_WT_ENABLED=1; the caller is responsible for also offering QUIC datagrams
          */
         unsigned wt_enabled : 1;
+        /**
+         * advertise the SETTINGS of earlier drafts as well (draft-02's SETTINGS_ENABLE_WEBTRANSPORT and draft-07's
+         * SETTINGS_WEBTRANSPORT_MAX_SESSIONS), without which current browsers do not send their CONNECT
+         */
+        unsigned wt_legacy : 1;
     } local_settings;
     struct {
         struct {

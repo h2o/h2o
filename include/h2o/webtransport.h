@@ -40,6 +40,14 @@ struct st_h2o_req_t;
  * WebTransport over HTTP/3 (draft-ietf-webtrans-http3-16)
  */
 #define H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED UINT64_C(0x2c7cf000)
+/**
+ * The SETTINGS by which earlier drafts signal WebTransport, which current browsers still use: draft-02's
+ * SETTINGS_ENABLE_WEBTRANSPORT (Chrome, Firefox), draft-07's SETTINGS_WEBTRANSPORT_MAX_SESSIONS and draft-14's
+ * SETTINGS_WT_MAX_SESSIONS (Safari). Accepted when `webtransport-legacy-drafts` is ON, with :protocol "webtransport".
+ */
+#define H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02 UINT64_C(0x2b603742)
+#define H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07 UINT64_C(0xc671706a)
+#define H2O_WEBTRANSPORT_H3_SETTINGS_WT_MAX_SESSIONS_DRAFT14 UINT64_C(0x14e9cd29)
 #define H2O_WEBTRANSPORT_H3_STREAM_TYPE_UNI UINT64_C(0x54)
 #define H2O_WEBTRANSPORT_H3_SIGNAL_BIDI UINT64_C(0x41)
 #define H2O_WEBTRANSPORT_H3_MAX_SESSION_ID UINT64_C(0x3ffffffffffffffc)

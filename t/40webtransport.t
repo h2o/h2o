@@ -11,10 +11,11 @@ plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
 sub spawn_wt_server {
-    my $enabled = shift;
+    my ($enabled, $extra) = @_;
+    $extra //= '';
     spawn_h2o(<< "EOT");
 webtransport: @{[ $enabled ? "ON" : "OFF" ]}
-hosts:
+${extra}hosts:
   default:
     paths:
       /echo:
@@ -24,8 +25,11 @@ hosts:
 EOT
 }
 
+# h3 with the handshakes of earlier drafts, as current browsers send them: draft-02 (Chrome, Firefox), draft-07 and draft-14
+# (Safari)
 my @protocols = (
     { name => "h3", opts => "-3", port => sub { $_[0]->{quic_port} } },
+    map { { name => "h3-draft$_", opts => "-3 -d $_", port => sub { $_[0]->{quic_port} } } } (2, 7, 14),
 );
 
 # runs the client, returning its output as an arrayref of lines, and the exit status
@@ -150,6 +154,23 @@ subtest "disabled" => sub {
         my ($out) = run_client($server, $protocols[0], "-t 5000", "/echo", "bidi:x");
         has_lines($out, ["settings wt-enabled=0"], "not advertised");
         ok !grep({ $_ eq "response 200" } @$out), "not established";
+    };
+};
+
+subtest "earlier drafts turned off" => sub {
+    my $server = spawn_wt_server(1, "webtransport-legacy-drafts: OFF\n");
+    for my $draft (2, 7, 14) {
+        subtest "draft-$draft" => sub {
+            my ($out) = run_client($server, { opts => "-3 -d $draft", port => sub { $_[0]->{quic_port} } }, "-t 5000", "/echo",
+                                   "bidi:x");
+            has_lines($out, ["settings wt-enabled=0"], "not advertised");
+            ok !grep({ $_ eq "response 200" } @$out), "not established" or diag join "\n", @$out;
+        };
+    }
+    subtest "draft-16" => sub {
+        my ($out, $status) = run_client($server, $protocols[0], "", "/echo", "bidi:hello");
+        is $status, 0, "exit status";
+        has_lines($out, ["settings wt-enabled=1", "response 200", "client-bidi[4] fin \"hello\""], "still established");
     };
 };
 
