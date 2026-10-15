@@ -171,7 +171,8 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
         size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
         if (new_capacity > table->buf_end - table->buf_start) {
             struct st_h2o_qpack_header_t **newbuf = h2o_mem_alloc(sizeof(*newbuf) * new_capacity);
-            memcpy(newbuf, table->first, sizeof(*newbuf) * count);
+            if (count != 0) /* `first` is NULL while the table has never had entries */
+                memcpy(newbuf, table->first, sizeof(*newbuf) * count);
             free(table->buf_start);
             table->buf_start = newbuf;
             table->first = newbuf;
