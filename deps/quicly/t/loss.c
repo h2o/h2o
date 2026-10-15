@@ -151,7 +151,7 @@ static void test_slow_cert_verify(void)
     ok(quicly_sentmap_prepare(&loss.sentmap, 2, now, QUICLY_EPOCH_1RTT) == 0);
     quicly_sentmap_commit(&loss.sentmap, 10, 0, 0);
     last_retransmittable_sent_at = now;
-    quicly_loss_update_alarm(&loss, now, last_retransmittable_sent_at, 1, 0, 1, 0, 1);
+    quicly_loss_update_alarm(&loss, now, last_retransmittable_sent_at, 1, 0, 1, 0, 1, 1);
 
     now += 10;
 
@@ -383,7 +383,7 @@ static void test_submillisecond_timers(void)
                                 QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING);
     ok(loss.rtt.latest == 0.125f);
     ok(quicly_rtt_get_pto(&loss.rtt, 0, 1) == 1.125);
-    quicly_loss_update_alarm(&loss, millisec, sent_at, 1, 1, 0, 0, 1);
+    quicly_loss_update_alarm(&loss, millisec, sent_at, 1, 1, 0, 0, 1, 1);
     ok(loss.alarm_at == millisec + 2);
 
     /* The loss delay is still at least 1ms, despite the smaller RTT. */
@@ -418,16 +418,16 @@ static void test_fractional_pto(void)
     };
     for (size_t i = 0; i != PTLS_ELEMENTSOF(tests); ++i) {
         loss.pto_count = tests[i].pto_count;
-        quicly_loss_update_alarm(&loss, millisec, millisec + 0.125, 1, 1, tests[i].handshake, 0, 1);
+        quicly_loss_update_alarm(&loss, millisec, millisec + 0.125, 1, 1, tests[i].handshake, 0, 1, 1);
         ok(loss.alarm_at == millisec + tests[i].delay_at_125us);
-        quicly_loss_update_alarm(&loss, millisec, millisec + 0.75, 1, 1, tests[i].handshake, 0, 1);
+        quicly_loss_update_alarm(&loss, millisec, millisec + 0.75, 1, 1, tests[i].handshake, 0, 1, 1);
         ok(loss.alarm_at == millisec + tests[i].delay_at_750us);
     }
 
     /* An overdue alarm is still clamped to now; no outstanding packets disables it. */
-    quicly_loss_update_alarm(&loss, millisec + 100, millisec + 0.75, 1, 1, 0, 0, 0);
+    quicly_loss_update_alarm(&loss, millisec + 100, millisec + 0.75, 1, 1, 0, 0, 0, 1);
     ok(loss.alarm_at == millisec + 100);
-    quicly_loss_update_alarm(&loss, millisec + 100, millisec + 0.75, 0, 1, 0, 0, 0);
+    quicly_loss_update_alarm(&loss, millisec + 100, millisec + 0.75, 0, 1, 0, 0, 0, 1);
     ok(loss.alarm_at == INT64_MAX);
 
     /* The variance floor does not round SRTT down. */

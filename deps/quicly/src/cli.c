@@ -1304,7 +1304,7 @@ static void usage(const char *cmd)
            "                            retry_configs from the server\n"
            "  --ech-key <file>          ECH private key for each ECH config provided by\n"
            "                            --ech-config\n"
-           "  --exit-after-handshake    immediately exists one the handshake concludes,\n"
+           "  --exit-after-handshake    immediately exits once the handshake concludes,\n"
            "                            without sending application data\n"
            "  -f fraction               increases the induced ack frequency to specified\n"
            "                            fraction of CWND (default: 0)\n"
@@ -1553,7 +1553,7 @@ static int cmd_encrypt_packet(int is_enc, int is_batch, const char *secret_dcid_
         /* setup crypto */
         if (packet_protect == NULL &&
             engine->setup_cipher(engine, NULL, epoch, is_enc, &header_protect, &packet_protect, cs->aead, cs->hash, secret) != 0) {
-            fprintf(stderr, "Crypto faiure.\n");
+            fprintf(stderr, "Crypto failure.\n");
             return 1;
         }
 

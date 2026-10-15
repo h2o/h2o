@@ -141,6 +141,17 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_END},
             },
             20 * 1200);
+
+    /* when the sender becomes app-limited after entering jumpstart, CWND upon exit is not reduced below IW */
+    subtest("app-limited", test_jumpstart_pattern, init,
+            (struct test_jumpstart_action[]){
+                {TEST_JUMPSTART_ACTION_SEND, 1000, 2},  /* send 2 packets */
+                {TEST_JUMPSTART_ACTION_ACKED, 1100, 2}, /* 2 packet acked, entering jumpstart */
+                {TEST_JUMPSTART_ACTION_SEND, 1100, 1},  /* send only 1 packet */
+                {TEST_JUMPSTART_ACTION_ACKED, 1200, 1}, /* receive ack for that packet, exiting jumpstart */
+                {TEST_JUMPSTART_ACTION_END},
+            },
+            11 * 1200);
 }
 
 void test_jumpstart(void)

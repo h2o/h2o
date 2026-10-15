@@ -198,9 +198,12 @@ typedef enum quicly_loss_ack_received_kind_t {
 static void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, float initial_rtt, const uint16_t *max_ack_delay,
                              const uint8_t *ack_delay_exponent);
 static void quicly_loss_dispose(quicly_loss_t *r);
+/**
+ * Updates the alarm. When `use_loss_time` is false, `loss_time` is not used for scheduling the alarm.
+ */
 static void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, double last_retransmittable_sent_at, int has_outstanding,
                                      int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
-                                     int is_after_send);
+                                     int is_after_send, int use_loss_time);
 /**
  * called when an ACK is received
  */
@@ -338,7 +341,7 @@ inline void quicly_loss_dispose(quicly_loss_t *r)
 
 inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, double last_retransmittable_sent_at, int has_outstanding,
                                      int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
-                                     int is_after_send)
+                                     int is_after_send, int use_loss_time)
 {
     if (!has_outstanding) {
         /* Do not set alarm if there's no data outstanding */
@@ -360,7 +363,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, double last_
     } while (0)
 
     /* time-threshold loss detection */
-    if (r->loss_time != INT64_MAX) {
+    if (r->loss_time != INT64_MAX && use_loss_time) {
         SET_ALARM(r->loss_time);
         return;
     }
@@ -451,7 +454,7 @@ inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32
 {
     r->alarm_at = INT64_MAX;
     *min_packets_to_send = 1;
-    if (r->loss_time != INT64_MAX) {
+    if (r->loss_time <= now) {
         /* Time threshold loss detection. Send at least 1 packet, but no restrictions on sending otherwise. */
         *restrict_sending = 0;
         return quicly_loss_detect_loss(r, now, max_ack_delay, is_1rtt_only, on_loss_detected);

@@ -634,6 +634,8 @@ inline void quicly_cc_jumpstart_on_acked(quicly_cc_t *cc, int in_recovery, uint3
     if (cc->jumpstart.exit_pn == UINT64_MAX && cc->jumpstart.enter_pn <= largest_acked) {
         assert(cc->cwnd < cc->ssthresh);
         cc->cwnd = inflight;
+        if (cc->cwnd < cc->cwnd_initial)
+            cc->cwnd = cc->cwnd_initial;
         cc->cwnd_exiting_jumpstart = cc->cwnd;
         cc->jumpstart.exit_pn = next_pn;
     }

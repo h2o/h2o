@@ -512,6 +512,9 @@ subtest "slow-start" => sub {
     };
 
     subtest "jumpstart-resume" => sub {
+        # The path has no queue; udpfw's 100-packet buffer is fully used by the 100ms propagation delay, so packets are dropped as
+        # soon as more than 99 are in flight. The training connection hence keeps losing packets in the rounds following startup,
+        # which affects the rate it records. A queue should probably be added to make the path realistic.
         $each_cc->(sub {
             my $cc = shift;
             unlink "$tempdir/session";
