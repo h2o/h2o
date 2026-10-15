@@ -415,6 +415,8 @@ const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
     if (host.len < sizeof(PREFIX) - 1 || memcmp(host.base, PREFIX, sizeof(PREFIX) - 1) != 0)
         return h2o_url_host_to_sun_err_is_not_unix_socket;
 
+    if (host.len == sizeof(PREFIX) - 1)
+        return "unix-domain socket path is empty";
     if (host.len - (sizeof(PREFIX) - 1) >= sizeof(sa->sun_path))
         return "unix-domain socket path is too long";
 

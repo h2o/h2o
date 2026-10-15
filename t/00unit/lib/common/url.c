@@ -807,6 +807,9 @@ static void test_host_to_sun(void)
     err = h2o_url_host_to_sun(h2o_iovec_init(H2O_STRLIT("example.com")), &sa);
     ok(err == h2o_url_host_to_sun_err_is_not_unix_socket);
 
+    err = h2o_url_host_to_sun(h2o_iovec_init(H2O_STRLIT("unix:")), &sa);
+    ok(err != NULL && err != h2o_url_host_to_sun_err_is_not_unix_socket);
+
     err = h2o_url_host_to_sun(h2o_iovec_init(H2O_STRLIT("unix:/")), &sa);
     ok(err == NULL);
     ok(sa.sun_family == AF_UNIX);
