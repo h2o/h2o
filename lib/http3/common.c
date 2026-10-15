@@ -1384,6 +1384,13 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
         if (conn->local_settings.wt_enabled) {
             ptls_buffer_push_quicint(&buf, H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED);
             ptls_buffer_push_quicint(&buf, 1);
+            if (conn->local_settings.wt_legacy) {
+                /* one session per connection, as in draft-16 when flow control is not used */
+                ptls_buffer_push_quicint(&buf, H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02);
+                ptls_buffer_push_quicint(&buf, 1);
+                ptls_buffer_push_quicint(&buf, H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07);
+                ptls_buffer_push_quicint(&buf, 1);
+            }
         }
     });
 
@@ -1536,6 +1543,15 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
                 conn->peer_settings.wt_enabled_duplicated = 1;
             seen_wt_enabled = 1;
             conn->peer_settings.wt_enabled = value;
+            break;
+        case H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02:
+            conn->peer_settings.wt_enable_draft02 = value;
+            break;
+        case H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07:
+            conn->peer_settings.wt_max_sessions_draft07 = value;
+            break;
+        case H2O_WEBTRANSPORT_H3_SETTINGS_WT_MAX_SESSIONS_DRAFT14:
+            conn->peer_settings.wt_max_sessions_draft14 = value;
             break;
         default:
             break;

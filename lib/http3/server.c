@@ -1846,8 +1846,11 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3_server_str
 
     /* special handling of CONNECT method */
     if (is_connect) {
+        /* draft-16 uses "webtransport-h3"; earlier drafts, as current browsers speak them, "webtransport" */
         if (conn->h3.local_settings.wt_enabled && stream->req.upgrade.base != NULL &&
-            h2o_lcstris(stream->req.upgrade.base, stream->req.upgrade.len, H2O_STRLIT("webtransport-h3"))) {
+            (h2o_lcstris(stream->req.upgrade.base, stream->req.upgrade.len, H2O_STRLIT("webtransport-h3")) ||
+             (conn->h3.local_settings.wt_legacy &&
+              h2o_lcstris(stream->req.upgrade.base, stream->req.upgrade.len, H2O_STRLIT("webtransport"))))) {
             /* whether the client supports WebTransport is not known until SETTINGS is received */
             if (!h2o_http3_has_received_settings(&conn->h3)) {
                 stream->datagram_flow_id = datagram_flow_id;
@@ -2985,6 +2988,29 @@ static void wt_on_request_dispose(struct st_h2o_http3_server_stream_t *stream)
 }
 
 /**
+ * Returns which draft's SETTINGS the client enabled WebTransport with: 16 (SETTINGS_WT_ENABLED), an earlier one if
+ * `webtransport-legacy-drafts` is ON (2, 7 or 14, as current browsers send them), or 0 if none.
+ */
+static int wt_peer_draft(struct st_h2o_http3_server_conn_t *conn)
+{
+    h2o_http3_conn_t *h3 = &conn->h3;
+
+    if (!h3->peer_settings.h3_datagram_rfc9297)
+        return 0;
+    if (h3->peer_settings.wt_enabled == 1 && !h3->peer_settings.wt_enabled_duplicated)
+        return 16;
+    if (!h3->local_settings.wt_legacy)
+        return 0;
+    if (h3->peer_settings.wt_max_sessions_draft14 != 0)
+        return 14;
+    if (h3->peer_settings.wt_max_sessions_draft07 != 0)
+        return 7;
+    if (h3->peer_settings.wt_enable_draft02 == 1)
+        return 2;
+    return 0;
+}
+
+/**
  * Handles an extended CONNECT request establishing a WebTransport session, once SETTINGS has been received. The request is
  * processed by the handlers, which accept the session by calling `h2o_webtransport_accept`.
  */
@@ -2994,9 +3020,7 @@ static int handle_input_expect_headers_process_wt_connect(struct st_h2o_http3_se
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
     /* the client is required to offer reset_stream_at as well (draft-ietf-webtrans-http3-16 section 3.1) */
-    if (!(conn->h3.peer_settings.wt_enabled == 1 && !conn->h3.peer_settings.wt_enabled_duplicated &&
-          conn->h3.peer_settings.h3_datagram_rfc9297 &&
-          quicly_get_remote_transport_parameters(conn->h3.super.quic)->reset_stream_at))
+    if (wt_peer_draft(conn) == 0 || !quicly_get_remote_transport_parameters(conn->h3.super.quic)->reset_stream_at)
         return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
                                                            "WebTransport is not enabled by the client", err_desc);
 
@@ -3641,6 +3665,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     conn->h3.local_settings.wt_enabled = conn->super.ctx->globalconf->webtransport.enabled &&
                                          ctx->super.quic->transport_params.max_datagram_frame_size != 0 &&
                                          ctx->super.quic->transport_params.reset_stream_at;
+    conn->h3.local_settings.wt_legacy =
+        conn->h3.local_settings.wt_enabled && conn->super.ctx->globalconf->webtransport.legacy_drafts;
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
     conn->num_streams_req_streaming = 0;

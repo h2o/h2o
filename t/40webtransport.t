@@ -9,10 +9,11 @@ plan skip_all => "$client_prog not found"
     unless -e $client_prog;
 
 sub spawn_wt_server {
-    my $enabled = shift;
+    my ($enabled, $extra) = @_;
+    $extra //= '';
     spawn_h2o(<< "EOT");
 webtransport: @{[ $enabled ? "ON" : "OFF" ]}
-hosts:
+${extra}hosts:
   default:
     paths:
       /echo:
@@ -22,9 +23,12 @@ hosts:
 EOT
 }
 
+# h3 with the handshakes of earlier drafts, as current browsers send them: draft-02 (Chrome, Firefox), draft-07 and draft-14
+# (Safari)
 my @protocols = (
     { name => "h2", opts => "", port => sub { $_[0]->{tls_port} } },
     { name => "h3", opts => "-3", port => sub { $_[0]->{quic_port} } },
+    map { { name => "h3-draft$_", opts => "-3 -d $_", port => sub { $_[0]->{quic_port} } } } (2, 7, 14),
 );
 
 # runs the client, returning its output as an arrayref of lines, and the exit status
@@ -50,7 +54,7 @@ sub has_lines {
 my $server = spawn_wt_server(1);
 
 for my $proto (@protocols) {
-    my $is_h3 = $proto->{name} eq 'h3';
+    my $is_h3 = $proto->{name} =~ /^h3/;
     my $first_bidi = $is_h3 ? 4 : 0;           # stream 0 is the CONNECT stream in HTTP/3
     my $first_server_uni = $is_h3 ? 15 : 3;    # 3, 7, 11 are the control and QPACK streams in HTTP/3
 
@@ -155,6 +159,23 @@ subtest "disabled" => sub {
         my ($out) = run_client($server, $protocols[1], "-t 5000", "/echo", "bidi:x");
         has_lines($out, ["settings wt-enabled=0"], "not advertised");
         ok !grep({ $_ eq "response 200" } @$out), "not established";
+    };
+};
+
+subtest "earlier drafts turned off" => sub {
+    my $server = spawn_wt_server(1, "webtransport-legacy-drafts: OFF\n");
+    for my $draft (2, 7, 14) {
+        subtest "draft-$draft" => sub {
+            my ($out) = run_client($server, { opts => "-3 -d $draft", port => sub { $_[0]->{quic_port} } }, "-t 5000", "/echo",
+                                   "bidi:x");
+            has_lines($out, ["settings wt-enabled=0"], "not advertised");
+            ok !grep({ $_ eq "response 200" } @$out), "not established" or diag join "\n", @$out;
+        };
+    }
+    subtest "draft-16" => sub {
+        my ($out, $status) = run_client($server, $protocols[1], "", "/echo", "bidi:hello");
+        is $status, 0, "exit status";
+        has_lines($out, ["settings wt-enabled=1", "response 200", "client-bidi[4] fin \"hello\""], "still established");
     };
 };
 

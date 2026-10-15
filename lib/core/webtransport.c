@@ -1717,7 +1717,8 @@ h2o_webtransport_session_t *h2o_webtransport_accept(h2o_req_t *req, const h2o_we
         h2o_send_error_400(req, "Bad Request", "not a WebTransport request", 0);
         return NULL;
     }
-    if ((is_native = h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("webtransport-h3")))) {
+    /* HTTP/3 carries the streams natively, whichever :protocol token the draft spoken uses; HTTP/2 uses capsules */
+    if ((is_native = req->version >= 0x300)) {
         /* the streams are carried natively; flow control is provided by the protocol layer */
         if (req->conn->callbacks->webtransport_attach == NULL) {
             h2o_send_error_400(req, "Bad Request", "WebTransport is not available", 0);
@@ -1784,6 +1785,10 @@ h2o_webtransport_session_t *h2o_webtransport_accept(h2o_req_t *req, const h2o_we
         h2o_iovec_t value = h2o_encode_sf_string(&req->pool, protocol.base, protocol.len);
         h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("wt-protocol"), 0, NULL, value.base, value.len);
     }
+    /* a draft-02 client (as Chrome and Firefox are) may ask which draft is spoken; answer as other servers do */
+    if (is_native && h2o_find_header_by_str(&req->headers, H2O_STRLIT("sec-webtransport-http3-draft02"), -1) != -1)
+        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("sec-webtransport-http3-draft"), 0, NULL,
+                              H2O_STRLIT("draft02"));
     req->write_req.cb = on_write_req;
     req->write_req.ctx = sess;
     req->forward_datagram.write_ = on_forward_datagram;
