@@ -279,7 +279,7 @@ typedef struct st_quicly_cc_t {
      */
     const quicly_cc_conf_t *conf;
     /**
-     * Current congestion window.
+     * Current congestion window; CWND is capped to INT32_MAX (2GiB - 1).
      */
     uint32_t cwnd;
     /**
@@ -566,6 +566,10 @@ static void quicly_cc_rapid_start_on_recovery(struct st_quicly_cc_rapid_start_t 
  * Called upon exitting recovery, to disable rapid start.
  */
 static void quicly_cc_rapid_start_exit_recovery(struct st_quicly_cc_rapid_start_t *rs);
+/**
+ * Saturating add that limits `*cwnd` to INT32_MAX (see quicly_cc_t::cwnd)
+ */
+static void quicly_cc_add_cwnd(uint32_t *cwnd, uint32_t increment);
 
 /* inline definitions */
 
@@ -744,6 +748,18 @@ inline void quicly_cc_rapid_start_exit_recovery(struct st_quicly_cc_rapid_start_
 {
     assert(rs->state == QUICLY_CC_RAPID_START_STATE_RECOVERY);
     rs->state = QUICLY_CC_RAPID_START_STATE_INACTIVE;
+}
+
+inline void quicly_cc_add_cwnd(uint32_t *cwnd, uint32_t increment)
+{
+    assert(*cwnd <= INT32_MAX);
+
+#ifdef __GNUC__ /* GCC or clang */
+    int32_t sum;
+    *cwnd = __builtin_add_overflow(*cwnd, increment, &sum) ? (uint32_t)INT32_MAX : (uint32_t)sum;
+#else
+    *cwnd = (uint64_t)*cwnd + increment > INT32_MAX ? (uint32_t)INT32_MAX : *cwnd + increment;
+#endif
 }
 
 #ifdef __cplusplus

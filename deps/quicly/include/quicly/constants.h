@@ -139,8 +139,6 @@ typedef int64_t quicly_stream_id_t;
 
 typedef struct st_quicly_conn_t quicly_conn_t;
 
-static uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y);
-
 /**
  * Used for emitting arbitrary debug message through probes. The debug message might get emitted unescaped as a JSON string,
  * therefore cannot contain characters that are required to be escaped as a JSON string (e.g., `\n`, `"`).
@@ -149,18 +147,6 @@ void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, c
     __attribute__((format(printf, 4, 5)));
 
 #define quicly_debug_printf(conn, ...) quicly__debug_printf((conn), __FUNCTION__, __LINE__, __VA_ARGS__)
-
-/* inline definitions */
-
-inline uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y)
-{
-#ifdef __GNUC__ /* GCC or clang */
-    uint32_t r;
-    return __builtin_add_overflow(x, y, &r) ? UINT32_MAX : r;
-#else
-    return x > UINT32_MAX - y ? UINT32_MAX : x + y;
-#endif
-}
 
 #ifdef __cplusplus
 }

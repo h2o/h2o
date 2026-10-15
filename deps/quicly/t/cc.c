@@ -1164,7 +1164,7 @@ static void test_abba_growth(void)
     ok(abba_on_growth(&state, 100000, 160000, 100000, &rtt, 0, &(int){0}) == 160000);
     rtt.latest = rtt.minimum = 1;
     ok(abba_on_growth(&state, 100000, 100000, 100000, &rtt, 0, &(int){0}) == 150000);
-    ok(abba_on_growth(&state, UINT32_MAX - 10, UINT32_MAX - 10, 100, &rtt, 0, &(int){0}) == UINT32_MAX);
+    ok(abba_on_growth(&state, INT32_MAX - 10, INT32_MAX - 10, 100, &rtt, 0, &(int){0}) == INT32_MAX);
 
     /* Three-fifths-byte increments accumulate: five one-byte ACKs add three bytes to CWND. */
     state = (struct st_quicly_cc_abba_t){.a = 1.f / 1024, .b = 8};
@@ -1679,27 +1679,42 @@ static void test_prague_estimator(void)
 static void test_prague_grow(void)
 {
     struct st_quicly_cc_prague_t prague = {.alpha = 1};
-    uint32_t mtu = 1200, cwnd = 100 * mtu;
+    uint32_t cwnd;
+    const uint32_t mtu = 1200;
 
     /* With SRTT above the virtual RTT, one MTU is added per CWND acknowledged, carrying the fraction. */
-    ok(prague_grow(&prague, cwnd, 0, 100, cwnd / 2, mtu, &no_ecn_counts) == cwnd);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 100, cwnd / 2, mtu, &no_ecn_counts);
+    ok(cwnd == 100 * mtu);
     ok(prague.increase_carry == 0.5);
-    ok(prague_grow(&prague, cwnd, 0, 100, cwnd / 2, mtu, &no_ecn_counts) == cwnd + mtu);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 100, cwnd / 2, mtu, &no_ecn_counts);
+    ok(cwnd == 101 * mtu);
     ok(prague.increase_carry == 0);
-    ok(prague_grow(&prague, cwnd, 0, 100, 3 * cwnd, mtu, &no_ecn_counts) == cwnd + 3 * mtu);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 100, 3 * cwnd, mtu, &no_ecn_counts);
+    ok(cwnd == 103 * mtu);
 
     /* Only unmarked bytes count, estimated from the packet ratio. */
-    ok(prague_grow(&prague, cwnd, 0, 100, cwnd, mtu, &(quicly_cc_ecn_counts_t){4, 2}) == cwnd);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 100, cwnd, mtu, &(quicly_cc_ecn_counts_t){4, 2});
+    ok(cwnd == 100 * mtu);
     ok(prague.increase_carry == 0.5);
     prague.increase_carry = 0;
 
     /* At 1/5 of the virtual RTT, 25 CWNDs are needed per MTU. */
-    ok(prague_grow(&prague, cwnd, 0, 5, 24 * cwnd, mtu, &no_ecn_counts) == cwnd);
-    ok(prague_grow(&prague, cwnd, 0, 5, 2 * cwnd, mtu, &no_ecn_counts) == cwnd + mtu);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 5, 24 * cwnd, mtu, &no_ecn_counts);
+    ok(cwnd == 100 * mtu);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 0, 5, 2 * cwnd, mtu, &no_ecn_counts);
+    ok(cwnd == 101 * mtu);
     prague.increase_carry = 0;
 
     /* With MTU normalization, the bytes needed per increase are proportional to the actual MTU. */
-    ok(prague_grow(&prague, cwnd, 1, 100, cwnd / 2, mtu / 2, &no_ecn_counts) == cwnd + mtu / 2);
+    cwnd = 100 * mtu;
+    prague_grow(&prague, &cwnd, 1, 100, cwnd / 2, mtu / 2, &no_ecn_counts);
+    ok(cwnd == 201 * (mtu / 2));
 }
 
 static void test_prague_growth(void)

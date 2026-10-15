@@ -328,7 +328,7 @@ static uint32_t cubic_quantized_w_est(const struct st_quicly_cc_cubic_t *state, 
     /* Keep the estimator continuous as defined by RFC 9438 Figure 4; only the value exposed as CWND is quantized, in whole-MTU
      * steps from the epoch's initial window. */
     double quantized = cwnd_epoch + floor((state->w_est - cwnd_epoch) / mtu) * mtu;
-    return quantized < UINT32_MAX ? quantized : UINT32_MAX;
+    return quantized < INT32_MAX ? quantized : INT32_MAX;
 }
 
 static uint32_t cubic_update_w_est(struct st_quicly_cc_cubic_t *state, uint32_t cwnd, uint32_t cwnd_epoch, uint32_t bytes,
@@ -370,7 +370,7 @@ static void cubic_on_acked(struct st_quicly_cc_cubic_t *state, uint32_t *cwnd, u
             target = *cwnd;
         if (target > 1.5 * *cwnd)
             target = 1.5 * *cwnd;
-        *cwnd = quicly_u32_add_saturating(*cwnd, (target / *cwnd - 1) * bytes);
+        quicly_cc_add_cwnd(cwnd, (target / *cwnd - 1) * bytes);
     }
 }
 
@@ -415,21 +415,21 @@ static void prague_on_acked(struct st_quicly_cc_prague_t *prague, double srtt, i
  * Prague's additive increase: `cwnd += unmarked * ai_per_rtt / cwnd` for each ACK, where `ai_per_rtt` is one MTU divided by M^2
  * (M = virtual RTT / SRTT). Only whole MTUs are added to CWND; the fraction is carried.
  */
-static uint32_t prague_grow(struct st_quicly_cc_prague_t *prague, uint32_t cwnd, int normalize_mtu, double srtt, uint32_t bytes,
-                            uint32_t mtu, const quicly_cc_ecn_counts_t *l4s)
+static void prague_grow(struct st_quicly_cc_prague_t *prague, uint32_t *cwnd, int normalize_mtu, double srtt, uint32_t bytes,
+                        uint32_t mtu, const quicly_cc_ecn_counts_t *l4s)
 {
     double unmarked = bytes;
     if (l4s->ce != 0)
         unmarked *= (double)(l4s->total - l4s->ce) / l4s->total; /* estimate from the packet ratio */
 
-    double m = prague_rtt_virt(srtt) / srtt, bytes_per_mtu = cwnd * m * m;
+    double m = prague_rtt_virt(srtt) / srtt, bytes_per_mtu = *cwnd * m * m;
     if (normalize_mtu)
         bytes_per_mtu *= (double)mtu / QUICLY_CC_REFERENCE_MTU;
     prague->increase_carry += unmarked / bytes_per_mtu;
 
     uint32_t num_mtus = (uint32_t)prague->increase_carry;
     prague->increase_carry -= num_mtus;
-    return quicly_u32_add_saturating(cwnd, num_mtus * mtu);
+    quicly_cc_add_cwnd(cwnd, num_mtus * mtu);
 }
 
 static int in_prague_ca(const quicly_cc_t *cc)
@@ -574,8 +574,8 @@ static uint32_t abba_on_growth(struct st_quicly_cc_abba_t *state, uint32_t cwnd,
         goto No_Accel;
 
     double candidate = cwnd + increase;
-    if (candidate >= UINT32_MAX)
-        candidate = UINT32_MAX;
+    if (candidate >= INT32_MAX)
+        candidate = INT32_MAX;
     uint32_t new_cwnd = (uint32_t)candidate;
     state->increase_remainder = candidate - new_cwnd;
     return new_cwnd;
@@ -734,8 +734,8 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
 
     /* Prague: handle CWND increase in its own way. */
     if (in_prague_ca(cc)) {
-        cc->cwnd =
-            prague_grow(&cc->state.pico.prague, cc->cwnd, cc->conf->normalize_mtu, loss->rtt.smoothed, bytes, max_udp_payload_size, l4s);
+        prague_grow(&cc->state.pico.prague, &cc->cwnd, cc->conf->normalize_mtu, loss->rtt.smoothed, bytes, max_udp_payload_size,
+                    l4s);
         if (abba_enabled(cc)) {
             uint32_t accel_cwnd = abba_on_growth(&cc->state.pico.abba, pre_cwnd, cc->cwnd, bytes, &loss->rtt,
                                                  cc->state.pico.cuback.cwnd_prior, NULL);
@@ -753,7 +753,7 @@ static void pico_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
         cc->state.pico.bytes_to_mtu_increase = calc_bytes_per_mtu_increase(cc, loss, max_udp_payload_size);
     while (bytes_available >= cc->state.pico.bytes_to_mtu_increase) {
         bytes_available -= cc->state.pico.bytes_to_mtu_increase;
-        cc->cwnd = quicly_u32_add_saturating(cc->cwnd, max_udp_payload_size);
+        quicly_cc_add_cwnd(&cc->cwnd, max_udp_payload_size);
         cc->state.pico.bytes_to_mtu_increase = calc_bytes_per_mtu_increase(cc, loss, max_udp_payload_size);
     }
     cc->state.pico.bytes_to_mtu_increase -= bytes_available;
