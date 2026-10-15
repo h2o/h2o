@@ -411,6 +411,25 @@ static void test_strtosize(void)
     ok(h2o_strtosize(H2O_STRLIT("1a")) == SIZE_MAX);
 }
 
+static void test_strtosizefwd(void)
+{
+    char buf[32], *p;
+
+    strcpy(buf, "1234567890123456789");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == 1234567890123456789);
+    ok(p == buf + strlen(buf));
+
+    /* 20 digits ending at the end of the buffer must be rejected rather than wrap */
+    strcpy(buf, "18446744073709551616");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == SIZE_MAX);
+
+    strcpy(buf, "18446744073709551616-");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == SIZE_MAX);
+}
+
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -427,4 +446,5 @@ void test_lib__common__string_c(void)
     subtest("join_list", test_join_list);
     subtest("split", test_split);
     subtest("strtosize", test_strtosize);
+    subtest("strtosizefwd", test_strtosizefwd);
 }

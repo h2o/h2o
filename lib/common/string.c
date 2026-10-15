@@ -134,11 +134,11 @@ size_t h2o_strtosizefwd(char **s, size_t len)
         v += ch - '0';
         p++;
         c++;
-        if (p == p_end)
-            break;
         /* similar as above, do not even try to overflow */
         if (c == 20)
             goto Error;
+        if (p == p_end)
+            break;
     }
 
     if (v >= SIZE_MAX)
