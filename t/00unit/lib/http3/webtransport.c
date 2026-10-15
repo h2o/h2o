@@ -10,6 +10,7 @@
 
 static struct {
     unsigned enabled, server_reset_stream_at, client_reset_stream_at;
+    unsigned legacy_off; /* webtransport-legacy-drafts: OFF */
 } wt_config;
 
 /* a stream as seen by the test application; the record outlives the stream */
@@ -144,6 +145,7 @@ static void wt_amend(struct rr_fixture *f)
     f->qc.transport_params.max_datagram_frame_size = 1500;
     f->qc.receive_datagram_frame = &wt_client_datagram_cb;
     f->conf.webtransport.enabled = wt_config.enabled;
+    f->conf.webtransport.legacy_drafts = !wt_config.legacy_off;
     f->qs.transport_params.reset_stream_at = wt_config.server_reset_stream_at;
     f->qc.transport_params.reset_stream_at = wt_config.client_reset_stream_at;
     f->conf.hosts[0]->paths.entries[0]->handlers.entries[0]->on_req = wt_handler;
@@ -239,7 +241,14 @@ static void wt_append_string(uint8_t **p, const uint8_t *end, uint8_t first, uns
 
 /* Sends an extended CONNECT request for webtransport-h3 without FIN, as a WebTransport client would, and steps the connection.
  * quicly may retire the stream while stepping (e.g., after an error response); the fixture record outlives it. */
+static struct rr_client_stream *wt_connect_protocol(struct rr_fixture *f, const char *protocol);
+
 static struct rr_client_stream *wt_connect(struct rr_fixture *f)
+{
+    return wt_connect_protocol(f, "webtransport-h3");
+}
+
+static struct rr_client_stream *wt_connect_protocol(struct rr_fixture *f, const char *protocol)
 {
     uint8_t fields[256], *p = fields, *end = fields + sizeof(fields);
     *p++ = 0;         /* required insert count */
@@ -251,7 +260,7 @@ static struct rr_client_stream *wt_connect(struct rr_fixture *f)
     *p++ = 0x50; /* :authority */
     wt_append_string(&p, end, 0, 7, "localhost");
     wt_append_string(&p, end, 0x20, 3, ":protocol");
-    wt_append_string(&p, end, 0, 7, "webtransport-h3");
+    wt_append_string(&p, end, 0, 7, protocol);
     uint8_t frame[sizeof(fields) + 8], *q = frame;
     *q++ = H2O_HTTP3_FRAME_TYPE_HEADERS;
     q = quicly_encodev(q, (uint64_t)(p - fields));
@@ -415,6 +424,45 @@ static void test_h3_webtransport_gating(void)
         rr_check_get(f);
         rr_dispose(f);
     }
+}
+
+/* With webtransport-legacy-drafts ON (the default), draft-02's and draft-07's SETTINGS are advertised too, and a client of an
+ * earlier draft is admitted with :protocol "webtransport" without offering reset_stream_at; its streams are reset with
+ * RESET_STREAM. With it OFF, neither. */
+static void test_h3_webtransport_legacy_drafts(void)
+{
+    /* draft-02's SETTINGS_ENABLE_WEBTRANSPORT (0x2b603742), as Chrome and Firefox send it */
+    static const uint8_t draft02[] = {H2O_HTTP3_SETTINGS_H3_DATAGRAM, 1, 0xab, 0x60, 0x37, 0x42, 1};
+    struct rr_fixture *f;
+
+    for (unsigned legacy_off = 0; legacy_off != 2; ++legacy_off) {
+        wt_config.legacy_off = legacy_off;
+        f = wt_setup(1, 1, 0);
+        ok(wt_server_setting(f, H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED) == 1);
+        ok(wt_server_setting(f, H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02) == (legacy_off ? UINT64_MAX : 1));
+        ok(wt_server_setting(f, H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07) == (legacy_off ? UINT64_MAX : 1));
+        wt_send_settings(f, draft02, sizeof(draft02));
+        struct rr_client_stream *s = wt_connect_protocol(f, "webtransport");
+        printf("# legacy_off=%u: status %d\n", legacy_off, wt_response_status(s));
+        if (legacy_off) {
+            ok(wt_response_status(s) != 200);
+            ok(wt_app.accepts == 0);
+        } else {
+            ok(wt_response_status(s) == 200);
+            ok(wt_app.accepts == 1);
+            /* a stream the server resets before anything is sent: RESET_STREAM, as the client cannot receive RESET_STREAM_AT */
+            h2o_webtransport_stream_t *stream;
+            ok(h2o_webtransport_open_stream(wt_app.session, &stream, 1) == 0);
+            quicly_stream_id_t id = stream->stream_id;
+            h2o_webtransport_reset_stream(stream, WT_ERR(9));
+            wt_steps(f);
+            struct rr_client_stream *cs = wt_client_stream(f, id);
+            ok(cs == NULL || cs->reset_err == WT_APP_ERR(9));
+        }
+        wt_check_alive(f);
+        rr_dispose(f);
+    }
+    wt_config.legacy_off = 0;
 }
 
 /* streams sent before the CONNECT request are buffered up to WT_MAX_PENDING_STREAMS, then delivered once the session is accepted */
@@ -729,6 +777,7 @@ static void test_h3_webtransport_sendbuf_full(void)
 static void test_h3_webtransport(void)
 {
     subtest("gating", test_h3_webtransport_gating);
+    subtest("legacy drafts", test_h3_webtransport_legacy_drafts);
     subtest("early streams", test_h3_webtransport_early_streams);
     subtest("refused", test_h3_webtransport_refused);
     subtest("session gone", test_h3_webtransport_session_gone);
