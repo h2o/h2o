@@ -3040,8 +3040,8 @@ static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_q
             double v;                                                                                                              \
             if (h2o_configurator_scanf(cmd, *node, "%lf", &v) != 0)                                                                \
                 return -1;                                                                                                         \
-            if (!(0 < v && v * 1024 <= UINT16_MAX)) {                                                                              \
-                h2o_configurator_errprintf(cmd, *node, "pacing multiplier must be greater than 0 and less than 64");               \
+            if (!(1 <= v && v <= 2)) {                                                                                             \
+                h2o_configurator_errprintf(cmd, *node, "pacing multiplier must be between 1 and 2");                               \
                 return -1;                                                                                                         \
             }                                                                                                                      \
             egress->fld = (uint16_t)(v * 1024);                                                                                    \
