@@ -2330,12 +2330,18 @@ To fine tune the behavior of QUIC, the quic attribute should be used in place of
 The quic attribute accepts following parameters.
 
 
+alternative
+A mapping that defines an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). The mapping must contain ratio, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255. The alternative settings start as a copy of the default settings (including cc and initcwnd of the listen directive); the following parameters, if specified within the mapping, override them: cc, disengage-jumpstart, ecn, initcwnd, initial-rtt, jumpstart-default, jumpstart-max, normalize-mtu, pacing, respect-app-limited, speculative-pto. Note that cc specified per host (i.e., by the listen directive of each host) is applied only to the connections using the default settings.
 amp-limit
 Amount of data that can be sent to the client before the client address is validated; see section 8.1 of RFC 9000. Default is 3.
+disengage-jumpstart
+A boolean flag (either OFF or ON) indicating whether jumpstart should be prepared but then not be used. When set to ON, connections for which jumpstart would have been used are counted as such (i.e., num-jumpstart-applicable), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in alternative. The default setting is OFF.
 ecn
 A boolean flag (either ON or OFF) indicating whether the server should use ECN signals to detect congestion. The default setting is ON. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.
 handshake-timeout-rtt-multiplier
 Handshake timeout in the unit of round-trip time. Default is 400.
+initial-rtt
+RTT to be assumed before the first RTT sample is obtained, in milliseconds. Default is 66.
 jumpstart-default
 Jumpstart enhances the slow start phase of congestion control by pacing a large number of packets for an entire round-trip time (RTT), allowing the server to assess the network's capacity sooner. This parameter specifies the number of packets sent during the jumpstart phase. The default value is zero, indicating that jumpstart is disabled for new connections.
 jumpstart-max
@@ -2346,6 +2352,8 @@ max-streams-bidi
 Maximum number of client-initated bi-directional streams. This parameter controls the HTTP request concurrency of a HTTP/3 connection. Default is 100.
 max-udp-payload-size
 See Section 18.2 of RFC 9000. Default is 1,472.
+normalize-mtu
+A boolean flag (either OFF or ON) indicating whether the growth of the congestion window should be normalized to a reference packet size rather than the maximum UDP payload size of the path. The default setting is ON.
 pacing
 A boolean flag (either OFF or ON) indicating whether sent packets should be paced. The default setting is OFF.
 qpack-encoder-table-capacity
@@ -2358,6 +2366,8 @@ retry
 A boolean flag (OFF or ON) indicating if a Retry packet should be used for validating the client address. Use of Retry packets mitigate denial-of-service attacks at the cost of incurring one additional round-trip for processing the handshake.
 sndbuf, rcvbuf
 Size of send and receive buffers, in the unit of bytes. Unlike the TCP counterparts that are per-connection, these buffers are associated to the listening port and applies to all the connections bound to that port.
+speculative-pto
+Number of probe packets to be sent speculatively at the end of a window, being an integer between 0 and 2. Default is 0.
 
 
 The example below reuses a previous binding but sets the retry parameter to ON.

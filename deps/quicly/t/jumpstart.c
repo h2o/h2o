@@ -30,6 +30,7 @@ struct test_jumpstart_action {
 static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jumpstart_action *actions, uint32_t final_cwnd)
 {
     static const uint32_t mtu = 1200;
+    static const quicly_cc_conf_t conf = {.initcwnd_packets = 10};
     quicly_loss_t loss = {.rtt = {.latest = 100, .smoothed = 100, .minimum = 100, .variance = 0}};
     quicly_cc_t cc;
     int64_t now = 1;
@@ -37,7 +38,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
     uint32_t packets_acked = 0, packets_inflight = 0;
     size_t ackcnt = 0;
 
-    init->cb(init, &cc, 10 * mtu, 0, now);
+    init->cb(init, &cc, &conf, mtu, now);
     ok(cc.cwnd == 10 * mtu);
     ok(cc.num_loss_episodes == 0);
 
@@ -50,7 +51,7 @@ static void test_jumpstart_pattern(quicly_init_cc_t *init, const struct test_jum
             break;
         case TEST_JUMPSTART_ACTION_ACKED:
             cc.type->cc_on_acked(&cc, &loss, action->packets * mtu, packets_acked + action->packets - 1, packets_inflight * mtu, 1,
-                                 next_pn, action->now, mtu);
+                                 next_pn, action->now, mtu, NULL);
             packets_inflight -= action->packets;
             packets_acked += action->packets;
             ++ackcnt;
@@ -140,6 +141,17 @@ static void do_test_jumpstart(quicly_init_cc_t *init)
                 {TEST_JUMPSTART_ACTION_END},
             },
             20 * 1200);
+
+    /* when the sender becomes app-limited after entering jumpstart, CWND upon exit is not reduced below IW */
+    subtest("app-limited", test_jumpstart_pattern, init,
+            (struct test_jumpstart_action[]){
+                {TEST_JUMPSTART_ACTION_SEND, 1000, 2},  /* send 2 packets */
+                {TEST_JUMPSTART_ACTION_ACKED, 1100, 2}, /* 2 packet acked, entering jumpstart */
+                {TEST_JUMPSTART_ACTION_SEND, 1100, 1},  /* send only 1 packet */
+                {TEST_JUMPSTART_ACTION_ACKED, 1200, 1}, /* receive ack for that packet, exiting jumpstart */
+                {TEST_JUMPSTART_ACTION_END},
+            },
+            11 * 1200);
 }
 
 void test_jumpstart(void)

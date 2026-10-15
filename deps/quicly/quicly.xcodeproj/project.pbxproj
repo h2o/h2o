@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		082195082683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		082195092683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
-		0821950A2683498900E3EFCF /* cc-pico.c in Sources */ = {isa = PBXBuildFile; fileRef = 082195072683498900E3EFCF /* cc-pico.c */; };
 		0829876726D372B70053638F /* cc-cubic.c in Sources */ = {isa = PBXBuildFile; fileRef = E9DF012324E4BAC20002EEC7 /* cc-cubic.c */; };
 		0829876926D372B70053638F /* picotls-probes.d in Sources */ = {isa = PBXBuildFile; fileRef = E95E953A2290498E00215ACD /* picotls-probes.d */; };
 		0829876A26D372B70053638F /* ranges.c in Sources */ = {isa = PBXBuildFile; fileRef = E9F6A41F1F3C0B6D0083F0B2 /* ranges.c */; };
@@ -880,7 +879,6 @@
 				E99B75E91F5D259400CF503E /* stream-concurrency.c in Sources */,
 				E920D22E1F4981E500799777 /* sentmap.c in Sources */,
 				E9CC44261EC1963100DC7D3E /* picotest.c in Sources */,
-				0821950A2683498900E3EFCF /* cc-pico.c in Sources */,
 				E95E953D22904A4C00215ACD /* picotls-probes.d in Sources */,
 				E9CC441C1EC195DF00DC7D3E /* picotls.c in Sources */,
 				E904233F24AED0410072C5B7 /* loss.c in Sources */,
