@@ -53,7 +53,8 @@
 #endif
 #elif __SANITIZE_ADDRESS__ /* gcc */
 #define ASAN_IN_USE 1
-#else
+#endif
+#ifndef ASAN_IN_USE
 #define ASAN_IN_USE 0
 #endif
 
@@ -192,8 +193,9 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
 #define ALIGN_TO(x, a) (((x) + (a) - 1) & ~((a) - 1))
     void *ret;
 
-    if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
-        /* allocate large requests directly */
+    /* allocate large requests directly; if ASan is enabled, delegate all allocations to detect any misuse */
+    if (ASAN_IN_USE || sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
+        assert(alignment <= offsetof(struct st_h2o_mem_pool_direct_t, bytes));
         struct st_h2o_mem_pool_direct_t *newp = h2o_mem_alloc(offsetof(struct st_h2o_mem_pool_direct_t, bytes) + sz);
         newp->next = pool->directs;
         pool->directs = newp;
