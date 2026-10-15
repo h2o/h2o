@@ -253,9 +253,10 @@ typedef struct st_h2o_webtransport_session_callbacks_t {
      */
     void (*on_receive_datagram)(h2o_webtransport_session_t *session, h2o_iovec_t payload);
     /**
-     * called when the peer asks for the session to be drained, or when the server starts shutting down the connection (optional)
+     * Called when the peer asks for the session to be drained (`by_peer` being set), or when the server starts shutting down the
+     * connection (optional).
      */
-    void (*on_drain)(h2o_webtransport_session_t *session);
+    void (*on_drain)(h2o_webtransport_session_t *session, int by_peer);
     /**
      * Called when the session is closed by the peer or due to an error. `err` is an application error when the peer closed the
      * session (being `QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0)` when no error code was provided), or one of the
