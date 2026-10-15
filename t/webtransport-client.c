@@ -882,7 +882,8 @@ static int run_h3(void)
     h3.ctx.transport_params.max_stream_data.bidi_local = RECV_WINDOW;
     h3.ctx.transport_params.max_stream_data.bidi_remote = RECV_WINDOW;
     h3.ctx.transport_params.max_datagram_frame_size = 1500;
-    h3.ctx.transport_params.reset_stream_at = 1;
+    /* as current browsers, a client of an earlier draft does not offer reset_stream_at (Chrome does not) */
+    h3.ctx.transport_params.reset_stream_at = wt_draft == 16;
     h3.qpack_dec = h2o_qpack_create_decoder(0, 0);
     h2o_buffer_init(&h3.capsules, &h2o_socket_buffer_prototype);
 
