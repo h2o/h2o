@@ -247,6 +247,9 @@ subtest 'header-termination (issue 462)' => sub {
 };
 
 subtest 'extensions' => sub {
+    # newer versions of nghttp ignore --weight, as RFC 7540 priorities have been deprecated
+    my $weight = 22;
+    my $nghttp_sends_weight = prog_exists("nghttp") && `nghttp --weight=$weight 2>&1` !~ /--weight option has been deprecated/;
     for my $set ([ qw{TLSv1.2 \S+RSA\S+} ], [ qw{TLSv1.3 TLS_AES_(?:128|256)_GCM_SHA(?:256|384)} ]) {
         my $tlsver = $set->[0];
         my $cipher = $set->[1];
@@ -262,7 +265,8 @@ subtest 'extensions' => sub {
                     system("curl --silent --insecure @{[curl_supports_http2() ? ' --http1.1' : '']} https://127.0.0.1:$server->{tls_port}/ > /dev/null");
                     if (prog_exists("nghttp")) {
                         system("nghttp -n https://localhost:$server->{tls_port}/");
-                        system("nghttp -n --weight=22 https://localhost:$server->{tls_port}/");
+                        system("nghttp -n --weight=$weight https://localhost:$server->{tls_port}/")
+                            if $nghttp_sends_weight;
                     }
                 },
                 '%{connection-id}x %{request-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.server-name}x %{http2.stream-id}x %{http2.priority.received}x',
@@ -285,14 +289,12 @@ subtest 'extensions' => sub {
                                 fail "basic";
                             }
                         };
-                        push @expected, +(
-                            sub {
-                                $check->(shift, qr{^5 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:16}is);
-                            },
-                            sub {
-                                $check->(shift, qr{^6 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:22}is);
-                            },
-                        );
+                        push @expected, sub {
+                            $check->(shift, qr{^5 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:16}is);
+                        };
+                        push @expected, sub {
+                            $check->(shift, qr{^6 ([0-9]+) $tlsver 0 $cipher (?:128|256) localhost ([0-9]+) 0:[0-9]+:$weight}is);
+                        } if $nghttp_sends_weight;
                     }
                     \@expected;
                 },

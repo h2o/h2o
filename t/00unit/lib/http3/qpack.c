@@ -581,7 +581,7 @@ static void do_test_decoder_stream_error(h2o_qpack_decoder_t *dec, h2o_iovec_t i
     const char *err_desc = NULL;
     int ret = h2o_qpack_decoder_handle_input(dec, &insert_count, &src, src_end, &err_desc);
 
-    ok(ret == H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED);
+    ok(ret == H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM);
     ok(err_desc == expected_err_desc);
 }
 

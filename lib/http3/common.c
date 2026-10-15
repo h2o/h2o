@@ -415,16 +415,22 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
 
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
+        if (conn->_control_streams.ingress.control != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.control = stream;
         stream->bytes_received = &conn->stats.bytes_received.control_stream;
         stream->handle_input = control_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
+        if (conn->_control_streams.ingress.qpack_encoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_encoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_encoder;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
+        if (conn->_control_streams.ingress.qpack_decoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
@@ -436,6 +442,11 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     }
 
     return stream->handle_input(conn, stream, src, src_end, is_eos);
+
+Duplicate:
+    /* permit only one control, encoder, and decoder stream per peer (RFC 9114 Section 6.2.1, RFC 9204 Section 4.2) */
+    h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_STREAM_CREATION, "duplicate critical stream");
+    stream->handle_input = discard_handle_input;
 }
 
 static void egress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
