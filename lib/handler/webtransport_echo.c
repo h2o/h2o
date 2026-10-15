@@ -231,7 +231,7 @@ static void on_receive_datagram(h2o_webtransport_session_t *session, h2o_iovec_t
     h2o_webtransport_send_datagrams(session, &payload, 1);
 }
 
-static void on_drain(h2o_webtransport_session_t *session)
+static void on_drain(h2o_webtransport_session_t *session, int by_peer)
 {
     struct st_echo_session_t *sess = session->data;
     if (h2o_timer_is_linked(&sess->greeting_timer))

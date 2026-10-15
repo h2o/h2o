@@ -103,7 +103,7 @@ static quicly_error_t wt_app_on_stream_open(h2o_webtransport_stream_t *stream)
     return 0;
 }
 
-static void wt_app_on_drain(h2o_webtransport_session_t *session)
+static void wt_app_on_drain(h2o_webtransport_session_t *session, int by_peer)
 {
     ++wt_app.drains;
 }
