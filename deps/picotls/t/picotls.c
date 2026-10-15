@@ -2905,6 +2905,11 @@ static void test_signature_algorithms_overflow(void)
 
 void test_picotls(void)
 {
+    /* PTLS_IS_SIGNED reports signedness after integer promotion, and PTLS_LOG_ELEMENT_NUMBER pushes 4-byte signed values as
+     * int32_t. This is correct only when int is no wider than 32 bits; were int wider (e.g., ILP64), uint32_t would be promoted
+     * to int and values above INT32_MAX would be logged as negative. */
+    ok(!PTLS_IS_SIGNED((uint32_t)0));
+
     subtest("is_ipaddr", test_is_ipaddr);
     subtest("extension_bitmap", test_extension_bitmap);
     subtest("select_cipher", test_select_cipher);

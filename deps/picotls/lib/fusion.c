@@ -1,23 +1,5 @@
 /*
- * This source file is licensed under the Apache License 2.0 *and* the MIT
- * License. Please agree to *both* of the licensing terms!
- *
- *
- * `transformH` function is a derivative work of OpenSSL. The original work
- * is covered by the following license:
- *
- * Copyright 2013-2020 The OpenSSL Project Authors. All Rights Reserved.
- *
- * Licensed under the Apache License 2.0 (the "License").  You may not use
- * this file except in compliance with the License.  You can obtain a copy
- * in the file LICENSE in the source distribution or at
- * https://www.openssl.org/source/license.html
- *
- *
- * All other work, including modifications to the `transformH` function is
- * covered by the following MIT license:
- *
- * Copyright (c) 2020-2022 Fastly, Kazuho Oku
+ * Copyright (c) 2020-2026 Fastly, Kazuho Oku
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -122,37 +104,23 @@ static const uint8_t one_[16] __attribute__((aligned(16))) = {1};
 static const uint8_t incr128x2_[32] __attribute__((aligned(32))) = {2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2};
 #define incr128x2 (*(__m256i *)incr128x2_)
 
-/* This function is covered by the Apache License and the MIT License. The origin is crypto/modes/asm/ghash-x86_64.pl of openssl
- * at commit 33388b4. */
-static __m128i transformH(__m128i H)
+/**
+ * multiply polynomial H by x modulo Q = x^128 + x^127 + x^126 + x^121 + 1
+ */
+static __m128i transformH(__m128i h)
 {
-    //  # <<1 twist
-    //  pshufd          \$0b11111111,$Hkey,$T2  # broadcast uppermost dword
-    __m128i t2 = _mm_shuffle_epi32(H, 0xff);
-    // movdqa          $Hkey,$T1
-    __m128i t1 = H;
-    // psllq           \$1,$Hkey
-    H = _mm_slli_epi64(H, 1);
-    // pxor            $T3,$T3                 #
-    __m128i t3 = _mm_setzero_si128();
-    // psrlq           \$63,$T1
-    t1 = _mm_srli_epi64(t1, 63);
-    // pcmpgtd         $T2,$T3                 # broadcast carry bit
-    t3 = _mm_cmplt_epi32(t2, t3);
-    //     pslldq          \$8,$T1
-    t1 = _mm_slli_si128(t1, 8);
-    // por             $T1,$Hkey               # H<<=1
-    H = _mm_or_si128(t1, H);
+    /* extract the carry bit from each 64-bit lane */
+    __m128i carry = _mm_srli_epi64(h, 63);
 
-    // # magic reduction
-    // pand            .L0x1c2_polynomial(%rip),$T3
-    t3 = _mm_and_si128(t3, poly);
-    // pxor            $T3,$Hkey               # if(carry) H^=0x1c2_polynomial
-    H = _mm_xor_si128(t3, H);
+    /* swapping the carry bits supplies the carry into bit 64 and the reduction polynomial's constant term at bit 0. */
+    __m128i shifted = _mm_xor_si128(_mm_add_epi64(h, h), _mm_shuffle_epi32(carry, 0x4e));
 
-    return H;
+    /* if bit 127 was set, also toggle bits 127, 126, and 121 */
+    __m128i mask = _mm_sub_epi64(_mm_setzero_si128(), carry);
+    __m128i reduction = _mm_and_si128(mask, _mm_set_epi32((int)0xc2000000u, 0, 0, 0));
+
+    return _mm_xor_si128(shifted, reduction);
 }
-// end of Apache License code
 
 static __m128i gfmul(__m128i x, __m128i y)
 {

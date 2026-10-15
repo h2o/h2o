@@ -5771,9 +5771,9 @@ static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLS_LOG_CONN(receive_message, tls, {
-        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
-        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
-        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+        PTLS_LOG_ELEMENT_NUMBER(message, message.base[0]);
+        PTLS_LOG_ELEMENT_NUMBER(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_NUMBER(result, ret);
     });
 
     return ret;
@@ -5842,9 +5842,9 @@ static int handle_server_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLS_LOG_CONN(receive_message, tls, {
-        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
-        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
-        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+        PTLS_LOG_ELEMENT_NUMBER(message, message.base[0]);
+        PTLS_LOG_ELEMENT_NUMBER(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_NUMBER(result, ret);
     });
 
     return ret;
@@ -7117,6 +7117,12 @@ void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len,
 void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v)
 {
     pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
+}
+
+void ptls_log__do_push_element_double(const char *prefix, size_t prefix_len, double v)
+{
+    /* .9 is enough precision for logging; 64 bytes is far more than enough, and we have assert in pushf_logbuf_or_invalidate */
+    pushf_logbuf_or_invalidate(prefix, prefix_len, 64, "%.9g", v);
 }
 
 void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v)
