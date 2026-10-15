@@ -1629,12 +1629,14 @@ static void test_enforce_retry(int use_cookie)
     ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
     ptls_buffer_t cbuf, sbuf, decbuf;
     size_t consumed;
+    unsigned send_change_cipher_spec_orig = ctx->send_change_cipher_spec;
     int ret;
 
     server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = use_cookie;
+    ctx->send_change_cipher_spec = 1;
 
     ptls_buffer_init(&cbuf, "", 0);
     ptls_buffer_init(&sbuf, "", 0);
@@ -1659,6 +1661,8 @@ static void test_enforce_retry(int use_cookie)
     } else {
         ok(ret == PTLS_ERROR_IN_PROGRESS);
     }
+    /* CCS is sent immediately after HRR */
+    ok(sbuf.off > 6 && memcmp(sbuf.base + sbuf.off - 6, "\x14\x03\x03\x00\x01\x01", 6) == 0);
 
     consumed = sbuf.off;
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
@@ -1697,6 +1701,7 @@ static void test_enforce_retry(int use_cookie)
     ptls_buffer_dispose(&cbuf);
     ptls_buffer_dispose(&sbuf);
     ptls_buffer_dispose(&decbuf);
+    ctx->send_change_cipher_spec = send_change_cipher_spec_orig;
 }
 
 static void test_enforce_retry_stateful(void)
@@ -2905,11 +2910,6 @@ static void test_signature_algorithms_overflow(void)
 
 void test_picotls(void)
 {
-    /* PTLS_IS_SIGNED reports signedness after integer promotion, and PTLS_LOG_ELEMENT_NUMBER pushes 4-byte signed values as
-     * int32_t. This is correct only when int is no wider than 32 bits; were int wider (e.g., ILP64), uint32_t would be promoted
-     * to int and values above INT32_MAX would be logged as negative. */
-    ok(!PTLS_IS_SIGNED((uint32_t)0));
-
     subtest("is_ipaddr", test_is_ipaddr);
     subtest("extension_bitmap", test_extension_bitmap);
     subtest("select_cipher", test_select_cipher);

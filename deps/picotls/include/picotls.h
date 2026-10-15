@@ -1511,14 +1511,15 @@ typedef struct st_ptls_log_getsni_t {
     do {                                                                                                                           \
         if (PTLS_IS_FLOAT(value)) {                                                                                                \
             ptls_log__do_push_element_double(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                              \
-        } else if (PTLS_IS_SIGNED(value)) {                                                                                        \
-            if (sizeof(value) <= sizeof(int32_t)) {                                                                                \
-                ptls_log__do_push_element_signed32(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                        \
+        } else if ((0 ? (value) : 1) - 2 < 1) {                                                                                    \
+            /* value is either a signed type or a small unsigned that can be safely promoted to `int` */                           \
+            if (sizeof(value) <= sizeof(int)) {                                                                                    \
+                ptls_log__do_push_element_signed(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
             } else {                                                                                                               \
                 ptls_log__do_push_element_signed64(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                        \
             }                                                                                                                      \
-        } else if (sizeof(value) <= sizeof(uint32_t)) {                                                                            \
-            ptls_log__do_push_element_unsigned32(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
+        } else if (sizeof(value) <= sizeof(unsigned)) {                                                                            \
+            ptls_log__do_push_element_unsigned(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                            \
         } else {                                                                                                                   \
             ptls_log__do_push_element_unsigned64(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
         }                                                                                                                          \
@@ -1542,11 +1543,6 @@ typedef struct st_ptls_log_getsni_t {
  * Evaluates to non-zero if the type of `v` is a floating-point type. `v` is not evaluated.
  */
 #define PTLS_IS_FLOAT(v) ((0 ? (v) : 1) / 2 != 0)
-/**
- * Evaluates to non-zero if the type of `v`, after integer promotion, is signed (floating-point types included). `v` is not
- * evaluated.
- */
-#define PTLS_IS_SIGNED(v) ((0 ? (v) : 1) - 2 < 1)
 
 /**
  * retains a list of connections that are bound to the object
@@ -1650,9 +1646,9 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
 void ptls_log__do_push_element_safestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_unsafestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, const void *s, size_t l);
-void ptls_log__do_push_element_signed32(const char *prefix, size_t prefix_len, int32_t v);
+void ptls_log__do_push_element_signed(const char *prefix, size_t prefix_len, int v);
 void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, int64_t v);
-void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len, uint32_t v);
+void ptls_log__do_push_element_unsigned(const char *prefix, size_t prefix_len, unsigned v);
 void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v);
 void ptls_log__do_push_element_double(const char *prefix, size_t prefix_len, double v);
 void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v);
