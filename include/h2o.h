@@ -500,6 +500,11 @@ struct st_h2o_globalconf_t {
          */
         int enabled;
         /**
+         * if the handshakes of earlier drafts are accepted too, as current browsers use them (see
+         * H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02)
+         */
+        int legacy_drafts;
+        /**
          * flow control limits being advertised for each session
          */
         h2o_webtransport_settings_t limits;

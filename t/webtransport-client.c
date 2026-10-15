@@ -116,6 +116,10 @@ static unsigned expected_server_streams;
 static int wait_close;
 static uint32_t close_code;
 static int64_t timeout_ms = 10000;
+/**
+ * -d: the draft of WebTransport over HTTP/3 whose handshake is used (16, or 2, 7 or 14 as current browsers send them)
+ */
+static int wt_draft = 16;
 
 static struct {
     struct wt_stream *list[MAX_STREAMS];
@@ -521,11 +525,15 @@ static int h3_handle_settings(ptls_iovec_t payload)
 {
     const uint8_t *src = payload.base, *end = src + payload.len;
     uint64_t wt_enabled = 0;
+    /* the setting a client of the draft waits for; a draft-14 client also takes draft-07's, as Safari does */
     while (src != end) {
         uint64_t id, value;
         if ((id = quicly_decodev(&src, end)) == UINT64_MAX || (value = quicly_decodev(&src, end)) == UINT64_MAX)
             return -1;
-        if (id == H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED)
+        if ((wt_draft == 16 && id == H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED) ||
+            (wt_draft == 2 && id == H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02) ||
+            ((wt_draft == 7 || wt_draft == 14) && id == H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07) ||
+            (wt_draft == 14 && id == H2O_WEBTRANSPORT_H3_SETTINGS_WT_MAX_SESSIONS_DRAFT14))
             wt_enabled = value;
     }
     printf("settings wt-enabled=%" PRIu64 "\n", wt_enabled);
@@ -724,7 +732,20 @@ static void h3_send_control_stream(void)
     uint8_t buf[64], *p = buf, settings[32], *q = settings;
     q = quicly_encodev(q, H2O_HTTP3_SETTINGS_H3_DATAGRAM);
     q = quicly_encodev(q, 1);
-    q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED);
+    switch (wt_draft) {
+    case 2:
+        q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02);
+        break;
+    case 7:
+        q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_MAX_SESSIONS_DRAFT07);
+        break;
+    case 14:
+        q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_WT_MAX_SESSIONS_DRAFT14);
+        break;
+    default:
+        q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED);
+        break;
+    }
     q = quicly_encodev(q, 1);
     p = quicly_encodev(p, H2O_HTTP3_STREAM_TYPE_CONTROL);
     p = quicly_encodev(p, H2O_HTTP3_FRAME_TYPE_SETTINGS);
@@ -738,9 +759,16 @@ static void h3_start_session(void)
 {
     h3.connect = h3_open(0, H3_STREAM_CONNECT);
     h2o_qpack_section_stats_t stats = {0};
-    h2o_iovec_t frame = h2o_qpack_flatten_request(
-        NULL, &pool, h3.connect->stream_id, NULL, h2o_iovec_init(H2O_STRLIT("CONNECT")), &H2O_URL_SCHEME_HTTPS, url.authority,
-        url.path, h2o_iovec_init(H2O_STRLIT("webtransport-h3")), req_headers, num_req_headers, h2o_iovec_init(NULL, 0), &stats);
+    /* earlier drafts use :protocol "webtransport", and draft-02 clients announce themselves as Chrome and Firefox do */
+    if (wt_draft == 2 && num_req_headers != MAX_HEADERS) {
+        static h2o_iovec_t draft02_name = {H2O_STRLIT("sec-webtransport-http3-draft02")};
+        req_headers[num_req_headers++] = (h2o_header_t){&draft02_name, NULL, h2o_iovec_init(H2O_STRLIT("1"))};
+    }
+    h2o_iovec_t protocol =
+        wt_draft == 16 ? h2o_iovec_init(H2O_STRLIT("webtransport-h3")) : h2o_iovec_init(H2O_STRLIT("webtransport"));
+    h2o_iovec_t frame = h2o_qpack_flatten_request(NULL, &pool, h3.connect->stream_id, NULL, h2o_iovec_init(H2O_STRLIT("CONNECT")),
+                                                  &H2O_URL_SCHEME_HTTPS, url.authority, url.path, protocol, req_headers,
+                                                  num_req_headers, h2o_iovec_init(NULL, 0), &stats);
     quicly_streambuf_egress_write(h3.connect, frame.base, frame.len);
 }
 
@@ -1230,6 +1258,7 @@ static void usage(const char *cmd)
             "Usage: %s [options] <url> [action...]\n"
             "Options:\n"
             "  -3              use HTTP/3 (default: HTTP/2)\n"
+            "  -d <draft>      the draft of WebTransport over HTTP/3 whose handshake is used: 16 (default), or 2, 7 or 14\n"
             "  -H name:value   adds a request header\n"
             "  -e <count>      number of streams the server is expected to open (in addition to the echo of `uni`)\n"
             "  -w              wait for the server to close the session\n"
@@ -1258,7 +1287,7 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    while ((ch = getopt(argc, argv, "3H:e:wc:t:h")) != -1) {
+    while ((ch = getopt(argc, argv, "3H:e:wc:t:d:h")) != -1) {
         switch (ch) {
         case '3':
             use_h3 = 1;
@@ -1285,6 +1314,11 @@ int main(int argc, char **argv)
             break;
         case 't':
             timeout_ms = strtoll(optarg, NULL, 10);
+            break;
+        case 'd':
+            wt_draft = (int)strtol(optarg, NULL, 10);
+            if (!(wt_draft == 2 || wt_draft == 7 || wt_draft == 14 || wt_draft == 16))
+                usage(argv[0]);
             break;
         default:
             usage(argv[0]);
