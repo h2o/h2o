@@ -34,6 +34,24 @@ Also, when set to <code>ON</code>, H2O offers the <a href="https://datatracker.i
 
 <?
 $ctx->{directive}->(
+    name         => "webtransport-legacy-drafts",
+    levels       => [ qw(global) ],
+    default      => 'webtransport-legacy-drafts: ON',
+    experimental => 1,
+    desc         => <<'EOT',
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the handshakes of earlier drafts of WebTransport over HTTP/3 are accepted as well.
+EOT
+)->(sub {
+?>
+<p>
+Current browsers speak earlier drafts than draft-16 when establishing a session: they send <code>:protocol</code> <code>webtransport</code> instead of <code>webtransport-h3</code>, signal WebTransport with the SETTINGS of draft-02 (<code>SETTINGS_ENABLE_WEBTRANSPORT</code>), draft-07 (<code>SETTINGS_WEBTRANSPORT_MAX_SESSIONS</code>) or draft-14 (<code>SETTINGS_WT_MAX_SESSIONS</code>), and do not necessarily offer the <code>reset_stream_at</code> transport parameter.
+When this directive is <code>ON</code> and <code>webtransport</code> is <code>ON</code>, H2O also advertises the SETTINGS of draft-02 and draft-07, without which these browsers do not send their extended CONNECT, and accepts such clients.
+The session is then carried as in draft-16, which these drafts share the streams and capsules of; a stream is reset with RESET_STREAM if the client did not offer <code>reset_stream_at</code>.
+</p>
+? })
+
+<?
+$ctx->{directive}->(
     name         => "webtransport.echo",
     levels       => [ qw(path) ],
     default      => 'webtransport.echo: OFF',

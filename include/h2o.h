@@ -506,6 +506,11 @@ struct st_h2o_globalconf_t {
          * if WebTransport is advertised (experimental)
          */
         int enabled;
+        /**
+         * if the handshakes of earlier drafts are accepted too, as current browsers use them (see
+         * H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02)
+         */
+        int legacy_drafts;
     } webtransport;
 
     struct {
