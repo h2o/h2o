@@ -29,11 +29,13 @@
 static h2o_mem_pool_t test_pool;
 static size_t test_on_head_calls;
 static const char *test_on_head_errstr;
+static int test_on_head_conn_pooled;
 
 static h2o_httpclient_body_cb test_on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
 {
     ++test_on_head_calls;
     test_on_head_errstr = errstr;
+    test_on_head_conn_pooled = !h2o_linklist_is_empty(&client->connpool->http2.conns);
     return NULL;
 }
 
@@ -60,14 +62,18 @@ static void test_error_closes_streams(void)
         .first_byte_timeout = 5000,
         .keepalive_timeout = 5000,
         .max_buffer_size = 65536,
+        .http2.max_concurrent_streams = 100,
     };
+    h2o_httpclient_connection_pool_t connpool = {};
     h2o_url_t origin;
     int fds[2];
     char junk[4096] = {0};
 
+    h2o_linklist_init_anchor(&connpool.http2.conns);
     h2o_mem_init_pool(&test_pool);
     test_on_head_calls = 0;
     test_on_head_errstr = NULL;
+    test_on_head_conn_pooled = 1;
 
     ok(h2o_url_parse(&test_pool, H2O_STRLIT("http://example.com/"), &origin) == 0);
     ok(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
@@ -85,11 +91,13 @@ static void test_error_closes_streams(void)
     memset(stream, 0, h2o_httpclient__h2_size);
     stream->super.pool = &test_pool;
     stream->super.ctx = &ctx;
+    stream->super.connpool = &connpool;
     stream->super._cb.on_connect = test_on_connect;
     h2o_httpclient__h2_on_connect(&stream->super, sock, &origin);
 
     struct st_h2o_http2client_conn_t *conn = sock->data;
     ok(conn->super.num_streams == 1);
+    ok(connpool.http2.conns.next == &conn->super.link);
 
     while (test_on_head_calls == 0)
         h2o_evloop_run(test_loop, 10);
@@ -97,6 +105,7 @@ static void test_error_closes_streams(void)
     ok(test_on_head_errstr == h2o_httpclient_error_protocol_violation);
     ok(conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING);
     ok(conn->super.num_streams == 0);
+    ok(!test_on_head_conn_pooled);
 
     /* the connection is closed by the I/O timeout */
     uint64_t deadline = h2o_now(test_loop) + ctx.io_timeout * 10;

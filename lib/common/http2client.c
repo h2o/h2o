@@ -286,6 +286,11 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
 static void call_stream_callbacks_with_error(struct st_h2o_http2client_conn_t *conn, const char *errstr)
 {
     struct st_h2o_http2client_stream_t *stream;
+
+    /* the connection is going to be closed; stop opening new streams on it */
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
+
     kh_foreach_value(conn->streams, stream, {
         call_callback_with_error(stream, errstr);
         close_stream(stream);
