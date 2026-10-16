@@ -204,6 +204,7 @@ struct st_h2o_http2_conn_t {
                                                */
     unsigned received_any_request : 1; /* if any request has been received. The connection is not subject to culling until at least
                                         * one request has been processed. */
+    unsigned webtransport_enabled : 1; /* if SETTINGS_WT_ENABLED has been sent */
 
     ssize_t (*_read_expect)(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
     h2o_buffer_t *_http1_req_input; /* contains data referred to by original request via HTTP/1.1 */
