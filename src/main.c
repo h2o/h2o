@@ -4270,7 +4270,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
             return 1;
         break;
     }
-    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+    if (encapsulated.srcaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
         struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
         if (listener_config->quic.sibling != NULL) {
             int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
