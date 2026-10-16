@@ -286,7 +286,10 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
 static void call_stream_callbacks_with_error(struct st_h2o_http2client_conn_t *conn, const char *errstr)
 {
     struct st_h2o_http2client_stream_t *stream;
-    kh_foreach_value(conn->streams, stream, { call_callback_with_error(stream, errstr); });
+    kh_foreach_value(conn->streams, stream, {
+        call_callback_with_error(stream, errstr);
+        close_stream(stream);
+    });
 }
 
 static int extract_content_length(const h2o_headers_t *headers, size_t *content_length, const char **err_desc)
