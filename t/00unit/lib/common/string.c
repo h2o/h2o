@@ -426,6 +426,11 @@ static void test_strtosizefwd(void)
     ok(h2o_strtosizefwd(&p, strlen(buf)) == 123456789);
     ok(p == buf + strlen(buf));
 
+    strcpy(buf, "123-");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == 123);
+    ok(p == buf + 3);
+
     /* 20 digits ending at the end of the buffer must be rejected rather than wrap */
     strcpy(buf, "18446744073709551616");
     p = buf;
