@@ -114,36 +114,18 @@ Error:
 
 size_t h2o_strtosizefwd(char **s, size_t len)
 {
-    uint64_t v, c;
-    char *p = *s, *p_end = *s + len;
+    uint64_t v = 0;
+    size_t i;
 
-    if (len == 0)
-        goto Error;
-
-    int ch = *p++;
-    if (!('0' <= ch && ch <= '9'))
-        goto Error;
-    v = ch - '0';
-    c = 1;
-
-    while (1) {
-        ch = *p;
-        if (!('0' <= ch && ch <= '9'))
-            break;
-        v *= 10;
-        v += ch - '0';
-        p++;
-        c++;
-        /* similar as above, do not even try to overflow */
-        if (c == 20)
+    for (i = 0; i < len && '0' <= (*s)[i] && (*s)[i] <= '9'; ++i) {
+        /* 19 digits never overflow uint64_t */
+        if (i == 19)
             goto Error;
-        if (p == p_end)
-            break;
+        v = v * 10 + (*s)[i] - '0';
     }
-
-    if (v >= SIZE_MAX)
+    if (i == 0 || v >= SIZE_MAX)
         goto Error;
-    *s = p;
+    *s += i;
     return v;
 
 Error:
