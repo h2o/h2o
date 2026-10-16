@@ -400,9 +400,15 @@ static void test_split(void)
 static void test_strtosize(void)
 {
     ok(h2o_strtosize(H2O_STRLIT("0")) == 0);
-    ok(h2o_strtosize(H2O_STRLIT("1234567890123456789")) == 1234567890123456789ULL);
-    ok(h2o_strtosize(H2O_STRLIT("9999999999999999999")) == 9999999999999999999ULL);
-    ok(h2o_strtosize(H2O_STRLIT("10000000000000000000")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("123456789")) == 123456789);
+    if (sizeof(size_t) == 4) {
+        ok(h2o_strtosize(H2O_STRLIT("4294967294")) == 4294967294U);
+        ok(h2o_strtosize(H2O_STRLIT("4294967295")) == SIZE_MAX);
+        ok(h2o_strtosize(H2O_STRLIT("4294967296")) == SIZE_MAX);
+    } else {
+        ok(h2o_strtosize(H2O_STRLIT("9999999999999999999")) == 9999999999999999999U);
+        ok(h2o_strtosize(H2O_STRLIT("10000000000000000000")) == SIZE_MAX);
+    }
     ok(h2o_strtosize(H2O_STRLIT("0000000000000000001")) == 1);
     ok(h2o_strtosize(H2O_STRLIT("00000000000000000001")) == SIZE_MAX);
     ok(h2o_strtosize(H2O_STRLIT("")) == SIZE_MAX);
@@ -415,9 +421,9 @@ static void test_strtosizefwd(void)
 {
     char buf[32], *p;
 
-    strcpy(buf, "1234567890123456789");
+    strcpy(buf, "123456789");
     p = buf;
-    ok(h2o_strtosizefwd(&p, strlen(buf)) == 1234567890123456789);
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == 123456789);
     ok(p == buf + strlen(buf));
 
     /* 20 digits ending at the end of the buffer must be rejected rather than wrap */
