@@ -133,7 +133,72 @@ static void test_scheduler(void)
     ok(sched.active.smallest_urgency == H2O_ABSPRIO_NUM_URGENCY_LEVELS);
 }
 
+static int handle_input_called;
+
+static quicly_error_t handle_input_record_call(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
+                                               const uint8_t *src_end, int in_generator, const char **err_desc)
+{
+    ++handle_input_called;
+    *src = src_end;
+    return 0;
+}
+
+static void receive_fin_then_reset(quicly_stream_t *qs, struct st_h2o_http3_server_stream_t *stream)
+{
+    static const uint8_t data[10];
+    size_t len;
+    uint64_t bytes_missing;
+
+    quicly_recvstate_init(&qs->recvstate);
+    h2o_buffer_init(&stream->recvbuf.buf, &h2o_socket_buffer_prototype);
+    stream->recvbuf.handle_input = handle_input_record_call;
+
+    /* receive bytes 0-9 and consume them, then bytes 90-99 with FIN, then RESET_STREAM with the same final size */
+    len = 10;
+    ok(quicly_recvstate_update(&qs->recvstate, 0, &len, 0, 10) == 0);
+    qs->recvstate.data_off = 10;
+    len = 10;
+    ok(quicly_recvstate_update(&qs->recvstate, 90, &len, 1, 10) == 0);
+    h2o_http3_update_recvbuf(&stream->recvbuf.buf, 90 - qs->recvstate.data_off, data, len);
+    ok(quicly_recvstate_reset(&qs->recvstate, 100, &bytes_missing) == 0);
+    ok(quicly_recvstate_transfer_complete(&qs->recvstate));
+    ok(qs->recvstate.eos == 100);
+}
+
+static void test_reset_received(void)
+{
+    quicly_stream_t qs = {.stream_id = 0};
+    struct st_h2o_http3_server_stream_t stream = {.quic = &qs, .state = H2O_HTTP3_SERVER_STREAM_STATE_SEND_BODY};
+    qs.data = &stream;
+
+    receive_fin_then_reset(&qs, &stream);
+    stream.reset_received = 1;
+
+    handle_input_called = 0;
+    handle_buffered_input(&stream, 1);
+    ok(handle_input_called == 0);
+    ok(get_request_stream_size(&stream) == 10);
+
+    h2o_buffer_dispose(&stream.recvbuf.buf);
+}
+
+static void test_reset_received_close_wait(void)
+{
+    quicly_stream_t qs = {.stream_id = 0};
+    struct st_h2o_http3_server_stream_t stream = {.quic = &qs, .state = H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT};
+    qs.data = &stream;
+
+    receive_fin_then_reset(&qs, &stream);
+    on_receive_reset_close_wait(&qs, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
+    ok(stream.reset_received);
+    ok(get_request_stream_size(&stream) == 10);
+
+    h2o_buffer_dispose(&stream.recvbuf.buf);
+}
+
 void test_lib__http3_server(void)
 {
     subtest("scheduler", test_scheduler);
+    subtest("reset-received", test_reset_received);
+    subtest("reset-received-close-wait", test_reset_received_close_wait);
 }
