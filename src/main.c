@@ -4286,11 +4286,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     msg->msg_iov[0].iov_len -= encapsulated.offset;
     *destaddr = encapsulated.destaddr;
     *srcaddr = encapsulated.srcaddr;
-    /* Clamp rather than adopt. The ttl is one of the fields the envelope's sender chooses, and the envelope is
-     * unauthenticated on a listener reachable from the public internet, so adopting it verbatim let a sender grant itself a
-     * budget of up to 255 hops -- turning any address-mismatch condition into an amplifier far larger than the one organic
-     * traffic gets. A legitimate envelope always arrives below `default_ttl`, because the hop that built it decremented
-     * from that same value, so this is a no-op for real forwarding. */
+    /* clamp the TTL; as the envelope is unauthenticated and therefore could be spoofed */
     *ttl = encapsulated.ttl < h3ctx->default_ttl ? encapsulated.ttl : h3ctx->default_ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
