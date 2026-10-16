@@ -31,6 +31,10 @@ typedef struct st_test_streambuf_t {
     struct {
         quicly_error_t stop_sending;
         quicly_error_t reset_stream;
+        /**
+         * reset surfaced through `on_receive` as the end of the stream
+         */
+        quicly_error_t reset_on_receive;
     } error_received;
     int is_detached;
 } test_streambuf_t;

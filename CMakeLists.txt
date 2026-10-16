@@ -414,6 +414,7 @@ SET(LIB_SOURCE_FILES
     lib/common/timerwheel.c
     lib/common/token.c
     lib/common/url.c
+    lib/common/webtransport_codec.c
     lib/common/balancer/roundrobin.c
     lib/common/balancer/least_conn.c
     lib/common/absprio.c
@@ -427,6 +428,7 @@ SET(LIB_SOURCE_FILES
     lib/core/proxy.c
     lib/core/request.c
     lib/core/util.c
+    lib/core/webtransport.c
 
     lib/handler/access_log.c
     lib/handler/compress.c
@@ -447,6 +449,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/throttle_resp.c
     lib/handler/self_trace.c
     lib/handler/server_timing.c
+    lib/handler/webtransport_echo.c
     lib/handler/status.c
     lib/handler/status/events.c
     lib/handler/status/memory.c
@@ -469,6 +472,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/self_trace.c
     lib/handler/configurator/server_timing.c
+    lib/handler/configurator/webtransport_echo.c
     lib/handler/configurator/status.c
 
     lib/http1.c
@@ -534,10 +538,12 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/url.c
     t/00unit/lib/common/timerwheel.c
     t/00unit/lib/common/absprio.c
+    t/00unit/lib/common/webtransport_codec.c
     t/00unit/lib/core/config.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
     t/00unit/lib/core/util.c
+    t/00unit/lib/core/webtransport.c
     t/00unit/lib/handler/compress.c
     t/00unit/lib/handler/connect.c
     t/00unit/lib/handler/fastcgi.c
@@ -572,9 +578,11 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/timerwheel.c
     lib/common/url.c
     lib/common/absprio.c
+    lib/common/webtransport_codec.c
     lib/core/headers.c
     lib/core/proxy.c
     lib/core/util.c
+    lib/core/webtransport.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
     lib/handler/connect.c
@@ -605,7 +613,7 @@ LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
     deps/quicly/lib/remote_cid.c
     deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sentmap.c
-    deps/quicly/lib/streambuf.c
+    # streambuf.c stays: WebTransport uses quicly_sendbuf_*, and it only calls into quicly through the stream API the mock provides
     #deps/quicly/lib/cc-cubic.c
     #deps/quicly/lib/cc-reno.c
     #deps/quicly/lib/defaults.c
@@ -677,6 +685,9 @@ SET_TARGET_PROPERTIES(t-qif PROPERTIES
     COMPILE_FLAGS "-DH2O_USE_LIBUV=0"
     EXCLUDE_FROM_ALL 1)
 TARGET_LINK_LIBRARIES(t-qif libh2o-evloop ${EXTRA_LIBS})
+ADD_EXECUTABLE(webtransport-client t/webtransport-client.c)
+SET_TARGET_PROPERTIES(webtransport-client PROPERTIES COMPILE_FLAGS "-DH2O_USE_LIBUV=0" EXCLUDE_FROM_ALL 1)
+TARGET_LINK_LIBRARIES(webtransport-client libh2o-evloop ${EXTRA_LIBS})
 
 ADD_CUSTOM_TARGET(lib-examples DEPENDS examples-httpclient-libuv examples-simple-libuv examples-socket-client-libuv)
 IF (WSLAY_FOUND)
@@ -898,7 +909,7 @@ ENDIF (LIBUV_FOUND)
 
 ADD_CUSTOM_TARGET(checkdepends
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS h2o t-00unit-evloop.t t-qif ${OPTIONAL_TEST})
+    DEPENDS h2o t-00unit-evloop.t t-qif webtransport-client ${OPTIONAL_TEST})
 IF (LIBUV_FOUND)
     ADD_DEPENDENCIES(checkdepends t-00unit-libuv.t)
 ENDIF ()
