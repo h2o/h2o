@@ -537,6 +537,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/core/config.c
     t/00unit/lib/core/headers.c
     t/00unit/lib/core/proxy.c
+    t/00unit/lib/core/logconf.c
     t/00unit/lib/core/util.c
     t/00unit/lib/handler/compress.c
     t/00unit/lib/handler/connect.c
@@ -574,6 +575,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/absprio.c
     lib/core/headers.c
     lib/core/proxy.c
+    lib/core/logconf.c
     lib/core/util.c
     lib/handler/compress.c
     lib/handler/compress/gzip.c
