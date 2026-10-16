@@ -247,6 +247,32 @@ static void test_acl_legacy_format(void)
     ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443/16") != NULL);
 }
 
+static void test_acl_v4mapped(void)
+{
+    h2o_connect_acl_entry_t entries[2];
+    ok(h2o_connect_parse_acl(&entries[0], "-127.0.0.0/8") == NULL);
+    ok(h2o_connect_parse_acl(&entries[1], "+*") == NULL);
+
+    struct sockaddr_in6 sin6 = {.sin6_family = AF_INET6, .sin6_port = htons(22)};
+
+    /* IPv4-mapped IPv6 addresses are matched against IPv4 entries */
+    memcpy(sin6.sin6_addr.s6_addr,
+           "\0\0\0\0"
+           "\0\0\0\0"
+           "\0\0\xff\xff"
+           "\x7f\0\0\1",
+           16);
+    ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
+    sin6.sin6_addr.s6_addr[12] = 10;
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
+
+    /* ordinary IPv6 addresses are not */
+    sin6.sin6_addr.s6_addr[10] = 0;
+    sin6.sin6_addr.s6_addr[11] = 0;
+    sin6.sin6_addr.s6_addr[12] = 0x7f;
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
+}
+
 static void test_masque_decode_hostport(void)
 {
     h2o_mem_pool_t pool;
@@ -413,4 +439,5 @@ void test_lib__handler__connect_c()
     subtest("get_next_server_address_for_connect", test_get_next_server_address_for_connect);
     subtest("acl_port_range", test_acl_port_range);
     subtest("acl_legacy_format", test_acl_legacy_format);
+    subtest("acl_v4mapped", test_acl_v4mapped);
 }
