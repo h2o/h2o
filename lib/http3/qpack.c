@@ -1051,7 +1051,7 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
         /* uncompressed */
         buf->entries[buf->size] &= ~((2 << prefix_bits) - 1); /* clear huffman mark */
         flatten_int(buf, len, prefix_bits);
-        memcpy(buf->entries + buf->size, src, len);
+        h2o_memcpy(buf->entries + buf->size, src, len);
         buf->size += len;
     } else {
         /* build huffman header and adjust the location (if necessary) */
