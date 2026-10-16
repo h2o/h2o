@@ -397,6 +397,20 @@ static void test_split(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_strtosize(void)
+{
+    ok(h2o_strtosize(H2O_STRLIT("0")) == 0);
+    ok(h2o_strtosize(H2O_STRLIT("1234567890123456789")) == 1234567890123456789ULL);
+    ok(h2o_strtosize(H2O_STRLIT("9999999999999999999")) == 9999999999999999999ULL);
+    ok(h2o_strtosize(H2O_STRLIT("10000000000000000000")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("0000000000000000001")) == 1);
+    ok(h2o_strtosize(H2O_STRLIT("00000000000000000001")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("a1")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("1a1")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("1a")) == SIZE_MAX);
+}
+
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -412,4 +426,5 @@ void test_lib__common__string_c(void)
     subtest("at_position", test_at_position);
     subtest("join_list", test_join_list);
     subtest("split", test_split);
+    subtest("strtosize", test_strtosize);
 }
