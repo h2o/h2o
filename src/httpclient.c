@@ -706,7 +706,7 @@ static void usage(const char *progname)
             "  -s <session-file>\n"
             "               file to read / write session information (atm HTTP/3 only)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
-            "  -W <bytes>   receive window size (HTTP/3 only)\n"
+            "  -W <bytes>   receive window size of request streams (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
             "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
             "               TLS is used and the provided hostname is used for peer.\n"
@@ -795,6 +795,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     h3ctx.quic.transport_params.max_datagram_frame_size = 1500;
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
@@ -973,7 +974,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse HTTP/3 receive window size (-W)\n");
                 exit(EXIT_FAILURE);
             }
-            h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
