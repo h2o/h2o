@@ -409,8 +409,7 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     if (src == NULL)
         return;
 
-    /* read the type, or just return if incomplete; quicly_decodev advances the pointer even when the input is incomplete, therefore
-     * decode using a copy and commit only when the type is complete */
+    /* read the type, or just return if incomplete */
     const uint8_t *p = *src;
     if ((type = quicly_decodev(&p, src_end)) == UINT64_MAX)
         return;
