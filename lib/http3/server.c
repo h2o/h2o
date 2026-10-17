@@ -2986,8 +2986,8 @@ static void wt_on_request_dispose(struct st_h2o_http3_server_stream_t *stream)
 }
 
 /**
- * Returns which draft's SETTINGS the client enabled WebTransport with: 16 (SETTINGS_WT_ENABLED), an earlier one if
- * `webtransport-legacy-drafts` is ON (2, 7 or 14, as current browsers send them), or 0 if none.
+ * Returns which draft's SETTINGS the client enabled WebTransport with: 16 (SETTINGS_WT_ENABLED, with reset_stream_at), an earlier
+ * one if `webtransport-legacy-drafts` is ON (2, 7 or 14, as current browsers send them), or 0 if none.
  */
 static int wt_peer_draft(struct st_h2o_http3_server_conn_t *conn)
 {
@@ -2995,7 +2995,11 @@ static int wt_peer_draft(struct st_h2o_http3_server_conn_t *conn)
 
     if (!h3->peer_settings.h3_datagram_rfc9297)
         return 0;
-    if (h3->peer_settings.wt_enabled == 1 && !h3->peer_settings.wt_enabled_duplicated)
+    /* Draft 16 also requires the client's reset_stream_at transport parameter (draft-ietf-webtrans-http3-16 section 3.1). A client
+     * that sends the SETTINGS of draft 16 and of an earlier draft, but not that parameter (some send only its provisional
+     * codepoint, unknown to quicly), is served as the earlier draft, as browsers are. */
+    if (h3->peer_settings.wt_enabled == 1 && !h3->peer_settings.wt_enabled_duplicated &&
+        quicly_get_remote_transport_parameters(conn->h3.super.quic)->reset_stream_at)
         return 16;
     if (!h3->local_settings.wt_legacy)
         return 0;
@@ -3017,13 +3021,15 @@ static int handle_input_expect_headers_process_wt_connect(struct st_h2o_http3_se
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    /* A draft-16 client is required to offer reset_stream_at as well (draft-ietf-webtrans-http3-16 section 3.1). One speaking an
-     * earlier draft, as current browsers do, need not: its streams are then reset with RESET_STREAM, as
-     * h2o_http3_reset_stream_reliably falls back to. */
-    int draft = wt_peer_draft(conn);
-    if (draft == 0 || (draft == 16 && !quicly_get_remote_transport_parameters(conn->h3.super.quic)->reset_stream_at))
-        return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request",
-                                                           "WebTransport is not enabled by the client", err_desc);
+    /* A client of an earlier draft, as current browsers are, need not offer reset_stream_at: its streams are reset with
+     * RESET_STREAM, as h2o_http3_reset_stream_reliably falls back to. The refusal says what is missing. */
+    if (wt_peer_draft(conn) == 0) {
+        const char *why = conn->h3.peer_settings.wt_enabled == 1 && !conn->h3.peer_settings.wt_enabled_duplicated &&
+                                  conn->h3.peer_settings.h3_datagram_rfc9297
+                              ? "draft-16 WebTransport requires the reset_stream_at transport parameter"
+                              : "WebTransport is not enabled by the client";
+        return handle_input_expect_headers_send_http_error(stream, h2o_send_error_400, "Invalid Request", why, err_desc);
+    }
 
     /* as flow control of WebTransport is not implemented, only one session is permitted on each connection */
     if (conn->wt.session_stream != NULL) {

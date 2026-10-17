@@ -115,6 +115,7 @@ static int64_t timeout_ms = 10000;
  * -d: the draft of WebTransport over HTTP/3 whose handshake is used (16, or 2, 7 or 14 as current browsers send them)
  */
 static int wt_draft = 16;
+static int wt_hybrid; /* -y: draft 16's SETTINGS_WT_ENABLED as well as the earlier draft's, without reset_stream_at */
 
 static struct {
     struct wt_stream *list[MAX_STREAMS];
@@ -735,6 +736,10 @@ static void h3_send_control_stream(void)
         break;
     }
     q = quicly_encodev(q, 1);
+    if (wt_hybrid && wt_draft != 16) { /* as some clients do */
+        q = quicly_encodev(q, H2O_WEBTRANSPORT_H3_SETTINGS_WT_ENABLED);
+        q = quicly_encodev(q, 1);
+    }
     p = quicly_encodev(p, H2O_HTTP3_STREAM_TYPE_CONTROL);
     p = quicly_encodev(p, H2O_HTTP3_FRAME_TYPE_SETTINGS);
     p = quicly_encodev(p, q - settings);
@@ -969,6 +974,7 @@ static void usage(const char *cmd)
             "Options:\n"
             "  -3              use HTTP/3 (the default)\n"
             "  -d <draft>      the draft of WebTransport over HTTP/3 whose handshake is used: 16 (default), or 2, 7 or 14\n"
+            "  -y              with -d 2, 7 or 14: also send draft 16's SETTINGS_WT_ENABLED, without reset_stream_at\n"
             "  -H name:value   adds a request header\n"
             "  -e <count>      number of streams the server is expected to open (in addition to the echo of `uni`)\n"
             "  -w              wait for the server to close the session\n"
@@ -997,7 +1003,7 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    while ((ch = getopt(argc, argv, "3H:e:wc:t:d:h")) != -1) {
+    while ((ch = getopt(argc, argv, "3H:e:wc:t:d:yh")) != -1) {
         switch (ch) {
         case '3':
             break;
@@ -1023,6 +1029,9 @@ int main(int argc, char **argv)
             break;
         case 't':
             timeout_ms = strtoll(optarg, NULL, 10);
+            break;
+        case 'y':
+            wt_hybrid = 1;
             break;
         case 'd':
             wt_draft = (int)strtol(optarg, NULL, 10);
