@@ -174,6 +174,19 @@ subtest "earlier drafts turned off" => sub {
     };
 };
 
+# Some clients send draft 16's SETTINGS_WT_ENABLED with the earlier drafts' and :protocol "webtransport", but no reset_stream_at (or
+# only its provisional codepoint). They are served as the earlier draft.
+subtest "a client of draft 16 and an earlier draft, without reset_stream_at" => sub {
+    my $server = spawn_wt_server(1);
+    my ($out, $status) = run_client($server, { opts => "-3 -d 2 -y", port => sub { $_[0]->{quic_port} } }, "", "/echo",
+                                    "bidi:hello");
+    is $status, 0, "exit status";
+    has_lines($out, ["response 200", "client-bidi[4] fin \"hello\""], "served as draft 2");
+    my $off = spawn_wt_server(1, "webtransport-legacy-drafts: OFF\n");
+    ($out) = run_client($off, { opts => "-3 -d 2 -y", port => sub { $_[0]->{quic_port} } }, "-t 5000", "/echo", "bidi:x");
+    has_lines($out, ["response 400"], "refused without the earlier drafts");
+};
+
 subtest "graceful shutdown" => sub {
     for my $proto (@protocols) {
         subtest $proto->{name} => sub {
