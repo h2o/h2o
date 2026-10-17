@@ -664,8 +664,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
         /* forward 1-RTT packets belonging to different nodes, threads */
-        if (ttl == 0)
-            return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  destaddr, srcaddr, ttl, packets, num_packets))
@@ -724,7 +722,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                          * the destination being claimed by the DCID */
                         uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                         uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                        if (ctx->forward_packets != NULL &&
                             (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                             ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                  num_packets);
@@ -752,8 +750,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
                      * that is supposed to be handled by another node. forward it. */
-                    if (ttl == 0)
-                        return;
                     if (ctx->forward_packets != NULL)
                         ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                              num_packets);
