@@ -172,6 +172,7 @@ int main(int argc, char **argv)
         subtest("lib/core/headers.c", test_lib__core__headers_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
         subtest("lib/core/util.c", test_lib__core__util_c);
+        subtest("lib/core/logconf.c", test_lib__core__logconf_c);
         subtest("lib/handler/connect.c", test_lib__handler__connect_c);
         subtest("lib/handler/headers.c", test_lib__handler__headers_c);
         subtest("lib/handler/mimemap.c", test_lib__handler__mimemap_c);
