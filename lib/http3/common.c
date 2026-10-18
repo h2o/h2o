@@ -410,21 +410,29 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         return;
 
     /* read the type, or just return if incomplete */
-    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+    const uint8_t *p = *src;
+    if ((type = quicly_decodev(&p, src_end)) == UINT64_MAX)
         return;
+    *src = p;
 
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
+        if (conn->_control_streams.ingress.control != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.control = stream;
         stream->bytes_received = &conn->stats.bytes_received.control_stream;
         stream->handle_input = control_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
+        if (conn->_control_streams.ingress.qpack_encoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_encoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_encoder;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
+        if (conn->_control_streams.ingress.qpack_decoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
@@ -436,6 +444,11 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     }
 
     return stream->handle_input(conn, stream, src, src_end, is_eos);
+
+Duplicate:
+    /* permit only one control, encoder, and decoder stream per peer (RFC 9114 Section 6.2.1, RFC 9204 Section 4.2) */
+    h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_STREAM_CREATION, "duplicate critical stream");
+    stream->handle_input = discard_handle_input;
 }
 
 static void egress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
@@ -651,8 +664,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
         /* forward 1-RTT packets belonging to different nodes, threads */
-        if (ttl == 0)
-            return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  destaddr, srcaddr, ttl, packets, num_packets))
@@ -711,7 +722,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                          * the destination being claimed by the DCID */
                         uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                         uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                        if (ctx->forward_packets != NULL &&
                             (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                             ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                  num_packets);
@@ -739,8 +750,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
                      * that is supposed to be handled by another node. forward it. */
-                    if (ttl == 0)
-                        return;
                     if (ctx->forward_packets != NULL)
                         ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                              num_packets);

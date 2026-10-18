@@ -171,7 +171,7 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
         size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
         if (new_capacity > table->buf_end - table->buf_start) {
             struct st_h2o_qpack_header_t **newbuf = h2o_mem_alloc(sizeof(*newbuf) * new_capacity);
-            memcpy(newbuf, table->first, sizeof(*newbuf) * count);
+            h2o_memcpy(newbuf, table->first, sizeof(*newbuf) * count);
             free(table->buf_start);
             table->buf_start = newbuf;
             table->first = newbuf;
@@ -477,8 +477,12 @@ int h2o_qpack_decoder_handle_input(h2o_qpack_decoder_t *qpack, uint64_t *insert_
     }
 
 Exit:
-    if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
+    if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
         ret = 0;
+    } else if (ret != 0) {
+        /* any failure to interpret an instruction received on the encoder stream (RFC 9204 Section 6) */
+        ret = H2O_HTTP3_ERROR_QPACK_ENCODER_STREAM;
+    }
     if (ret == 0 && old_total_inserts != qpack->total_inserts)
         *insert_count = qpack->total_inserts;
     return (int)ret;
@@ -1047,7 +1051,7 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
         /* uncompressed */
         buf->entries[buf->size] &= ~((2 << prefix_bits) - 1); /* clear huffman mark */
         flatten_int(buf, len, prefix_bits);
-        memcpy(buf->entries + buf->size, src, len);
+        h2o_memcpy(buf->entries + buf->size, src, len);
         buf->size += len;
     } else {
         /* build huffman header and adjust the location (if necessary) */

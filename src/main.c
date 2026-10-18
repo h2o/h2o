@@ -4167,6 +4167,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     int fd;
     h2o_context_t *h2octx = ctx->accept_ctx.ctx;
 
+    if (ttl == 0)
+        return 0;
+
     /* determine the file descriptor to which the packets should be forwarded, or return */
     if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid->node_id) {
         /* inter-node forwarding */
@@ -4206,7 +4209,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
 
     /* forward (TODO coalesce packets that were coalesced upon receipt) */
     char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
+    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl - 1);
     for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(fd, vec, 2);
@@ -4250,6 +4253,10 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
+    /* drop packets that do not have an IPv4 or IPv6 source address; QUIC runs only over IP */
+    if (!(encapsulated.srcaddr.sa.sa_family == AF_INET || encapsulated.srcaddr.sa.sa_family == AF_INET6))
+        return 0;
+
     /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
@@ -4263,7 +4270,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
             return 1;
         break;
     }
-    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+    if (encapsulated.srcaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
         struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
         if (listener_config->quic.sibling != NULL) {
             int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
@@ -4279,7 +4286,8 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     msg->msg_iov[0].iov_len -= encapsulated.offset;
     *destaddr = encapsulated.destaddr;
     *srcaddr = encapsulated.srcaddr;
-    *ttl = encapsulated.ttl;
+    /* clamp the TTL; as the envelope is unauthenticated and therefore could be spoofed */
+    *ttl = encapsulated.ttl < h3ctx->default_ttl ? encapsulated.ttl : h3ctx->default_ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
     PTLS_LOG(h2o, h3_forwarded_packet_receive, {
