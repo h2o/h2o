@@ -66,6 +66,60 @@ static void test_parse_proxy_line(void)
     ok(sa.ss_family == AF_INET6);
     ok(memcmp(&((struct sockaddr_in6 *)&sa)->sin6_addr, H2O_STRLIT("\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1")) == 0);
     ok(((struct sockaddr_in6 *)&sa)->sin6_port == htons(56324));
+
+    /* valid max-length (107 bytes) PROXY v1 line */
+    strcpy(in, "PROXY UNKNOWN ");
+    memset(in + 14, 'a', 91);
+    in[105] = '\r';
+    in[106] = '\n';
+    in[107] = '\0';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == 107);
+    ok(salen == 0);
+
+    /* valid max-length (107 bytes) PROXY v1 line followed by extra data in buffer */
+    strcpy(in + 107, "abc");
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == 107);
+    ok(salen == 0);
+
+    /* valid max-length (107 bytes) TCP6 line */
+    strcpy(in, "PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535   \r\n");
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == 107);
+    ok(salen == sizeof(struct sockaddr_in6));
+    ok(sa.ss_family == AF_INET6);
+    ok(((struct sockaddr_in6 *)&sa)->sin6_port == htons(65535));
+
+    /* incomplete lines (< 107 bytes) return -2 */
+    strcpy(in, "PROXY UNKNOWN ");
+    memset(in + 14, 'a', 92);
+    in[106] = '\0';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == -2);
+
+    /* incomplete line of 106 bytes with trailing \r returns -2 */
+    in[105] = '\r';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == -2);
+
+    /* line >= 107 bytes with no CRLF must return -1 (invalid) */
+    strcpy(in, "PROXY UNKNOWN ");
+    memset(in + 14, 'a', 93);
+    in[107] = '\0';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == -1);
+
+    /* line of 107 bytes with trailing \r (no \n) must return -1 */
+    in[106] = '\r';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == -1);
+
+    /* line > 107 bytes with no CRLF must return -1 (invalid) */
+    memset(in + 14, 'a', 186);
+    in[200] = '\0';
+    ret = parse_proxy_line(in, strlen(in), (void *)&sa, &salen);
+    ok(ret == -1);
 }
 
 struct expected_t {
