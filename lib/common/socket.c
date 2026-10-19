@@ -2098,19 +2098,23 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
 
 void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t session_data)
 {
+    SSL_SESSION *session = NULL;
+
     if (session_data.len != 0) {
         const unsigned char *p = (void *)session_data.base;
-        sock->ssl->handshake.server.async_resumption.session_data = d2i_SSL_SESSION(NULL, &p, (long)session_data.len);
+        session = d2i_SSL_SESSION(NULL, &p, (long)session_data.len);
         /* FIXME warn on failure */
     }
 
+    sock->ssl->handshake.server.async_resumption.session_data = session;
     sock->ssl->handshake.server.async_resumption.state = ASYNC_RESUMPTION_STATE_COMPLETE;
     proceed_handshake(sock, 0);
 
-    if (sock->ssl->handshake.server.async_resumption.session_data != NULL) {
-        SSL_SESSION_free(sock->ssl->handshake.server.async_resumption.session_data);
+    /* `sock->ssl` would be NULL if the socket has been closed by the handshake callback */
+    if (sock->ssl != NULL)
         sock->ssl->handshake.server.async_resumption.session_data = NULL;
-    }
+    if (session != NULL)
+        SSL_SESSION_free(session);
 }
 
 void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb get_async_cb,
