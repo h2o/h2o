@@ -407,6 +407,7 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
         free(logconf->elements.entries[i].suffix.base);
         switch (logconf->elements.entries[i].type) {
         case ELEMENT_TYPE_EXTENDED_VAR:
+        case ELEMENT_TYPE_ENV_VAR:
         case ELEMENT_TYPE_IN_HEADER_STRING:
         case ELEMENT_TYPE_OUT_HEADER_STRING:
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME:
