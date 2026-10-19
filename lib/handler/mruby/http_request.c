@@ -272,8 +272,8 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
     for (i = 0; i < num_headers; ++i) {
         /* skip the headers, we determine the eos! */
-        if (h2o_memis(headers_sorted[i].name, headers_sorted[i].name->len, H2O_STRLIT("content-length")) ||
-            h2o_memis(headers_sorted[i].name, headers_sorted[i].name->len, H2O_STRLIT("transfer-encoding")))
+        if (h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len, H2O_STRLIT("content-length")) ||
+            h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len, H2O_STRLIT("transfer-encoding")))
             continue;
         /* build and set the hash entry */
         mrb_value k, v;
