@@ -129,7 +129,7 @@ static int req_requires_content_length(h2o_req_t *req)
                           (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
                            h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
 
-    return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
+    return is_put_or_post;
 }
 
 static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
