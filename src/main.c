@@ -573,7 +573,7 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
         h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
-                                   identity->certificate_file.str, strerror(errno));
+                                   identity->key_file.str, strerror(errno));
         return 0;
     }
 
