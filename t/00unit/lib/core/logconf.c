@@ -39,7 +39,7 @@ static void test_log_request_error_element(void)
     size_t i;
 
     /* compile a log configuration that emits the error log */
-    logconf = h2o_logconf_compile(H2O_STRLIT("%{error}x"), H2O_LOGCONF_ESCAPE_APACHE, errbuf);
+    logconf = h2o_logconf_compile("%{error}x", H2O_LOGCONF_ESCAPE_APACHE, errbuf);
     ok(logconf != NULL);
     if (logconf == NULL)
         return;
@@ -81,7 +81,7 @@ static void test_log_request_error_element_with_escaping(void)
     char *line;
     static const char error_text[] = "a\tb\"c";
 
-    logconf = h2o_logconf_compile(H2O_STRLIT("%{error}x"), H2O_LOGCONF_ESCAPE_APACHE, errbuf);
+    logconf = h2o_logconf_compile("%{error}x", H2O_LOGCONF_ESCAPE_APACHE, errbuf);
     ok(logconf != NULL);
     if (logconf == NULL)
         return;
