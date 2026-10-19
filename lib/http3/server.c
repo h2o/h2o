@@ -2290,12 +2290,13 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     }
 
     /* unlink and dispose */
-    if (h2o_timer_is_linked(&conn->timeout))
-        h2o_timer_unlink(&conn->timeout);
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
         h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
     h2o_http3_dispose_conn(&conn->h3);
     kh_destroy(stream, conn->datagram_flows);
+    /* destroying a request-streaming stream might have armed the timer (see `check_run_blocked`) */
+    if (h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_unlink(&conn->timeout);
 
     /* check consistency post-disposal */
     assert(conn->num_streams.recv_headers == 0);
