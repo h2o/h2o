@@ -252,7 +252,8 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         if (self->receivers.entries[i] == &status_ctx->receiver)
             break;
     assert(i != self->receivers.size);
-    memmove(self->receivers.entries + i + 1, self->receivers.entries + i, self->receivers.size - i - 1);
+    memmove(self->receivers.entries + i, self->receivers.entries + i + 1,
+            (self->receivers.size - i - 1) * sizeof(self->receivers.entries[0]));
     --self->receivers.size;
 
     h2o_multithread_unregister_receiver(ctx->queue, &status_ctx->receiver);
