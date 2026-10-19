@@ -773,6 +773,13 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
+    /* RFC 7540 section 6.10 requires the CONTINUATION frames to be sent on the stream that the HEADERS frame was sent
+     * on; a frame on any other stream is a connection error */
+    if (frame.stream_id != (uint32_t)conn->_headers_unparsed_stream_id) {
+        *err_desc = "unexpected stream id in CONTINUATION frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+
     if (conn->_headers_unparsed->size + frame.length <= H2O_MAX_REQLEN) {
         h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
         memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
@@ -791,6 +798,7 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
                 ret = hret;
             h2o_buffer_dispose(&conn->_headers_unparsed);
             conn->_headers_unparsed = NULL;
+            conn->_headers_unparsed_stream_id = -1;
         }
     } else {
         /* request is too large (TODO log) */
@@ -1086,6 +1094,7 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 PREPARE_FOR_CONTINUATION:
     /* request is not complete, store in buffer */
     conn->_read_expect = expect_continuation_of_headers;
+    conn->_headers_unparsed_stream_id = (int32_t)frame->stream_id;
     h2o_buffer_init(&conn->_headers_unparsed, &h2o_socket_buffer_prototype);
     h2o_buffer_reserve(&conn->_headers_unparsed, payload.headers_len);
     memcpy(conn->_headers_unparsed->bytes, payload.headers, payload.headers_len);
@@ -1842,6 +1851,7 @@ static h2o_http2_conn_t *create_conn(h2o_context_t *ctx, h2o_hostconf_t **hosts,
     h2o_http2_conn_t *conn = (void *)h2o_create_connection(sizeof(*conn), ctx, hosts, connected_at, &callbacks);
 
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
+    conn->_headers_unparsed_stream_id = -1; /* no header block is being parsed */
     conn->sock = sock;
     conn->peer_settings = H2O_HTTP2_SETTINGS_DEFAULT;
     conn->streams = kh_init(h2o_http2_stream_t);

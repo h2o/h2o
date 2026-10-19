@@ -212,7 +212,8 @@ struct st_h2o_http2_conn_t {
     h2o_hpack_header_table_t _output_header_table;
     h2o_linklist_t _pending_reqs; /* list of h2o_http2_stream_t that contain pending requests */
     h2o_timer_t _timeout_entry;
-    h2o_buffer_t *_headers_unparsed; /* for temporary storing HEADERS|CONTINUATION frames without END_HEADERS flag set */
+    h2o_buffer_t *_headers_unparsed;     /* for temporary storing HEADERS|CONTINUATION frames without END_HEADERS flag set */
+    int32_t _headers_unparsed_stream_id; /* the stream id of the stream that the header block being parsed belongs to */
     struct {
         h2o_buffer_t *buf;
         h2o_buffer_t *buf_in_flight;
