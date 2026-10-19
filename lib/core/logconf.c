@@ -243,6 +243,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("usec_frac"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_USEC_FRAC);
                     } else {
+                        if (quote_end == pt) {
+                            sprintf(errbuf, "failed to compile log format: empty format for %%{...}t");
+                            goto Error;
+                        }
                         h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_STRFTIME);
                         LAST_ELEMENT()->data.name = name;
