@@ -1026,7 +1026,7 @@ static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, pt
 
         ptls_clear_memory(digest, digestlen);
         free(digest);
-        return 0;
+        return ret;
     }
 
     /* select the signature scheme or return an error */
