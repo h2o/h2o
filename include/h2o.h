@@ -2207,7 +2207,7 @@ enum {
     H2O_FILE_FLAG_DIR_LISTING = 0x2,
     H2O_FILE_FLAG_SEND_COMPRESSED = 0x4,
     H2O_FILE_FLAG_GUNZIP = 0x8,
-    H2O_FILE_FLAG_IO_URING = 0x16,
+    H2O_FILE_FLAG_IO_URING = 0x10,
 };
 
 typedef struct st_h2o_file_handler_t h2o_file_handler_t;
