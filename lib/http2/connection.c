@@ -695,7 +695,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         /* handle the request */
         stream->req.is_tunnel_req = 1;
         goto ProcessImmediately;
-        return 0;
     }
 
     /* handle expect: 100-continue */
