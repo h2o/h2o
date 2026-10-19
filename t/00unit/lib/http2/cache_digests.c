@@ -71,8 +71,43 @@ static void test_decode(void)
     h2o_cache_digests_destroy(digests);
 }
 
+static void test_decode_limit(void)
+{
+    h2o_cache_digests_t *digests = NULL;
+
+    /* a digest that carries exactly the maximum number of keys is accepted */
+    h2o_cache_digests_load_header(&digests, H2O_STRLIT("QD__________wA"));
+    ok(digests != NULL);
+    if (digests == NULL)
+        return;
+    ok(digests->fresh.url_only.size == 1);
+    ok(digests->fresh.url_only.entries[0].keys.size == H2O_CACHE_DIGESTS_MAX_KEYS);
+    h2o_cache_digests_destroy(digests);
+    digests = NULL;
+
+    /* a digest that carries one key too many is discarded as a whole */
+    h2o_cache_digests_load_header(&digests, H2O_STRLIT("QD__________4A"));
+    ok(digests == NULL);
+
+    /* so is a digest that carries many keys */
+    h2o_cache_digests_load_header(&digests, H2O_STRLIT("QD_________________________________A"));
+    ok(digests == NULL);
+
+    /* the number of digests that a request may carry is bounded as well */
+    for (size_t i = 0; i < H2O_CACHE_DIGESTS_MAX_FRAMES; ++i)
+        h2o_cache_digests_load_header(&digests, H2O_STRLIT("AeLA"));
+    ok(digests != NULL);
+    if (digests == NULL)
+        return;
+    ok(digests->fresh.url_only.size == H2O_CACHE_DIGESTS_MAX_FRAMES);
+    h2o_cache_digests_load_header(&digests, H2O_STRLIT("AeLA"));
+    ok(digests->fresh.url_only.size == H2O_CACHE_DIGESTS_MAX_FRAMES);
+    h2o_cache_digests_destroy(digests);
+}
+
 void test_lib__http2__cache_digests(void)
 {
     subtest("calc_hash", test_calc_hash);
     subtest("test_decode", test_decode);
+    subtest("test_decode_limit", test_decode_limit);
 }
