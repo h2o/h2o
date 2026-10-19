@@ -1033,6 +1033,10 @@ int main(int argc, char **argv)
             }
             for (slot = h3_key_exchanges; *slot != NULL; ++slot)
                 ;
+            if (slot == h3_key_exchanges + PTLS_ELEMENTSOF(h3_key_exchanges) - 1) {
+                fprintf(stderr, "too many key exchanges\n");
+                exit(EXIT_FAILURE);
+            }
             *slot = *named;
         } break;
         case OPT_HTTP3_NO_ECN:
