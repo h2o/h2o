@@ -4073,7 +4073,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         *dst++ = 6;
         memcpy(dst, addr->sin6.sin6_addr.s6_addr, 16);
         dst += 16;
-        memcpy(dst, &addr->sin.sin_port, 2);
+        memcpy(dst, &addr->sin6.sin6_port, 2);
         dst += 2;
         break;
     case AF_UNSPEC:
