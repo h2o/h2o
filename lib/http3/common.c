@@ -542,7 +542,7 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         *p++ = 6;
         memcpy(p, addr->sin6.sin6_addr.s6_addr, 16);
         p += 16;
-        memcpy(p, &addr->sin.sin_port, 2);
+        memcpy(p, &addr->sin6.sin6_port, 2);
         p += 2;
         break;
     case AF_UNSPEC:
