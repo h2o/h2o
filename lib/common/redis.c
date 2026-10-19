@@ -189,7 +189,8 @@ static void handle_reply(h2o_redis_command_t *command, redisReply *reply, const 
     case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
         if (reply != NULL && reply->type == REDIS_REPLY_ARRAY) {
             char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
-            if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
+            if (reply->elements != 0 && reply->element[0]->type == REDIS_REPLY_STRING &&
+                strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
                 dispose_command(command);
             } else {
                 /* (p)subscribe commands doesn't get freed until (p)unsubscribe or disconnect */
