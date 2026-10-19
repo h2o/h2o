@@ -590,6 +590,13 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 if (token->flags.is_hpack_special) {
                     if (token == H2O_TOKEN_CONTENT_LENGTH) {
+                        /* RFC 9113 section 8.1.1 requires a message that carries conflicting content-length header
+                         * fields to be treated as malformed. A message that carries the header more than once is
+                         * rejected, rather than having one of the values silently ignored. */
+                        if (*content_length != SIZE_MAX) {
+                            *err_desc = h2o_hpack_err_invalid_content_length_header;
+                            return H2O_HTTP2_ERROR_PROTOCOL;
+                        }
                         if ((*content_length = h2o_strtosize(value.base, value.len)) == SIZE_MAX) {
                             *err_desc = h2o_hpack_err_invalid_content_length_header;
                             return H2O_HTTP2_ERROR_PROTOCOL;

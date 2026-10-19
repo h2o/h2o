@@ -693,6 +693,52 @@ static void test_more_soft_errors(void)
     do_test_more_soft_error((const uint8_t[]){0x03, 'a', 'b', 0x20}, 4, 0, h2o_iovec_init(H2O_STRLIT("ab ")));
 }
 
+/* the pseudo-headers of a request: :method GET, :scheme http, :path /, :authority www.example.com. The authority is
+ * encoded using the name of the static table (index 1) and the path using the static table (index 4). */
+#define REQUEST_PREFIX "\x82\x86\x84\x41\x0f\x77\x77\x77\x2e\x65\x78\x61\x6d\x70\x6c\x65\x2e\x63\x6f\x6d"
+/* a content-length header, encoded as a literal header field without indexing with a new name */
+#define CONTENT_LENGTH_1 "\x00\x0e\x63\x6f\x6e\x74\x65\x6e\x74\x2d\x6c\x65\x6e\x67\x74\x68\x01\x31"
+#define CONTENT_LENGTH_2 "\x00\x0e\x63\x6f\x6e\x74\x65\x6e\x74\x2d\x6c\x65\x6e\x67\x74\x68\x01\x32"
+
+static void test_content_length(void)
+{
+    h2o_hpack_header_table_t header_table;
+    h2o_req_t req;
+    h2o_iovec_t expect;
+    int pseudo_headers_map;
+    size_t content_length;
+    const char *err_desc = NULL;
+    int r;
+
+    memset(&header_table, 0, sizeof(header_table));
+    header_table.hpack_capacity = 4096;
+
+    /* a request that carries a single content-length header is accepted */
+    memset(&req, 0, sizeof(req));
+    h2o_mem_init_pool(&req.pool);
+    r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
+                                &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_headers_map,
+                                &content_length, &expect, NULL, NULL, (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1,
+                                sizeof(REQUEST_PREFIX CONTENT_LENGTH_1) - 1, &err_desc);
+    ok(r == 0);
+    ok(content_length == 1);
+    h2o_mem_clear_pool(&req.pool);
+
+    /* a request that carries two content-length headers is rejected; RFC 9113 section 8.1.1 requires a message that
+     * carries conflicting content-length header fields to be treated as malformed */
+    memset(&req, 0, sizeof(req));
+    h2o_mem_init_pool(&req.pool);
+    err_desc = NULL;
+    r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
+                                &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_headers_map,
+                                &content_length, &expect, NULL, NULL,
+                                (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1 CONTENT_LENGTH_2,
+                                sizeof(REQUEST_PREFIX CONTENT_LENGTH_1 CONTENT_LENGTH_2) - 1, &err_desc);
+    ok(r == H2O_HTTP2_ERROR_PROTOCOL);
+    ok(err_desc != NULL);
+    h2o_mem_clear_pool(&req.pool);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -702,4 +748,5 @@ void test_lib__http2__hpack(void)
     subtest("inherit-invalid", test_inherit_invalid);
     subtest("dynamic-table-size-update", test_dynamic_table_size_update);
     subtest("empty-header-name", test_more_soft_errors);
+    subtest("content-length", test_content_length);
 }
