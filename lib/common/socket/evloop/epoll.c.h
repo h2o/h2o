@@ -49,13 +49,15 @@ static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t event
 
     if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0) {
         op = EPOLL_CTL_ADD;
-        sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
     } else {
         op = EPOLL_CTL_MOD;
     }
     while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
         ;
-    return ret == 0;
+    if (ret != 0)
+        return 0;
+    sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
+    return 1;
 }
 
 static int delete_from_epoll_on_close(struct st_h2o_evloop_socket_t *sock)
