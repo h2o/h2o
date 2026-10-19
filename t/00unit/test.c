@@ -170,6 +170,7 @@ int main(int argc, char **argv)
         subtest("lib/common/absprio.c", test_lib__common__absprio_c);
         subtest("lib/core/config.c", test_lib__core_config_c);
         subtest("lib/core/headers.c", test_lib__core__headers_c);
+        subtest("lib/core/logconf.c", test_lib__core__logconf_c);
         subtest("lib/core/proxy.c", test_lib__core__proxy_c);
         subtest("lib/core/util.c", test_lib__core__util_c);
         subtest("lib/handler/connect.c", test_lib__handler__connect_c);

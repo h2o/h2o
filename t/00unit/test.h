@@ -64,6 +64,7 @@ void test_lib__common__url_c(void);
 void test_lib__common__absprio_c(void);
 void test_lib__core_config_c(void);
 void test_lib__core__headers_c(void);
+void test_lib__core__logconf_c(void);
 void test_lib__core__proxy_c(void);
 void test_lib__core__util_c(void);
 void test_lib__handler__connect_c(void);
