@@ -285,7 +285,7 @@ static unsigned buffer_size_to_power(size_t sz)
     unsigned power = sizeof(unsigned long long) * 8 - __builtin_clzll(sz) - 1;
     if (power < H2O_BUFFER_MIN_ALLOC_POWER) {
         power = H2O_BUFFER_MIN_ALLOC_POWER;
-    } else if (sz != (1 << power)) {
+    } else if (sz != ((size_t)1 << power)) {
         ++power;
     }
     return power;
