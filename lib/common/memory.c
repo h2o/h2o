@@ -460,10 +460,14 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     fallocate_ret = ftruncate(fd, new_allocsize);
                 if (fallocate_ret != 0) {
                     h2o_perror("failed to resize temporary file");
+                    if (inbuf->_fd == -1)
+                        close(fd);
                     goto MapError;
                 }
                 if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
                     h2o_perror("mmap failed");
+                    if (inbuf->_fd == -1)
+                        close(fd);
                     goto MapError;
                 }
                 if (inbuf->_fd == -1) {
