@@ -1501,9 +1501,12 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     const unsigned char *id;
     unsigned id_len;
     unsigned char *p;
+    int len;
 
     /* build data */
-    data.len = i2d_SSL_SESSION(session, NULL);
+    if ((len = i2d_SSL_SESSION(session, NULL)) <= 0)
+        return 0;
+    data.len = len;
     data.base = alloca(data.len);
     p = (void *)data.base;
     i2d_SSL_SESSION(session, &p);
