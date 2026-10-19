@@ -287,7 +287,6 @@ static h2o_redis_command_type_t detect_command_type(const char *formatted)
     p = strchr(p, '\n');
     CHECK(p);
     ++p;
-    CHECK(p);
 
 #define MATCH(c, target) strncasecmp(c, target, sizeof(target) - 1) == 0
     if (MATCH(p, "subscribe\r\n"))
