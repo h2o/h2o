@@ -529,6 +529,25 @@ static void test_hostport(void)
     input = h2o_iovec_init(H2O_STRLIT("[]:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
+
+    /* a port has to be followed by the end of the authority, or by the start of the path or of the query */
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8081"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == input.base + input.len);
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
+    ok(port == 8081);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8081abc"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8081 "));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8081#frag"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
 }
 
 static void test_parse(void)
