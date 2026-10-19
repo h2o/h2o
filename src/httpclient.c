@@ -1017,7 +1017,7 @@ int main(int argc, char **argv)
             }
             break;
         case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
-            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != 1) {
                 fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
                 exit(EXIT_FAILURE);
             }
