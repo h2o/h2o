@@ -1414,7 +1414,8 @@ const char *h2o_socket_get_error_string(int errnum, const char *default_err)
 
 static void create_ossl(h2o_socket_t *sock, int is_server)
 {
-    sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx);
+    if ((sock->ssl->ossl = SSL_new(sock->ssl->ssl_ctx)) == NULL)
+        h2o_fatal("no memory");
 #ifdef OPENSSL_IS_BORINGSSL
     if (is_server) {
         SSL_set_accept_state(sock->ssl->ossl);
