@@ -1744,6 +1744,9 @@ static void test_encoder_stream_input(void)
         ok(handle_decoder_stream_instruction(enc, buf, encode_insert_count_increment(buf, 2)) == 0);
         ok(enc->largest_known_received == 2);
         ok(handle_decoder_stream_error(enc, buf, encode_insert_count_increment(buf, 1)) == H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+        ok(handle_decoder_stream_error(enc, buf, encode_insert_count_increment(buf, INT64_MAX)) ==
+           H2O_HTTP3_ERROR_QPACK_DECODER_STREAM);
+        ok(enc->largest_known_received == 2);
 
         h2o_mem_clear_pool(&pool);
         h2o_qpack_destroy_encoder(enc);
