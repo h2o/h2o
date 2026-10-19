@@ -460,25 +460,37 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    h2o_buffer_reserve(&conn->input.headers_unparsed, frame.length);
-    memcpy(conn->input.headers_unparsed->bytes + conn->input.headers_unparsed->size, frame.payload, frame.length);
-    conn->input.headers_unparsed->size += frame.length;
+    if (conn->input.headers_unparsed->size + frame.length <= H2O_MAX_REQLEN) {
+        h2o_buffer_reserve(&conn->input.headers_unparsed, frame.length);
+        memcpy(conn->input.headers_unparsed->bytes + conn->input.headers_unparsed->size, frame.payload, frame.length);
+        conn->input.headers_unparsed->size += frame.length;
 
-    if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
-        conn->input.read_frame = expect_default;
+        if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
+            conn->input.read_frame = expect_default;
 
-        if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
-            hret = on_trailers(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes,
-                               conn->input.headers_unparsed->size, err_desc);
-        } else {
-            hret = on_head(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes, conn->input.headers_unparsed->size,
-                           err_desc, headers_had_end_stream);
+            if (stream != NULL && stream->state.res == STREAM_STATE_BODY) {
+                hret = on_trailers(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes,
+                                   conn->input.headers_unparsed->size, err_desc);
+            } else {
+                hret = on_head(conn, stream, (const uint8_t *)conn->input.headers_unparsed->bytes,
+                               conn->input.headers_unparsed->size, err_desc, headers_had_end_stream);
+            }
+            if (hret != 0)
+                ret = hret;
+
+            h2o_buffer_dispose(&conn->input.headers_unparsed);
+            conn->input.headers_unparsed = NULL;
         }
-        if (hret != 0)
-            ret = hret;
-
+    } else {
+        /* the header block is too large; the server applies the same limit to the header block that it receives, and
+         * the frames that carry the header block are not subject to flow control, so an origin that is not trusted
+         * would otherwise be able to make the client allocate an arbitrary amount of memory */
+        *err_desc = "header block is too large";
+        if (stream != NULL)
+            call_callback_with_error(stream, h2o_httpclient_error_protocol_violation);
         h2o_buffer_dispose(&conn->input.headers_unparsed);
         conn->input.headers_unparsed = NULL;
+        return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
     return ret;
