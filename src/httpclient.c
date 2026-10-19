@@ -1082,7 +1082,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
 #else
     { /* initialize QUIC context */
-        h2o_socket_t *socks[2], **sp = socks;
+        h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
         if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
             ++sp;
         if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
