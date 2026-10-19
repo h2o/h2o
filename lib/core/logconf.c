@@ -113,7 +113,7 @@ static h2o_iovec_t strdup_lowercased(const char *s, size_t len)
     return v;
 }
 
-static int determine_magicquote_nodes(h2o_logconf_t *logconf, char *errbuf)
+static void determine_magicquote_nodes(h2o_logconf_t *logconf)
 {
     size_t element_index;
     int quote_char = '\0'; /* the quote char being used if the state machine is within a string literal */
@@ -146,8 +146,6 @@ static int determine_magicquote_nodes(h2o_logconf_t *logconf, char *errbuf)
             }
         }
     }
-
-    return 1;
 }
 
 h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
@@ -388,8 +386,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
 #undef LAST_ELEMENT
 
     if (escape == H2O_LOGCONF_ESCAPE_JSON) {
-        if (!determine_magicquote_nodes(logconf, errbuf))
-            goto Error;
+        determine_magicquote_nodes(logconf);
     }
 
     return logconf;
