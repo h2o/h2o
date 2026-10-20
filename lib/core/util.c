@@ -226,6 +226,11 @@ static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
 static void redis_resumption_on_get(redisReply *reply, void *_accept_data, const char *errstr)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = _accept_data;
+
+    /* Being called while `get_command` is NULL means that `h2o_redis_command` failed synchronously, i.e., while the handshake is
+     * in progress. As the connection is in the connected state, that happens only when hiredis fails to allocate memory. */
+    if (accept_data->get_command == NULL)
+        h2o_fatal("no memory");
     accept_data->get_command = NULL;
 
     h2o_iovec_t session_data;
