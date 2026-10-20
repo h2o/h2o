@@ -293,7 +293,7 @@ ENDIF (ZLIB_FOUND)
 
 # Try to find system libyaml first
 IF (PKG_CONFIG_FOUND)
-    PKG_CHECK_MODULES(LIBYAML yaml-0.1)
+    PKG_CHECK_MODULES(LIBYAML yaml-0.1>=0.2)
     IF (LIBYAML_FOUND)
         INCLUDE_DIRECTORIES(${LIBYAML_INCLUDE_DIRS})
         LINK_DIRECTORIES(${LIBYAML_LIBRARY_DIRS})
@@ -310,6 +310,21 @@ ENDIF (NOT LIBYAML_FOUND)
 IF (NOT LIBYAML_FOUND)
     MESSAGE(STATUS "Using vendored libyaml")
 ENDIF (NOT LIBYAML_FOUND)
+
+# The vendored copy of libyaml is not compiled when the system library is used, so the vendored header must not be
+# used either. The structures of the two differ between the versions (the layout of `yaml_parser_t` differs between
+# libyaml 0.1 and 0.2), and using the header of one version with the library of the other is undefined behaviour. The
+# same applies to the header of hiredis.
+IF (LIBYAML_FOUND)
+    GET_PROPERTY(_h2o_include_directories DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+    SET(_h2o_include_directories_kept "")
+    FOREACH (_h2o_include_directory ${_h2o_include_directories})
+        IF (NOT _h2o_include_directory MATCHES "yaml/include$")
+            LIST(APPEND _h2o_include_directories_kept ${_h2o_include_directory})
+        ENDIF ()
+    ENDFOREACH ()
+    SET_PROPERTY(DIRECTORY PROPERTY INCLUDE_DIRECTORIES ${_h2o_include_directories_kept})
+ENDIF (LIBYAML_FOUND)
 
 # Try to find system brotli first
 IF (PKG_CONFIG_FOUND)
@@ -353,7 +368,7 @@ ENDIF (WITH_ZSTD)
 
 # Try to find system hiredis first, falling back to the vendored copy in deps/hiredis
 IF (PKG_CONFIG_FOUND)
-    PKG_CHECK_MODULES(HIREDIS hiredis)
+    PKG_CHECK_MODULES(HIREDIS hiredis>=1.0)
     IF (HIREDIS_FOUND)
         INCLUDE_DIRECTORIES(${HIREDIS_INCLUDE_DIRS})
         LINK_DIRECTORIES(${HIREDIS_LIBRARY_DIRS})
@@ -363,6 +378,19 @@ ENDIF (PKG_CONFIG_FOUND)
 IF (NOT HIREDIS_FOUND)
     MESSAGE(STATUS "Using vendored hiredis")
 ENDIF (NOT HIREDIS_FOUND)
+
+# See the note on the vendored copy of libyaml above; the header of hiredis must come from the same place as the
+# library that is linked against it.
+IF (HIREDIS_FOUND)
+    GET_PROPERTY(_h2o_include_directories DIRECTORY PROPERTY INCLUDE_DIRECTORIES)
+    SET(_h2o_include_directories_kept "")
+    FOREACH (_h2o_include_directory ${_h2o_include_directories})
+        IF (NOT _h2o_include_directory MATCHES "hiredis$")
+            LIST(APPEND _h2o_include_directories_kept ${_h2o_include_directory})
+        ENDIF ()
+    ENDFOREACH ()
+    SET_PROPERTY(DIRECTORY PROPERTY INCLUDE_DIRECTORIES ${_h2o_include_directories_kept})
+ENDIF (HIREDIS_FOUND)
 
 IF (PKG_CONFIG_FOUND)
     PKG_CHECK_MODULES(LIBCAP libcap)

@@ -3850,9 +3850,9 @@ static int on_config_ssl_offload(h2o_configurator_command_t *cmd, h2o_configurat
     return 0;
 }
 
-#if H2O_USE_NEVERBLEED
 static int on_config_neverbleed_offload(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
+#if H2O_USE_NEVERBLEED
     switch (h2o_configurator_get_one_of(cmd, node, "OFF,QAT,QAT-AUTO")) {
     case 0:
         neverbleed_offload = NEVERBLEED_OFFLOAD_OFF;
@@ -3866,10 +3866,16 @@ static int on_config_neverbleed_offload(h2o_configurator_command_t *cmd, h2o_con
     default:
         h2o_fatal("logic flaw");
     }
+#else
+    /* The directive is registered even when neverbleed is not compiled in, so that the operator is told that the
+     * feature is unavailable rather than being told that the directive does not exist. It also keeps the list of the
+     * directives that the server supports in sync with the documentation, which the test suite compares. */
+    h2o_configurator_errprintf(cmd, node, "neverbleed support is not compiled in (build with -DWITH_NEVERBLEED=ON)\n");
+    return -1;
+#endif
 
     return 0;
 }
-#endif
 
 static int on_config_io_uring_batch_size(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -5029,10 +5035,8 @@ static void setup_configurators(void)
         h2o_configurator_define_command(c, "tcp-reuseport", H2O_CONFIGURATOR_FLAG_GLOBAL, on_tcp_reuseport);
         h2o_configurator_define_command(c, "ssl-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_ssl_offload);
-#if H2O_USE_NEVERBLEED
         h2o_configurator_define_command(c, "neverbleed-offload", H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_neverbleed_offload);
-#endif
         h2o_configurator_define_command(c, "io_uring-batch-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_io_uring_batch_size);
