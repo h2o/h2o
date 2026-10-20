@@ -489,11 +489,6 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                 conn->req.input.scheme = url.scheme;
                 conn->req.input.path = url.path;
                 host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
-            } else if (conn->req.input.path.len != 1 || conn->req.input.path.base[0] != '*') {
-                /* The request target is neither in the origin-form nor in the absolute-form, and it is not the
-                 * asterisk-form either (RFC 9112 section 3.2). Reject it, rather than forwarding a target that does not
-                 * conform to any of the forms. */
-                return "invalid request";
             }
         }
         /* move host header to req->authority */
