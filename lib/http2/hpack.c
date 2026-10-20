@@ -90,7 +90,7 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
         return NULL;
     if ((entry->flags & NGHTTP2_HUFF_SYM) != 0) {
         *dst++ = entry->sym;
-        *seen_char_types |= (entry->flags & NGHTTP2_HUFF_INVALID_CHARS);
+        *seen_char_types |= (entry->flags & (NGHTTP2_HUFF_INVALID_CHARS | NGHTTP2_HUFF_UPPER_CASE_CHAR));
     }
     *state = entry->state;
     *maybe_eos = (entry->flags & NGHTTP2_HUFF_ACCEPTED) != 0;
