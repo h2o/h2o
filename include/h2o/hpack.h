@@ -108,5 +108,23 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
 int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
                              h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
                              const char **err_desc);
+/**
+ * Returns if given field should not be compressed due to security / privacy concerns around wire-size change.
+ */
+static int h2o_hpack_dont_compress(const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags);
+
+/* inline functions */
+
+inline int h2o_hpack_dont_compress(const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
+{
+    int dont_compress = flags.dont_compress;
+
+    if (!dont_compress && h2o_iovec_is_token(name))
+        dont_compress = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name)->flags.dont_compress;
+    if (dont_compress)
+        dont_compress = value.len < 20;
+
+    return dont_compress;
+}
 
 #endif
