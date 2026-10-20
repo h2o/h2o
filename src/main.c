@@ -1673,10 +1673,20 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
     /* create signer */
     if (use_neverbleed) {
 #if H2O_USE_NEVERBLEED
+        /* The private key is provided by the neverbleed provider, and the function that calculates the signature
+         * schemes expects a key of the legacy API: it dereferences the result of EVP_PKEY_get1_EC_KEY(), which is NULL
+         * for a key that belongs to a provider. The schemes are therefore calculated from the certificate, whose key is
+         * the key that the client verifies, and which the private key corresponds to. */
+        EVP_PKEY *schemes_key = key;
+        if (cert != NULL) {
+            EVP_PKEY *cert_key = X509_get_pubkey(cert);
+            if (cert_key != NULL)
+                schemes_key = cert_key;
+        }
         pctx->sc.async_digestsign = (struct async_nb_picotls_context_t){
             .super = {async_nb_picotls_sign},
             .key = key,
-            .schemes = ptls_openssl_lookup_signature_schemes(key),
+            .schemes = ptls_openssl_lookup_signature_schemes(schemes_key),
         };
         EVP_PKEY_up_ref(key);
         if (pctx->sc.async_digestsign.schemes == NULL)
