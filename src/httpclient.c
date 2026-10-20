@@ -1120,6 +1120,10 @@ int main(int argc, char **argv)
         }
         is_connect = 1;
     }
+    if (udp_sock != NULL && !is_connect) {
+        fprintf(stderr, "-X can only be used for creating a tunnel\n");
+        exit(EXIT_FAILURE);
+    }
     const char *input_path = input_file;
     if (is_connect && input_path == NULL)
         input_path = "/dev/stdin";
