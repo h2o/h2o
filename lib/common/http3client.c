@@ -592,9 +592,11 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
-    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
-    if (req->super._cb.on_body == NULL)
+    if (req->super._cb.on_body == NULL) {
+        req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_CLOSED;
         return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
+    }
+    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
 
     /* handle body */
     req->handle_input = handle_input_expect_data_frame;
