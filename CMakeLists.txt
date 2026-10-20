@@ -528,6 +528,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/socket.c
+    t/00unit/lib/common/socketpool.c
     t/00unit/lib/common/string.c
     t/00unit/lib/common/rand.c
     t/00unit/lib/common/time.c
@@ -566,6 +567,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/multithread.c
     lib/common/serverutil.c
     lib/common/socket.c
+    lib/common/socketpool.c
     lib/common/string.c
     lib/common/rand.c
     lib/common/time.c
