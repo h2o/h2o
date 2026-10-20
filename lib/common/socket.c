@@ -1326,6 +1326,8 @@ h2o_iovec_t h2o_socket_log_ssl_ech_cipher_bits(h2o_socket_t *sock, h2o_mem_pool_
 
 h2o_iovec_t h2o_socket_log_ssl_backend(h2o_socket_t *sock, h2o_mem_pool_t *pool)
 {
+    if (sock->ssl == NULL)
+        return h2o_iovec_init(NULL, 0);
     if (sock->ssl->ptls != NULL)
         return h2o_iovec_init(H2O_STRLIT("picotls"));
     if (sock->ssl->ossl != NULL)
