@@ -866,6 +866,10 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
+        if (ext_node->data.sequence.size == 0) {
+            h2o_configurator_errprintf(cmd, ext_node, "`extensions` must not be empty");
+            return -1;
+        }
         exts = alloca((ext_node->data.sequence.size + 1) * sizeof(*exts));
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
