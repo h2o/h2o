@@ -829,6 +829,7 @@ static void test_host_to_sun(void)
     memset(host + 5, 'a', sizeof(sa.sun_path) + 1);
     err = h2o_url_host_to_sun(h2o_iovec_init(host, 5 + sizeof(sa.sun_path) + 1), &sa);
     ok(err != NULL && err != h2o_url_host_to_sun_err_is_not_unix_socket);
+}
 
 static void test_resolve_path(void)
 {
