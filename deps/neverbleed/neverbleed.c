@@ -108,7 +108,7 @@ struct st_neverbleed_thread_data_t {
 /**
  * a variant of pthread_once, that does not require you to declare a callback, nor have a global variable
  */
-#define NEVERBLEED_MULTITHREAD_ONCE(block)                                                                                                \
+#define NEVERBLEED_MULTITHREAD_ONCE(block)                                                                                         \
     do {                                                                                                                           \
         static volatile int lock = 0;                                                                                              \
         int lock_loaded = lock;                                                                                                    \
@@ -701,14 +701,11 @@ static int priv_dec_stub(neverbleed_iobuf_t *buf)
         size_t outlen = sizeof(out);
         EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(pkey, NULL);
         int ok = 0;
-        if (ctx != NULL && EVP_PKEY_decrypt_init(ctx) > 0 &&
-            EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_WITH_TLS_PADDING) > 0) {
+        if (ctx != NULL && EVP_PKEY_decrypt_init(ctx) > 0 && EVP_PKEY_CTX_set_rsa_padding(ctx, RSA_PKCS1_WITH_TLS_PADDING) > 0) {
             OSSL_PARAM params[3], *p = params;
-            *p++ = OSSL_PARAM_construct_uint(OSSL_ASYM_CIPHER_PARAM_TLS_CLIENT_VERSION,
-                                             (unsigned int *)&tls_client_version);
+            *p++ = OSSL_PARAM_construct_uint(OSSL_ASYM_CIPHER_PARAM_TLS_CLIENT_VERSION, (unsigned int *)&tls_client_version);
             *p++ = OSSL_PARAM_construct_end();
-            if (EVP_PKEY_CTX_set_params(ctx, params) > 0 &&
-                EVP_PKEY_decrypt(ctx, out, &outlen, from, flen) > 0)
+            if (EVP_PKEY_CTX_set_params(ctx, params) > 0 && EVP_PKEY_decrypt(ctx, out, &outlen, from, flen) > 0)
                 ok = 1;
         }
         EVP_PKEY_CTX_free(ctx);
@@ -1107,8 +1104,7 @@ static int sig_digest_sign_final(void *vctx, unsigned char *sig, size_t *siglen,
     return 1;
 }
 
-static int sig_digest_sign(void *vctx, unsigned char *sig, size_t *siglen, size_t sigsize, const unsigned char *tbs,
-                              size_t tbslen)
+static int sig_digest_sign(void *vctx, unsigned char *sig, size_t *siglen, size_t sigsize, const unsigned char *tbs, size_t tbslen)
 {
     struct sig_ctx *ctx = vctx;
 
@@ -1436,8 +1432,7 @@ static int ec_sig_sign_init(void *vctx, void *vkey, const OSSL_PARAM params[])
     return 1;
 }
 
-static int ec_sig_sign(void *vctx, unsigned char *sig, size_t *siglen, size_t sigsize, const unsigned char *tbs,
-                          size_t tbslen)
+static int ec_sig_sign(void *vctx, unsigned char *sig, size_t *siglen, size_t sigsize, const unsigned char *tbs, size_t tbslen)
 {
     struct ec_sig_ctx *ctx = vctx;
     struct ec_keydata *key = ctx->keydata;
@@ -1529,7 +1524,7 @@ static int ec_sig_digest_sign_final(void *vctx, unsigned char *sig, size_t *sigl
 }
 
 static int ec_sig_digest_sign(void *vctx, unsigned char *sig, size_t *siglen, size_t sigsize, const unsigned char *tbs,
-                                 size_t tbslen)
+                              size_t tbslen)
 {
     struct ec_sig_ctx *ctx = vctx;
     if (sig == NULL) {
@@ -1638,7 +1633,7 @@ static int asym_cipher_decrypt_init(void *vctx, void *vkey, const OSSL_PARAM par
 }
 
 static int asym_cipher_decrypt(void *vctx, unsigned char *out, size_t *outlen, size_t outsize, const unsigned char *in,
-                                  size_t inlen)
+                               size_t inlen)
 {
     struct asym_cipher_ctx *ctx = vctx;
     struct rsa_keydata *key = ctx->keydata;
@@ -2148,26 +2143,25 @@ static int digestsign_stub(neverbleed_iobuf_t *buf)
         if (EVP_PKEY_CTX_set_rsa_mgf1_md(pkey_ctx, md) != 1)
             goto Softfail;
     }
-    /* ED25519 keys can never be loaded, so use the Update -> Final call chain without worrying about backward compatibility */
-    if (EVP_DigestSignUpdate(mdctx, signdata, signlen) != 1)
-        goto Softfail;
-    if (EVP_DigestSignFinal(mdctx, NULL, &digestlen) != 1)
+    /* Sign the data. The one-shot call is used rather than the Update -> Final chain: the finalization of the latter
+     * consumes the operation, so it cannot be used to obtain the size of the signature beforehand, and the size of an
+     * ECDSA signature is not known in advance. ED25519 keys can never be loaded, so the one-shot call is safe for every
+     * key that is supported. */
+    digestlen = sizeof(digestbuf);
+    if (EVP_DigestSign(mdctx, digestbuf, &digestlen, signdata, signlen) != 1)
         goto Softfail;
     if (sizeof(digestbuf) < digestlen) {
         warnf("%s: digest unexpectedly long as %zu bytes", __FUNCTION__, digestlen);
         goto Softfail;
     }
-    if (EVP_DigestSignFinal(mdctx, digestbuf, &digestlen) != 1)
-        goto Softfail;
 
 Respond: /* build response */
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, digestbuf, digestlen);
     if (mdctx != NULL)
         EVP_MD_CTX_destroy(mdctx);
-Exit: __attribute__((unused))
-    if (pkey != NULL)
-        EVP_PKEY_free(pkey);
+Exit:
+    __attribute__((unused)) if (pkey != NULL) EVP_PKEY_free(pkey);
     return 0;
 
 Softfail:
@@ -2276,8 +2270,8 @@ static int decrypt_stub(neverbleed_iobuf_t *buf)
 Respond:
     iobuf_dispose(buf);
     iobuf_push_bytes(buf, decryptbuf, decryptlen);
-Exit: __attribute__((unused))
-    RSA_free(rsa);
+Exit:
+    __attribute__((unused)) RSA_free(rsa);
     EVP_PKEY_free(pkey);
     return 0;
 
@@ -2410,9 +2404,8 @@ static int load_key_stub(neverbleed_iobuf_t *buf)
         rsa = EVP_PKEY_get1_RSA(pkey);
         /* Reject large key sizes */
         if (RSA_size(rsa) > NEVERBLEED_MAX_RSA_BYTES) {
-            snprintf(errbuf, sizeof(errbuf),
-                "RSA key too large (%d bytes); neverbleed maximum is %d bytes (%d bits)",
-                RSA_size(rsa), NEVERBLEED_MAX_RSA_BYTES, NEVERBLEED_MAX_RSA_BYTES * 8);
+            snprintf(errbuf, sizeof(errbuf), "RSA key too large (%d bytes); neverbleed maximum is %d bytes (%d bits)",
+                     RSA_size(rsa), NEVERBLEED_MAX_RSA_BYTES, NEVERBLEED_MAX_RSA_BYTES * 8);
             goto Respond;
         }
         type = NEVERBLEED_TYPE_RSA;
