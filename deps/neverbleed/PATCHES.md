@@ -32,3 +32,19 @@ daemon instead of corrupting its heap.
 
 **Files touched:** `neverbleed.c` (`is_slot_in_use()`, `del_pkey_stub()`, `keymgmt_free()`,
 `ec_keymgmt_free()`).
+
+## 2. Sign the data with the one-shot call
+
+**Status:** applied in this repository. Upstream: not reported yet.
+
+The OpenSSL 3 provider variant of the daemon obtained the size of the signature by calling
+`EVP_DigestSignFinal()` with a null buffer, and then called it a second time to obtain the signature. The second
+call fails for the ECDSA keys, as the first call already consumed the signing operation, and the daemon then
+responds with an empty signature. A TLS handshake that uses an ECDSA certificate therefore failed, and the cipher
+suites that use one did not work at all. The RSA cipher suites were unaffected.
+
+Use the one-shot `EVP_DigestSign()` call instead. The comment in the code noted that the `Update` -> `Final` chain was
+used because the ED25519 keys cannot be loaded; as the one-shot call behaves identically for every other key type,
+the chain is not needed.
+
+**Files touched:** `neverbleed.c` (`digestsign_stub()`).
