@@ -213,6 +213,12 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
                     continue;
+                if (token == H2O_TOKEN_CONTENT_LENGTH && !req->is_tunnel_req) {
+                    /* The content-length of the request that is sent to the origin is generated below. Forwarding the
+                     * one that the client sent as well would result in the request having two of them, which a peer
+                     * that rejects such a request would refuse to serve. */
+                    continue;
+                }
                 if (token == H2O_TOKEN_COOKIE) {
                     h2o_vector_reserve(&req->pool, &cookie_values, cookie_values.size + 1);
                     cookie_values.entries[cookie_values.size++] = h->value;
