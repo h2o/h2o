@@ -190,7 +190,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                 const h2o_token_t *token;
                 const char *quote_end = strchr(++pt, '}');
                 if (quote_end == NULL) {
-                    sprintf(errbuf, "failed to compile log format: unterminated header name starting at: \"%16s\"", pt);
+                    sprintf(errbuf, "failed to compile log format: unterminated header name starting at: \"%.16s\"", pt);
                     goto Error;
                 }
                 const char modifier = quote_end[1];
