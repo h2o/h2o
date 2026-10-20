@@ -1835,11 +1835,11 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         if (bufs[i].len == 0)
             continue;
         /* copy one body vector */
-        payload_size += bufs[i].len;
         stream->sendbuf.vecs.entries[dst_slot++] = (struct st_h2o_http3_server_sendvec_t){
             .vec = bufs[i],
-            .entity_offset = stream->sendbuf.final_body_size,
+            .entity_offset = stream->sendbuf.final_body_size + payload_size,
         };
+        payload_size += bufs[i].len;
     }
     if (payload_size != 0) {
         /* build DATA frame header */
@@ -2006,6 +2006,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->qpack_blocked_ref = 0;
     stream->qpack_blocked_ever = 0;
     stream->req_streaming_eos_delivered = 0;
+    stream->datagram_flow_id = UINT64_MAX;
     stream->req_body = NULL;
     memset(&stream->stats, 0, sizeof(stream->stats));
 

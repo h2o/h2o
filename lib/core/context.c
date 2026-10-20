@@ -62,6 +62,7 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic = quicly_spec_context;
     h3ctx->quic.tls = &h3ctx->tls;
     h3ctx->quic.transport_params.max_streams_uni = 10;
+    h3ctx->quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     if (!use_ecn)
         h3ctx->quic.enable_ratio.ecn = 0;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];

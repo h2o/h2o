@@ -1180,8 +1180,6 @@ void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf)
     while (!h2o_linklist_is_empty(&conf->configurators)) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, conf->configurators.next);
         h2o_linklist_unlink(&c->_link);
-        if (c->dispose != NULL)
-            c->dispose(c);
         destroy_configurator(c);
     }
 }

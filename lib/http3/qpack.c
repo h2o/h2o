@@ -171,7 +171,7 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
         size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
         if (new_capacity > table->buf_end - table->buf_start) {
             struct st_h2o_qpack_header_t **newbuf = h2o_mem_alloc(sizeof(*newbuf) * new_capacity);
-            memcpy(newbuf, table->first, sizeof(*newbuf) * count);
+            h2o_memcpy(newbuf, table->first, sizeof(*newbuf) * count);
             free(table->buf_start);
             table->buf_start = newbuf;
             table->first = newbuf;
@@ -1051,7 +1051,7 @@ static void flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len, 
         /* uncompressed */
         buf->entries[buf->size] &= ~((2 << prefix_bits) - 1); /* clear huffman mark */
         flatten_int(buf, len, prefix_bits);
-        memcpy(buf->entries + buf->size, src, len);
+        h2o_memcpy(buf->entries + buf->size, src, len);
         buf->size += len;
     } else {
         /* build huffman header and adjust the location (if necessary) */

@@ -133,5 +133,15 @@ void test_lib__handler__headers_c(void)
     ok(headers_are(&pool, &headers,
                    H2O_STRLIT("content-type: text/plain\ncache-control: public, max-age=86400\nset-cookie: a=b\nx-foo: bar\n")));
 
+    /* removing a cookie from multiple cookie headers, the first of which becomes empty */
+    headers = (h2o_headers_t){NULL};
+    h2o_add_header(&pool, &headers, H2O_TOKEN_COOKIE, NULL, h2o_strdup(&pool, H2O_STRLIT("a=1")).base, 3);
+    h2o_add_header(&pool, &headers, H2O_TOKEN_COOKIE, NULL, h2o_strdup(&pool, H2O_STRLIT("a=2; b=3")).base, 8);
+    header_str = h2o_iovec_init(H2O_STRLIT("a"));
+    args = (h2o_headers_command_arg_t){&header_str, {NULL}};
+    cmd = (h2o_headers_command_t){H2O_HEADERS_CMD_COOKIE_UNSET, &args, 1};
+    h2o_rewrite_headers(&pool, &headers, &cmd);
+    ok(headers_are(&pool, &headers, H2O_STRLIT("cookie: b=3\n")));
+
     h2o_mem_clear_pool(&pool);
 }

@@ -45,7 +45,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         size_t name_len;
         while ((name = h2o_next_token(&iter, '&', '&', &name_len, &value)) != NULL) {
             if (h2o_memis(name, name_len, H2O_STRLIT("sample-ratio"))) {
-                if (sscanf(h2o_uri_unescape(&req->pool, value.base, value.len).base, "%f", &sample_ratio) != 1 ||
+                h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
+                if (unescaped.base == NULL || sscanf(unescaped.base, "%f", &sample_ratio) != 1 ||
                     !(0 <= sample_ratio && sample_ratio <= 1)) {
                     h2o_send_error_400(req, "Bad Request", "sample-rate must be a number between 0 and 1", 0);
                     ret = 0;

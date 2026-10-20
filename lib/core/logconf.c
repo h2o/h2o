@@ -190,7 +190,7 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                 const h2o_token_t *token;
                 const char *quote_end = strchr(++pt, '}');
                 if (quote_end == NULL) {
-                    sprintf(errbuf, "failed to compile log format: unterminated header name starting at: \"%16s\"", pt);
+                    sprintf(errbuf, "failed to compile log format: unterminated header name starting at: \"%.16s\"", pt);
                     goto Error;
                 }
                 const char modifier = quote_end[1];
@@ -243,6 +243,10 @@ h2o_logconf_t *h2o_logconf_compile(const char *fmt, int escape, char *errbuf)
                     } else if (h2o_memis(pt, quote_end - pt, H2O_STRLIT("usec_frac"))) {
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_USEC_FRAC);
                     } else {
+                        if (quote_end == pt) {
+                            sprintf(errbuf, "failed to compile log format: empty format for %%{...}t");
+                            goto Error;
+                        }
                         h2o_iovec_t name = h2o_strdup(NULL, pt, quote_end - pt);
                         NEW_ELEMENT(ELEMENT_TYPE_TIMESTAMP_STRFTIME);
                         LAST_ELEMENT()->data.name = name;
@@ -407,6 +411,7 @@ void h2o_logconf_dispose(h2o_logconf_t *logconf)
         free(logconf->elements.entries[i].suffix.base);
         switch (logconf->elements.entries[i].type) {
         case ELEMENT_TYPE_EXTENDED_VAR:
+        case ELEMENT_TYPE_ENV_VAR:
         case ELEMENT_TYPE_IN_HEADER_STRING:
         case ELEMENT_TYPE_OUT_HEADER_STRING:
         case ELEMENT_TYPE_TIMESTAMP_STRFTIME:
@@ -696,8 +701,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitNull;
-            RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
