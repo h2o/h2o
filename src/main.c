@@ -5234,7 +5234,7 @@ int main(int argc, char **argv)
         size_t i;
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
-        conf.server_starter.bound_fd_map = malloc(conf.server_starter.num_fds);
+        conf.server_starter.bound_fd_map = h2o_mem_alloc(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
     }
 
@@ -5514,7 +5514,7 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
-    conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
+    conf.threads = h2o_mem_alloc(sizeof(conf.threads[0]) * conf.thread_map.size);
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);
