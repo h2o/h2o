@@ -774,13 +774,13 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
         fprintf(stderr, "[lib/ssl.c] %s:redisCommand GET failed:%s\n", __func__, ctx->errstr);
         goto Exit;
     }
-    if (reply->type == REDIS_REPLY_STRING) {
-        int r = parse_tickets(&tickets, reply->str, reply->len, errbuf);
-        freeReplyObject(reply);
-        if (r != 0) {
-            fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
-            goto Exit;
-        }
+    int r = 0;
+    if (reply->type == REDIS_REPLY_STRING)
+        r = parse_tickets(&tickets, reply->str, reply->len, errbuf);
+    freeReplyObject(reply);
+    if (r != 0) {
+        fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
+        goto Exit;
     }
     if (tickets.size > 1)
         qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);
