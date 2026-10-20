@@ -968,8 +968,7 @@ void h2o_socket_sendvec(h2o_socket_t *sock, h2o_sendvec_t *vecs, size_t cnt, uns
         /* If the pull vector has a send callback, and if we have the necessary conditions to utilize it, Let it write directly to
          * the socket. */
 #if !H2O_USE_LIBUV
-        if (pull_index == cnt - 1 && vecs[pull_index].callbacks != NULL &&
-            do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
+        if (pull_index == cnt - 1 && do_write_with_sendvec(sock, bufs, cnt - 1, vecs + pull_index))
             return;
 #endif
         /* Load the vector onto memory now. */
