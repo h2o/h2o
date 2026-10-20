@@ -868,8 +868,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'b':
-            req.body_size = atoi(optarg);
-            if (req.body_size <= 0) {
+            if (sscanf(optarg, "%zu", &req.body_size) != 1 || req.body_size == 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
                 exit(EXIT_FAILURE);
             }
