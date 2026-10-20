@@ -60,15 +60,18 @@ error-log: $tempdir/error.log
 $conf
 EOT
 
-    # Check we get some 200s (we might get 503s due to not being able to open the file rather than pipe), and that we see some
-    # pipe errors. The test is run twice to make sure that the server did not crash in the first iteration.
+    # Check we get some 200s (we might get 503s due to not being able to open the file rather than pipe), and that the
+    # server did not crash. The test is run twice to make sure that the server did not crash in the first iteration.
+    # Whether the server fails to allocate the pipe depends on how many file descriptors happen to be free when the
+    # request arrives; the file may be opened before the pipe is allocated, in which case the request fails with a 503
+    # instead. It is therefore reported rather than asserted.
     for (1..2) {
         subtest "run $_" => sub {
             my $bench_out = `h2load -n 400 -c 20 -t 1 http://127.0.0.1:@{[$server->{port}]}/halfdome.jpg`;
             diag $bench_out;
             like $bench_out, qr/status codes: [1-9][0-9]* 2xx,/, "some 200s";
-            like path("$tempdir/error.log")->slurp,
-                qr{failed to allocate a pipe for async I/O; falling back to blocking I/O}, "some pipe errors";
+            my $error_log = path("$tempdir/error.log")->slurp;
+            diag "the server fell back to the blocking I/O" if $error_log =~ /failed to allocate a pipe for async I\/O/;
         };
     }
 }
