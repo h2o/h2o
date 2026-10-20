@@ -670,7 +670,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         }
     } else if (req.body_size > 0) {
         *filler_remaining_bytes(client) = req.body_size;
-        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
+        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
         *proceed_req_cb = filler_proceed_request;
