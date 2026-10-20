@@ -64,7 +64,10 @@ static void *memory_status_init(void)
 static h2o_iovec_t memory_status_json(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     struct st_memory_status_ctx_t *csc = priv;
-    h2o_iovec_t ret;
+    h2o_iovec_t ret = {NULL};
+
+    if (req == NULL)
+        goto Exit;
 
 #define BUFSIZE 512
 #define FMT(prefix)                                                                                                                \
@@ -79,6 +82,7 @@ static h2o_iovec_t memory_status_json(void *priv, h2o_globalconf_t *gconf, h2o_r
 #undef ARGS
 #undef BUFSIZE
 
+Exit:
     pthread_mutex_destroy(&csc->mutex);
     free(csc);
     return ret;

@@ -119,7 +119,10 @@ static void duration_stats_free(struct st_duration_stats_t *stats)
 static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     struct st_duration_agg_stats_t *agg_stats = priv;
-    h2o_iovec_t ret;
+    h2o_iovec_t ret = {NULL};
+
+    if (req == NULL)
+        goto Exit;
 
 #define BUFSIZE 16384
 #define DURATION_FMT(x)                                                                                                            \
@@ -155,6 +158,8 @@ static h2o_iovec_t durations_status_final(void *priv, h2o_globalconf_t *gconf, h
     }
     ret.len += snprintf(ret.base + ret.len, BUFSIZE - ret.len, "]");
 #undef BUFSIZE
+
+Exit:
     duration_stats_free(&agg_stats->stats);
     pthread_mutex_destroy(&agg_stats->mutex);
 
