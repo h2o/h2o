@@ -696,8 +696,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
         case ELEMENT_TYPE_TIMESTAMP_SEC_SINCE_EPOCH: /* %{sec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
                 goto EmitNull;
-            RESERVE(sizeof(H2O_UINT32_LONGEST_STR) - 1);
-            pos += sprintf(pos, "%" PRIu32, (uint32_t)req->processed_at.at.tv_sec);
+            RESERVE(sizeof(H2O_UINT64_LONGEST_STR) - 1);
+            pos += sprintf(pos, "%" PRIu64, (uint64_t)req->processed_at.at.tv_sec);
             break;
         case ELEMENT_TYPE_TIMESTAMP_MSEC_SINCE_EPOCH: /* %{msec}t */
             if (h2o_timeval_is_null(&req->processed_at.at))
