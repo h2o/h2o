@@ -562,8 +562,8 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     if (cipher == NULL) {
         static uint8_t key[PTLS_AES128_KEY_SIZE];
         H2O_MULTITHREAD_ONCE({ ptls_openssl_random_bytes(key, sizeof(key)); });
-        cipher = EVP_CIPHER_CTX_new();
-        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+        if ((cipher = EVP_CIPHER_CTX_new()) == NULL || !EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL))
+            h2o_fatal("failed to setup the cipher for calculating the accept hash key");
     }
 
     uint8_t buf[(1 + 16 + 2) * 2 + QUICLY_MAX_CID_LEN_V1 + PTLS_AES_BLOCK_SIZE] = {0};
