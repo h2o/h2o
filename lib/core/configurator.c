@@ -870,6 +870,10 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
+            if (n->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, n, "`extensions` must be a scalar or sequence of scalar");
+                return -1;
+            }
             if ((exts[i] = normalize_ext(cmd, n)) == NULL)
                 return -1;
         }

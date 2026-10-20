@@ -2089,8 +2089,8 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
 static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_ech_create_opener_t **_opener,
                          ptls_iovec_t *retry_configs)
 {
-    struct ech_create_opener_t *opener =
-        h2o_mem_alloc(sizeof(opener) + sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
+    struct ech_create_opener_t *opener = h2o_mem_alloc(offsetof(struct ech_create_opener_t, configs) +
+                                                       sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
     *opener = (struct ech_create_opener_t){{ech_create_opener}};
     *_opener = &opener->super;
 

@@ -361,10 +361,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
 
-    if ((100 <= stream->input.status && stream->input.status <= 199) ||
-        (stream->input.status == 204 || stream->input.status == 304)) {
+    if (stream->input.status == 204 || stream->input.status == 304)
         stream->input.message_body_forbidden = 1;
-    }
 
     if (!extract_content_length(&stream->input.headers, &stream->input.remaining_content_length, err_desc)) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
