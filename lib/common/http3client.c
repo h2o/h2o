@@ -634,8 +634,16 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
     }
     memcpy(dst, req->sendbuf->bytes + off, *len);
 
-    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX)
+    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX) {
         call_proceed_req(req, NULL);
+        /* `proceed_req` might have synchronously either appended data by calling `do_write_req`, or raised an error:
+         *  * in the case of an error the stream is detached and quicly sends a reset,
+         *  * if data has been appended, notify quicly by clearing `*wrote_all`. */
+        if (qs->data == NULL)
+            return;
+        if (req->sendbuf->size > off + *len)
+            *wrote_all = 0;
+    }
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
