@@ -48,3 +48,17 @@ used because the ED25519 keys cannot be loaded; as the one-shot call behaves ide
 the chain is not needed.
 
 **Files touched:** `neverbleed.c` (`digestsign_stub()`).
+
+## 3. Use the EC context functions in the EC signature dispatch table
+
+**Status:** applied in this repository. Upstream: not reported yet.
+
+The dispatch table of the EC signature implementation used the functions of the RSA implementation for the
+initialization of the digest signing and for the update of the data to be signed. Those functions operate on
+`struct sig_ctx`, while the EC implementation uses `struct ec_sig_ctx`; the two structures have a different layout, so
+the initialization wrote the digest NID (an int) into the field that holds the pointer to the buffer of the data to be
+signed, and the update then used that value as a pointer. The ECDSA cipher suites therefore did not work at all, and
+the server could be killed by a signal while signing with an ECDSA key.
+
+**Files touched:** `neverbleed.c` (`ec_sig_digest_sign_init()`, `ec_sig_digest_sign_update()`, `ec_sig_functions[]`,
+`ec_sig_digest_sign()`).
