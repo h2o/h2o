@@ -50,6 +50,7 @@ struct st_h2o_status_collector_t {
         h2o_req_t *req;
         h2o_multithread_receiver_t *receiver;
     } src;
+    h2o_globalconf_t *globalconf;
     size_t num_remaining_threads_atomic;
     H2O_VECTOR(struct st_status_ctx_t) status_ctx;
 };
@@ -88,6 +89,12 @@ static void send_response(struct st_h2o_status_collector_t *collector)
 
     req = collector->src.req;
     if (!req) {
+        /* the request has been closed; let the handlers release the contexts */
+        for (i = 0; i < collector->globalconf->statuses.size; i++) {
+            h2o_status_handler_t *sh = collector->globalconf->statuses.entries[i];
+            if (collector->status_ctx.entries[i].active && sh->init != NULL)
+                sh->final(collector->status_ctx.entries[i].ctx, collector->globalconf, NULL);
+        }
         h2o_mem_release_shared(collector);
         return;
     }
@@ -183,6 +190,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
         }
         collector->src.req = req;
         collector->src.receiver = &status_ctx->receiver;
+        collector->globalconf = req->conn->ctx->globalconf;
         collector->num_remaining_threads_atomic = self->receivers.size;
 
         for (i = 0; i != self->receivers.size; ++i) {
