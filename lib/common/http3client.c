@@ -966,7 +966,7 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
         return;
 
     struct st_h2o_http3client_req_t *req = qs->data;
-    if (req->on_read_datagrams != NULL)
+    if (req != NULL && req->on_read_datagrams != NULL)
         req->on_read_datagrams(&req->super, &payload, 1);
 }
 
