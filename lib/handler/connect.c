@@ -757,38 +757,33 @@ struct st_udp_capsule_t {
 static int udp_decode_target(quicly_address_t *dest, const uint8_t **src, const uint8_t *end)
 {
     uint8_t ip_version;
-    uint16_t port;
     if (ptls_decode8(&ip_version, src, end) != 0)
         return -1;
     switch (ip_version) {
     case 0:
         *dest = (quicly_address_t){0};
         return 0;
-    case 4: {
-        uint32_t addr;
-        if (ptls_decode32(&addr, src, end) != 0)
+    case 4:
+        dest->sin = (struct sockaddr_in){.sin_family = AF_INET};
+        if ((size_t)(end - *src) < sizeof(dest->sin.sin_addr) + sizeof(dest->sin.sin_port))
             return -1;
-        dest->sin = (struct sockaddr_in){.sin_family = AF_INET, .sin_addr.s_addr = htonl(addr)};
-        break;
-    }
-    case 6: {
-        uint64_t addr[2];
-        if (ptls_decode64(&addr[0], src, end) != 0 || ptls_decode64(&addr[1], src, end) != 0)
-            return -1;
+        memcpy(&dest->sin.sin_addr, *src, sizeof(dest->sin.sin_addr));
+        *src += sizeof(dest->sin.sin_addr);
+        memcpy(&dest->sin.sin_port, *src, sizeof(dest->sin.sin_port));
+        *src += sizeof(dest->sin.sin_port);
+        return 0;
+    case 6:
         dest->sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
-        quicly_encode64(quicly_encode64(dest->sin6.sin6_addr.s6_addr, addr[0]), addr[1]);
-        break;
-    }
+        if ((size_t)(end - *src) < sizeof(dest->sin6.sin6_addr) + sizeof(dest->sin6.sin6_port))
+            return -1;
+        memcpy(&dest->sin6.sin6_addr, *src, sizeof(dest->sin6.sin6_addr));
+        *src += sizeof(dest->sin6.sin6_addr);
+        memcpy(&dest->sin6.sin6_port, *src, sizeof(dest->sin6.sin6_port));
+        *src += sizeof(dest->sin6.sin6_port);
+        return 0;
     default:
         return -1;
     }
-    if (ptls_decode16(&port, src, end) != 0)
-        return -1;
-    if (ip_version == 4)
-        dest->sin.sin_port = htons(port);
-    else
-        dest->sin6.sin6_port = htons(port);
-    return 0;
 }
 
 static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const uint8_t **src, const uint8_t *end, int is_draft03)
