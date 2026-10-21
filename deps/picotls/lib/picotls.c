@@ -1991,9 +1991,13 @@ Exit:
 static int push_signature_algorithms(ptls_verify_certificate_t *vc, ptls_buffer_t *sendbuf)
 {
     /* The list sent when verify callback is not registered */
-    static const uint16_t default_algos[] = {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384, PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
-                                             PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384, PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
-                                             PTLS_SIGNATURE_RSA_PKCS1_SHA256, PTLS_SIGNATURE_RSA_PKCS1_SHA1, UINT16_MAX};
+    static const uint16_t default_algos[] = {PTLS_SIGNATURE_RSA_PSS_RSAE_SHA384,
+                                             PTLS_SIGNATURE_RSA_PSS_RSAE_SHA256,
+                                             PTLS_SIGNATURE_ECDSA_SECP384R1_SHA384,
+                                             PTLS_SIGNATURE_ECDSA_SECP256R1_SHA256,
+                                             PTLS_SIGNATURE_RSA_PKCS1_SHA256,
+                                             PTLS_SIGNATURE_RSA_PKCS1_SHA1,
+                                             UINT16_MAX};
     int ret;
 
     ptls_buffer_push_block(sendbuf, 2, {
@@ -2587,7 +2591,7 @@ static int send_client_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptls_
             ptls_aead_free(tls->ech.aead);
             tls->ech.aead = NULL;
             if ((ret = update_ch_hash_and_binder(tls->key_schedule, emitter->buf->base, mess_start, emitter->buf->off,
-                                                     psk.secret.base != NULL, binder_key, 0)) != 0)
+                                                 psk.secret.base != NULL, binder_key, 0)) != 0)
                 goto Exit;
         } else {
             /* update outer hash */
@@ -6099,6 +6103,9 @@ static void init_record_message_emitter(ptls_t *tls, struct st_ptls_record_messa
         {sendbuf, &tls->traffic_protection.enc, 5, begin_record_message, commit_record_message}};
 }
 
+/* the address of an empty input; see ptls_handshake */
+static const uint8_t empty_input[1] = {0};
+
 int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size_t *inlen, ptls_handshake_properties_t *properties)
 {
     struct st_ptls_record_message_emitter_t emitter;
@@ -6121,7 +6128,11 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *_sendbuf, const void *input, size
         break;
     }
 
-    const uint8_t *src = input, *const src_end = src + *inlen;
+    /* `input` is NULL when there is nothing to read. Forming a pointer from a null pointer, and
+       subtracting two null pointers, are undefined behaviour, so the address of an empty buffer is
+       used instead; its length is zero, so nothing is ever read from it. */
+    const uint8_t *src = input != NULL ? input : empty_input;
+    const uint8_t *const src_end = src + (input != NULL ? *inlen : 0);
     ptls_buffer_t decryptbuf;
 
     ptls_buffer_init(&decryptbuf, "", 0);
@@ -6225,8 +6236,7 @@ Exit:
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen)
 {
     if (!(tls->traffic_protection.enc.aead != NULL &&
-          (tls->traffic_protection.enc.tls12 || tls->traffic_protection.enc.epoch == 1 ||
-           tls->traffic_protection.enc.epoch == 3)))
+          (tls->traffic_protection.enc.tls12 || tls->traffic_protection.enc.epoch == 1 || tls->traffic_protection.enc.epoch == 3)))
         return PTLS_ERROR_IN_PROGRESS;
 
     /* "For AES-GCM, up to 2^24.5 full-size records (about 24 million) may be encrypted on a given connection while keeping a
@@ -7242,7 +7252,7 @@ void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)
 
     *state = (ptls_log_conn_state_t){
         .random_ = (float)r / ((uint64_t)UINT32_MAX + 1), /* [0..1), so that any(r) < sample_ratio where sample_ratio is [0..1] */
-        .address = {0}, /* inaddr6_any */
+        .address = {0},                                   /* inaddr6_any */
         .conn_id = conn_id,
     };
     if (peeraddr != NULL) {
