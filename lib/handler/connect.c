@@ -42,6 +42,15 @@ struct st_connect_handler_t {
 #define UDP_BOUND_OVERHEAD (8 + 1 + 16 + 2) /* Context ID, IP version, IPv6 address, UDP port */
 #define UDP_BIND_BUFFER_LIMIT (64 * 1024)
 
+struct st_udp_capsule_t {
+    uint64_t type;
+    uint64_t context_id;
+    union {
+        h2o_iovec_t datagram;
+        quicly_address_t assign;
+    } data;
+};
+
 struct st_server_address_t {
     struct sockaddr *sa;
     socklen_t salen;
@@ -718,42 +727,6 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static void udp_send_buffered(struct st_connect_generator_t *self)
-{
-    if (self->udp.ingress.doublebuf.inflight)
-        return;
-    h2o_iovec_t vec = h2o_doublebuffer_prepare(&self->udp.ingress.doublebuf, &self->udp.ingress.streambuf, SIZE_MAX);
-    if (vec.base == NULL)
-        return;
-    if (self->src_req->forward_datagram.read_ == NULL && self->sock != NULL && h2o_socket_is_reading(self->sock))
-        h2o_socket_read_stop(self->sock);
-    h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
-}
-
-static int udp_send_context_response(struct st_connect_generator_t *self, uint64_t type, uint64_t context_id)
-{
-    uint8_t capsule[18], encoded_id[8], *p = capsule;
-    size_t id_len = quicly_encodev(encoded_id, context_id) - encoded_id;
-    p = quicly_encodev(p, type);
-    p = quicly_encodev(p, id_len);
-    memcpy(p, encoded_id, id_len);
-    p += id_len;
-    if (self->udp.ingress.streambuf->size + (p - capsule) > UDP_BIND_BUFFER_LIMIT)
-        return -1;
-    h2o_buffer_append(&self->udp.ingress.streambuf, capsule, p - capsule);
-    udp_send_buffered(self);
-    return 0;
-}
-
-struct st_udp_capsule_t {
-    uint64_t type;
-    uint64_t context_id;
-    union {
-        h2o_iovec_t datagram;
-        quicly_address_t assign;
-    } data;
-};
-
 static int udp_decode_target(quicly_address_t *dest, const uint8_t **src, const uint8_t *end)
 {
     uint8_t ip_version;
@@ -807,30 +780,63 @@ static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const ui
         if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
             return -1;
         break;
-    default:
+    default: /* unknown capsules are skipped */
         *src = end;
         break;
     }
+
     return *src == end ? 0 : -1;
 }
 
-/* Returns 0 on success, -2 if incomplete, -1 if malformed. */
+/**
+ * Returns 0 on success, -2 if incomplete, -1 if malformed.
+ */
 static int udp_decode_capsule(struct st_udp_capsule_t *capsule, const uint8_t **src, const uint8_t *end, int is_draft03)
 {
     const uint8_t *start = *src;
     uint64_t length;
+
     *capsule = (struct st_udp_capsule_t){0};
+
     if ((capsule->type = ptls_decode_quicint(src, end)) == UINT64_MAX ||
         (length = ptls_decode_quicint(src, end)) == UINT64_MAX || length > (uint64_t)(end - *src)) {
         *src = start;
         return -2;
     }
-    const uint8_t *payload_end = *src + length;
+
     if (is_draft03 && capsule->type != 0) {
-        *src = payload_end; /* draft-03 has no bind control capsules */
+        *src += length; /* draft-03 has no bind control capsules */
         return 0;
     }
-    return udp_decode_capsule_payload(capsule, src, payload_end, is_draft03);
+
+    return udp_decode_capsule_payload(capsule, src, *src + length, is_draft03);
+}
+
+static void udp_send_buffered(struct st_connect_generator_t *self)
+{
+    if (self->udp.ingress.doublebuf.inflight)
+        return;
+    h2o_iovec_t vec = h2o_doublebuffer_prepare(&self->udp.ingress.doublebuf, &self->udp.ingress.streambuf, SIZE_MAX);
+    if (vec.base == NULL)
+        return;
+    if (self->src_req->forward_datagram.read_ == NULL && self->sock != NULL && h2o_socket_is_reading(self->sock))
+        h2o_socket_read_stop(self->sock);
+    h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static int udp_send_context_response(struct st_connect_generator_t *self, uint64_t type, uint64_t context_id)
+{
+    uint8_t capsule[18], encoded_id[8], *p = capsule;
+    size_t id_len = quicly_encodev(encoded_id, context_id) - encoded_id;
+    p = quicly_encodev(p, type);
+    p = quicly_encodev(p, id_len);
+    memcpy(p, encoded_id, id_len);
+    p += id_len;
+    if (self->udp.ingress.streambuf->size + (p - capsule) > UDP_BIND_BUFFER_LIMIT)
+        return -1;
+    h2o_buffer_append(&self->udp.ingress.streambuf, capsule, p - capsule);
+    udp_send_buffered(self);
+    return 0;
 }
 
 static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_id, h2o_iovec_t datagram)
