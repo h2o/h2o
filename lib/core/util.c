@@ -387,7 +387,7 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, sock
 {
 #define CHECK_EOF()                                                                                                                \
     if (p == end)                                                                                                                  \
-    return -2
+    return len < 107 ? -2 : -1
 #define EXPECT_CHAR(ch)                                                                                                            \
     do {                                                                                                                           \
         CHECK_EOF();                                                                                                               \
@@ -402,7 +402,7 @@ static ssize_t parse_proxy_line(char *src, size_t len, struct sockaddr *sa, sock
         --p;                                                                                                                       \
     } while (0)
 
-    char *p = src, *end = p + len;
+    char *p = src, *end = p + (len < 107 ? len : 107);
     void *addr;
     in_port_t *port;
 
@@ -471,7 +471,7 @@ SkipToEOL:
     } while (*p++ != '\r');
     CHECK_EOF();
     if (*p++ != '\n')
-        return -2;
+        return -1;
     return p - src;
 
 #undef CHECK_EOF
