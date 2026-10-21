@@ -139,6 +139,42 @@ static int on_config_connect_proxy_masque_draft_03(h2o_configurator_command_t *c
     return 0;
 }
 
+static int on_config_connect_udp_bind_address(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+
+    /* reset, then set the address of each address family being specified; an empty sequence disables the feature */
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(self->vars->conf.connect_udp_bind_addresses); ++i)
+        self->vars->conf.connect_udp_bind_addresses[i] = in6addr_any;
+
+    int first_was_v6 = 0;
+    for (size_t i = 0; i != node->data.sequence.size; ++i) {
+        yoml_t *element = node->data.sequence.elements[i];
+        if (element->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, element, "address must be a scalar");
+            return -1;
+        }
+        struct in_addr v4;
+        if (inet_pton(AF_INET, element->data.scalar, &v4) == 1) {
+            if (i == 1 && !first_was_v6) {
+                h2o_configurator_errprintf(cmd, element, "only one IPv4 address can be specified");
+                return -1;
+            }
+            ptls_build_v4_mapped_v6_address(&self->vars->conf.connect_udp_bind_addresses[i], &v4.s_addr);
+        } else if (inet_pton(AF_INET6, element->data.scalar, &self->vars->conf.connect_udp_bind_addresses[i]) == 1) {
+            if (i == 1 && first_was_v6) {
+                h2o_configurator_errprintf(cmd, element, "only one IPv6 address can be specified");
+                return -1;
+            }
+        } else {
+            h2o_configurator_errprintf(cmd, element, "value must be an IPv4 or IPv6 address literal, other than unspecified");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 static int on_config_proxy_status_identity(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     warn_deprecation(cmd, node, "proxy.proxy-status.identity", "");
@@ -732,6 +768,7 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
             },
         .tunnel_enabled = 0, /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
         .max_buffer_size = SIZE_MAX,
+        .connect_udp_bind_addresses = {in6addr_any, in6addr_any},
         .http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS,
         .http3.ecn = 1,
         .protocol_ratio.http2 = -1,
@@ -762,6 +799,9 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
     h2o_configurator_define_command(&c->super, "proxy.connect.masque-draft-03",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_connect_proxy_masque_draft_03);
+    h2o_configurator_define_command(&c->super, "proxy.connect-udp.bind-address",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE,
+                                    on_config_connect_udp_bind_address);
     h2o_configurator_define_command(&c->super, "proxy.proxy-status.identity",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                     on_config_proxy_status_identity);

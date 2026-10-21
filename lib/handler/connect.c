@@ -894,6 +894,39 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
     }
 }
 
+static void udp_complete_setup(struct st_connect_generator_t *self, int fd)
+{
+    /* setup, initiating transfer of early data */
+#if H2O_USE_LIBUV
+    self->sock = h2o_uv__poll_create(get_loop(self), fd, (uv_close_cb)free);
+#else
+    self->sock = h2o_evloop_socket_create(get_loop(self), fd, H2O_SOCKET_FLAG_DONT_READ);
+#endif
+    assert(self->sock != NULL);
+    self->sock->data = self;
+    self->src_req->write_req.cb = udp_write_stream;
+    self->src_req->forward_datagram.write_ = udp_write_datagrams;
+    self->src_req->write_req.ctx = self;
+
+    /* build and submit success */
+    if (self->src_req->version < 0x200 && !self->udp.is_draft03) {
+        assert(self->src_req->upgrade.base != NULL);
+        self->src_req->res.status = 101;
+        self->src_req->res.reason = "Switching Protocols";
+        h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("connect-udp"));
+    } else {
+        self->src_req->res.status = 200;
+    }
+    if (!self->udp.is_draft03)
+        h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
+                              H2O_STRLIT("?1"));
+    h2o_start_response(self->src_req, &self->super);
+    h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
+
+    /* write any data if provided, or just call the proceed_req callback */
+    self->src_req->write_req.cb(self, self->no_req_streaming);
+}
+
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
     int fd;
@@ -917,39 +950,60 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     self->timeout.cb = on_io_timeout;
     reset_io_timeout(self);
 
-    /* setup, initiating transfer of early data */
-#if H2O_USE_LIBUV
-    self->sock = h2o_uv__poll_create(get_loop(self), fd, (uv_close_cb)free);
-#else
-    self->sock = h2o_evloop_socket_create(get_loop(self), fd, H2O_SOCKET_FLAG_DONT_READ);
-#endif
-    assert(self->sock != NULL);
-    self->sock->data = self;
-    self->src_req->write_req.cb = udp_write_stream;
-    self->src_req->forward_datagram.write_ = udp_write_datagrams;
-    self->src_req->write_req.ctx = self;
-
     record_connect_success(self);
 
-    /* build and submit success */
-    if (self->src_req->version < 0x200 && !self->udp.is_draft03) {
-        assert(self->src_req->upgrade.base != NULL);
-        self->src_req->res.status = 101;
-        self->src_req->res.reason = "Switching Protocols";
-        h2o_add_header(&self->src_req->pool, &self->src_req->res.headers, H2O_TOKEN_UPGRADE, NULL, H2O_STRLIT("connect-udp"));
-    } else {
-        self->src_req->res.status = 200;
-    }
-    if (!self->udp.is_draft03)
-        h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
-                              H2O_STRLIT("?1"));
-    h2o_start_response(self->src_req, &self->super);
-    h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
-
-    /* write any data if provided, or just call the proceed_req callback */
-    self->src_req->write_req.cb(self, self->no_req_streaming);
+    udp_complete_setup(self, fd);
 
     return 1;
+}
+
+static int udp_bind_is_enabled(h2o_proxy_config_vars_t *config)
+{
+    return !IN6_IS_ADDR_UNSPECIFIED(&config->connect_udp_bind_addresses[0]);
+}
+
+static int udp_bind(h2o_mem_pool_t *pool, struct in6_addr *addr, char *quoted_tuple, const char **errstr)
+{
+    quicly_address_t sa;
+    int fd = -1, on = 1;
+
+    /* setup `sa` based on the address provided */
+    if (IN6_IS_ADDR_V4MAPPED(addr)) {
+        sa.sin = (struct sockaddr_in){.sin_family = AF_INET};
+        memcpy(&sa.sin.sin_addr.s_addr, &addr->s6_addr[12], 4);
+    } else {
+        sa.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6, .sin6_addr = *addr};
+    }
+
+    /* open a socket and bind */
+    if ((fd = socket(sa.sa.sa_family, SOCK_DGRAM, 0)) == -1)
+        goto Fail;
+    if (sa.sa.sa_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
+        goto Fail;
+    if (bind(fd, &sa.sa, sa.sa.sa_family == AF_INET6 ? sizeof(sa.sin6) : sizeof(sa.sin)) != 0)
+        goto Fail;
+
+    /* build the tuple string */
+    *quoted_tuple++ = '"';
+    if (sa.sa.sa_family == AF_INET6)
+        *quoted_tuple++ = '[';
+    size_t hostlen;
+    if ((hostlen =
+            h2o_socket_getnumerichost(&sa.sa, sa.sa.sa_family == AF_INET6 ? sizeof(sa.sin6) : sizeof(sa.sin), quoted_tuple)) ==
+        SIZE_MAX)
+        goto Fail;
+    quoted_tuple += hostlen;
+    if (sa.sa.sa_family == AF_INET6)
+        *quoted_tuple++ = ']';
+    quoted_tuple += sprintf(quoted_tuple, ":%" PRIu16 "\"", h2o_socket_getport(&sa.sa));
+
+    return fd;
+
+Fail:
+    *errstr = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
+    if (fd != -1)
+        close(fd);
+    return -1;
 }
 
 static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
@@ -987,11 +1041,20 @@ static int masque_decode_hostport(h2o_mem_pool_t *pool, const char *_src, size_t
 
     { /* parse port */
         size_t v;
-        if ((v = h2o_strtosizefwd(&src, end - src)) >= 65535)
+        if ((v = h2o_strtosizefwd(&src, end - src)) < 65535) {
+            if (h2o_memis(host->base, host->len, H2O_STRLIT("*")))
+                return 0;
+            *port = (uint16_t)v;
+        } else if ((end - src >= 1 && *src == '*') || (end - src >= 3 && h2o_lcstris(src, 3, H2O_STRLIT("%2a")))) {
+            if (!h2o_memis(host->base, host->len, H2O_STRLIT("*")))
+                return 0;
+            *port = 0;
+            src += *src == '*' ? 1 : 3;
+        } else {
             return 0;
+        }
         if (src == end || *src != '/')
             return 0;
-        *port = (uint16_t)v;
     }
 
     return 1;
@@ -1027,9 +1090,32 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     if (self->src_req->proceed_req == NULL)
         self->no_req_streaming = 1;
 
+    /* connect-udp-listen: bind to a local tuple and start */
+    if (h2o_memis(host.base, host.len, H2O_STRLIT("*"))) {
+        /* bind */
+        char *quoted_tuple = h2o_mem_alloc_pool(&req->pool, char, NI_MAXHOST + sizeof("\"[]:65535\""));
+        int fd = -1;
+        const char *errstr = NULL;
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(handler->config.connect_udp_bind_addresses); ++i) {
+            if (IN6_IS_ADDR_UNSPECIFIED(&handler->config.connect_udp_bind_addresses[i]))
+                break;
+            if ((fd = udp_bind(&self->src_req->pool, &handler->config.connect_udp_bind_addresses, quoted_tuple, &errstr)) != -1)
+                break;
+        }
+        if (fd == -1) {
+            assert(errstr != NULL);
+            record_error(self->handler, self->src_req, NULL, "desc", errstr, NULL);
+            h2o_send_error_503(self->src_req, "Service Unavailable", errstr, H2O_SEND_ERROR_KEEP_HEADERS); /* FIXME */
+            return 0;
+        }
+        /* socket is ready; start forwarding */
+        udp_complete_setup(self, fd);
+        return 0;
+    }
+
+    /* unbounded (i.e., ordinary) connect-udp; start address resolution */
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
-
     self->getaddr_req.v6 = h2o_hostinfo_getaddr(
         &self->src_req->conn->ctx->receivers.hostinfo_getaddr, host, h2o_iovec_init(port_str, port_strlen), AF_INET6,
         is_tcp ? SOCK_STREAM : SOCK_DGRAM, is_tcp ? IPPROTO_TCP : IPPROTO_UDP, AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, self);
@@ -1082,7 +1168,7 @@ static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
-    uint16_t port;
+    uint32_t port;
 
     /* reject requests wo. upgrade: connect-udp */
     if (!(req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))))
@@ -1098,6 +1184,11 @@ static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
                                 req->path_normalized.len - req->pathconf->path.len, &host, &port)) {
         record_error(handler, req, NULL, "http_request_error", "invalid URI", NULL);
         h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
+    }
+    if (h2o_memis(host.base, host.len, H2O_STRLIT("*")) && !udp_bind_is_enabled(&handler->config)) {
+        record_error(handler, req, NULL, "http_request_denied", "bound UDP proxying is disabled", NULL);
+        h2o_send_error_403(req, "Forbidden", "Forbiddedn", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
     }
 
