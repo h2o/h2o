@@ -579,7 +579,7 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
         h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
-                                   identity->certificate_file.str, strerror(errno));
+                                   identity->key_file.str, strerror(errno));
         return 0;
     }
 
@@ -4144,7 +4144,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         *dst++ = 6;
         memcpy(dst, addr->sin6.sin6_addr.s6_addr, 16);
         dst += 16;
-        memcpy(dst, &addr->sin.sin_port, 2);
+        memcpy(dst, &addr->sin6.sin6_port, 2);
         dst += 2;
         break;
     case AF_UNSPEC:
@@ -4600,7 +4600,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
-    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);

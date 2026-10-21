@@ -550,6 +550,10 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
     ctx->refs.input_stream = mrb_nil_value();
     ctx->req.can_keepalive = h2o_socketpool_can_keepalive(&shared_ctx->ctx->globalconf->proxy.global_socketpool);
 
+    /* build request; from now on, ctx is owned by the request object, so that it is released by GC if an exception is raised */
+    ctx->refs.request = h2o_mruby_create_data_instance(
+        mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
+
     /* uri */
     if (h2o_url_parse(&ctx->pool, arg_url, arg_url_len, &url) != 0)
         mrb_raise(mrb, E_ARGUMENT_ERROR, "invaild URL");
@@ -600,10 +604,7 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
         }
     }
 
-    /* build request and connect */
-    ctx->refs.request = h2o_mruby_create_data_instance(
-        mrb, mrb_ary_entry(ctx->ctx->shared->constants, H2O_MRUBY_HTTP_REQUEST_CLASS), ctx, &request_type);
-
+    /* connect */
     h2o_httpclient_connect(&ctx->client, &ctx->pool, ctx, &shared_ctx->ctx->proxy.client_ctx, &shared_ctx->ctx->proxy.connpool,
                            &url, NULL, on_connect);
 
