@@ -123,6 +123,33 @@ subtest "udp-bind-h3" => sub {
     ok index($resp, pack('CC', 0, length $datagram) . $datagram) >= 0, "H3 UDP echoed";
 };
 
+subtest "udp-bind-h3-datagram" => sub {
+    my $local_port = empty_port({host => "127.0.0.1", proto => "udp"});
+    my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -X $local_port -m CONNECT -H 'connect-udp-bind: ?1' " .
+              "https://127.0.0.1:@{[$tunnel_server->{quic_port}]}/.well-known/masque/udp/%2A/%2A/";
+    open my $client, "|-", "$cmd > $tempdir/out 2>&1" or die "failed to start $cmd: $!";
+    sleep 0.5;
+    print $client pack('C*', 0x11, 2, 2, 0); # register uncompressed Context ID 2 on the stream
+    flush $client;
+    sleep 0.5;
+
+    my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $local_port, Proto => "udp")
+        or die "failed to connect to local UDP socket: $!";
+    my $datagram = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello";
+    local $SIG{ALRM} = sub { die "timed out waiting for bound QUIC DATAGRAM" };
+    alarm 5;
+    $sock->send($datagram) or die "failed to send bound QUIC DATAGRAM: $!";
+    defined $sock->recv(my $echo, 1500) or die "failed to receive bound QUIC DATAGRAM: $!";
+    alarm 0;
+    is $echo, $datagram, "bound UDP echoed over QUIC DATAGRAMs";
+
+    undef $client;
+    open my $fh, "<", "$tempdir/out" or die "failed to read $tempdir/out: $!";
+    my $resp = do { local $/; <$fh> };
+    like $resp, qr{^HTTP/3 200\b}, "H3 bind accepted";
+    ok index($resp, pack('C*', 0x12, 1, 2)) >= 0, "H3 context acknowledged";
+};
+
 sub read_exact {
     my ($sock, $length) = @_;
     my $result = "";
@@ -259,14 +286,16 @@ sub doit {
 
         if ($use_sock) {
             # H3: test exchange using the UDP socket
+            my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $tunnel_port, Proto => "udp")
+                or die "failed to connect to local UDP socket: $!";
+            local $SIG{ALRM} = sub { die "timed out waiting for UDP echo" };
             for my $mess ("hello", "world") {
-                open my $fh, '-|', "echo $mess | nc -u -w 1 127.0.0.1 $tunnel_port"
-                    or die "failed to spawn nc:$?";
-                my $resp = do {
-                    local $/;
-                    <$fh>;
-                };
-                is $resp, "$mess\n", "got UDP echo";
+                my $datagram = ($cmd =~ / -m CONNECT-UDP / ? "" : "\0") . "$mess\n";
+                alarm 5;
+                $sock->send($datagram) or die "failed to send UDP datagram: $!";
+                defined $sock->recv(my $resp, 1500) or die "failed to receive UDP datagram: $!";
+                alarm 0;
+                is $resp, $datagram, "got UDP echo";
             }
         } else {
             # H1,H2: write from both stdin and UDP socket, but all the responses are sent to the stream

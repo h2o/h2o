@@ -330,19 +330,10 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     struct msghdr mess = {};
     ssize_t rret;
 
-    size_t context_id_len;
-    if (strcmp(req.method, "CONNECT-UDP") == 0) {
-        // No context id for draft03.
-        context_id_len = 0;
-    } else {
-        context_id_len = 1;
-        buf[0] = 0; // Context ID 0 used for UDP packets.
-    }
-
     /* read one UDP datagram, or return */
     do {
-        vec.iov_base = buf + context_id_len;
-        vec.iov_len = sizeof(buf) - context_id_len;
+        vec.iov_base = buf;
+        vec.iov_len = sizeof(buf);
         mess.msg_name = &udp_sock_remote_addr;
         mess.msg_namelen = sizeof(udp_sock_remote_addr);
         mess.msg_iov = &vec;
@@ -359,13 +350,13 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
     /* send the datagram directly or encapsulated on the stream */
     if (udp_write != NULL) {
-        h2o_iovec_t datagram = h2o_iovec_init(buf, context_id_len + rret);
+        h2o_iovec_t datagram = h2o_iovec_init(buf, rret);
         udp_write(client, &datagram, 1);
     } else {
         /* append UDP chunk to the input buffer */
         uint8_t header_buf[3];
-        h2o_buffer_append(&input.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
-        h2o_buffer_append(&input.sock->input, buf, context_id_len + rret);
+        h2o_buffer_append(&input.sock->input, header_buf, build_capsule_header(header_buf, rret));
+        h2o_buffer_append(&input.sock->input, buf, rret);
         /* pretend as if we read from the input */
         input_on_read(input.sock, NULL);
     }
@@ -373,23 +364,10 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
 
 static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
-    int is_draft03 = strcmp(req.method, "CONNECT-UDP") == 0;
-
     for (size_t i = 0; i != num_datagrams; ++i) {
         if (udp_sock != NULL) {
-            /* connected to client via UDP; decode and forward the UDP payload */
-            struct iovec udp_payload;
-            if (is_draft03) {
-                udp_payload = (struct iovec){datagrams[i].base, datagrams[i].len};
-            } else {
-                const uint8_t *src = (uint8_t *)datagrams[i].base;
-                /* Skip datagrams with context id != 0, rfc9298 section 5. TODO: error-close the connection upon decoding failure?
-                 */
-                if (ptls_decode_quicint(&src, src + datagrams[i].len) != 0)
-                    continue;
-                udp_payload = (struct iovec){.iov_base = (void *)src,
-                                             .iov_len = datagrams[i].len - (src - (const uint8_t *)datagrams[i].base)};
-            }
+            /* forward the HTTP Datagram payload unchanged */
+            struct iovec udp_payload = {datagrams[i].base, datagrams[i].len};
             struct msghdr mess = {.msg_name = &udp_sock_remote_addr,
                                   .msg_namelen = sizeof(udp_sock_remote_addr),
                                   .msg_iov = &udp_payload,
