@@ -1913,14 +1913,31 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     }
 
     /* set session resumption context so that resumption will succeed only against the same certificate */
-    if (raw_pubkey_count == 0) {
+    {
         uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
-        unsigned session_ctx_len;
+        unsigned session_ctx_len = 0;
         H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
-        int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
-        assert(ret == 1);
+        if (raw_pubkey_count == 0) {
+            int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
+            assert(ret == 1);
+        } else {
+            /* The identity is a raw public key. Bind the session to the key itself, so that a session
+             * that was obtained for one identity is not resumed for another; without the context, a
+             * session would be accepted by every listener that uses the same kind of identity. */
+            EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
+            assert(mdctx != NULL);
+            int ret = EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
+            assert(ret == 1);
+            for (size_t i = 0; i < raw_pubkey_count; ++i) {
+                ret = EVP_DigestUpdate(mdctx, raw_pubkey[i].base, raw_pubkey[i].len);
+                assert(ret == 1);
+            }
+            ret = EVP_DigestFinal_ex(mdctx, session_ctx, &session_ctx_len);
+            assert(ret == 1);
+            EVP_MD_CTX_free(mdctx);
+        }
         assert(session_ctx_len == sizeof(session_ctx));
-        ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
+        int ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
 
