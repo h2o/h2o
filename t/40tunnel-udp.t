@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use IO::Socket::INET;
+use Socket qw(inet_aton);
 use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(sleep);
@@ -52,6 +53,7 @@ hosts:
         proxy.connect-udp: # RFC9298
           - "+*"
 proxy.timeout.io: 30000
+proxy.connect-udp.bind-address: [127.0.0.1]
 proxy.connect.masque-draft-03: ON
 proxy.connect.emit-proxy-status: ON
 access-log:
@@ -62,6 +64,72 @@ EOT
     $tunnel_server->{quic_port} = $quic_port;
     $tunnel_server;
 };
+
+subtest "udp-bind-uncompressed" => sub {
+    my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $tunnel_server->{port}, Proto => "tcp")
+        or die "failed to connect to tunnel server: $!";
+    $sock->autoflush(1);
+    local $SIG{ALRM} = sub { die "timed out reading bound UDP response" };
+    alarm 5;
+    print $sock "GET /.well-known/masque/udp/%2A/%2A/ HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: connect-udp\r\nConnect-UDP-Bind: ?1\r\nCapsule-Protocol: ?1\r\n\r\n";
+    my $headers = "";
+    while ($headers !~ /\r\n\r\n\z/) {
+        my $n = sysread($sock, my $byte, 1);
+        die "unexpected EOF" unless $n;
+        $headers .= $byte;
+    }
+    like $headers, qr{^HTTP/1\.1 101\b}, "upgrade accepted";
+    like $headers, qr{\r\nconnect-udp-bind: \?1\r\n}i, "bind confirmed";
+    like $headers, qr{\r\nproxy-public-address: "127\.0\.0\.1:\d+"\r\n}i, "bound address advertised";
+
+    print $sock pack('C*', 0x11, 2, 2, 0); # assign uncompressed Context ID 2
+    is read_exact($sock, 3), pack('C*', 0x12, 1, 2), "context acknowledged";
+
+    my $datagram = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello";
+    print $sock pack('CC', 0, length $datagram), $datagram;
+    is read_exact($sock, 2 + length $datagram), pack('CC', 0, length $datagram) . $datagram, "UDP echoed";
+
+    my ($bound_port) = $headers =~ /proxy-public-address: "127\.0\.0\.1:(\d+)"/i;
+    my $peer = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $bound_port, Proto => "udp")
+        or die "failed to open UDP peer: $!";
+    $peer->send("ping");
+    my $incoming = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $peer->sockport) . "ping";
+    is read_exact($sock, 2 + length $incoming), pack('CC', 0, length $incoming) . $incoming, "unsolicited UDP received";
+
+    print $sock pack('C*', 0x11, 8, 4, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port});
+    is read_exact($sock, 3), pack('C*', 0x13, 1, 4), "compressed context rejected";
+    print $sock pack('C*', 0x13, 1, 2, 0x11, 2, 6, 0); # close ID 2, open ID 6
+    is read_exact($sock, 3), pack('C*', 0x12, 1, 6), "new uncompressed context acknowledged";
+    alarm 0;
+};
+
+subtest "udp-bind-h3" => sub {
+    my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -m CONNECT -H 'connect-udp-bind: ?1' " .
+              "https://127.0.0.1:@{[$tunnel_server->{quic_port}]}/.well-known/masque/udp/%2A/%2A/";
+    open my $client, "|-", "$cmd > $tempdir/out 2>&1" or die "failed to start $cmd: $!";
+    sleep 0.5;
+    my $datagram = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello";
+    print $client pack('C*', 0x11, 2, 2, 0), pack('CC', 0, length $datagram), $datagram;
+    flush $client;
+    sleep 0.5;
+    undef $client;
+    open my $fh, "<", "$tempdir/out" or die "failed to read $tempdir/out: $!";
+    my $resp = do { local $/; <$fh> };
+    like $resp, qr{^HTTP/3 200\b}, "H3 bind accepted";
+    ok index($resp, pack('C*', 0x12, 1, 2)) >= 0, "H3 context acknowledged";
+    ok index($resp, pack('CC', 0, length $datagram) . $datagram) >= 0, "H3 UDP echoed";
+};
+
+sub read_exact {
+    my ($sock, $length) = @_;
+    my $result = "";
+    while (length($result) < $length) {
+        my $n = sysread($sock, my $part, $length - length($result));
+        die "unexpected EOF" unless $n;
+        $result .= $part;
+    }
+    return $result;
+}
 
 # setup H2O that acts as a reverse proxy to the UDP tunnel server
 my $proxy_server = do {

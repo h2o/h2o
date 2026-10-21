@@ -39,6 +39,8 @@ struct st_connect_handler_t {
 
 #define MAX_ADDRESSES_PER_FAMILY 4
 #define UDP_CHUNK_OVERHEAD 10 /* sufficient space to hold DATAGRAM capsule header (RFC 9297) and context ID of zero (RFC 9298) */
+#define UDP_BOUND_OVERHEAD (8 + 1 + 16 + 2) /* Context ID, IP version, IPv6 address, UDP port */
+#define UDP_BIND_BUFFER_LIMIT (64 * 1024)
 
 struct st_server_address_t {
     struct sockaddr *sa;
@@ -115,8 +117,12 @@ struct st_connect_generator_t {
                 h2o_timer_t delayed;
             } egress;
             struct {
-                char buf[UDP_CHUNK_OVERHEAD + 1500];
+                char buf[UDP_CHUNK_OVERHEAD + UDP_BOUND_OVERHEAD + 1500];
+                h2o_buffer_t *streambuf;
+                h2o_doublebuffer_t doublebuf;
             } ingress;
+            uint64_t bound_context_id; /* zero when no uncompressed context is open */
+            unsigned can_unbound : 1;
             /**
              * if using draft-03 style encoding rather than RFC 9298
              */
@@ -270,6 +276,10 @@ static void dispose_generator(struct st_connect_generator_t *self)
     } else {
         if (self->udp.egress.buf != NULL)
             h2o_buffer_dispose(&self->udp.egress.buf);
+        if (self->udp.ingress.streambuf != NULL)
+            h2o_buffer_dispose(&self->udp.ingress.streambuf);
+        if (self->udp.ingress.doublebuf.buf != NULL)
+            h2o_doublebuffer_dispose(&self->udp.ingress.doublebuf);
         h2o_timer_unlink(&self->udp.egress.delayed);
     }
     h2o_timer_unlink(&self->timeout);
@@ -283,7 +293,7 @@ static int close_socket(struct st_connect_generator_t *self)
         self->tcp.recvbuf_detached = self->sock->input;
         send_inflight = self->tcp.recvbuf_detached->size != 0;
     } else {
-        send_inflight = !h2o_socket_is_reading(self->sock);
+        send_inflight = self->udp.ingress.doublebuf.inflight || !h2o_socket_is_reading(self->sock);
     }
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
@@ -708,14 +718,14 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
+static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, uint64_t *chunk_type)
 {
     const uint8_t *bytes = (const uint8_t *)start;
     const uint8_t *end = bytes + len;
-    uint64_t chunk_type, chunk_length;
+    uint64_t chunk_length;
 
-    chunk_type = ptls_decode_quicint(&bytes, end);
-    if (chunk_type == UINT64_MAX)
+    *chunk_type = ptls_decode_quicint(&bytes, end);
+    if (*chunk_type == UINT64_MAX)
         return h2o_iovec_init(NULL, 0);
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
@@ -730,24 +740,121 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
      * CONNECT-UDP Stream Chunks can be used to convey UDP payloads, by
      * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
      */
-    *skip = chunk_type != 0;
     *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
 
     return h2o_iovec_init(bytes, chunk_length);
 }
 
-static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
+static void udp_send_buffered(struct st_connect_generator_t *self)
+{
+    if (self->udp.ingress.doublebuf.inflight)
+        return;
+    h2o_iovec_t vec = h2o_doublebuffer_prepare(&self->udp.ingress.doublebuf, &self->udp.ingress.streambuf, SIZE_MAX);
+    if (vec.base == NULL)
+        return;
+    if (self->src_req->forward_datagram.read_ == NULL && self->sock != NULL && h2o_socket_is_reading(self->sock))
+        h2o_socket_read_stop(self->sock);
+    h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
+}
+
+static int udp_send_context_response(struct st_connect_generator_t *self, uint64_t type, uint64_t context_id)
+{
+    uint8_t capsule[18], encoded_id[8], *p = capsule;
+    size_t id_len = quicly_encodev(encoded_id, context_id) - encoded_id;
+    p = quicly_encodev(p, type);
+    p = quicly_encodev(p, id_len);
+    memcpy(p, encoded_id, id_len);
+    p += id_len;
+    if (self->udp.ingress.streambuf->size + (p - capsule) > UDP_BIND_BUFFER_LIMIT)
+        return -1;
+    h2o_buffer_append(&self->udp.ingress.streambuf, capsule, p - capsule);
+    udp_send_buffered(self);
+    return 0;
+}
+
+static int udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
 {
     const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
 
-    /* When using RFC 9298, the payload starts with a Context ID; drop anything other than UDP packets.
-     * TODO: propagate error when decoding fails? */
-    if (!self->udp.is_draft03 && (ptls_decode_quicint(&src, end)) != 0)
-        return;
+    if (!self->udp.is_draft03) {
+        uint64_t context_id = ptls_decode_quicint(&src, end);
+        if (self->udp.can_unbound) {
+            if (context_id == 0) {
+                return -1;
+            }
+            if (self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id || src == end)
+                return 0;
+            quicly_address_t dest;
+            socklen_t destlen;
+            switch (*src++) {
+            case 4:
+                if (end - src < 6)
+                    return 0;
+                dest.sin = (struct sockaddr_in){.sin_family = AF_INET};
+                memcpy(&dest.sin.sin_addr, src, 4);
+                memcpy(&dest.sin.sin_port, src + 4, 2);
+                destlen = sizeof(dest.sin);
+                src += 6;
+                break;
+            case 6:
+                if (end - src < 18)
+                    return 0;
+                dest.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
+                memcpy(&dest.sin6.sin6_addr, src, 16);
+                memcpy(&dest.sin6.sin6_port, src + 16, 2);
+                destlen = sizeof(dest.sin6);
+                src += 18;
+                break;
+            default:
+                return 0;
+            }
+            if (!h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, &dest.sa))
+                return 0;
+            H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
+            while (sendto(h2o_socket_get_fd(self->sock), src, end - src, 0, &dest.sa, destlen) == -1 && errno == EINTR)
+                ;
+            return 0;
+        }
+        if (context_id != 0)
+            return 0;
+    }
 
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
     while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
         ;
+    return 0;
+}
+
+static int udp_handle_bound_capsule(struct st_connect_generator_t *self, uint64_t type, h2o_iovec_t capsule)
+{
+    const uint8_t *p = (const uint8_t *)capsule.base, *end = p + capsule.len;
+    if (type == 0) { /* DATAGRAM */
+        return udp_write_core(self, capsule);
+    } else if (type == 0x11) { /* COMPRESSION_ASSIGN */
+        uint64_t context_id = ptls_decode_quicint(&p, end);
+        if (context_id == UINT64_MAX || context_id == 0 || (context_id & 1) != 0 || p == end)
+            return -1;
+        if (*p == 0) {
+            if (end - p != 1 || self->udp.bound_context_id != 0)
+                return -1;
+            self->udp.bound_context_id = context_id;
+            return udp_send_context_response(self, 0x12, context_id); /* COMPRESSION_ACK */
+        } else {
+            size_t expected_len = *p == 4 ? 7 : *p == 6 ? 19 : 0;
+            if (expected_len == 0 || end - p != expected_len)
+                return -1;
+            return udp_send_context_response(self, 0x13, context_id); /* compressed contexts are unsupported */
+        }
+    } else if (type == 0x13) { /* COMPRESSION_CLOSE */
+        uint64_t context_id = ptls_decode_quicint(&p, end);
+        if (context_id == UINT64_MAX || context_id == 0 || p != end)
+            return -1;
+        if (context_id == self->udp.bound_context_id)
+            self->udp.bound_context_id = 0;
+    } else if (type == 0x12) { /* the proxy did not assign a context */
+        return -1;
+    }
+    return 0;
 }
 
 static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
@@ -777,15 +884,26 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
         chunk.len = self->udp.egress.buf->size;
     }
     do {
-        int skip = 0;
+        uint64_t type;
         size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip);
+        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &type);
         if (datagram.base == NULL)
             break;
-        if (!skip)
+        if (self->udp.can_unbound) {
+            if (udp_handle_bound_capsule(self, type, datagram) != 0) {
+                close_readwrite(self);
+                return;
+            }
+        } else if (type == 0) {
             udp_write_core(self, datagram);
+        }
         off += to_consume;
     } while (1);
+
+    if (self->udp.can_unbound && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
+        close_readwrite(self);
+        return;
+    }
 
     if (from_buf) {
         h2o_buffer_consume(&self->udp.egress.buf, off);
@@ -828,15 +946,20 @@ static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t 
 
     reset_io_timeout(self);
 
-    for (size_t i = 0; i != num_datagrams; ++i)
-        udp_write_core(self, datagrams[i]);
+    for (size_t i = 0; i != num_datagrams; ++i) {
+        if (udp_write_core(self, datagrams[i]) != 0) {
+            close_readwrite(self);
+            return;
+        }
+    }
 }
 
 static void udp_on_read(h2o_socket_t *_sock, const char *err)
 {
     struct st_connect_generator_t *self = _sock->data;
-    h2o_iovec_t payload =
-        h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD, sizeof(self->udp.ingress.buf) - UDP_CHUNK_OVERHEAD);
+    quicly_address_t srcaddr;
+    socklen_t srcaddrlen = sizeof(srcaddr);
+    h2o_iovec_t payload = h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD + UDP_BOUND_OVERHEAD, 1500);
 
     if (err != NULL) {
         close_readwrite(self);
@@ -845,7 +968,9 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
 
     { /* read UDP packet, or return */
         ssize_t rret;
-        while ((rret = recv(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
+        while ((rret = self->udp.can_unbound
+                           ? recvfrom(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0, &srcaddr.sa, &srcaddrlen)
+                           : recv(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
             ;
         if (rret == -1)
             return;
@@ -853,8 +978,39 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
     H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, payload.len);
 
+    if (self->udp.can_unbound) {
+        if (self->udp.bound_context_id == 0)
+            return;
+        size_t addrlen;
+        uint8_t ip_version;
+        const void *addr, *port;
+        if (srcaddr.sa.sa_family == AF_INET) {
+            addrlen = 4;
+            ip_version = 4;
+            addr = &srcaddr.sin.sin_addr;
+            port = &srcaddr.sin.sin_port;
+        } else if (srcaddr.sa.sa_family == AF_INET6) {
+            addrlen = 16;
+            ip_version = 6;
+            addr = &srcaddr.sin6.sin6_addr;
+            port = &srcaddr.sin6.sin6_port;
+        } else {
+            return;
+        }
+        payload.base -= 1 + addrlen + 2;
+        payload.len += 1 + addrlen + 2;
+        payload.base[0] = ip_version;
+        memcpy(payload.base + 1, addr, addrlen);
+        memcpy(payload.base + 1 + addrlen, port, 2);
+        uint8_t encoded[8];
+        size_t encoded_len = quicly_encodev(encoded, self->udp.bound_context_id) - encoded;
+        payload.base -= encoded_len;
+        payload.len += encoded_len;
+        memcpy(payload.base, encoded, encoded_len);
+    }
+
     /* prepend Context ID (of zero, indicating UDP packet) if RFC 9298 */
-    if (!self->udp.is_draft03) {
+    if (!self->udp.is_draft03 && !self->udp.can_unbound) {
         *--payload.base = 0;
         payload.len += 1;
     }
@@ -863,8 +1019,6 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     if (self->src_req->forward_datagram.read_ != NULL) {
         self->src_req->forward_datagram.read_(self->src_req, &payload, 1);
     } else {
-        h2o_socket_read_stop(self->sock);
-        h2o_timer_unlink(&self->timeout);
         { /* prepend Datagram Capsule length */
             uint8_t length_buf[8];
             size_t length_len = quicly_encodev(length_buf, payload.len) - length_buf;
@@ -876,7 +1030,8 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
         *--payload.base = 0;
         payload.len += 1;
         assert(payload.base >= self->udp.ingress.buf);
-        h2o_send(self->src_req, &payload, 1, H2O_SEND_STATE_IN_PROGRESS);
+        h2o_buffer_append(&self->udp.ingress.streambuf, payload.base, payload.len);
+        udp_send_buffered(self);
     }
 }
 
@@ -884,10 +1039,17 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
 
+    h2o_doublebuffer_consume(&self->udp.ingress.doublebuf);
+    if (self->udp.ingress.streambuf->size != 0 || self->udp.ingress.doublebuf.buf->size != 0) {
+        udp_send_buffered(self);
+        return;
+    }
+
     if (self->sock != NULL) {
         h2o_buffer_consume(&self->sock->input, self->sock->input->size);
         reset_io_timeout(self);
-        h2o_socket_read_start(self->sock, udp_on_read);
+        if (!h2o_socket_is_reading(self->sock))
+            h2o_socket_read_start(self->sock, udp_on_read);
     } else {
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -921,6 +1083,7 @@ static void udp_complete_setup(struct st_connect_generator_t *self, int fd)
         h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("capsule-protocol"), 0, NULL,
                               H2O_STRLIT("?1"));
     h2o_start_response(self->src_req, &self->super);
+    h2o_doublebuffer_prepare_empty(&self->udp.ingress.doublebuf);
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
     /* write any data if provided, or just call the proceed_req callback */
@@ -962,7 +1125,7 @@ static int udp_bind_is_enabled(h2o_proxy_config_vars_t *config)
     return !IN6_IS_ADDR_UNSPECIFIED(&config->connect_udp_bind_addresses[0]);
 }
 
-static int udp_bind(h2o_mem_pool_t *pool, struct in6_addr *addr, char *quoted_tuple, const char **errstr)
+static int udp_bind(struct in6_addr *addr, char *quoted_tuple, const char **errstr)
 {
     quicly_address_t sa;
     int fd = -1, on = 1;
@@ -981,6 +1144,9 @@ static int udp_bind(h2o_mem_pool_t *pool, struct in6_addr *addr, char *quoted_tu
     if (sa.sa.sa_family == AF_INET6 && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &on, sizeof(on)) != 0)
         goto Fail;
     if (bind(fd, &sa.sa, sa.sa.sa_family == AF_INET6 ? sizeof(sa.sin6) : sizeof(sa.sin)) != 0)
+        goto Fail;
+    socklen_t salen = sa.sa.sa_family == AF_INET6 ? sizeof(sa.sin6) : sizeof(sa.sin);
+    if (getsockname(fd, &sa.sa, &salen) != 0)
         goto Fail;
 
     /* build the tuple string */
@@ -1078,6 +1244,8 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     } else {
         self->super.proceed = udp_on_proceed;
         h2o_buffer_init(&self->udp.egress.buf, &h2o_socket_buffer_prototype);
+        h2o_buffer_init(&self->udp.ingress.streambuf, &h2o_socket_buffer_prototype);
+        h2o_doublebuffer_init(&self->udp.ingress.doublebuf, &h2o_socket_buffer_prototype);
         self->udp.egress.delayed = (h2o_timer_t){.cb = udp_write_stream_complete_delayed};
         self->udp.is_draft03 = is_masque_draft03;
     }
@@ -1099,7 +1267,7 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
         for (size_t i = 0; i < PTLS_ELEMENTSOF(handler->config.connect_udp_bind_addresses); ++i) {
             if (IN6_IS_ADDR_UNSPECIFIED(&handler->config.connect_udp_bind_addresses[i]))
                 break;
-            if ((fd = udp_bind(&self->src_req->pool, &handler->config.connect_udp_bind_addresses, quoted_tuple, &errstr)) != -1)
+            if ((fd = udp_bind(&handler->config.connect_udp_bind_addresses[i], quoted_tuple, &errstr)) != -1)
                 break;
         }
         if (fd == -1) {
@@ -1108,6 +1276,12 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
             h2o_send_error_503(self->src_req, "Service Unavailable", errstr, H2O_SEND_ERROR_KEEP_HEADERS); /* FIXME */
             return 0;
         }
+        self->udp.can_unbound = 1;
+        self->timeout.cb = on_io_timeout;
+        reset_io_timeout(self);
+        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONNECT_UDP_BIND, NULL, H2O_STRLIT("?1"));
+        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("proxy-public-address"), 0, NULL, quoted_tuple,
+                              strlen(quoted_tuple));
         /* socket is ready; start forwarding */
         udp_complete_setup(self, fd);
         return 0;
@@ -1168,7 +1342,7 @@ static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_connect_handler_t *handler = (void *)_handler;
     h2o_iovec_t host;
-    uint32_t port;
+    uint16_t port;
 
     /* reject requests wo. upgrade: connect-udp */
     if (!(req->upgrade.base != NULL && h2o_lcstris(req->upgrade.base, req->upgrade.len, H2O_STRLIT("connect-udp"))))
@@ -1190,6 +1364,16 @@ static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
         record_error(handler, req, NULL, "http_request_denied", "bound UDP proxying is disabled", NULL);
         h2o_send_error_403(req, "Forbidden", "Forbiddedn", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
+    }
+    if (h2o_memis(host.base, host.len, H2O_STRLIT("*"))) {
+        ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, -1);
+        if (index < 0 || !h2o_memis(req->headers.entries[index].value.base, req->headers.entries[index].value.len,
+                                    H2O_STRLIT("?1")) ||
+            h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, index) >= 0) {
+            record_error(handler, req, NULL, "http_request_error", "invalid connect-udp-bind", NULL);
+            h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+            return 0;
+        }
     }
 
     return on_req_core((void *)handler, req, host, port, 0, 0);
