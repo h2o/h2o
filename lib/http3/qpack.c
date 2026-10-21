@@ -908,6 +908,8 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
     if (qpack == NULL || insert_count == 0)
         goto Error;
 
+    if (insert_count > INT64_MAX - qpack->largest_known_received)
+        goto Error;
     int64_t new_value = qpack->largest_known_received + insert_count;
     if (new_value >= qpack_table_total_inserts(&qpack->table))
         goto Error;
