@@ -1933,17 +1933,11 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             /* The identity is a raw public key. Bind the session to the key itself, so that a session
              * that was obtained for one identity is not resumed for another; without the context, a
              * session would be accepted by every listener that uses the same kind of identity. */
-            EVP_MD_CTX *mdctx = EVP_MD_CTX_new();
-            assert(mdctx != NULL);
-            int ret = EVP_DigestInit_ex(mdctx, EVP_sha256(), NULL);
-            assert(ret == 1);
-            for (size_t i = 0; i < raw_pubkey_count; ++i) {
-                ret = EVP_DigestUpdate(mdctx, raw_pubkey[i].base, raw_pubkey[i].len);
-                assert(ret == 1);
-            }
-            ret = EVP_DigestFinal_ex(mdctx, session_ctx, &session_ctx_len);
-            assert(ret == 1);
-            EVP_MD_CTX_free(mdctx);
+            SHA256_CTX mdctx;
+            assert(SHA256_Init(&mdctx) == 1);
+            for (size_t i = 0; i < raw_pubkey_count; ++i)
+                assert(SHA256_Update(&mdctx, raw_pubkey[i].base, raw_pubkey[i].len) == 1);
+            assert(SHA256_Final(session_ctx, &mdctx) == 1);
         }
         assert(session_ctx_len == sizeof(session_ctx));
         int ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
