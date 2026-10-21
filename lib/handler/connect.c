@@ -711,7 +711,7 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
 static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
 {
     const uint8_t *bytes = (const uint8_t *)start;
-    const uint8_t *end = bytes + len;
+    const uint8_t *end = bytes != NULL ? bytes + len : NULL;
     uint64_t chunk_type, chunk_length;
 
     chunk_type = ptls_decode_quicint(&bytes, end);
@@ -779,7 +779,8 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     do {
         int skip = 0;
         size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip);
+        h2o_iovec_t datagram =
+            udp_get_next_chunk(chunk.base != NULL ? chunk.base + off : NULL, chunk.len - off, &to_consume, &skip);
         if (datagram.base == NULL)
             break;
         if (!skip)

@@ -287,7 +287,7 @@ static void append_params(h2o_req_t *req, iovec_vector_t *vecs, h2o_fastcgi_conf
     if (req->scheme == &H2O_URL_SCHEME_HTTPS)
         append_pair(&req->pool, vecs, H2O_STRLIT("HTTPS"), H2O_STRLIT("on"));
     { /* headers */
-        const h2o_header_t *h = req->headers.entries, *h_end = h + req->headers.size;
+        const h2o_header_t *h = req->headers.entries, *h_end = h != NULL ? h + req->headers.size : NULL;
         size_t cookie_length = 0;
         int found_early_data = 0;
         for (; h != h_end; ++h) {
@@ -419,8 +419,9 @@ static void set_timeout(struct st_fcgi_generator_t *generator, uint64_t timeout,
     h2o_timer_link(generator->req->conn->ctx->loop, timeout, &generator->timeout);
 }
 
-static void close_generator(struct st_fcgi_generator_t *generator)
+static void close_generator(void *p)
 {
+    struct st_fcgi_generator_t *generator = p;
     /* can be called more than once */
     if (h2o_timer_is_linked(&generator->timeout))
         h2o_timer_unlink(&generator->timeout);
@@ -786,7 +787,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_fastcgi_handler_t *handler = (void *)_handler;
     struct st_fcgi_generator_t *generator;
 
-    generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), (void (*)(void *))close_generator);
+    generator = h2o_mem_alloc_shared(&req->pool, sizeof(*generator), close_generator);
     generator->super.proceed = do_proceed;
     generator->super.stop = do_stop;
     generator->handler = handler;

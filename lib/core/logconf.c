@@ -449,6 +449,8 @@ static char *append_unsafe_string_apache(char *pos, const char *src, size_t len)
 
 static char *append_unsafe_string_json(char *pos, const char *src, size_t len)
 {
+    if (src == NULL)
+        return pos;
     const char *src_end = src + len;
 
     for (; src != src_end; ++src) {
