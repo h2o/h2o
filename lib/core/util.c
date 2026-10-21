@@ -479,11 +479,23 @@ SkipToEOL:
 #undef SKIP_TO_WS
 }
 
+/* The PROXY protocol line is at most 107 bytes long (the specification caps the header of the second
+ * version of the protocol, and the first version is shorter still). A peer that sends more than that
+ * is not speaking the protocol, and the buffer would otherwise keep growing until the handshake times
+ * out. */
+#define H2O_MAX_PROXY_LINE_LENGTH 256
+
 static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_accept_data_t *data = sock->data;
 
     if (err != NULL) {
+        accept_data_callbacks.destroy(data);
+        h2o_socket_close(sock);
+        return;
+    }
+
+    if (sock->input->size > H2O_MAX_PROXY_LINE_LENGTH) {
         accept_data_callbacks.destroy(data);
         h2o_socket_close(sock);
         return;
