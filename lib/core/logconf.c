@@ -842,8 +842,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         case ELEMENT_TYPE_ERROR:
-            if (req->error_logs != NULL)
-                pos = append_unsafe_string(pos, req->error_logs->bytes, req->error_logs->size);
+            if (req->error_logs != NULL) {
+                /* the size of the error log is not bounded; reserve enough space for the worst case of escaping */
+                size_t error_len = req->error_logs->size;
+                if (error_len > SIZE_MAX / unsafe_factor)
+                    error_len = SIZE_MAX / unsafe_factor;
+                RESERVE(error_len * unsafe_factor);
+                pos = append_unsafe_string(pos, req->error_logs->bytes, error_len);
+            }
             break;
 
         case ELEMENT_TYPE_PROXY_IDLE_TIME:

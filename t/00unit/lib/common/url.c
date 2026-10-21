@@ -831,6 +831,74 @@ static void test_host_to_sun(void)
     ok(err != NULL && err != h2o_url_host_to_sun_err_is_not_unix_socket);
 }
 
+static void test_resolve_path(void)
+{
+    h2o_iovec_t base, relative;
+
+    /* the base path is used up to its last '/' */
+    base = h2o_iovec_init(H2O_STRLIT("/dir/index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(h2o_memis(base.base, base.len, H2O_STRLIT("/dir/")));
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* ".." steps back one path segment of the base path */
+    base = h2o_iovec_init(H2O_STRLIT("/dir/index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("../foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(h2o_memis(base.base, base.len, H2O_STRLIT("/")));
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* the root cannot be stepped back any further */
+    base = h2o_iovec_init(H2O_STRLIT("/dir/index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("../../foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(h2o_memis(base.base, base.len, H2O_STRLIT("/")));
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* a relative path that is rooted discards the base path */
+    base = h2o_iovec_init(H2O_STRLIT("/dir/index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("/foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("/foo.html")));
+
+    /* a base path that does not contain any '/' is discarded, rather than being scanned out of bounds */
+    base = h2o_iovec_init(H2O_STRLIT("index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* the same, with an empty relative path */
+    base = h2o_iovec_init(H2O_STRLIT("index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT(""));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(relative.len == 0);
+
+    /* the same, with a relative path that steps back */
+    base = h2o_iovec_init(H2O_STRLIT("index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("../foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* a base path whose last '/' is not its first byte */
+    base = h2o_iovec_init(H2O_STRLIT("dir/index.html"));
+    relative = h2o_iovec_init(H2O_STRLIT("../foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+
+    /* an empty base path */
+    base = h2o_iovec_init(H2O_STRLIT(""));
+    relative = h2o_iovec_init(H2O_STRLIT("foo.html"));
+    h2o_url_resolve_path(&base, &relative);
+    ok(base.len == 0);
+    ok(h2o_memis(relative.base, relative.len, H2O_STRLIT("foo.html")));
+}
+
 void test_lib__common__url_c(void)
 {
     subtest("normalize_path", test_normalize_path);
@@ -839,4 +907,6 @@ void test_lib__common__url_c(void)
     subtest("parse_relative", test_parse_relative);
     subtest("resolve", test_resolve);
     subtest("host_to_sun", test_host_to_sun);
+
+    subtest("resolve_path", test_resolve_path);
 }

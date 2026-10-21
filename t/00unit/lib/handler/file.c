@@ -263,6 +263,21 @@ static void test_process_range(void)
     h2o_mem_clear_pool(&testpool);
 }
 
+static void test_flags(void)
+{
+    /* The flags are used as a bitmask, therefore each of them has to occupy exactly one bit, and no two of them may
+     * overlap. H2O_FILE_FLAG_IO_URING used to be 0x16, which overlapped H2O_FILE_FLAG_DIR_LISTING and
+     * H2O_FILE_FLAG_SEND_COMPRESSED, and therefore made the `file.io_uring` directive enable directory listing and the
+     * serving of compressed variants. */
+    ok((H2O_FILE_FLAG_NO_ETAG & (H2O_FILE_FLAG_NO_ETAG - 1)) == 0);
+    ok((H2O_FILE_FLAG_DIR_LISTING & (H2O_FILE_FLAG_DIR_LISTING - 1)) == 0);
+    ok((H2O_FILE_FLAG_SEND_COMPRESSED & (H2O_FILE_FLAG_SEND_COMPRESSED - 1)) == 0);
+    ok((H2O_FILE_FLAG_GUNZIP & (H2O_FILE_FLAG_GUNZIP - 1)) == 0);
+    ok((H2O_FILE_FLAG_IO_URING & (H2O_FILE_FLAG_IO_URING - 1)) == 0);
+    ok((H2O_FILE_FLAG_IO_URING & H2O_FILE_FLAG_DIR_LISTING) == 0);
+    ok((H2O_FILE_FLAG_IO_URING & H2O_FILE_FLAG_SEND_COMPRESSED) == 0);
+}
+
 static void test_if_modified_since(void)
 {
     char lm_date[H2O_TIMESTR_RFC1123_LEN + 1];
@@ -911,6 +926,7 @@ void test_lib__handler__file_c()
     subtest("range request", test_range_req);
     subtest("if-range", test_if_range);
     subtest("strong etag comparison", test_strong_etag_cmp);
+    subtest("flags", test_flags);
 
     h2o_context_dispose(&ctx);
     h2o_config_dispose(&globalconf);

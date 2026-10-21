@@ -830,6 +830,7 @@ static void keymgmt_free(void *keydata)
         iobuf_push_str(&buf, "del_pkey");
         iobuf_push_num(&buf, key->key_index);
         iobuf_transaction_no_response(&buf, thdata);
+        key->key_index = SIZE_MAX; /* the key has been released; do not release it twice */
     }
     BN_free(key->n);
     BN_free(key->e);
@@ -1240,6 +1241,7 @@ static void ec_keymgmt_free(void *keydata)
         iobuf_push_num(&buf, key->key_index);
         iobuf_transaction(&buf, thdata);
         iobuf_dispose(&buf);
+        key->key_index = SIZE_MAX; /* the key has been released; do not release it twice */
     }
     OPENSSL_free(key->pub_bytes);
     OPENSSL_free(key);
@@ -2654,6 +2656,25 @@ Redo:
     _exit(0);
 }
 
+/* Returns 1 if the given slot is in use, 0 if the slot is on the list of empty slots, and -1 if the state of the list of
+ * empty slots cannot be determined (i.e. if the list is corrupt). Note that a slot that is in use holds a key while a
+ * slot that is empty holds the index of the next empty slot, the two being stored in a union. */
+static int is_slot_in_use(size_t key_index)
+{
+    size_t index = daemon_vars.keys.first_empty;
+    size_t num_visited = 0;
+
+    while (index != SIZE_MAX) {
+        if (index == key_index)
+            return 0;
+        if (++num_visited > daemon_vars.keys.num_slots)
+            return -1; /* the list of empty slots is corrupt */
+        index = daemon_vars.keys.slots[index].next_empty;
+    }
+
+    return 1;
+}
+
 static int del_pkey_stub(neverbleed_iobuf_t *buf)
 {
     size_t key_index;
@@ -2667,9 +2688,16 @@ static int del_pkey_stub(neverbleed_iobuf_t *buf)
     pthread_mutex_lock(&daemon_vars.keys.lock);
     /* set slot as available */
     if (key_index < daemon_vars.keys.num_slots) {
-        EVP_PKEY_free(daemon_vars.keys.slots[key_index].pkey);
-        daemon_vars.keys.slots[key_index].next_empty = daemon_vars.keys.first_empty;
-        daemon_vars.keys.first_empty = key_index;
+        int in_use = is_slot_in_use(key_index);
+        if (in_use < 0)
+            warnf("%s: the list of empty slots is corrupt; refusing to delete the key at index %zu", __FUNCTION__,
+                  key_index);
+        else if (in_use) {
+            EVP_PKEY_free(daemon_vars.keys.slots[key_index].pkey);
+            daemon_vars.keys.slots[key_index].next_empty = daemon_vars.keys.first_empty;
+            daemon_vars.keys.first_empty = key_index;
+        } else
+            warnf("%s: the key at index %zu has already been deleted", __FUNCTION__, key_index);
     } else {
         warnf("%s: invalid key index %zu", __FUNCTION__, key_index);
     }

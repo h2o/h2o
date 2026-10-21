@@ -33,6 +33,11 @@
 
 #define INITIAL_INBUFSZ 8192
 
+/* the maximum size of the error log that is retained by a request; the error log is exposed to the access log (i.e.
+ * `%{error}x`) and is otherwise unbounded, as an upstream may emit an arbitrary amount of text (e.g. the FastCGI
+ * handler logs the contents of the FCGI_STDERR records it receives) */
+#define H2O_MAX_ERROR_LOG_SIZE 65536
+
 struct st_deferred_request_action_t {
     h2o_timer_t timeout;
     h2o_req_t *req;
@@ -247,8 +252,19 @@ static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_
     h2o_req_t *req = (void *)data;
     if (req->error_logs == NULL)
         h2o_buffer_init(&req->error_logs, &h2o_socket_buffer_prototype);
-    h2o_buffer_append(&req->error_logs, prefix.base, prefix.len);
-    h2o_buffer_append(&req->error_logs, msg.base, msg.len);
+    /* Retain at most H2O_MAX_ERROR_LOG_SIZE bytes of the error log. Note that the message is emitted to the error log
+     * in its entirety below, therefore the truncation affects only the copy that is retained by the request and that is
+     * exposed to the access log. */
+    if (req->error_logs->size < H2O_MAX_ERROR_LOG_SIZE) {
+        size_t capacity = H2O_MAX_ERROR_LOG_SIZE - req->error_logs->size;
+        size_t prefix_len = prefix.len < capacity ? prefix.len : capacity;
+        size_t msg_len;
+        h2o_buffer_append(&req->error_logs, prefix.base, prefix_len);
+        capacity -= prefix_len;
+        msg_len = msg.len < capacity ? msg.len : capacity;
+        if (msg_len > 0)
+            h2o_buffer_append(&req->error_logs, msg.base, msg_len);
+    }
 
     if (req->pathconf->error_log.emit_request_errors) {
         h2o_write_error_log(prefix, msg);

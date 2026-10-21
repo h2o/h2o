@@ -51,6 +51,15 @@ sub read_logs {
    } @_;
 }
 
+sub read_file {
+    my ($fn) = @_;
+    open my $fh, "<", $fn or die "failed to open $fn:$!";
+    local $/;
+    my $content = <$fh>;
+    close $fh;
+    return defined($content) ? $content : "";
+}
+
 subtest 'middleware' => sub {
     subtest 'basic' => sub {
         my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
@@ -100,6 +109,66 @@ EOT
             isnt scalar(@$error_logs), 0, 'error log count';
             is $access_logs->[0], "[lib/core/proxy.c] in request:127.0.0.1:$port/:connection refused", 'access log';
             is $error_logs->[-1], "[lib/core/proxy.c] in request:127.0.0.1:$port/:connection refused", 'error log';
+        });
+    };
+
+    subtest 'large error log' => sub {
+        my ($port, $tls_port) = empty_ports(2, { host => "0.0.0.0" });
+        my $server = spawn_h2o_raw(<<"EOT", [$port, $tls_port]);
+num-threads: 1
+hosts:
+  "127.0.0.1:$port":
+    paths:
+      /:
+        - mruby.handler: |
+            proc {|env|
+              raise "A" * 100000
+            }
+  "127.0.0.1:$tls_port":
+    paths:
+      /:
+        - mruby.handler: |
+            proc {|env|
+              raise "A" * 100000
+            }
+access-log:
+  path: $access_log_file
+  format: "%{error}x"
+error-log: $error_log_file
+listen:
+  host: 0.0.0.0
+  port: $port
+listen:
+  host: 0.0.0.0
+  port: $tls_port
+  ssl:
+    key-file: examples/h2o/server.key
+    certificate-file: examples/h2o/server.crt
+    ocsp-update-interval: 0
+EOT
+        $server = +{ %$server, port => $port, tls_port => $tls_port };
+        run_with_curl($server, sub {
+            my ($proto, $port, $curl) = @_;
+            truncate $access_log_file, 0;
+            truncate $error_log_file, 0;
+
+            my ($headers, $body) = get($proto, $port, $curl, '/');
+            like $headers, qr{^HTTP/[0-9.]+ 500}is;
+
+            sleep 1;
+
+            # The error log that is retained by the request is capped, therefore the access log line is bounded. Note
+            # that the error log is emitted in its entirety to the error log file.
+            my $access_log_content = read_file($access_log_file);
+            cmp_ok length($access_log_content), '>=', 65536, 'access log contains the error log';
+            cmp_ok length($access_log_content), '<=', 65536 + 1024, 'access log is bounded';
+
+            my $error_log_content = read_file($error_log_file);
+            cmp_ok length($error_log_content), '>', 100000, 'error log is not truncated';
+
+            # the server is still alive
+            my ($headers2, $body2) = get($proto, $port, $curl, '/');
+            like $headers2, qr{^HTTP/[0-9.]+ 500}is;
         });
     };
 

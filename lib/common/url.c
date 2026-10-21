@@ -361,6 +361,16 @@ Build:
     return ret;
 }
 
+/* Returns the offset of the last '/' found within the given buffer, or SIZE_MAX if the buffer does not contain any */
+static size_t find_last_slash(const char *base, size_t len)
+{
+    while (len > 0) {
+        if (base[--len] == '/')
+            return len;
+    }
+    return SIZE_MAX;
+}
+
 void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
 {
     size_t base_path_len = base->len, rel_path_offset = 0;
@@ -369,15 +379,19 @@ void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
         base_path_len = 0;
     } else {
         /* relative path */
-        while (base->base[--base_path_len] != '/')
-            ;
+        /* The base path is used up to its last '/' (inclusive). The offset of that '/' is retained in `slash_pos`, with
+         * SIZE_MAX indicating that the base path does not contain any '/' at all. Note that the base path is not
+         * guaranteed to be rooted (i.e. it is not guaranteed to start with '/'), as it is the request target as it was
+         * received; the scans below are therefore bounded, so that a base path that does not contain any '/' does not
+         * lead to a scan that runs past the beginning of the buffer. */
+        size_t slash_pos = find_last_slash(base->base, base->len);
         while (rel_path_offset != relative->len) {
             if (relative->base[rel_path_offset] == '.') {
                 if (relative->len - rel_path_offset >= 2 && relative->base[rel_path_offset + 1] == '.' &&
                     (relative->len - rel_path_offset == 2 || relative->base[rel_path_offset + 2] == '/')) {
-                    if (base_path_len != 0) {
-                        while (base->base[--base_path_len] != '/')
-                            ;
+                    /* step back one path segment of the base path; the root cannot be stepped back any further */
+                    if (slash_pos != SIZE_MAX && slash_pos != 0) {
+                        slash_pos = find_last_slash(base->base, slash_pos);
                     }
                     rel_path_offset += relative->len - rel_path_offset == 2 ? 2 : 3;
                     continue;
@@ -392,7 +406,7 @@ void h2o_url_resolve_path(h2o_iovec_t *base, h2o_iovec_t *relative)
             }
             break;
         }
-        base_path_len += 1;
+        base_path_len = slash_pos == SIZE_MAX ? 0 : slash_pos + 1;
     }
 
     base->len = base_path_len;
