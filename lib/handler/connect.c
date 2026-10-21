@@ -718,33 +718,6 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, uint64_t *chunk_type)
-{
-    const uint8_t *bytes = (const uint8_t *)start;
-    const uint8_t *end = bytes + len;
-    uint64_t chunk_length;
-
-    *chunk_type = ptls_decode_quicint(&bytes, end);
-    if (*chunk_type == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
-    chunk_length = ptls_decode_quicint(&bytes, end);
-    if (chunk_length == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
-
-    /* chunk is incomplete */
-    if (end - bytes < chunk_length)
-        return h2o_iovec_init(NULL, 0);
-
-    /*
-     * https://tools.ietf.org/html/draft-ietf-masque-connect-udp-03#section-6
-     * CONNECT-UDP Stream Chunks can be used to convey UDP payloads, by
-     * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
-     */
-    *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
-
-    return h2o_iovec_init(bytes, chunk_length);
-}
-
 static void udp_send_buffered(struct st_connect_generator_t *self)
 {
     if (self->udp.ingress.doublebuf.inflight)
@@ -772,86 +745,156 @@ static int udp_send_context_response(struct st_connect_generator_t *self, uint64
     return 0;
 }
 
-static int udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
+struct st_udp_capsule_t {
+    uint64_t type;
+    uint64_t context_id;
+    union {
+        h2o_iovec_t datagram;
+        quicly_address_t assign;
+    } data;
+};
+
+static int udp_decode_target(quicly_address_t *dest, const uint8_t **src, const uint8_t *end)
 {
+    uint8_t ip_version;
+    uint16_t port;
+    if (ptls_decode8(&ip_version, src, end) != 0)
+        return -1;
+    switch (ip_version) {
+    case 0:
+        *dest = (quicly_address_t){0};
+        return 0;
+    case 4: {
+        uint32_t addr;
+        if (ptls_decode32(&addr, src, end) != 0)
+            return -1;
+        dest->sin = (struct sockaddr_in){.sin_family = AF_INET, .sin_addr.s_addr = htonl(addr)};
+        break;
+    }
+    case 6: {
+        uint64_t addr[2];
+        if (ptls_decode64(&addr[0], src, end) != 0 || ptls_decode64(&addr[1], src, end) != 0)
+            return -1;
+        dest->sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
+        quicly_encode64(quicly_encode64(dest->sin6.sin6_addr.s6_addr, addr[0]), addr[1]);
+        break;
+    }
+    default:
+        return -1;
+    }
+    if (ptls_decode16(&port, src, end) != 0)
+        return -1;
+    if (ip_version == 4)
+        dest->sin.sin_port = htons(port);
+    else
+        dest->sin6.sin6_port = htons(port);
+    return 0;
+}
+
+static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const uint8_t **src, const uint8_t *end, int is_draft03)
+{
+    switch (capsule->type) {
+    case 0: /* DATAGRAM, or UDP_PACKET in draft-03 */
+        if (!is_draft03 && (capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX) {
+            *src = end; /* invalid HTTP Datagram; discard it without rejecting the capsule */
+            break;
+        }
+        capsule->data.datagram = h2o_iovec_init(*src, end - *src);
+        *src = end;
+        break;
+    case 0x11: /* COMPRESSION_ASSIGN */
+        if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX ||
+            udp_decode_target(&capsule->data.assign, src, end) != 0)
+            return -1;
+        break;
+    case 0x12: /* COMPRESSION_ACK */
+    case 0x13: /* COMPRESSION_CLOSE */
+        if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
+            return -1;
+        break;
+    default:
+        *src = end;
+        break;
+    }
+    return *src == end ? 0 : -1;
+}
+
+/* Returns 0 on success, -2 if incomplete, -1 if malformed. */
+static int udp_decode_capsule(struct st_udp_capsule_t *capsule, const uint8_t **src, const uint8_t *end, int is_draft03)
+{
+    const uint8_t *start = *src;
+    uint64_t length;
+    *capsule = (struct st_udp_capsule_t){0};
+    if ((capsule->type = ptls_decode_quicint(src, end)) == UINT64_MAX ||
+        (length = ptls_decode_quicint(src, end)) == UINT64_MAX || length > (uint64_t)(end - *src)) {
+        *src = start;
+        return -2;
+    }
+    const uint8_t *payload_end = *src + length;
+    if (is_draft03 && capsule->type != 0) {
+        *src = payload_end; /* draft-03 has no bind control capsules */
+        return 0;
+    }
+    return udp_decode_capsule_payload(capsule, src, payload_end, is_draft03);
+}
+
+static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_id, h2o_iovec_t datagram)
+{
+    if (context_id == UINT64_MAX)
+        return 0;
     const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
 
-    if (!self->udp.is_draft03) {
-        uint64_t context_id = ptls_decode_quicint(&src, end);
-        if (self->udp.can_unbound) {
-            if (context_id == 0) {
-                return -1;
-            }
-            if (self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id || src == end)
-                return 0;
-            quicly_address_t dest;
-            socklen_t destlen;
-            switch (*src++) {
-            case 4:
-                if (end - src < 6)
-                    return 0;
-                dest.sin = (struct sockaddr_in){.sin_family = AF_INET};
-                memcpy(&dest.sin.sin_addr, src, 4);
-                memcpy(&dest.sin.sin_port, src + 4, 2);
-                destlen = sizeof(dest.sin);
-                src += 6;
-                break;
-            case 6:
-                if (end - src < 18)
-                    return 0;
-                dest.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6};
-                memcpy(&dest.sin6.sin6_addr, src, 16);
-                memcpy(&dest.sin6.sin6_port, src + 16, 2);
-                destlen = sizeof(dest.sin6);
-                src += 18;
-                break;
-            default:
-                return 0;
-            }
-            if (!h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, &dest.sa))
-                return 0;
-            H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
-            while (sendto(h2o_socket_get_fd(self->sock), src, end - src, 0, &dest.sa, destlen) == -1 && errno == EINTR)
-                ;
+    if (self->udp.can_unbound) {
+        if (context_id == 0)
+            return -1;
+        if (self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id)
             return 0;
-        }
-        if (context_id != 0)
+        quicly_address_t dest;
+        if (udp_decode_target(&dest, &src, end) != 0 || (dest.sa.sa_family != AF_INET && dest.sa.sa_family != AF_INET6))
             return 0;
+        if (!h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, &dest.sa))
+            return 0;
+        socklen_t salen = dest.sa.sa_family == AF_INET ? sizeof(dest.sin) : sizeof(dest.sin6);
+        H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
+        while (sendto(h2o_socket_get_fd(self->sock), src, end - src, 0, &dest.sa, salen) == -1 && errno == EINTR)
+            ;
+        return 0;
     }
-
+    if (context_id != 0)
+        return 0;
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
     while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
         ;
     return 0;
 }
 
-static int udp_handle_bound_capsule(struct st_connect_generator_t *self, uint64_t type, h2o_iovec_t capsule)
+static int udp_handle_capsule(struct st_connect_generator_t *self, struct st_udp_capsule_t capsule)
 {
-    const uint8_t *p = (const uint8_t *)capsule.base, *end = p + capsule.len;
-    if (type == 0) { /* DATAGRAM */
-        return udp_write_core(self, capsule);
-    } else if (type == 0x11) { /* COMPRESSION_ASSIGN */
-        uint64_t context_id = ptls_decode_quicint(&p, end);
-        if (context_id == UINT64_MAX || context_id == 0 || (context_id & 1) != 0 || p == end)
+    if (capsule.type == 0) /* DATAGRAM, or UDP_PACKET in draft-03 */
+        return udp_write_core(self, capsule.context_id, capsule.data.datagram);
+
+    if (!self->udp.can_unbound)
+        return 0;
+
+    if (capsule.type == 0x11) { /* COMPRESSION_ASSIGN */
+        uint64_t context_id = capsule.context_id;
+        if (context_id == 0 || (context_id & 1) != 0)
             return -1;
-        if (*p == 0) {
-            if (end - p != 1 || self->udp.bound_context_id != 0)
+        if (capsule.data.assign.sa.sa_family == AF_UNSPEC) {
+            if (self->udp.bound_context_id != 0)
                 return -1;
             self->udp.bound_context_id = context_id;
             return udp_send_context_response(self, 0x12, context_id); /* COMPRESSION_ACK */
         } else {
-            size_t expected_len = *p == 4 ? 7 : *p == 6 ? 19 : 0;
-            if (expected_len == 0 || end - p != expected_len)
-                return -1;
             return udp_send_context_response(self, 0x13, context_id); /* compressed contexts are unsupported */
         }
-    } else if (type == 0x13) { /* COMPRESSION_CLOSE */
-        uint64_t context_id = ptls_decode_quicint(&p, end);
-        if (context_id == UINT64_MAX || context_id == 0 || p != end)
+    } else if (capsule.type == 0x13) { /* COMPRESSION_CLOSE */
+        uint64_t context_id = capsule.context_id;
+        if (context_id == 0)
             return -1;
         if (context_id == self->udp.bound_context_id)
             self->udp.bound_context_id = 0;
-    } else if (type == 0x12) { /* the proxy did not assign a context */
+    } else if (capsule.type == 0x12) { /* the proxy did not assign a context */
         return -1;
     }
     return 0;
@@ -872,7 +915,6 @@ static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
 static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
 {
     int from_buf = 0;
-    size_t off = 0;
 
     reset_io_timeout(self);
 
@@ -883,22 +925,19 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
         chunk.base = self->udp.egress.buf->bytes;
         chunk.len = self->udp.egress.buf->size;
     }
-    do {
-        uint64_t type;
-        size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &type);
-        if (datagram.base == NULL)
+    /* Draft-03 stream chunks and RFC 9297 capsules share the same type/length framing. */
+    const uint8_t *src = (const uint8_t *)chunk.base, *end = src + chunk.len;
+    while (1) {
+        struct st_udp_capsule_t capsule;
+        int ret = udp_decode_capsule(&capsule, &src, end, self->udp.is_draft03);
+        if (ret == -2)
             break;
-        if (self->udp.can_unbound) {
-            if (udp_handle_bound_capsule(self, type, datagram) != 0) {
-                close_readwrite(self);
-                return;
-            }
-        } else if (type == 0) {
-            udp_write_core(self, datagram);
+        if (ret != 0 || udp_handle_capsule(self, capsule) != 0) {
+            close_readwrite(self);
+            return;
         }
-        off += to_consume;
-    } while (1);
+    }
+    size_t off = src - (const uint8_t *)chunk.base;
 
     if (self->udp.can_unbound && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
         close_readwrite(self);
@@ -947,7 +986,11 @@ static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t 
     reset_io_timeout(self);
 
     for (size_t i = 0; i != num_datagrams; ++i) {
-        if (udp_write_core(self, datagrams[i]) != 0) {
+        const uint8_t *src = (const uint8_t *)datagrams[i].base, *end = src + datagrams[i].len;
+        uint64_t context_id = 0;
+        if (!self->udp.is_draft03 && (context_id = ptls_decode_quicint(&src, end)) == UINT64_MAX)
+            continue;
+        if (udp_write_core(self, context_id, h2o_iovec_init(src, end - src)) != 0) {
             close_readwrite(self);
             return;
         }

@@ -82,9 +82,12 @@ subtest "udp-bind-uncompressed" => sub {
     like $headers, qr{\r\nconnect-udp-bind: \?1\r\n}i, "bind confirmed";
     like $headers, qr{\r\nproxy-public-address: "127\.0\.0\.1:\d+"\r\n}i, "bound address advertised";
 
-    print $sock pack('C*', 0x11, 2, 2, 0); # assign uncompressed Context ID 2
+    print $sock pack('C', 0x11); # split the capsule header across reads
+    sleep 0.05;
+    print $sock pack('C*', 2, 2, 0); # assign uncompressed Context ID 2
     is read_exact($sock, 3), pack('C*', 0x12, 1, 2), "context acknowledged";
 
+    print $sock pack('C*', 0, 2, 2, 5); # invalid HTTP Datagram: unsupported IP version
     my $datagram = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello";
     print $sock pack('CC', 0, length $datagram), $datagram;
     is read_exact($sock, 2 + length $datagram), pack('CC', 0, length $datagram) . $datagram, "UDP echoed";
