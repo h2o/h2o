@@ -1404,6 +1404,11 @@ Exit:
     return ret;
 }
 
+/* Set when the updater of the status of a certificate is running. The updater forks a process and
+ * executes the command that fetches the status, and the pledge of the server therefore has to allow the
+ * two promises that permit it; see apply_pledge(). */
+static int ocsp_updater_enabled = 0;
+
 static void *ocsp_updater_thread(void *_identity)
 {
     struct listener_ssl_identity_t *identity = _identity;
@@ -2592,6 +2597,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             case RUN_MODE_WORKER: {
                 pthread_t tid;
                 h2o_multithread_create_thread(&tid, NULL, ocsp_updater_thread, identity);
+                ocsp_updater_enabled = 1;
             } break;
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
@@ -3571,13 +3577,21 @@ static void apply_pledge(void)
      * - proc:  Fork processes - required by OCSP updater threads
      * - exec:  Execute external programs - required by OCSP updater to spawn fetch scripts
      *
-     * Note: OCSP updater threads continue running after pledge is applied and periodically
-     * fork/exec to fetch certificate status updates (see get_ocsp_response function).
+     * The two promises that allow the process to start another one are granted only when the server
+     * is going to start one. The updater of the status of a certificate is the only part of the server
+     * that forks a process and executes a command, and it does so periodically, long after the pledge
+     * has been applied; a deployment that does not use the updater does not need the two promises,
+     * and they are the ones that would let a process that has been compromised start something of its
+     * own. The promises of a process cannot be increased afterwards, so the decision has to be made
+     * here, before the first pledge.
      */
-    if (pledge("stdio rpath wpath cpath inet dns unix proc exec", NULL) != 0)
+    const char *promises =
+        ocsp_updater_enabled ? "stdio rpath wpath cpath inet dns unix proc exec" : "stdio rpath wpath cpath inet dns unix";
+
+    if (pledge(promises, NULL) != 0)
         h2o_fatal("pledge failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
 
-    fprintf(stderr, "[INFO] pledge restrictions applied: stdio rpath wpath cpath inet dns unix proc exec\n");
+    fprintf(stderr, "[INFO] pledge restrictions applied: %s\n", promises);
 }
 #endif
 
