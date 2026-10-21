@@ -650,7 +650,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos = append_safe_string(pos, env_var->base, env_var->len);
         } break;
         case ELEMENT_TYPE_QUERY: /* %q */
-            if (req->input.query_at != SIZE_MAX) {
+            if (req->input.query_at != SIZE_MAX && req->input.path.base != NULL && req->input.query_at <= req->input.path.len) {
                 size_t len = req->input.path.len - req->input.query_at;
                 RESERVE(len * unsafe_factor);
                 pos = append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);

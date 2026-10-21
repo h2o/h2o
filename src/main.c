@@ -4562,7 +4562,7 @@ Exit:
         num_quic_connections(-1);
     }
 ExitNoDecrements:
-    return &conn->super;
+    return conn == NULL ? NULL : &conn->super;
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)

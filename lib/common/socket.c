@@ -2391,8 +2391,10 @@ void zerocopy_buffers_push(struct st_h2o_socket_zerocopy_buffers_t *buffers, voi
         if (new_capacity <= buffers->capacity) {
             memmove(buffers->bufs, buffers->bufs + buffers->first, sizeof(buffers->bufs[0]) * (buffers->last - buffers->first));
         } else {
+            size_t nbufs = buffers->last - buffers->first;
             void **newbufs = h2o_mem_alloc(sizeof(newbufs[0]) * new_capacity);
-            h2o_memcpy(newbufs, buffers->bufs + buffers->first, sizeof(newbufs[0]) * (buffers->last - buffers->first));
+            if (nbufs > 0)
+                h2o_memcpy(newbufs, buffers->bufs + buffers->first, sizeof(newbufs[0]) * nbufs);
             free(buffers->bufs);
             buffers->bufs = newbufs;
             buffers->capacity = new_capacity;
