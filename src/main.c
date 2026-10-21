@@ -1600,6 +1600,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .cipher_suites = cipher_suites,
                 .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
+                /* ECH is used as a server only, and the client side of it must not be enabled here: when a
+                 * client offers ECH and the server rejects it, picotls frees the public name of the client
+                 * but keeps the state of the offer, and the certificate of the peer is then validated
+                 * without the name being compared against it. */
                 .ech.server = {ech_create_opener, ech_retry_configs},
                 .on_client_hello = &pctx->ch.super,
                 .emit_certificate = &pctx->ec.super,
