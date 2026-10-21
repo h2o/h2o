@@ -418,7 +418,7 @@ void h2o_http2_stream_send_pending_data(h2o_http2_conn_t *conn, h2o_http2_stream
         stream->_data.size = 0;
         stream->send_state = H2O_SEND_STATE_ERROR;
         h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_END_STREAM);
-    } else if (nextbuf == stream->_data.entries + stream->_data.size) {
+    } else if (nextbuf == (stream->_data.entries != NULL ? stream->_data.entries + stream->_data.size : NULL)) {
         /* sent all data */
         stream->_data.size = 0;
         if (stream->state == H2O_HTTP2_STREAM_STATE_SEND_BODY_IS_FINAL)

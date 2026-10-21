@@ -16,27 +16,39 @@ jobs:
       matrix:
         include:
           - name: default
+            timeout: 60
             command: make -f misc/docker-ci/check.mk ALL BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 1.1.0 + Fuzz
+            timeout: 60
             command: make -f misc/docker-ci/check.mk ossl1.1.0+fuzz BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 1.1.1
+            timeout: 60
             command: make -f misc/docker-ci/check.mk ossl1.1.1 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: OpenSSL 3.0 (Ubuntu 24.04 / DTrace)
+            timeout: 60
             command: make -f misc/docker-ci/check.mk ossl3.0 BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: boringssl
+            timeout: 60
             command: make -f misc/docker-ci/check.mk boringssl BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           # Exercises the compile-time switches that every other job leaves at their defaults, so that
           # the neverbleed engine and the brotli handler are built in both configurations.
           - name: neverbleed + brotli optional
+            timeout: 60
             command: make -f misc/docker-ci/check.mk optional-features BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: ASan (Ubuntu 24.04)
+            timeout: 60
             command: make -f misc/docker-ci/check.mk asan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
+          # The sanitized build is slower than the others, and it is the job that was never given
+          # the time to finish: it used to be killed by the timeout of the matrix, which made its
+          # failure indistinguishable from a hang. It gets a timeout of its own.
           - name: ASan + UBSan (Ubuntu 24.04)
+            timeout: 120
             command: make -f misc/docker-ci/check.mk ubsan BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
           - name: Coverage
+            timeout: 60
             command: make -f misc/docker-ci/check.mk coverage BUILD_ARGS=-j6 TEST_ENV='TEST_JOBS=4 TEST_PLATFORM=github-actions'
 
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout }}
     steps:
     - uses: actions/checkout@v3
       with:

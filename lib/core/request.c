@@ -166,7 +166,8 @@ h2o_hostconf_t *h2o_req_setup(h2o_req_t *req)
 
 static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
 {
-    h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
+    h2o_handler_t **end =
+        req->pathconf->handlers.entries != NULL ? req->pathconf->handlers.entries + req->pathconf->handlers.size : NULL;
 
     for (; handler != end; ++handler) {
         req->handler = *handler;
@@ -718,7 +719,8 @@ DECL_SEND_ERROR_DEFERRED(502)
 static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
 {
     if (input.len < limit) {
-        memcpy(dst, input.base, input.len);
+        if (input.len > 0)
+            memcpy(dst, input.base, input.len);
         return input.len;
     } else {
         memcpy(dst, input.base, (limit - 3));

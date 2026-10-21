@@ -63,7 +63,6 @@ struct gkc_summary {
     struct freelist *fl;
 };
 
-
 static inline int list_empty(struct list *l)
 {
     return l->next == l;
@@ -94,10 +93,12 @@ static inline void list_add_tail(struct list *l, struct list *n)
 }
 
 #undef offsetof
-#ifdef __compiler_offsetof
-#define offsetof(TYPE,MEMBER) __compiler_offsetof(TYPE,MEMBER)
+#ifdef __GNUC__
+#define offsetof(TYPE, MEMBER) __builtin_offsetof(TYPE, MEMBER)
+#elif defined(__compiler_offsetof)
+#define offsetof(TYPE, MEMBER) __compiler_offsetof(TYPE, MEMBER)
 #else
-#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
+#define offsetof(TYPE, MEMBER) ((size_t)&((TYPE *)0)->MEMBER)
 #endif
 
 #define container_of(ptr, type, member) ((type *)((char *)(ptr) - offsetof(type, member)))
@@ -118,7 +119,6 @@ struct gkc_tuple {
     struct list node;
 };
 #define list_to_tuple(ln) (container_of((ln), struct gkc_tuple, node))
-
 
 void gkc_summary_init(struct gkc_summary *s, double epsilon)
 {
@@ -150,7 +150,7 @@ void gkc_sanity_check(struct gkc_summary *s)
         cur = cur->next;
         nr_elems += tcur->g;
         nr_alloced++;
-        if (s->nr_elems > (1/s->epsilon)) {
+        if (s->nr_elems > (1 / s->epsilon)) {
             /* there must be enough observations for this to become true */
             assert(tcur->g + tcur->delta <= (s->nr_elems * s->epsilon * 2));
         }
@@ -298,9 +298,7 @@ void gkc_insert_value(struct gkc_summary *s, double value)
     new->g = 1;
     list_init(&new->node);
 
-
     s->nr_elems++;
-
 
     /* first insert */
     if (list_empty(&s->head)) {
@@ -333,7 +331,7 @@ void gkc_insert_value(struct gkc_summary *s, double value)
     /* v > vs-1, new max */
     list_add_tail(&s->head, &new->node);
 out:
-    if (s->nr_elems % (int)(1/(2*s->epsilon))) {
+    if (s->nr_elems % (int)(1 / (2 * s->epsilon))) {
         gkc_compress(s);
     }
 }

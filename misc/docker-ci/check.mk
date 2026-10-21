@@ -89,14 +89,22 @@ asan:
 # faults ASan is blind to: signed integer overflow, shifts out of range, misaligned access, null
 # dereference, and out-of-bounds indices into fixed-size arrays. The codebase parses a lot of
 # length-prefixed input (HTTP, HTTP/3, and the framing in deps/), so that class is worth covering.
-# -fno-sanitize-recover=undefined makes the first report abort the run instead of being logged and
-# stepped over, and print_stacktrace=1 makes it point at a line rather than just an address.
+# print_stacktrace=1 makes a report point at a line rather than just an address.
+#
+# The sanitizer is left recoverable (-fsanitize-recover=undefined, halt_on_error=0), because a report
+# that aborts the process under test is a report that is never seen: the server dies, the test that
+# was talking to it waits for a response that is not coming, and the job dies of the workflow
+# timeout with nothing in the log but the absence of output. Recoverable, the run continues, every
+# report is written to a file, and misc/docker-ci/ubsan-report.sh prints them all and fails the job
+# once the test suite has finished - one run, every finding, and a proper failure instead of a
+# timeout. log_path is set for both sanitizers, so that a report of either of them is collected.
 ubsan:
 	docker run $(DOCKER_RUN_OPTS) h2oserver/h2o-ci:ubuntu2404 \
 		make -f $(SRC_DIR)/misc/docker-ci/check.mk _check \
-		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined" -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=undefined" -DWITH_MPTCP=ON' \
+		CMAKE_ARGS='-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fsanitize-recover=undefined" -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fsanitize-recover=undefined" -DWITH_MPTCP=ON' \
 		BUILD_ARGS='$(BUILD_ARGS)' \
-		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0 UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1 EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
+		TEST_ENV='ASAN_OPTIONS=detect_leaks=0:alloc_dealloc_mismatch=0:log_path=/tmp/ubsan-report UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0:log_path=/tmp/ubsan-report EXPECTED_SERVER_FEATURES=$(SERVER_FEATURES_UBUNTU2404) $(TEST_ENV)' \
+		UBSAN_REPORT_DIR=/tmp/ubsan-report \
 		TMP_SIZE='$(TMP_SIZE)'
 
 # https://clang.llvm.org/docs/SourceBasedCodeCoverage.html
@@ -129,7 +137,11 @@ _do_check:
 	time komake $(BUILD_ARGS) all checkdepends
 	if [ -e h2o-fuzzer-http1 ] ; then export $(FUZZ_ASAN); fi; \
 		ulimit -n 1024; \
-		env $(TEST_ENV) make check
+		env $(TEST_ENV) make check; \
+		rc=$$?; \
+		sh $(SRC_DIR)/misc/docker-ci/ubsan-report.sh '$(UBSAN_REPORT_DIR)'; \
+		rrc=$$?; \
+		if [ $$rc -ne 0 ] || [ $$rrc -ne 0 ] ; then exit 1 ; fi
 
 enter:
 	docker run $(DOCKER_RUN_OPTS) -it $(CONTAINER_NAME) bash

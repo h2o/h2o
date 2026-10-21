@@ -114,11 +114,12 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 
-Error: {
-    int saved_errno = errno;
-    close(fd);
-    errno = saved_errno;
-}
+Error:
+    {
+        int saved_errno = errno;
+        close(fd);
+        errno = saved_errno;
+    }
     return NULL;
 }
 #endif
@@ -1411,7 +1412,8 @@ void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, s
         h2o_buffer_reserve(buf, new_size - (*buf)->size);
         (*buf)->size = new_size;
     }
-    memcpy((*buf)->bytes + off, src, len);
+    if (len > 0)
+        memcpy((*buf)->bytes + off, src, len);
 }
 
 void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)

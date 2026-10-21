@@ -1760,8 +1760,8 @@ static h2o_iovec_t *build_http2_origin_frame(h2o_configurator_command_t *cmd, yo
 {
     size_t i;
     h2o_iovec_t *http2_origin_frame = h2o_mem_alloc(sizeof(*http2_origin_frame));
-    uint16_t lengths[nr_origins];
-    h2o_iovec_t elems[nr_origins * 2];
+    uint16_t lengths[nr_origins != 0 ? nr_origins : 1];
+    h2o_iovec_t elems[nr_origins != 0 ? nr_origins * 2 : 1];
     for (i = 0; i < nr_origins; i++) {
         yoml_t *origin = origins[i];
         if (origin->type != YOML_TYPE_SCALAR) {
@@ -4562,7 +4562,7 @@ Exit:
         num_quic_connections(-1);
     }
 ExitNoDecrements:
-    return &conn->super;
+    return conn == NULL ? NULL : &conn->super;
 }
 
 static void update_listener_state(struct listener_ctx_t *listeners)

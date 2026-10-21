@@ -29,8 +29,8 @@ enum {
     H2O_CONFIGURATOR_FLAG_HOST = 0x2,
     H2O_CONFIGURATOR_FLAG_PATH = 0x4,
     H2O_CONFIGURATOR_FLAG_EXTENSION = 0x8,
-    H2O_CONFIGURATOR_FLAG_ALL_LEVELS =
-        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH | H2O_CONFIGURATOR_FLAG_EXTENSION,
+    H2O_CONFIGURATOR_FLAG_ALL_LEVELS = H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
+        H2O_CONFIGURATOR_FLAG_EXTENSION,
     H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR = 0x100,
     H2O_CONFIGURATOR_FLAG_EXPECT_SEQUENCE = 0x200,
     H2O_CONFIGURATOR_FLAG_EXPECT_MAPPING = 0x400,
@@ -201,7 +201,8 @@ void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf);
 
 inline int h2o_configurator_at_extension_level(h2o_configurator_context_t *ctx)
 {
-    return ctx->pathconf != NULL && ctx->pathconf->path.base == NULL && ctx->pathconf != &ctx->hostconf->fallback_path;
+    return ctx->pathconf != NULL && ctx->pathconf->path.base == NULL &&
+           (ctx->hostconf == NULL || ctx->pathconf != &ctx->hostconf->fallback_path);
 }
 
 #endif
