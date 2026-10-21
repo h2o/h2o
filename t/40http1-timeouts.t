@@ -61,4 +61,22 @@ $conffn = build_test(8, 1);
 $res = `curl -X POST -d \@$conffn -svo /dev/null http://127.0.0.1:$port/custom-perl 2>&1 > /dev/null`;
 like $res, qr{Connection.*to host 127\.0\.0\.1(?::\d+)? left intact}, "connection was closed";
 
+subtest "http1-request-io-timeout-while-generating: OFF" => sub {
+    my $server = spawn_h2o(<< "EOT");
+http1-request-io-timeout: 2
+http1-request-io-timeout-while-generating: OFF
+http1-request-timeout: 5
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: https://127.0.0.1:$upstream_port
+        proxy.ssl.verify-peer: OFF
+        proxy.timeout.io: 1000000
+EOT
+    my $conffn = build_test(1, 3);
+    my $res = `curl -X POST -d \@$conffn -svo /dev/null http://127.0.0.1:$server->{port}/custom-perl 2>&1 > /dev/null`;
+    like $res, qr{Connection.*to host 127\.0\.0\.1(?::\d+)? left intact}, "waiting for the response is not timed out";
+};
+
 done_testing();
