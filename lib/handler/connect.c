@@ -131,7 +131,8 @@ struct st_connect_generator_t {
                 h2o_doublebuffer_t doublebuf;
             } ingress;
             uint64_t bound_context_id; /* zero when no uncompressed context is open */
-            unsigned can_unbound : 1;
+            unsigned can_unbound : 1; /* Context ID 0 is permitted */
+            unsigned can_bound : 1;   /* bound UDP proxying is permitted */
             /**
              * if using draft-03 style encoding rather than RFC 9298
              */
@@ -845,10 +846,8 @@ static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_
         return 0;
     const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
 
-    if (self->udp.can_unbound) {
-        if (context_id == 0)
-            return -1;
-        if (self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id)
+    if (context_id != 0) {
+        if (!self->udp.can_bound || self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id)
             return 0;
         quicly_address_t dest;
         if (udp_decode_target(&dest, &src, end) != 0 || (dest.sa.sa_family != AF_INET && dest.sa.sa_family != AF_INET6))
@@ -861,8 +860,8 @@ static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_
             ;
         return 0;
     }
-    if (context_id != 0)
-        return 0;
+    if (!self->udp.can_unbound)
+        return -1;
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
     while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
         ;
@@ -874,7 +873,7 @@ static int udp_handle_capsule(struct st_connect_generator_t *self, struct st_udp
     if (capsule.type == 0) /* DATAGRAM, or UDP_PACKET in draft-03 */
         return udp_write_core(self, capsule.context_id, capsule.data.datagram);
 
-    if (!self->udp.can_unbound)
+    if (!self->udp.can_bound)
         return 0;
 
     if (capsule.type == 0x11) { /* COMPRESSION_ASSIGN */
@@ -940,7 +939,7 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     }
     size_t off = src - (const uint8_t *)chunk.base;
 
-    if (self->udp.can_unbound && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
+    if (self->udp.can_bound && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
         close_readwrite(self);
         return;
     }
@@ -1012,7 +1011,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
 
     { /* read UDP packet, or return */
         ssize_t rret;
-        while ((rret = self->udp.can_unbound
+        while ((rret = self->udp.can_bound
                            ? recvfrom(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0, &srcaddr.sa, &srcaddrlen)
                            : recv(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
             ;
@@ -1022,7 +1021,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
     H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, payload.len);
 
-    if (self->udp.can_unbound) {
+    if (self->udp.can_bound) {
         if (self->udp.bound_context_id == 0)
             return;
         size_t addrlen;
@@ -1054,7 +1053,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
 
     /* prepend Context ID (of zero, indicating UDP packet) if RFC 9298 */
-    if (!self->udp.is_draft03 && !self->udp.can_unbound) {
+    if (!self->udp.is_draft03 && !self->udp.can_bound) {
         *--payload.base = 0;
         payload.len += 1;
     }
@@ -1320,7 +1319,7 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
             h2o_send_error_503(self->src_req, "Service Unavailable", errstr, H2O_SEND_ERROR_KEEP_HEADERS); /* FIXME */
             return 0;
         }
-        self->udp.can_unbound = 1;
+        self->udp.can_bound = 1;
         self->timeout.cb = on_io_timeout;
         reset_io_timeout(self);
         h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONNECT_UDP_BIND, NULL, H2O_STRLIT("?1"));
@@ -1331,7 +1330,10 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
         return 0;
     }
 
-    /* unbounded (i.e., ordinary) connect-udp; start address resolution */
+    if (!is_tcp)
+        self->udp.can_unbound = 1;
+
+    /* unbound (i.e., ordinary) connect-udp; start address resolution */
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
     self->getaddr_req.v6 = h2o_hostinfo_getaddr(
