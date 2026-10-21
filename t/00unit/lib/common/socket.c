@@ -208,8 +208,8 @@ static void test_zerocopy_buffers_random(void)
 {
     struct st_h2o_socket_zerocopy_buffers_t buffers = {};
 
-    int rseed = 13;
-#define RAND() (rseed = (rseed * 1103515245 + 12345) & 255)
+    unsigned int rseed = 13;
+#define RAND() ((int)((rseed = (rseed * 1103515245u + 12345u) & 255u)))
 
     /* push 1000 entries, repeating each of them at 25% probability */
     for (uintptr_t i = 0; i < 1000; ++i) {

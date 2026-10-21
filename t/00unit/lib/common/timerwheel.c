@@ -36,11 +36,11 @@ static void my_callback(h2o_timerwheel_entry_t *timer)
     invokes++;
 }
 
-static int rseed = 13;
+static unsigned int rseed = 13;
 
 static inline int lcg_rand()
 {
-    return rseed = (rseed * 1103515245 + 12345) & RAND_MAX;
+    return rseed = (rseed * 1103515245u + 12345u) & RAND_MAX;
 }
 
 static void test_slot_calc(void)
