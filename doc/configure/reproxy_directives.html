@@ -67,8 +67,38 @@ This document describes the configuration directives of the reproxy handler.
 <li><a href="configure/reproxy_directives.html#reproxy">
 <code>reproxy</code>
 </a></li>
+<li><a href="configure/reproxy_directives.html#reproxy.allowed-hosts">
+<code>reproxy.allowed-hosts</code>
+</a></li>
 </ul>
 
+
+<div id="reproxy.allowed-hosts" class="directive-head">
+<h3><a href="configure/reproxy_directives.html#reproxy.allowed-hosts"><code>"reproxy.allowed-hosts"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A sequence of the host names that the server is allowed to fetch when the upstream asks for it to do so with the
+<code>X-Reproxy-URL</code> header.
+</p>
+
+<p>
+The header comes from the response of the upstream, and the upstream may be under the control of somebody else. By
+default, H2O fetches whatever the upstream asks for, which lets an upstream that is hostile, or that has been
+compromised, make the server reach hosts that are not meant to be reachable from the outside. When this directive is
+used, a request for a host that is not on the list is refused with a 502.
+</p>
+
+<p>
+When the directive is not used, any host may be requested, which is what H2O did before this directive existed.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+</dl>
 
 <div id="reproxy" class="directive-head">
 <h3><a href="configure/reproxy_directives.html#reproxy"><code>"reproxy"</code></a></h3>
