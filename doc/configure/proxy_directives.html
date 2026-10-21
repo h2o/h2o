@@ -176,6 +176,9 @@ Following sections describe the configuration directives defined for the module.
 <li><a href="configure/proxy_directives.html#proxy.proxy-status.identity">
 <code>proxy.proxy-status.identity</code>
 </a></li>
+<li><a href="configure/proxy_directives.html#proxy.sanitize-forwarded-headers">
+<code>proxy.sanitize-forwarded-headers</code>
+</a></li>
 <li><a href="configure/proxy_directives.html#proxy.ssl.cafile">
 <code>proxy.ssl.cafile</code>
 </a></li>
@@ -973,6 +976,40 @@ Specifies the name of the server to be emitted as part of the <code>proxy-status
 </dd>
 </dl>
 
+
+<div id="proxy.sanitize-forwarded-headers" class="directive-head">
+<div class="directive-since">since v2.3</div>
+<h3><a href="configure/proxy_directives.html#proxy.sanitize-forwarded-headers"><code>"proxy.sanitize-forwarded-headers"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if the headers that tell the origin about the
+client, namely <code>X-Forwarded-For</code>, <code>Via</code> and <code>X-Forwarded-Proto</code>, are to be
+dropped when the client sends them.
+</p>
+
+<p>
+By default, H2O appends the address of the client to the <code>X-Forwarded-For</code> header that the client
+sent, and merges the <code>Via</code> header that the client sent with the one that H2O adds, which is what a
+proxy that is in the middle of a chain is expected to do. A client can therefore claim to be somebody else, and
+an application that trusts the leftmost entry of the chain, rather than the rightmost one, would believe the
+claim.
+</p>
+
+<p>
+When this flag is set, the values that the client sent are dropped, and the origin is told about the address of
+the client alone. This is what a deployment that is reached only by clients that it trusts, and that therefore
+have no reason to send such headers in the first place, wants.
+</p>
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.sanitize-forwarded-headers: OFF</pre></code>
+</dl>
 
 <div id="proxy.ssl.cafile" class="directive-head">
 <div class="directive-since">since v2.0</div>

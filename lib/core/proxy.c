@@ -150,6 +150,7 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
     socklen_t sslen;
     h2o_iovec_t xff_buf = {NULL}, via_buf = {NULL};
     int preserve_x_forwarded_proto = req->conn->ctx->globalconf->proxy.preserve_x_forwarded_proto;
+    int sanitize_forwarded_headers = req->conn->ctx->globalconf->proxy.sanitize_forwarded_headers;
     int emit_x_forwarded_headers = req->conn->ctx->globalconf->proxy.emit_x_forwarded_headers;
     int emit_via_header = req->conn->ctx->globalconf->proxy.emit_via_header;
 
@@ -224,12 +225,16 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                     cookie_values.entries[cookie_values.size++] = h->value;
                     continue;
                 } else if (token == H2O_TOKEN_VIA) {
+                    if (sanitize_forwarded_headers)
+                        continue; /* the value that the client sent is not trusted */
                     if (!emit_via_header) {
                         goto AddHeader;
                     }
                     via_buf = build_request_merge_headers(&req->pool, via_buf, h->value, ',');
                     continue;
                 } else if (token == H2O_TOKEN_X_FORWARDED_FOR) {
+                    if (sanitize_forwarded_headers)
+                        continue; /* the value that the client sent is not trusted */
                     if (!emit_x_forwarded_headers) {
                         goto AddHeader;
                     }
@@ -240,7 +245,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                     goto AddHeader;
                 }
             }
-            if (!preserve_x_forwarded_proto && h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
+            if ((!preserve_x_forwarded_proto || sanitize_forwarded_headers) &&
+                h2o_lcstris(h->name->base, h->name->len, H2O_STRLIT("x-forwarded-proto")))
                 continue;
         AddHeader:
             if (h2o_iovec_is_token(h->name)) {
