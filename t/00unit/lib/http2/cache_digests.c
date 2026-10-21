@@ -105,9 +105,31 @@ static void test_decode_limit(void)
     h2o_cache_digests_destroy(digests);
 }
 
+static void test_lookup_zero_capacity(void)
+{
+    /* A frame that carries no capacity holds the key zero. Looking a URL up in such a frame used to
+     * shift the hash by the width of the type, which is undefined behaviour. */
+    h2o_cache_digests_frame_t frame = {0};
+    h2o_cache_digests_frame_vector_t vector = {NULL};
+    h2o_cache_digests_t digests = {0};
+    uint64_t keys[1] = {0};
+
+    frame.capacity_bits = 0;
+    frame.keys.entries = keys;
+    frame.keys.size = 1;
+
+    h2o_vector_reserve(NULL, &vector, 1);
+    vector.entries[vector.size++] = frame;
+    digests.fresh.url_only = vector;
+
+    ok(h2o_cache_digests_lookup_by_url(&digests, H2O_STRLIT("https://example.com/style.css")) == H2O_CACHE_DIGESTS_STATE_FRESH);
+    ok(h2o_cache_digests_lookup_by_url(&digests, H2O_STRLIT("https://example.com/other.css")) == H2O_CACHE_DIGESTS_STATE_FRESH);
+}
+
 void test_lib__http2__cache_digests(void)
 {
     subtest("calc_hash", test_calc_hash);
     subtest("test_decode", test_decode);
     subtest("test_decode_limit", test_decode_limit);
+    subtest("test_lookup_zero_capacity", test_lookup_zero_capacity);
 }
