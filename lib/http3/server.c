@@ -2438,7 +2438,15 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         ++ctx->super.quic_stats->packet_processed;
     }
     ++ctx->super.next_cid->master_id; /* FIXME check overlap */
-    h2o_http3_setup(&conn->h3, qconn);
+    if (h2o_http3_setup(&conn->h3, qconn) != 0) {
+        /* The setup has failed partway, so the control streams of the connection are not there. The
+         * connection cannot be used, and the paths that use those streams would dereference a null
+         * pointer. */
+        h2o_http3_dispose_conn(&conn->h3);
+        kh_destroy(stream, conn->datagram_flows);
+        h2o_destroy_connection(&conn->super);
+        return &h2o_http3_accept_conn_closed;
+    }
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
     H2O_LOG_CONN(h3s_accept, &conn->super, {
