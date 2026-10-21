@@ -232,6 +232,11 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
                     return NULL;
             } else if (*token_start == '/' || *token_start == '?') {
                 break;
+            } else {
+                /* the port has to be followed by the end of the authority, or by the start of the path or of the
+                 * query; anything else is not a valid authority, and accepting it would mean that the authority that
+                 * is used differs from the one that was received */
+                return NULL;
             }
         }
         *port = (uint16_t)p;

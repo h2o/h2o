@@ -35,6 +35,14 @@ struct st_h2o_cache_digests_frame_t {
     unsigned capacity_bits;
 };
 
+enum {
+    /* the maximum number of keys that a single digest may carry; the keys are encoded using a variable number of
+     * bits, therefore a digest of a few bytes would otherwise be able to allocate an arbitrary amount of memory */
+    H2O_CACHE_DIGESTS_MAX_KEYS = 64,
+    /* the maximum number of digests that a single request may carry */
+    H2O_CACHE_DIGESTS_MAX_FRAMES = 16,
+};
+
 static void dispose_frame_vector(h2o_cache_digests_frame_vector_t *v)
 {
     size_t i;
@@ -83,8 +91,20 @@ static void load_digest(h2o_cache_digests_t **digests, const char *gcs_base64, s
         value += decoded + 1;
         if (value >= (uint64_t)1 << frame.capacity_bits)
             goto Exit;
+        /* the number of keys is bounded; the digest is discarded as a whole if the limit is reached, as a truncated
+         * set of keys would be misinterpreted as being the complete set */
+        if (frame.keys.size >= H2O_CACHE_DIGESTS_MAX_KEYS)
+            goto Exit;
         h2o_vector_reserve(NULL, &frame.keys, frame.keys.size + 1);
         frame.keys.entries[frame.keys.size++] = value;
+    }
+
+    /* the number of digests that a request may carry is bounded */
+    if (*digests != NULL) {
+        h2o_cache_digests_frame_vector_t *existing =
+            with_validators ? &(*digests)->fresh.url_and_etag : &(*digests)->fresh.url_only;
+        if (existing->size >= H2O_CACHE_DIGESTS_MAX_FRAMES)
+            goto Exit;
     }
 
     /* store the result */

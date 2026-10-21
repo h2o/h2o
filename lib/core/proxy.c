@@ -213,6 +213,12 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
                 const h2o_token_t *token = (void *)h->name;
                 if (token->flags.proxy_should_drop_for_req)
                     continue;
+                if (token == H2O_TOKEN_CONTENT_LENGTH && !req->is_tunnel_req) {
+                    /* The content-length of the request that is sent to the origin is generated below. Forwarding the
+                     * one that the client sent as well would result in the request having two of them, which a peer
+                     * that rejects such a request would refuse to serve. */
+                    continue;
+                }
                 if (token == H2O_TOKEN_COOKIE) {
                     h2o_vector_reserve(&req->pool, &cookie_values, cookie_values.size + 1);
                     cookie_values.entries[cookie_values.size++] = h->value;
@@ -675,7 +681,25 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
     if (status != 100 ||
         (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
         self->src_req->res.status = status;
-        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
+        /* Forward the headers of the informational response, dropping the ones that are not to be forwarded (the
+         * same set that is dropped from the final response). The values have to be copied, as the client discards
+         * them once this callback returns. */
+        h2o_headers_t forwarded = {NULL};
+        for (i = 0; i != num_headers; ++i) {
+            if (h2o_iovec_is_token(headers[i].name)) {
+                const h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name);
+                if (token->flags.proxy_should_drop_for_res)
+                    continue;
+                h2o_add_header(&self->src_req->pool, &forwarded, token, headers[i].orig_name,
+                               h2o_strdup(&self->src_req->pool, headers[i].value.base, headers[i].value.len).base,
+                               headers[i].value.len);
+            } else {
+                h2o_add_header_by_str(
+                    &self->src_req->pool, &forwarded, headers[i].name->base, headers[i].name->len, 0, headers[i].orig_name,
+                    h2o_strdup(&self->src_req->pool, headers[i].value.base, headers[i].value.len).base, headers[i].value.len);
+            }
+        }
+        self->src_req->res.headers = forwarded;
         h2o_send_informational(self->src_req);
     } else {
         /* we don't need to forward 100 since protocol handlers have already done */

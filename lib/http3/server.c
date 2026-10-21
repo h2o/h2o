@@ -1436,6 +1436,13 @@ quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *str
             shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator, 0);
             return 0;
         }
+        /* The content-length header is optional, and a request that does not carry one is not bounded by it; the size of
+         * the body is bounded by the limit that applies to the request entity, as it is in HTTP/2. Note that the check is
+         * made before the payload is buffered, so that the body is not retained in the first place. */
+        if (stream->req.req_body_bytes_received + frame.length > get_conn(stream)->super.ctx->globalconf->max_request_entity_size) {
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, in_generator, 0);
+            return 0;
+        }
         break;
     default:
         return 0;
