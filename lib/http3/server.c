@@ -1754,6 +1754,13 @@ static int finalize_do_send_setup_udp_tunnel(struct st_h2o_http3_server_stream_t
         int r;
         khiter_t iter = kh_put(stream, conn->datagram_flows, stream->datagram_flow_id, &r);
         assert(iter != kh_end(conn->datagram_flows));
+        if (r != 0) {
+            /* The flow id is already in use by another tunnel of this connection. The client chooses
+             * the flow id, and two tunnels may choose the same one; the datagrams of the two would
+             * then be dispatched to the same handler. */
+            shutdown_stream(stream, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, 0, 0);
+            return 0;
+        }
         kh_val(conn->datagram_flows, iter) = stream;
     }
 
