@@ -27,7 +27,7 @@ quicly_error_t quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap
 {
     quicly_sentmap_init_iter(&loss->sentmap, iter);
 
-    int64_t retire_before = now - quicly_loss_get_sentmap_expiration_time(loss, max_ack_delay);
+    double retire_before = now - quicly_loss_get_sentmap_expiration_time(loss, max_ack_delay);
 
     /* Retire entries older than the time specified, unless the connection is alive and the number of packets in the sentmap is
      * below 32 packets. This exception (the threshold of 32) exists to be capable of recognizing excessively late-ACKs when under
@@ -58,13 +58,17 @@ quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_
     /* This function ensures that the value returned in loss_time is when the next application timer should be set for loss
      * detection. if no timer is required, loss_time is set to INT64_MAX. */
 
-    const float rtt_for_threshold = loss->rtt.latest > loss->rtt.smoothed ? (float)loss->rtt.latest : loss->rtt.smoothed;
-    const uint32_t delay_until_lost = (uint32_t)ceilf(rtt_for_threshold * (1024 + loss->thresholds.time_based_percentile) / 1024);
+    const float rtt_for_threshold = loss->rtt.latest > loss->rtt.smoothed ? loss->rtt.latest : loss->rtt.smoothed;
+    double delay_until_lost = (double)rtt_for_threshold * (1024 + loss->thresholds.time_based_percentile) / 1024;
+    if (delay_until_lost < 1)
+        delay_until_lost = 1;
     quicly_sentmap_iter_t iter;
     const quicly_sent_packet_t *sent;
     quicly_error_t ret;
 
-#define CHECK_TIME_THRESHOLD(sent) ((sent)->sent_at <= now - delay_until_lost)
+    /* Share the deadline calculation between loss detection and timer scheduling to keep floating-point rounding consistent. */
+#define LOSS_DEADLINE(sent) ((sent)->sent_at + delay_until_lost)
+#define CHECK_TIME_THRESHOLD(sent) (LOSS_DEADLINE(sent) <= now)
 #define CHECK_PACKET_THRESHOLD(sent)                                                                                               \
     (loss->thresholds.use_packet_based &&                                                                                          \
      (int64_t)(sent)->packet_number <= largest_acked_signed - QUICLY_LOSS_DEFAULT_PACKET_THRESHOLD)
@@ -105,15 +109,17 @@ quicly_error_t quicly_loss_detect_loss(quicly_loss_t *loss, int64_t now, uint32_
     }
 
     /* schedule time-threshold alarm if there is a packet outstanding that is smaller than largest_acked */
-    while (sent->sent_at != INT64_MAX && sent->packet_number + 1 < loss->largest_acked_packet_plus1.per_epoch[sent->ack_epoch]) {
+    while (sent->sent_at != INFINITY && sent->packet_number + 1 < loss->largest_acked_packet_plus1.per_epoch[sent->ack_epoch]) {
         if (sent->cc_bytes_in_flight != 0) {
-            assert(now < sent->sent_at + delay_until_lost);
-            loss->loss_time = sent->sent_at + delay_until_lost;
+            assert(now < LOSS_DEADLINE(sent));
+            loss->loss_time = ceil(LOSS_DEADLINE(sent));
             break;
         }
         quicly_sentmap_skip(&iter);
         sent = quicly_sentmap_get(&iter);
     }
+
+#undef LOSS_DEADLINE
 
     return 0;
 }

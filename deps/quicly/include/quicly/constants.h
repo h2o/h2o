@@ -34,7 +34,7 @@ extern "C" {
 #define QUICLY_DEFAULT_MAX_ACK_DELAY 25 /* milliseconds */
 #define QUICLY_LOCAL_MAX_ACK_DELAY 25   /* milliseconds */
 #define QUICLY_DEFAULT_ACK_DELAY_EXPONENT 3
-#define QUICLY_LOCAL_ACK_DELAY_EXPONENT 10
+#define QUICLY_LOCAL_ACK_DELAY_EXPONENT 3
 #define QUICLY_MIN_INITIAL_DCID_LEN 8
 #define QUICLY_DEFAULT_ACTIVE_CONNECTION_ID_LIMIT 2 /* If this transport parameter is absent, a default of 2 is assumed. (18.2) */
 /**
@@ -54,6 +54,22 @@ extern "C" {
 #define QUICLY_DEFAULT_PACKET_TOLERANCE 2
 #define QUICLY_MAX_PACKET_TOLERANCE 10
 #define QUICLY_FIRST_ACK_FREQUENCY_LOSS_EPISODE 4
+
+/**
+ * 2x multiplied by the scaling factor of 1024.
+ * We use of 2x during congestion avoidance, which is different from Linux using 1.25x. The rationale behind this choice is that
+ * 1.25x is not sufficiently aggressive immediately after a loss event. Following a loss event, the congestion window (CWND) is
+ * halved (i.e., beta), but the RTT remains high for one RTT and SRTT can remain high even loger, since it is a moving average
+ * adjusted with each ACK received. Consequently, if the multiplier is set to 1.25x, the calculated send rate could drop to as low
+ * as 1.25 * 1/2 = 0.625. By using a 2x multiplier, the send rate is guaranteed to become no less than that immediately before the
+ * loss event, which would have been the link throughput. (TODO evaluate if 1.25x (or 1.216 below) is actually better)
+ */
+#define QUICLY_DEFAULT_PACING_MULTIPLIER 2048
+/**
+ * 3 * ln(1.5) scaled by 1024; under a fluid model, minimum multiplier that stasifies per-CWND growth of x is
+ * `K(x) = x / (x - 1) * ln(x)`, where Cubic and ABBA both use x = 1.5.
+ */
+#define QUICLY_DEFAULT_PACING_MULTIPLIER_L4S 1246
 
 #define QUICLY_AEAD_TAG_SIZE 16
 
@@ -123,8 +139,6 @@ typedef int64_t quicly_stream_id_t;
 
 typedef struct st_quicly_conn_t quicly_conn_t;
 
-static uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y);
-
 /**
  * Used for emitting arbitrary debug message through probes. The debug message might get emitted unescaped as a JSON string,
  * therefore cannot contain characters that are required to be escaped as a JSON string (e.g., `\n`, `"`).
@@ -133,18 +147,6 @@ void quicly__debug_printf(quicly_conn_t *conn, const char *function, int line, c
     __attribute__((format(printf, 4, 5)));
 
 #define quicly_debug_printf(conn, ...) quicly__debug_printf((conn), __FUNCTION__, __LINE__, __VA_ARGS__)
-
-/* inline definitions */
-
-inline uint32_t quicly_u32_add_saturating(uint32_t x, uint32_t y)
-{
-#ifdef __GNUC__ /* GCC or clang */
-    uint32_t r;
-    return __builtin_add_overflow(x, y, &r) ? UINT32_MAX : r;
-#else
-    return x > UINT32_MAX - y ? UINT32_MAX : x + y;
-#endif
-}
 
 #ifdef __cplusplus
 }
