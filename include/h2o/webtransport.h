@@ -63,12 +63,26 @@ struct st_h2o_req_t;
 #define H2O_WEBTRANSPORT_H3_ERROR_FLOW_CONTROL UINT64_C(0x045d4487)
 
 /**
- * capsule types (RFC 9297) that are carried on the extended CONNECT stream; others (including those of flow control, which is not
- * enabled) are ignored
+ * capsule types (RFC 9297); all but CLOSE_SESSION, DRAIN_SESSION and DATAGRAM are specific to the capsule protocol used by
+ * draft-ietf-webtrans-http2 (or to flow control, which is not enabled), and are ignored when WebTransport runs on native HTTP/3
+ * streams
  */
 #define H2O_WEBTRANSPORT_CAPSULE_DATAGRAM UINT64_C(0x00)
 #define H2O_WEBTRANSPORT_CAPSULE_CLOSE_SESSION UINT64_C(0x2843)
 #define H2O_WEBTRANSPORT_CAPSULE_DRAIN_SESSION UINT64_C(0x78ae)
+#define H2O_WEBTRANSPORT_CAPSULE_PADDING UINT64_C(0x190b4d38)
+#define H2O_WEBTRANSPORT_CAPSULE_RESET_STREAM UINT64_C(0x190b4d39)
+#define H2O_WEBTRANSPORT_CAPSULE_STOP_SENDING UINT64_C(0x190b4d3a)
+#define H2O_WEBTRANSPORT_CAPSULE_STREAM_FIN UINT64_C(0x190b4d3b)
+#define H2O_WEBTRANSPORT_CAPSULE_STREAM UINT64_C(0x190b4d3c)
+#define H2O_WEBTRANSPORT_CAPSULE_MAX_DATA UINT64_C(0x190b4d3d)
+#define H2O_WEBTRANSPORT_CAPSULE_MAX_STREAM_DATA UINT64_C(0x190b4d3e)
+#define H2O_WEBTRANSPORT_CAPSULE_MAX_STREAMS_BIDI UINT64_C(0x190b4d3f)
+#define H2O_WEBTRANSPORT_CAPSULE_MAX_STREAMS_UNI UINT64_C(0x190b4d40)
+#define H2O_WEBTRANSPORT_CAPSULE_DATA_BLOCKED UINT64_C(0x190b4d41)
+#define H2O_WEBTRANSPORT_CAPSULE_STREAM_DATA_BLOCKED UINT64_C(0x190b4d42)
+#define H2O_WEBTRANSPORT_CAPSULE_STREAMS_BLOCKED_BIDI UINT64_C(0x190b4d43)
+#define H2O_WEBTRANSPORT_CAPSULE_STREAMS_BLOCKED_UNI UINT64_C(0x190b4d44)
 
 /**
  * maximum length of the reason phrase carried by WT_CLOSE_SESSION
@@ -126,7 +140,7 @@ int h2o_webtransport_is_valid_utf8(const uint8_t *src, size_t len);
  */
 uint8_t *h2o_webtransport_encode_capsule_header(uint8_t *dst, uint64_t type, uint64_t length);
 /**
- * Appends a capsule whose payload is a sequence of varints (e.g., WT_DRAIN_SESSION, which has none) to the buffer.
+ * Appends a capsule whose payload is a sequence of varints (e.g., WT_MAX_STREAM_DATA, WT_RESET_STREAM) to the buffer.
  */
 void h2o_webtransport_encode_varint_capsule(h2o_buffer_t **buf, uint64_t type, const uint64_t *fields, size_t num_fields);
 /**
@@ -143,6 +157,11 @@ void h2o_webtransport_encode_drain_session(h2o_buffer_t **buf);
  * successful.
  */
 int h2o_webtransport_decode_capsule_header(const uint8_t **src, const uint8_t *end, uint64_t *type, uint64_t *length);
+/**
+ * Decodes the payload of a capsule that consists of exactly `num_fields` varints. Returns zero if successful, or
+ * H2O_WEBTRANSPORT_DECODE_INVALID.
+ */
+int h2o_webtransport_decode_varint_capsule(h2o_iovec_t payload, uint64_t *fields, size_t num_fields);
 /**
  * Decodes the payload of a WT_CLOSE_SESSION capsule. `reason` refers to the input. Returns zero if successful, or
  * H2O_WEBTRANSPORT_DECODE_INVALID.
@@ -171,6 +190,31 @@ h2o_webtransport_protocol_selection_t h2o_webtransport_select_protocol(const h2o
                                                                        size_t *selected);
 
 /**
+ * The flow control limits carried by the WebTransport-Init header field (draft-ietf-webtrans-http2 section 4.3.2). Each member
+ * is left untouched when the corresponding key is absent.
+ */
+typedef struct st_h2o_webtransport_init_params_t {
+    /**
+     * `u`: limit for unidirectional streams opened by the recipient of the header field
+     */
+    uint64_t max_stream_data_uni;
+    /**
+     * `bl`: limit for bidirectional streams opened by the sender of the header field
+     */
+    uint64_t max_stream_data_bidi_local;
+    /**
+     * `br`: limit for bidirectional streams opened by the recipient of the header field
+     */
+    uint64_t max_stream_data_bidi_remote;
+} h2o_webtransport_init_params_t;
+
+/**
+ * Parses the field lines of WebTransport-Init, being a Dictionary (RFC 9651). Unknown keys are ignored. Returns zero if
+ * successful, or -1 if the field cannot be parsed or if any of the known keys is not a non-negative Integer.
+ */
+int h2o_webtransport_parse_init_header(const h2o_iovec_t *lines, size_t num_lines, h2o_webtransport_init_params_t *params);
+
+/**
  * Errors being reported through `quicly_error_t`. Application errors are conveyed as
  * `QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(code)`, where `code` is a 32-bit WebTransport application error code, regardless of the
  * underlying transport. The values below occupy the space that is unused by picotls and quicly.
@@ -184,13 +228,42 @@ h2o_webtransport_protocol_selection_t h2o_webtransport_select_protocol(const h2o
  */
 #define H2O_WEBTRANSPORT_ERROR_BUFFERED_STREAM_REJECTED ((quicly_error_t)0x2e702)
 /**
- * the peer violated the protocol (e.g., sent a malformed capsule)
+ * the peer violated the protocol (WT_ERROR on HTTP/2)
  */
 #define H2O_WEBTRANSPORT_ERROR_PROTOCOL ((quicly_error_t)0x2e703)
+/**
+ * the peer violated flow control (WT_FLOW_CONTROL_ERROR on HTTP/2)
+ */
+#define H2O_WEBTRANSPORT_ERROR_FLOW_CONTROL ((quicly_error_t)0x2e704)
+/**
+ * the peer sent a capsule for a stream that is in an invalid state (WT_STREAM_STATE_ERROR on HTTP/2)
+ */
+#define H2O_WEBTRANSPORT_ERROR_STREAM_STATE ((quicly_error_t)0x2e705)
 /**
  * the HTTP stream or the connection carrying the session was terminated without a WebTransport-level signal
  */
 #define H2O_WEBTRANSPORT_ERROR_TRANSPORT ((quicly_error_t)0x2e706)
+
+/**
+ * default flow control limits being advertised
+ */
+#define H2O_WEBTRANSPORT_DEFAULT_MAX_DATA (4 * 1024 * 1024)
+#define H2O_WEBTRANSPORT_DEFAULT_MAX_STREAM_DATA (256 * 1024)
+#define H2O_WEBTRANSPORT_DEFAULT_MAX_STREAMS 100
+
+/**
+ * The flow control limits of a WebTransport session, as sent in SETTINGS by one endpoint (i.e., `bidi_local` applies to the
+ * bidirectional streams opened by the sender of the settings, `bidi_remote` to those opened by the receiver). The number of streams
+ * is a cumulative count, as is the case for QUIC.
+ */
+typedef struct st_h2o_webtransport_settings_t {
+    uint64_t max_data;
+    uint64_t max_stream_data_uni;
+    uint64_t max_stream_data_bidi_local;
+    uint64_t max_stream_data_bidi_remote;
+    uint64_t max_streams_uni;
+    uint64_t max_streams_bidi;
+} h2o_webtransport_settings_t;
 
 typedef struct st_h2o_webtransport_session_t h2o_webtransport_session_t;
 typedef struct st_h2o_webtransport_stream_t h2o_webtransport_stream_t;
