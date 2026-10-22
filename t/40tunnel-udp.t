@@ -2,7 +2,8 @@ use strict;
 use warnings;
 use File::Temp qw(tempdir);
 use IO::Socket::INET;
-use Socket qw(inet_aton);
+use IO::Socket::IP;
+use Socket qw(AF_INET6 SOCK_DGRAM inet_aton inet_pton);
 use Net::EmptyPort qw(check_port empty_port wait_port);
 use Test::More;
 use Time::HiRes qw(sleep);
@@ -30,6 +31,23 @@ my $udp_server = do {
     $guard;
 };
 
+my $udp_server_v6 = do {
+    my $sock = IO::Socket::IP->new(LocalHost => "::1", LocalPort => 0, Type => SOCK_DGRAM, Proto => "udp");
+    if ($sock) {
+        my $guard = spawn_forked(sub {
+            while (my $peer = $sock->recv(my $datagram, 1500)) {
+                $sock->send($datagram, 0, $peer);
+            }
+        });
+        $guard->{port} = $sock->sockport;
+        $guard;
+    } else {
+        undef;
+    }
+};
+my $bind_addresses = $udp_server_v6 ? '[127.0.0.1, "::1"]' : '[127.0.0.1]';
+my $reverse_bind_addresses = $udp_server_v6 ? '["::1", 127.0.0.1]' : '[127.0.0.1]';
+
 # setup H2O that acts as a UDP tunnel
 my $tunnel_server = do {
     my $quic_port = empty_port({
@@ -52,8 +70,24 @@ hosts:
       "/.well-known/masque/udp":
         proxy.connect-udp: # RFC9298
           - "+*"
+      "/bind-failure/.well-known/masque/udp":
+        proxy.connect-udp.bind-address: [192.0.2.1]
+        proxy.connect-udp:
+          - "+*"
+      "/partial-bind/.well-known/masque/udp":
+        proxy.connect-udp.bind-address: [192.0.2.1, "::1"]
+        proxy.connect-udp:
+          - "+*"
+      "/ipv6-first/.well-known/masque/udp":
+        proxy.connect-udp.bind-address: $reverse_bind_addresses
+        proxy.connect-udp:
+          - "+*"
+      "/bind-disabled/.well-known/masque/udp":
+        proxy.connect-udp.bind-address: []
+        proxy.connect-udp:
+          - "+*"
 proxy.timeout.io: 30000
-proxy.connect-udp.bind-address: [127.0.0.1]
+proxy.connect-udp.bind-address: $bind_addresses
 proxy.connect.masque-draft-03: ON
 proxy.connect.emit-proxy-status: ON
 access-log:
@@ -99,10 +133,137 @@ subtest "udp-bind-uncompressed" => sub {
     my $incoming = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $peer->sockport) . "ping";
     is read_exact($sock, 2 + length $incoming), pack('CC', 0, length $incoming) . $incoming, "unsolicited UDP received";
 
+    SKIP: {
+        skip "IPv6 loopback unavailable", 3 unless $udp_server_v6;
+        like $headers, qr{\r\nproxy-public-address: "\[::1\]:\d+"\r\n}i, "IPv6 bound address advertised";
+        my $datagram = pack('CC', 2, 6) . inet_pton(AF_INET6, '::1') . pack('n', $udp_server_v6->{port}) . "hello6";
+        print $sock pack('CC', 0, length $datagram), $datagram;
+        is read_exact($sock, 2 + length $datagram), pack('CC', 0, length $datagram) . $datagram, "IPv6 UDP echoed on the same tunnel";
+
+        my ($bound_port) = $headers =~ /proxy-public-address: "\[::1\]:(\d+)"/i;
+        my $peer = IO::Socket::IP->new(PeerHost => "::1", PeerPort => $bound_port, Type => SOCK_DGRAM, Proto => "udp")
+            or die "failed to open IPv6 UDP peer: $!";
+        $peer->send("ping6");
+        my $incoming = pack('CC', 2, 6) . inet_pton(AF_INET6, '::1') . pack('n', $peer->sockport) . "ping6";
+        is read_exact($sock, 2 + length $incoming), pack('CC', 0, length $incoming) . $incoming, "unsolicited IPv6 UDP received";
+    }
+
     print $sock pack('C*', 0x11, 8, 4, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port});
     is read_exact($sock, 3), pack('C*', 0x13, 1, 4), "compressed context rejected";
     print $sock pack('C*', 0x13, 1, 2, 0x11, 2, 6, 0); # close ID 2, open ID 6
     is read_exact($sock, 3), pack('C*', 0x12, 1, 6), "new uncompressed context acknowledged";
+    alarm 0;
+};
+
+subtest "udp-bind-capsule-errors" => sub {
+    local $SIG{ALRM} = sub { die "timed out waiting for capsule error handling" };
+    alarm 5;
+    for my $case (
+        ["missing DATAGRAM Context ID", pack('C*', 0, 0)],
+        ["truncated DATAGRAM Context ID", pack('C*', 0, 1, 0x40)],
+        ["missing COMPRESSION_ASSIGN target", pack('C*', 0x11, 1, 2)],
+        ["trailing COMPRESSION_CLOSE bytes", pack('C*', 0x13, 2, 2, 0)],
+    ) {
+        my ($sock) = open_udp_bind_tunnel("/.well-known/masque/udp/%2A/%2A/");
+        # A malformed known capsule must terminate the tunnel, rather than skip to the valid assignment and ACK it.
+        print $sock $case->[1], pack('C*', 0x11, 2, 2, 0);
+        is sysread($sock, my $byte, 1), 0, "$case->[0] terminates the tunnel";
+    }
+    {
+        my ($sock) = open_udp_bind_tunnel("/.well-known/masque/udp/%2A/%2A/");
+        # Unknown types, unlike malformed known capsules, must be skipped (RFC 9297 Section 3.2).
+        print $sock pack('C*', 0x3f, 2, 0xff, 0xff, 0x11, 2, 2, 0);
+        is read_exact($sock, 3), pack('C*', 0x12, 1, 2), "unknown capsule permits the following assignment";
+    }
+    alarm 0;
+};
+
+subtest "udp-bind-ipv6-first" => sub {
+    plan skip_all => "IPv6 loopback unavailable" unless $udp_server_v6;
+    local $SIG{ALRM} = sub { die "timed out reading IPv6-first UDP response" };
+    alarm 5;
+    my ($sock, $headers) = open_udp_bind_tunnel("/ipv6-first/.well-known/masque/udp/%2A/%2A/");
+    like $headers, qr{\r\nproxy-public-address: "127\.0\.0\.1:\d+"\r\n}i, "IPv4 bound address advertised";
+    like $headers, qr{\r\nproxy-public-address: "\[::1\]:\d+"\r\n}i, "IPv6 bound address advertised";
+    print $sock pack('C*', 0x11, 2, 2, 0);
+    is read_exact($sock, 3), pack('C*', 0x12, 1, 2), "context acknowledged";
+    for my $target (
+        pack('C', 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}),
+        pack('C', 6) . inet_pton(AF_INET6, '::1') . pack('n', $udp_server_v6->{port}),
+    ) {
+        my $datagram = pack('C', 2) . $target . "hello";
+        print $sock pack('CC', 0, length $datagram), $datagram;
+        is read_exact($sock, 2 + length $datagram), pack('CC', 0, length $datagram) . $datagram,
+            "UDP echoed with IP Version " . ord(substr($target, 0, 1));
+    }
+    alarm 0;
+};
+
+subtest "udp-bind-mixed" => sub {
+    local $SIG{ALRM} = sub { die "timed out reading mixed UDP response" };
+    alarm 5;
+    my ($sock, $headers) = open_udp_bind_tunnel("/.well-known/masque/udp/127.0.0.1/$udp_server->{port}/");
+    like $headers, qr{^HTTP/1\.1 101\b}, "upgrade accepted";
+    like $headers, qr{\r\nconnect-udp-bind: \?1\r\n}i, "bind confirmed alongside the connected target";
+
+    my $ordinary = "\0ordinary";
+    print $sock pack('CC', 0, length $ordinary), $ordinary;
+    is read_exact($sock, 2 + length $ordinary), pack('CC', 0, length $ordinary) . $ordinary, "Context ID 0 works before registration";
+
+    print $sock pack('C*', 0x11, 2, 2, 0);
+    is read_exact($sock, 3), pack('C*', 0x12, 1, 2), "bound context acknowledged";
+    my $bound = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "bound";
+    print $sock pack('CC', 0, length $bound), $bound;
+    is read_exact($sock, 2 + length $bound), pack('CC', 0, length $bound) . $bound, "registered bound datagram echoed";
+
+    print $sock pack('CC', 0, length $ordinary), $ordinary;
+    is read_exact($sock, 2 + length $ordinary), pack('CC', 0, length $ordinary) . $ordinary, "Context ID 0 works with a bound context open";
+    print $sock pack('C*', 0x13, 1, 2), pack('CC', 0, length $ordinary), $ordinary;
+    is read_exact($sock, 2 + length $ordinary), pack('CC', 0, length $ordinary) . $ordinary, "closing the bound context preserves ordinary forwarding";
+    alarm 0;
+};
+
+subtest "udp-bind-setup-failures" => sub {
+    local $SIG{ALRM} = sub { die "timed out reading UDP setup response" };
+    alarm 10;
+    {
+        my ($sock, $headers) = open_udp_bind_tunnel("/bind-disabled/.well-known/masque/udp/127.0.0.1/$udp_server->{port}/");
+        like $headers, qr{^HTTP/1\.1 101\b}, "empty bind-address list permits ordinary fallback";
+        unlike $headers, qr{\r\n(?:connect-udp-bind|proxy-public-address):}i, "empty bind-address list does not advertise binding";
+        my $ordinary = "\0disabled";
+        print $sock pack('CC', 0, length $ordinary), $ordinary;
+        is read_exact($sock, 2 + length $ordinary), pack('CC', 0, length $ordinary) . $ordinary, "ordinary forwarding works with binding disabled";
+    }
+    {
+        my ($sock, $headers) = open_udp_bind_tunnel("/bind-failure/.well-known/masque/udp/127.0.0.1/$udp_server->{port}/");
+        like $headers, qr{^HTTP/1\.1 101\b}, "bind failure falls back to the connected target";
+        unlike $headers, qr{\r\n(?:connect-udp-bind|proxy-public-address):}i, "fallback does not advertise binding";
+        my $ordinary = "\0fallback";
+        print $sock pack('CC', 0, length $ordinary), $ordinary;
+        is read_exact($sock, 2 + length $ordinary), pack('CC', 0, length $ordinary) . $ordinary, "fallback forwards Context ID 0";
+    }
+    {
+        my ($sock, $headers) = open_udp_bind_tunnel("/bind-failure/.well-known/masque/udp/%2A/%2A/");
+        like $headers, qr{^HTTP/1\.1 503\b}, "bind-only request fails when no bound socket can be created";
+        unlike $headers, qr{\r\n(?:connect-udp-bind|proxy-public-address):}i, "bind failure does not advertise binding";
+    }
+    {
+        my ($sock, $headers) = open_udp_bind_tunnel("/.well-known/masque/udp/nonexistent.invalid/1234/");
+        like $headers, qr{^HTTP/1\.1 502\b}, "required target resolution failure fails the mixed request";
+        unlike $headers, qr{\r\n(?:connect-udp-bind|proxy-public-address):}i, "target setup failure does not advertise binding";
+    }
+    SKIP: {
+        skip "IPv6 loopback unavailable", 4 unless $udp_server_v6;
+        my ($sock, $headers) = open_udp_bind_tunnel("/partial-bind/.well-known/masque/udp/127.0.0.1/$udp_server->{port}/");
+        like $headers, qr{^HTTP/1\.1 101\b}, "mixed setup succeeds when one bound family fails";
+        like $headers, qr{\r\nproxy-public-address: "\[::1\]:\d+"\r\n}i, "successful bound family advertised";
+        unlike $headers, qr{proxy-public-address: "192\.0\.2\.1:}i, "failed bound family omitted";
+        print $sock pack('C*', 0x11, 2, 2, 0);
+        read_exact($sock, 3);
+        my $bound = pack('CC', 2, 6) . inet_pton(AF_INET6, '::1') . pack('n', $udp_server_v6->{port}) . "partial";
+        print $sock pack('CC', 0, length $bound), $bound;
+        is read_exact($sock, 2 + length $bound), pack('CC', 0, length $bound) . $bound, "remaining bound family forwards datagrams";
+    }
     alarm 0;
 };
 
@@ -124,30 +285,38 @@ subtest "udp-bind-h3" => sub {
 };
 
 subtest "udp-bind-h3-datagram" => sub {
-    my $local_port = empty_port({host => "127.0.0.1", proto => "udp"});
-    my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -X $local_port -m CONNECT -H 'connect-udp-bind: ?1' " .
-              "https://127.0.0.1:@{[$tunnel_server->{quic_port}]}/.well-known/masque/udp/%2A/%2A/";
-    open my $client, "|-", "$cmd > $tempdir/out 2>&1" or die "failed to start $cmd: $!";
-    sleep 0.5;
-    print $client pack('C*', 0x11, 2, 2, 0); # register uncompressed Context ID 2 on the stream
-    flush $client;
-    sleep 0.5;
+    for my $mode (qw(bound-only mixed)) {
+        subtest $mode => sub {
+            my $local_port = empty_port({host => "127.0.0.1", proto => "udp"});
+            my $target = $mode eq 'mixed' ? "127.0.0.1/$udp_server->{port}" : '%2A/%2A';
+            my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -X $local_port -m CONNECT -H 'connect-udp-bind: ?1' " .
+                      "https://127.0.0.1:@{[$tunnel_server->{quic_port}]}/.well-known/masque/udp/$target/";
+            open my $client, "|-", "$cmd > $tempdir/out 2>&1" or die "failed to start $cmd: $!";
+            sleep 0.5;
+            print $client pack('C*', 0x11, 2, 2, 0); # register uncompressed Context ID 2 on the stream
+            flush $client;
+            sleep 0.5;
 
-    my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $local_port, Proto => "udp")
-        or die "failed to connect to local UDP socket: $!";
-    my $datagram = pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello";
-    local $SIG{ALRM} = sub { die "timed out waiting for bound QUIC DATAGRAM" };
-    alarm 5;
-    $sock->send($datagram) or die "failed to send bound QUIC DATAGRAM: $!";
-    defined $sock->recv(my $echo, 1500) or die "failed to receive bound QUIC DATAGRAM: $!";
-    alarm 0;
-    is $echo, $datagram, "bound UDP echoed over QUIC DATAGRAMs";
+            my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $local_port, Proto => "udp")
+                or die "failed to connect to local UDP socket: $!";
+            my @datagrams = (pack('CC', 2, 4) . inet_aton('127.0.0.1') . pack('n', $udp_server->{port}) . "hello");
+            unshift @datagrams, "\0ordinary" if $mode eq 'mixed';
+            local $SIG{ALRM} = sub { die "timed out waiting for QUIC DATAGRAM" };
+            for my $datagram (@datagrams) {
+                alarm 5;
+                $sock->send($datagram) or die "failed to send QUIC DATAGRAM: $!";
+                defined $sock->recv(my $echo, 1500) or die "failed to receive QUIC DATAGRAM: $!";
+                alarm 0;
+                is $echo, $datagram, "UDP echoed over QUIC DATAGRAMs with Context ID " . ord(substr($datagram, 0, 1));
+            }
 
-    undef $client;
-    open my $fh, "<", "$tempdir/out" or die "failed to read $tempdir/out: $!";
-    my $resp = do { local $/; <$fh> };
-    like $resp, qr{^HTTP/3 200\b}, "H3 bind accepted";
-    ok index($resp, pack('C*', 0x12, 1, 2)) >= 0, "H3 context acknowledged";
+            undef $client;
+            open my $fh, "<", "$tempdir/out" or die "failed to read $tempdir/out: $!";
+            my $resp = do { local $/; <$fh> };
+            like $resp, qr{^HTTP/3 200\b}, "H3 bind accepted";
+            ok index($resp, pack('C*', 0x12, 1, 2)) >= 0, "H3 context acknowledged";
+        };
+    }
 };
 
 sub read_exact {
@@ -159,6 +328,17 @@ sub read_exact {
         $result .= $part;
     }
     return $result;
+}
+
+sub open_udp_bind_tunnel {
+    my ($path) = @_;
+    my $sock = IO::Socket::INET->new(PeerAddr => "127.0.0.1", PeerPort => $tunnel_server->{port}, Proto => "tcp")
+        or die "failed to connect to tunnel server: $!";
+    $sock->autoflush(1);
+    print $sock "GET $path HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: connect-udp\r\nConnect-UDP-Bind: ?1\r\nCapsule-Protocol: ?1\r\n\r\n";
+    my $headers = "";
+    $headers .= read_exact($sock, 1) while $headers !~ /\r\n\r\n\z/;
+    return ($sock, $headers);
 }
 
 # setup H2O that acts as a reverse proxy to the UDP tunnel server

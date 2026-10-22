@@ -144,10 +144,9 @@ static int on_config_connect_udp_bind_address(h2o_configurator_command_t *cmd, h
     struct proxy_configurator_t *self = (void *)cmd->configurator;
 
     /* reset, then set the address of each address family being specified; an empty sequence disables the feature */
-    for (size_t i = 0; i < PTLS_ELEMENTSOF(self->vars->conf.connect_udp_bind_addresses); ++i)
-        self->vars->conf.connect_udp_bind_addresses[i] = in6addr_any;
+    self->vars->conf.connect_udp_bind_v4addr = (struct in_addr){.s_addr = INADDR_ANY};
+    self->vars->conf.connect_udp_bind_v6addr = in6addr_any;
 
-    int first_was_v6 = 0;
     for (size_t i = 0; i != node->data.sequence.size; ++i) {
         yoml_t *element = node->data.sequence.elements[i];
         if (element->type != YOML_TYPE_SCALAR) {
@@ -155,17 +154,19 @@ static int on_config_connect_udp_bind_address(h2o_configurator_command_t *cmd, h
             return -1;
         }
         struct in_addr v4;
-        if (inet_pton(AF_INET, element->data.scalar, &v4) == 1) {
-            if (i == 1 && !first_was_v6) {
+        struct in6_addr v6;
+        if (inet_pton(AF_INET, element->data.scalar, &v4) == 1 && v4.s_addr != INADDR_ANY) {
+            if (self->vars->conf.connect_udp_bind_v4addr.s_addr != 0) {
                 h2o_configurator_errprintf(cmd, element, "only one IPv4 address can be specified");
                 return -1;
             }
-            ptls_build_v4_mapped_v6_address(&self->vars->conf.connect_udp_bind_addresses[i], &v4.s_addr);
-        } else if (inet_pton(AF_INET6, element->data.scalar, &self->vars->conf.connect_udp_bind_addresses[i]) == 1) {
-            if (i == 1 && first_was_v6) {
+            self->vars->conf.connect_udp_bind_v4addr = v4;
+        } else if (inet_pton(AF_INET6, element->data.scalar, &v6) == 1 && !IN6_IS_ADDR_UNSPECIFIED(&v6)) {
+            if (!IN6_IS_ADDR_UNSPECIFIED(&self->vars->conf.connect_udp_bind_v6addr)) {
                 h2o_configurator_errprintf(cmd, element, "only one IPv6 address can be specified");
                 return -1;
             }
+            self->vars->conf.connect_udp_bind_v6addr = v6;
         } else {
             h2o_configurator_errprintf(cmd, element, "value must be an IPv4 or IPv6 address literal, other than unspecified");
             return -1;
@@ -768,7 +769,8 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
             },
         .tunnel_enabled = 0, /* experimental support for tunneling (e.g., CONNECT, websocket) is disabled by default */
         .max_buffer_size = SIZE_MAX,
-        .connect_udp_bind_addresses = {in6addr_any, in6addr_any},
+        .connect_udp_bind_v4addr = {.s_addr = INADDR_ANY},
+        .connect_udp_bind_v6addr = IN6ADDR_ANY_INIT,
         .http2.max_concurrent_streams = H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS,
         .http3.ecn = 1,
         .protocol_ratio.http2 = -1,

@@ -121,6 +121,7 @@ struct st_connect_generator_t {
             h2o_buffer_t *recvbuf_detached;
         } tcp;
         struct {
+            h2o_socket_t *bound_v4sock, *bound_v6sock;
             struct {
                 h2o_buffer_t *buf; /* for datagram fragments */
                 h2o_timer_t delayed;
@@ -131,8 +132,6 @@ struct st_connect_generator_t {
                 h2o_doublebuffer_t doublebuf;
             } ingress;
             uint64_t bound_context_id; /* zero when no uncompressed context is open */
-            unsigned can_unbound : 1; /* Context ID 0 is permitted */
-            unsigned can_bound : 1;   /* bound UDP proxying is permitted */
             /**
              * if using draft-03 style encoding rather than RFC 9298
              */
@@ -140,6 +139,11 @@ struct st_connect_generator_t {
         } udp;
     };
 };
+
+static int is_closed(struct st_connect_generator_t *self)
+{
+    return self->sock == NULL && (self->is_tcp || (self->udp.bound_v4sock == NULL && self->udp.bound_v6sock == NULL));
+}
 
 static h2o_iovec_t get_proxy_status_identity(h2o_req_t *req)
 {
@@ -248,6 +252,7 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
 static void try_connect(struct st_connect_generator_t *self);
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
+static int udp_bind_sockets(struct st_connect_generator_t *self, const char **errstr);
 
 static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
 {
@@ -284,6 +289,13 @@ static void dispose_generator(struct st_connect_generator_t *self)
         if (self->tcp.recvbuf_detached != NULL)
             h2o_buffer_dispose(&self->tcp.recvbuf_detached);
     } else {
+        h2o_socket_t **socks[] = {&self->udp.bound_v4sock, &self->udp.bound_v6sock};
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(socks); ++i) {
+            if (*socks[i] != NULL) {
+                h2o_socket_close(*socks[i]);
+                *socks[i] = NULL;
+            }
+        }
         if (self->udp.egress.buf != NULL)
             h2o_buffer_dispose(&self->udp.egress.buf);
         if (self->udp.ingress.streambuf != NULL)
@@ -295,19 +307,27 @@ static void dispose_generator(struct st_connect_generator_t *self)
     h2o_timer_unlink(&self->timeout);
 }
 
-static int close_socket(struct st_connect_generator_t *self)
+static int close_sockets(struct st_connect_generator_t *self)
 {
     int send_inflight;
 
     if (self->is_tcp) {
         self->tcp.recvbuf_detached = self->sock->input;
         send_inflight = self->tcp.recvbuf_detached->size != 0;
+        h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
+        h2o_socket_close(self->sock);
+        self->sock = NULL;
     } else {
-        send_inflight = self->udp.ingress.doublebuf.inflight || !h2o_socket_is_reading(self->sock);
+        send_inflight = self->udp.ingress.doublebuf.inflight;
+        h2o_socket_t **socks[] = {&self->sock, &self->udp.bound_v4sock, &self->udp.bound_v6sock};
+        for (size_t i = 0; i < PTLS_ELEMENTSOF(socks); ++i) {
+            if (*socks[i] != NULL) {
+                send_inflight |= !h2o_socket_is_reading(*socks[i]);
+                h2o_socket_close(*socks[i]);
+                *socks[i] = NULL;
+            }
+        }
     }
-    h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
-    h2o_socket_close(self->sock);
-    self->sock = NULL;
     self->socket_closed = 1;
 
     return send_inflight;
@@ -317,10 +337,12 @@ static void close_readwrite(struct st_connect_generator_t *self)
 {
     int send_inflight = 0;
 
-    if (self->sock != NULL)
-        send_inflight = close_socket(self);
-    else if (self->is_tcp)
+    if (!is_closed(self))
+        send_inflight = close_sockets(self);
+    else if (self->is_tcp && self->tcp.recvbuf_detached != NULL)
         send_inflight = self->tcp.recvbuf_detached->size != 0;
+    else if (!self->is_tcp)
+        send_inflight = self->udp.ingress.doublebuf.inflight;
 
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
@@ -352,7 +374,7 @@ static void on_io_timeout(h2o_timer_t *timer)
 
 static void reset_io_timeout(struct st_connect_generator_t *self)
 {
-    if (self->sock != NULL) {
+    if (!is_closed(self)) {
         h2o_timer_unlink(&self->timeout);
         h2o_timer_link(get_loop(self), self->handler->config.io_timeout, &self->timeout);
     }
@@ -363,10 +385,8 @@ static void send_connect_error(struct st_connect_generator_t *self, int code, co
     stop_eyeballs(self);
     h2o_timer_unlink(&self->timeout);
 
-    if (self->sock != NULL) {
-        h2o_socket_close(self->sock);
-        self->sock = NULL;
-    }
+    if (!is_closed(self))
+        close_sockets(self);
 
     h2o_send_error_generic(self->src_req, code, msg, errstr, H2O_SEND_ERROR_KEEP_HEADERS);
 }
@@ -764,10 +784,8 @@ static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const ui
 {
     switch (capsule->type) {
     case 0: /* DATAGRAM, or UDP_PACKET in draft-03 */
-        if (!is_draft03 && (capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX) {
-            *src = end; /* invalid HTTP Datagram; discard it without rejecting the capsule */
-            break;
-        }
+        if (!is_draft03 && (capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
+            return -1;
         capsule->data.datagram = h2o_iovec_init(*src, end - *src);
         *src = end;
         break;
@@ -781,11 +799,12 @@ static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const ui
         if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
             return -1;
         break;
-    default: /* unknown capsules are skipped */
+    default: /* RFC 9297 Section 3.2: unknown capsule types are ignored, consuming their entire Value. */
         *src = end;
         break;
     }
 
+    /* RFC 9297 Section 3.3 requires exactly the defined fields, with neither truncation nor trailing bytes. */
     return *src == end ? 0 : -1;
 }
 
@@ -813,6 +832,25 @@ static int udp_decode_capsule(struct st_udp_capsule_t *capsule, const uint8_t **
     return udp_decode_capsule_payload(capsule, src, *src + length, is_draft03);
 }
 
+static void udp_on_read(h2o_socket_t *sock, const char *err);
+
+static void udp_set_reading(struct st_connect_generator_t *self, int enabled)
+{
+    h2o_socket_t *socks[] = {self->sock, self->udp.bound_v4sock, self->udp.bound_v6sock};
+
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(socks); ++i) {
+        if (socks[i] == NULL)
+            continue;
+        if (enabled) {
+            if (!h2o_socket_is_reading(socks[i]))
+                h2o_socket_read_start(socks[i], udp_on_read);
+        } else {
+            if (h2o_socket_is_reading(socks[i]))
+                h2o_socket_read_stop(socks[i]);
+        }
+    }
+}
+
 static void udp_send_buffered(struct st_connect_generator_t *self)
 {
     if (self->udp.ingress.doublebuf.inflight)
@@ -820,8 +858,8 @@ static void udp_send_buffered(struct st_connect_generator_t *self)
     h2o_iovec_t vec = h2o_doublebuffer_prepare(&self->udp.ingress.doublebuf, &self->udp.ingress.streambuf, SIZE_MAX);
     if (vec.base == NULL)
         return;
-    if (self->src_req->forward_datagram.read_ == NULL && self->sock != NULL && h2o_socket_is_reading(self->sock))
-        h2o_socket_read_stop(self->sock);
+    if (self->src_req->forward_datagram.read_ == NULL)
+        udp_set_reading(self, 0);
     h2o_send(self->src_req, &vec, 1, H2O_SEND_STATE_IN_PROGRESS);
 }
 
@@ -840,27 +878,28 @@ static int udp_send_context_response(struct st_connect_generator_t *self, uint64
     return 0;
 }
 
-static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_id, h2o_iovec_t datagram)
+static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_id, h2o_iovec_t payload)
 {
-    if (context_id == UINT64_MAX)
-        return 0;
-    const uint8_t *src = (const uint8_t *)datagram.base, *end = src + datagram.len;
+    const uint8_t *src = (const uint8_t *)payload.base, *end = src + payload.len;
 
     if (context_id != 0) {
-        if (!self->udp.can_bound || self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id)
+        if (self->udp.bound_context_id == 0 || context_id != self->udp.bound_context_id)
             return 0;
         quicly_address_t dest;
         if (udp_decode_target(&dest, &src, end) != 0 || (dest.sa.sa_family != AF_INET && dest.sa.sa_family != AF_INET6))
             return 0;
         if (!h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, &dest.sa))
             return 0;
+        h2o_socket_t *sock = dest.sa.sa_family == AF_INET ? self->udp.bound_v4sock : self->udp.bound_v6sock;
+        if (sock == NULL)
+            return 0;
         socklen_t salen = dest.sa.sa_family == AF_INET ? sizeof(dest.sin) : sizeof(dest.sin6);
         H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
-        while (sendto(h2o_socket_get_fd(self->sock), src, end - src, 0, &dest.sa, salen) == -1 && errno == EINTR)
+        while (sendto(h2o_socket_get_fd(sock), src, end - src, 0, &dest.sa, salen) == -1 && errno == EINTR)
             ;
         return 0;
     }
-    if (!self->udp.can_unbound)
+    if (self->sock == NULL)
         return -1;
     H2O_PROBE_REQUEST(CONNECT_UDP_WRITE, self->src_req, end - src);
     while (send(h2o_socket_get_fd(self->sock), src, end - src, 0) == -1 && errno == EINTR)
@@ -873,7 +912,7 @@ static int udp_handle_capsule(struct st_connect_generator_t *self, struct st_udp
     if (capsule.type == 0) /* DATAGRAM, or UDP_PACKET in draft-03 */
         return udp_write_core(self, capsule.context_id, capsule.data.datagram);
 
-    if (!self->udp.can_bound)
+    if (self->udp.bound_v4sock == NULL && self->udp.bound_v6sock == NULL)
         return 0;
 
     if (capsule.type == 0x11) { /* COMPRESSION_ASSIGN */
@@ -932,6 +971,7 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
         int ret = udp_decode_capsule(&capsule, &src, end, self->udp.is_draft03);
         if (ret == -2)
             break;
+        /* RFC 9297 Section 3.3: malformed known capsules fail the HTTP message; do not skip them and continue. */
         if (ret != 0 || udp_handle_capsule(self, capsule) != 0) {
             close_readwrite(self);
             return;
@@ -939,7 +979,7 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     }
     size_t off = src - (const uint8_t *)chunk.base;
 
-    if (self->udp.can_bound && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
+    if ((self->udp.bound_v4sock != NULL || self->udp.bound_v6sock != NULL) && chunk.len - off > UDP_BIND_BUFFER_LIMIT) {
         close_readwrite(self);
         return;
     }
@@ -964,13 +1004,13 @@ static int udp_write_stream(void *_self, int is_end_stream)
     if (self->socket_closed)
         return 1;
 
-    assert(self->sock != NULL && "write_req called before proceed_req is called?");
+    assert(!is_closed(self) && "write_req called before proceed_req is called?");
 
     if (is_end_stream)
         self->write_closed = 1;
 
     /* if the socket is not yet open, buffer input and return */
-    if (self->sock == NULL) {
+    if (is_closed(self)) {
         h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
         return 0;
     }
@@ -983,6 +1023,8 @@ static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t 
 {
     struct st_connect_generator_t *self = _req->write_req.ctx;
 
+    if (is_closed(self))
+        return;
     reset_io_timeout(self);
 
     for (size_t i = 0; i != num_datagrams; ++i) {
@@ -997,9 +1039,9 @@ static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t 
     }
 }
 
-static void udp_on_read(h2o_socket_t *_sock, const char *err)
+static void udp_on_read(h2o_socket_t *sock, const char *err)
 {
-    struct st_connect_generator_t *self = _sock->data;
+    struct st_connect_generator_t *self = sock->data;
     quicly_address_t srcaddr;
     socklen_t srcaddrlen = sizeof(srcaddr);
     h2o_iovec_t payload = h2o_iovec_init(self->udp.ingress.buf + UDP_CHUNK_OVERHEAD + UDP_BOUND_OVERHEAD, 1500);
@@ -1011,9 +1053,9 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
 
     { /* read UDP packet, or return */
         ssize_t rret;
-        while ((rret = self->udp.can_bound
-                           ? recvfrom(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0, &srcaddr.sa, &srcaddrlen)
-                           : recv(h2o_socket_get_fd(self->sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
+        while ((rret = sock != self->sock
+                           ? recvfrom(h2o_socket_get_fd(sock), payload.base, payload.len, 0, &srcaddr.sa, &srcaddrlen)
+                           : recv(h2o_socket_get_fd(sock), payload.base, payload.len, 0)) == -1 && errno == EINTR)
             ;
         if (rret == -1)
             return;
@@ -1021,7 +1063,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
     H2O_PROBE_REQUEST(CONNECT_UDP_READ, self->src_req, payload.len);
 
-    if (self->udp.can_bound) {
+    if (sock != self->sock) {
         if (self->udp.bound_context_id == 0)
             return;
         size_t addrlen;
@@ -1053,7 +1095,7 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
 
     /* prepend Context ID (of zero, indicating UDP packet) if RFC 9298 */
-    if (!self->udp.is_draft03 && !self->udp.can_bound) {
+    if (!self->udp.is_draft03 && sock == self->sock) {
         *--payload.base = 0;
         payload.len += 1;
     }
@@ -1088,27 +1130,32 @@ static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
         return;
     }
 
-    if (self->sock != NULL) {
-        h2o_buffer_consume(&self->sock->input, self->sock->input->size);
+    if (!is_closed(self)) {
         reset_io_timeout(self);
-        if (!h2o_socket_is_reading(self->sock))
-            h2o_socket_read_start(self->sock, udp_on_read);
+        udp_set_reading(self, 1);
     } else {
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
     }
 }
 
-static void udp_complete_setup(struct st_connect_generator_t *self, int fd)
+static h2o_socket_t *udp_wrap_socket(struct st_connect_generator_t *self, int fd)
 {
-    /* setup, initiating transfer of early data */
+    h2o_socket_t *sock;
 #if H2O_USE_LIBUV
-    self->sock = h2o_uv__poll_create(get_loop(self), fd, (uv_close_cb)free);
+    sock = h2o_uv__poll_create(get_loop(self), fd, (uv_close_cb)free);
 #else
-    self->sock = h2o_evloop_socket_create(get_loop(self), fd, H2O_SOCKET_FLAG_DONT_READ);
+    sock = h2o_evloop_socket_create(get_loop(self), fd, H2O_SOCKET_FLAG_DONT_READ);
 #endif
-    assert(self->sock != NULL);
-    self->sock->data = self;
+    assert(sock != NULL);
+    sock->data = self;
+    return sock;
+}
+
+static void udp_complete_setup(struct st_connect_generator_t *self)
+{
+    assert(!is_closed(self));
+    reset_io_timeout(self);
     self->src_req->write_req.cb = udp_write_stream;
     self->src_req->forward_datagram.write_ = udp_write_datagrams;
     self->src_req->write_req.ctx = self;
@@ -1133,53 +1180,63 @@ static void udp_complete_setup(struct st_connect_generator_t *self, int fd)
     self->src_req->write_req.cb(self, self->no_req_streaming);
 }
 
+static int udp_bind_is_enabled(h2o_proxy_config_vars_t *config)
+{
+    return config->connect_udp_bind_v4addr.s_addr != 0 || !IN6_IS_ADDR_UNSPECIFIED(&config->connect_udp_bind_v6addr);
+}
+
+static int udp_bind_is_requested(h2o_req_t *req)
+{
+    ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, -1);
+    return index >= 0 && h2o_memis(req->headers.entries[index].value.base, req->headers.entries[index].value.len,
+                                 H2O_STRLIT("?1")) &&
+           h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, index) < 0;
+}
+
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
-    int fd;
-
     assert(self->udp.egress.buf->size == 0); /* the handler does not call `proceed_req` until the connection becomes ready */
 
-    H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
-    /* connect */
-    if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
-        connect(fd, server_address->sa, server_address->salen) != 0) {
-        const char *err = h2o_socket_error_conn_fail;
-        if (fd != -1) {
-            err = h2o_socket_get_error_string(errno, err);
-            close(fd);
+    if (server_address != NULL) {
+        int fd;
+        H2O_PROBE_REQUEST(CONNECT_UDP_START, self->src_req, server_address->sa);
+        if ((fd = socket(server_address->sa->sa_family, SOCK_DGRAM, 0)) == -1 ||
+            connect(fd, server_address->sa, server_address->salen) != 0) {
+            const char *err = h2o_socket_error_conn_fail;
+            if (fd != -1) {
+                err = h2o_socket_get_error_string(errno, err);
+                close(fd);
+            }
+            set_last_error(self, ERROR_CLASS_CONNECT, err);
+            return 0;
         }
-        set_last_error(self, ERROR_CLASS_CONNECT, err);
-        return 0;
+        self->sock = udp_wrap_socket(self, fd);
     }
 
     stop_eyeballs(self);
+    if (!self->udp.is_draft03 && udp_bind_is_enabled(&self->handler->config) && udp_bind_is_requested(self->src_req)) {
+        const char *errstr = NULL;
+        /* A concrete target permits fallback to ordinary CONNECT-UDP; a wildcard target requires a bound socket. */
+        if (!udp_bind_sockets(self, &errstr) && self->sock == NULL) {
+            assert(errstr != NULL);
+            record_error(self->handler, self->src_req, NULL, "desc", errstr, NULL);
+            send_connect_error(self, 503, "Service Unavailable", errstr);
+            return 0;
+        }
+    }
     self->timeout.cb = on_io_timeout;
-    reset_io_timeout(self);
 
-    record_connect_success(self);
+    if (server_address != NULL)
+        record_connect_success(self);
 
-    udp_complete_setup(self, fd);
+    udp_complete_setup(self);
 
     return 1;
 }
 
-static int udp_bind_is_enabled(h2o_proxy_config_vars_t *config)
+static h2o_socket_t *udp_bind(struct st_connect_generator_t *self, quicly_address_t sa, const char **errstr)
 {
-    return !IN6_IS_ADDR_UNSPECIFIED(&config->connect_udp_bind_addresses[0]);
-}
-
-static int udp_bind(struct in6_addr *addr, char *quoted_tuple, const char **errstr)
-{
-    quicly_address_t sa;
     int fd = -1, on = 1;
-
-    /* setup `sa` based on the address provided */
-    if (IN6_IS_ADDR_V4MAPPED(addr)) {
-        sa.sin = (struct sockaddr_in){.sin_family = AF_INET};
-        memcpy(&sa.sin.sin_addr.s_addr, &addr->s6_addr[12], 4);
-    } else {
-        sa.sin6 = (struct sockaddr_in6){.sin6_family = AF_INET6, .sin6_addr = *addr};
-    }
 
     /* open a socket and bind */
     if ((fd = socket(sa.sa.sa_family, SOCK_DGRAM, 0)) == -1)
@@ -1193,6 +1250,8 @@ static int udp_bind(struct in6_addr *addr, char *quoted_tuple, const char **errs
         goto Fail;
 
     /* build the tuple string */
+    char *quoted_tuple = h2o_mem_alloc_pool(&self->src_req->pool, char, NI_MAXHOST + sizeof("\"[]:65535\""));
+    char *tuple_start = quoted_tuple;
     *quoted_tuple++ = '"';
     if (sa.sa.sa_family == AF_INET6)
         *quoted_tuple++ = '[';
@@ -1206,13 +1265,31 @@ static int udp_bind(struct in6_addr *addr, char *quoted_tuple, const char **errs
         *quoted_tuple++ = ']';
     quoted_tuple += sprintf(quoted_tuple, ":%" PRIu16 "\"", h2o_socket_getport(&sa.sa));
 
-    return fd;
+    h2o_add_header_by_str(&self->src_req->pool, &self->src_req->res.headers, H2O_STRLIT("proxy-public-address"), 0, NULL,
+                          tuple_start, quoted_tuple - tuple_start);
+    return udp_wrap_socket(self, fd);
 
 Fail:
     *errstr = h2o_socket_get_error_string(errno, h2o_socket_error_conn_fail);
     if (fd != -1)
         close(fd);
-    return -1;
+    return NULL;
+}
+
+static int udp_bind_sockets(struct st_connect_generator_t *self, const char **errstr)
+{
+    h2o_req_t *req = self->src_req;
+    h2o_proxy_config_vars_t *config = &self->handler->config;
+    if (config->connect_udp_bind_v4addr.s_addr != 0)
+        self->udp.bound_v4sock = udp_bind(
+            self, (quicly_address_t){.sin = {.sin_family = AF_INET, .sin_addr = config->connect_udp_bind_v4addr}}, errstr);
+    if (!IN6_IS_ADDR_UNSPECIFIED(&config->connect_udp_bind_v6addr))
+        self->udp.bound_v6sock = udp_bind(
+            self, (quicly_address_t){.sin6 = {.sin6_family = AF_INET6, .sin6_addr = config->connect_udp_bind_v6addr}}, errstr);
+    if (self->udp.bound_v4sock == NULL && self->udp.bound_v6sock == NULL)
+        return 0;
+    h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONNECT_UDP_BIND, NULL, H2O_STRLIT("?1"));
+    return 1;
 }
 
 static void on_stop(h2o_generator_t *_self, h2o_req_t *req)
@@ -1301,37 +1378,11 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     if (self->src_req->proceed_req == NULL)
         self->no_req_streaming = 1;
 
-    /* connect-udp-listen: bind to a local tuple and start */
-    if (h2o_memis(host.base, host.len, H2O_STRLIT("*"))) {
-        /* bind */
-        char *quoted_tuple = h2o_mem_alloc_pool(&req->pool, char, NI_MAXHOST + sizeof("\"[]:65535\""));
-        int fd = -1;
-        const char *errstr = NULL;
-        for (size_t i = 0; i < PTLS_ELEMENTSOF(handler->config.connect_udp_bind_addresses); ++i) {
-            if (IN6_IS_ADDR_UNSPECIFIED(&handler->config.connect_udp_bind_addresses[i]))
-                break;
-            if ((fd = udp_bind(&handler->config.connect_udp_bind_addresses[i], quoted_tuple, &errstr)) != -1)
-                break;
-        }
-        if (fd == -1) {
-            assert(errstr != NULL);
-            record_error(self->handler, self->src_req, NULL, "desc", errstr, NULL);
-            h2o_send_error_503(self->src_req, "Service Unavailable", errstr, H2O_SEND_ERROR_KEEP_HEADERS); /* FIXME */
-            return 0;
-        }
-        self->udp.can_bound = 1;
-        self->timeout.cb = on_io_timeout;
-        reset_io_timeout(self);
-        h2o_add_header(&req->pool, &req->res.headers, H2O_TOKEN_CONNECT_UDP_BIND, NULL, H2O_STRLIT("?1"));
-        h2o_add_header_by_str(&req->pool, &req->res.headers, H2O_STRLIT("proxy-public-address"), 0, NULL, quoted_tuple,
-                              strlen(quoted_tuple));
-        /* socket is ready; start forwarding */
-        udp_complete_setup(self, fd);
+    /* connect-udp-listen: bind a local tuple for each configured address family and start */
+    if (!is_tcp && !is_masque_draft03 && h2o_memis(host.base, host.len, H2O_STRLIT("*"))) {
+        udp_connect(self, NULL);
         return 0;
     }
-
-    if (!is_tcp)
-        self->udp.can_unbound = 1;
 
     /* unbound (i.e., ordinary) connect-udp; start address resolution */
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
@@ -1411,15 +1462,10 @@ static int on_req_connect_udp(h2o_handler_t *_handler, h2o_req_t *req)
         h2o_send_error_403(req, "Forbidden", "Forbiddedn", H2O_SEND_ERROR_KEEP_HEADERS);
         return 0;
     }
-    if (h2o_memis(host.base, host.len, H2O_STRLIT("*"))) {
-        ssize_t index = h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, -1);
-        if (index < 0 || !h2o_memis(req->headers.entries[index].value.base, req->headers.entries[index].value.len,
-                                    H2O_STRLIT("?1")) ||
-            h2o_find_header(&req->headers, H2O_TOKEN_CONNECT_UDP_BIND, index) >= 0) {
-            record_error(handler, req, NULL, "http_request_error", "invalid connect-udp-bind", NULL);
-            h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
-            return 0;
-        }
+    if (h2o_memis(host.base, host.len, H2O_STRLIT("*")) && !udp_bind_is_requested(req)) {
+        record_error(handler, req, NULL, "http_request_error", "invalid connect-udp-bind", NULL);
+        h2o_send_error_400(req, "Bad Request", "Bad Request", H2O_SEND_ERROR_KEEP_HEADERS);
+        return 0;
     }
 
     return on_req_core((void *)handler, req, host, port, 0, 0);
