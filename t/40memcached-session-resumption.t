@@ -37,6 +37,7 @@ sub doit {
 ssl-session-resumption:
   mode: cache
   cache-store: memcached
+  integrity-key: h2o-test-integrity-key
   memcached:
     host: 127.0.0.1
     port: $memc_port

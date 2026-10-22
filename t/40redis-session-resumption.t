@@ -50,6 +50,7 @@ num-threads: 1
 ssl-session-resumption:
   mode: cache
   cache-store: redis
+  integrity-key: h2o-test-integrity-key
   redis:
     host: 127.0.0.1
     port: $redis->{port}
@@ -73,6 +74,7 @@ handshake-timeout: 1
 ssl-session-resumption:
   mode: cache
   cache-store: redis
+  integrity-key: h2o-test-integrity-key
   redis:
     host: 192.0.2.0
     port: 6379
@@ -95,6 +97,7 @@ ssl-session-resumption:
   lifetime: 3
   mode: cache
   cache-store: redis
+  integrity-key: h2o-test-integrity-key
   redis:
     host: 127.0.0.1
     port: $redis->{port}

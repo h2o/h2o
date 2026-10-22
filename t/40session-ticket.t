@@ -87,6 +87,7 @@ subtest "memcached" => sub {
         my $conf =<< "EOT";
   mode: ticket
   ticket-store: memcached
+  integrity-key: h2o-test-integrity-key
   memcached:
     host: 127.0.0.1
     port: $memc_port
