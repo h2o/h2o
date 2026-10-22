@@ -251,13 +251,27 @@ static void test_process_range(void)
     }
 
     {
+        /* The two ranges overlap, and together they ask for more bytes than the file holds. The
+         * ranges are served in the order in which they were requested, until the total number of
+         * the bytes that they ask for would exceed the size of the file; the bytes that the second
+         * range asks for are carried by the first one anyway. */
         testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-\t,5-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
-        ok(ret == 2);
+        ok(ret == 1);
         ok(*ranges++ == 1);
-        ok(*ranges++ == 99);
-        ok(*ranges++ == 5);
-        ok(*ranges == 6);
+        ok(*ranges == 99);
+    }
+
+    { /* a request that asks for the same bytes more often than the file can serve them is served
+       * with no more ranges and no more bytes than the caps allow */
+        testrange =
+            h2o_iovec_init(H2O_STRLIT("bytes=0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9,0-9"));
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 10);
+        ok(*ranges++ == 0);
+        ok(*ranges++ == 10);
+        ok(*ranges++ == 0);
+        ok(*ranges == 10);
     }
 
     h2o_mem_clear_pool(&testpool);

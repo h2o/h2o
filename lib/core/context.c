@@ -43,10 +43,16 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
 
     /* tls (TODO inherit session cache setting of ssl_ctx) */
     h3ctx->tls = (ptls_context_t){
+        /* the random bytes are taken from OpenSSL; the random source of picotls that is backed by
+         * the bcrypt API of Windows is a stub that returns nothing but zeroes, and must never be
+         * used */
         .random_bytes = ptls_openssl_random_bytes,
         .get_time = &ptls_get_time,
         .key_exchanges = ptls_openssl_key_exchanges,
         .cipher_suites = ptls_openssl_cipher_suites,
+        /* picotls reassembles the handshake messages in a buffer whose size is bounded only by the
+         * memory of the process when this is left unset; bound it */
+        .max_buffer_size = 64 * 1024,
     };
     h3ctx->verify_cert = (ptls_openssl_verify_certificate_t){};
     if ((SSL_CTX_get_verify_mode(ssl_ctx) & SSL_VERIFY_PEER) != 0) {

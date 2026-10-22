@@ -242,11 +242,13 @@ Error:
 #endif
 }
 
+#define H2O_MAX_COMMAND_RESPONSE_SIZE (1024 * 1024)
+
 int h2o_read_command(const char *cmd, char **argv, h2o_iovec_t std_in, h2o_buffer_t **resp, int *child_status)
 {
     int respfds[2] = {-1, -1}, inputfds[2] = {-1, -1};
     pid_t pid = -1;
-    int mutex_locked = 0, ret = -1;
+    int mutex_locked = 0, ret = -1, response_too_large = 0;
 
     h2o_buffer_init(resp, &h2o_socket_buffer_prototype);
 
@@ -289,8 +291,15 @@ int h2o_read_command(const char *cmd, char **argv, h2o_iovec_t std_in, h2o_buffe
     close(inputfds[1]);
     inputfds[1] = -1;
 
-    /* read the response from pipe */
+    /* read the response from pipe; the response of a command is not expected to be large, and the
+     * command is not expected to be able to make the server allocate an arbitrary amount of memory */
     while (1) {
+        if ((*resp)->size >= H2O_MAX_COMMAND_RESPONSE_SIZE) {
+            fprintf(stderr, "[lib/common/serverutil.c] the response of the command exceeds the limit of %zu bytes\n",
+                    (size_t)H2O_MAX_COMMAND_RESPONSE_SIZE);
+            response_too_large = 1;
+            break;
+        }
         h2o_iovec_t buf = h2o_buffer_reserve(resp, 8192);
         ssize_t r;
         while ((r = read(respfds[0], buf.base, buf.len)) == -1 && errno == EINTR)
@@ -310,7 +319,8 @@ Exit:
             ;
         if (r == pid) {
             /* success */
-            ret = 0;
+            if (!response_too_large)
+                ret = 0;
         }
     }
 #define CLOSE_FD(x)                                                                                                                \

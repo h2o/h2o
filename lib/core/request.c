@@ -240,12 +240,17 @@ static void retain_original_response(h2o_req_t *req)
     req->res.original.headers.size = req->res.headers.size;
 }
 
+/* The message of the error log is under the control of the peer, or of the application, and it may
+ * contain anything at all. The characters that would let it forge a line of the error log, or that
+ * would alter the terminal that displays the log, are escaped. */
 void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg)
 {
+    h2o_iovec_t escaped = h2o_escape_control_chars(msg);
     /* use writev(2) to emit error atomically */
-    struct iovec vecs[] = {{prefix.base, prefix.len}, {msg.base, msg.len}, {"\n", 1}};
+    struct iovec vecs[] = {{prefix.base, prefix.len}, {escaped.base, escaped.len}, {"\n", 1}};
     H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) <= IOV_MAX);
     writev(2, vecs, sizeof(vecs) / sizeof(vecs[0]));
+    free(escaped.base);
 }
 
 static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_t msg)
@@ -257,14 +262,16 @@ static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_
      * in its entirety below, therefore the truncation affects only the copy that is retained by the request and that is
      * exposed to the access log. */
     if (req->error_logs->size < H2O_MAX_ERROR_LOG_SIZE) {
+        h2o_iovec_t escaped = h2o_escape_control_chars(msg);
         size_t capacity = H2O_MAX_ERROR_LOG_SIZE - req->error_logs->size;
         size_t prefix_len = prefix.len < capacity ? prefix.len : capacity;
         size_t msg_len;
         h2o_buffer_append(&req->error_logs, prefix.base, prefix_len);
         capacity -= prefix_len;
-        msg_len = msg.len < capacity ? msg.len : capacity;
+        msg_len = escaped.len < capacity ? escaped.len : capacity;
         if (msg_len > 0)
-            h2o_buffer_append(&req->error_logs, msg.base, msg_len);
+            h2o_buffer_append(&req->error_logs, escaped.base, msg_len);
+        free(escaped.base);
     }
 
     if (req->pathconf->error_log.emit_request_errors) {

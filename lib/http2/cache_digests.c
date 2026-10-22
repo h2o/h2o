@@ -203,7 +203,9 @@ static int lookup(h2o_cache_digests_frame_vector_t *vector, const char *url, siz
         size_t i = 0;
         do {
             h2o_cache_digests_frame_t *frame = vector->entries + i;
-            uint64_t key = hash >> (64 - frame->capacity_bits);
+            /* a frame that carries no capacity holds the key zero; the shift below would be by the
+             * width of the type, which is undefined behaviour */
+            uint64_t key = frame->capacity_bits == 0 ? 0 : hash >> (64 - frame->capacity_bits);
             if (frame->keys.entries != NULL &&
                 bsearch(&key, frame->keys.entries, frame->keys.size, sizeof(frame->keys.entries[0]), cmp_key) != NULL)
                 return is_fresh ? H2O_CACHE_DIGESTS_STATE_FRESH : H2O_CACHE_DIGESTS_STATE_STALE;

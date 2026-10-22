@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <strings.h>
 #include "h2o.h"
 
 static void on_send(h2o_ostream_t *self, h2o_req_t *req, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state)
@@ -38,6 +39,27 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
     }
     dest = req->res.headers.entries[xru_index].value;
     h2o_delete_header(&req->res.headers, xru_index);
+
+    /* The header comes from the response of the origin, and the origin may be under the control of
+     * somebody else; the filter therefore redirects only to the hosts that the operator has allowed. */
+    {
+        char **allowed = req->conn->ctx->globalconf->reproxy.allowed_hosts;
+        if (allowed != NULL) {
+            h2o_url_t url;
+            if (h2o_url_parse(&req->pool, dest.base, dest.len, &url) != 0 || url.host.base == NULL) {
+                h2o_send_error_502(req, "Bad Gateway", "the origin asked for a host that is not allowed", 0);
+                return;
+            }
+            size_t i;
+            for (i = 0; allowed[i] != NULL; ++i)
+                if (strcasecmp(allowed[i], url.host.base) == 0)
+                    break;
+            if (allowed[i] == NULL) {
+                h2o_send_error_502(req, "Bad Gateway", "the origin asked for a host that is not allowed", 0);
+                return;
+            }
+        }
+    }
 
     /* setup params */
     switch (req->res.status) {

@@ -519,6 +519,11 @@ struct st_h2o_globalconf_t {
          */
         unsigned preserve_x_forwarded_proto : 1;
         /**
+         * a boolean flag if set to true, instructs the proxy to drop the x-forwarded-for, via and
+         * x-forwarded-proto headers that the client sends, and to report the address of the client alone
+         */
+        unsigned sanitize_forwarded_headers : 1;
+        /**
          * a boolean flag if set to true, instructs the proxy to preserve the server header passed by the origin
          */
         unsigned preserve_server_header : 1;
@@ -563,6 +568,14 @@ struct st_h2o_globalconf_t {
          */
         h2o_socketpool_t global_socketpool;
     } proxy;
+
+    struct {
+        /**
+         * the hosts that the reproxy filter is allowed to redirect a request to; when the list is
+         * empty, any host may be requested
+         */
+        char **allowed_hosts;
+    } reproxy;
 
     /**
      * enum indicating to what clients h2o sends 1xx response

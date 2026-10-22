@@ -44,6 +44,30 @@ static int on_config_reproxy(h2o_configurator_command_t *cmd, h2o_configurator_c
     return 0;
 }
 
+static int on_config_reproxy_allowed_hosts(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    /* The hosts that the reproxy filter is allowed to redirect a request to. When the list is empty,
+     * any host may be requested, which is what the filter did before this directive existed. */
+    if (node->type != YOML_TYPE_SEQUENCE) {
+        h2o_configurator_errprintf(cmd, node, "reproxy.allowed-hosts must be a sequence of host names");
+        return -1;
+    }
+    size_t n = node->data.sequence.size;
+    char **hosts = h2o_mem_alloc(sizeof(char *) * (n + 1));
+    for (size_t i = 0; i < n; ++i) {
+        yoml_t *item = node->data.sequence.elements[i];
+        if (item->type != YOML_TYPE_SCALAR) {
+            h2o_configurator_errprintf(cmd, item, "reproxy.allowed-hosts must be a sequence of host names");
+            free(hosts);
+            return -1;
+        }
+        hosts[i] = h2o_strdup(NULL, item->data.scalar, SIZE_MAX).base;
+    }
+    hosts[n] = NULL;
+    ctx->globalconf->reproxy.allowed_hosts = hosts;
+    return 0;
+}
+
 static int on_config_enter(h2o_configurator_t *_self, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct reproxy_configurator_t *self = (void *)_self;
@@ -76,6 +100,8 @@ void h2o_reproxy_register_configurator(h2o_globalconf_t *conf)
     c->super.exit = on_config_exit;
 
     /* reproxy: ON | OFF */
+    h2o_configurator_define_command(&c->super, "reproxy.allowed-hosts", H2O_CONFIGURATOR_FLAG_GLOBAL,
+                                    on_config_reproxy_allowed_hosts);
     h2o_configurator_define_command(&c->super, "reproxy",
                                     H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_HOST | H2O_CONFIGURATOR_FLAG_PATH |
                                         H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,

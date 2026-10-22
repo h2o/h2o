@@ -26,6 +26,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include <sys/syscall.h>
 #include <sys/un.h>
@@ -2099,6 +2100,20 @@ void h2o_socket_ssl_handshake(h2o_socket_t *sock, SSL_CTX *ssl_ctx, const char *
         }
         sock->ssl->handshake.client.server_name = h2o_strdup(NULL, server_name, SIZE_MAX).base;
         SSL_set_tlsext_host_name(sock->ssl->ossl, sock->ssl->handshake.client.server_name);
+        /* Verify that the certificate of the peer is valid for the name that was asked for. The chain
+         * of the certificate is verified by OpenSSL, but the name in it is not, unless it is asked for
+         * explicitly; a certificate that is valid for some other name would be accepted otherwise. */
+        {
+            X509_VERIFY_PARAM *param = SSL_get0_param(sock->ssl->ossl);
+            struct in_addr addr4;
+            struct in6_addr addr6;
+            if (inet_pton(AF_INET, server_name, &addr4) == 1 || inet_pton(AF_INET6, server_name, &addr6) == 1) {
+                /* the name is an IP address, and the certificate has to carry it as such */
+                X509_VERIFY_PARAM_set1_ip_asc(param, server_name);
+            } else {
+                X509_VERIFY_PARAM_set1_host(param, server_name, strlen(server_name));
+            }
+        }
         proceed_handshake(sock, 0);
     }
 }

@@ -1404,6 +1404,11 @@ Exit:
     return ret;
 }
 
+/* Set when the updater of the status of a certificate is running. The updater forks a process and
+ * executes the command that fetches the status, and the pledge of the server therefore has to allow the
+ * two promises that permit it; see apply_pledge(). */
+static int ocsp_updater_enabled = 0;
+
 static void *ocsp_updater_thread(void *_identity)
 {
     struct listener_ssl_identity_t *identity = _identity;
@@ -1600,6 +1605,10 @@ static const char *listener_setup_ssl_picotls(struct listener_config_t *listener
                 .cipher_suites = cipher_suites,
                 .tls12_cipher_suites = ptls_openssl_tls12_cipher_suites,
                 .certificates = {0}, /* fill later */
+                /* ECH is used as a server only, and the client side of it must not be enabled here: when a
+                 * client offers ECH and the server rejects it, picotls frees the public name of the client
+                 * but keeps the state of the offer, and the certificate of the peer is then validated
+                 * without the name being compared against it. */
                 .ech.server = {ech_create_opener, ech_retry_configs},
                 .on_client_hello = &pctx->ch.super,
                 .emit_certificate = &pctx->ec.super,
@@ -1913,14 +1922,26 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
     }
 
     /* set session resumption context so that resumption will succeed only against the same certificate */
-    if (raw_pubkey_count == 0) {
+    {
         uint8_t session_ctx[SSL_MAX_SID_CTX_LENGTH];
-        unsigned session_ctx_len;
+        unsigned session_ctx_len = 0;
         H2O_BUILD_ASSERT(sizeof(session_ctx) == SHA256_DIGEST_LENGTH);
-        int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
-        assert(ret == 1);
+        if (raw_pubkey_count == 0) {
+            int ret = X509_digest(SSL_CTX_get0_certificate(ssl_ctx), EVP_sha256(), session_ctx, &session_ctx_len);
+            assert(ret == 1);
+        } else {
+            /* The identity is a raw public key. Bind the session to the key itself, so that a session
+             * that was obtained for one identity is not resumed for another; without the context, a
+             * session would be accepted by every listener that uses the same kind of identity. */
+            SHA256_CTX mdctx;
+            assert(SHA256_Init(&mdctx) == 1);
+            for (size_t i = 0; i < raw_pubkey_count; ++i)
+                assert(SHA256_Update(&mdctx, raw_pubkey[i].base, raw_pubkey[i].len) == 1);
+            assert(SHA256_Final(session_ctx, &mdctx) == 1);
+            session_ctx_len = sizeof(session_ctx);
+        }
         assert(session_ctx_len == sizeof(session_ctx));
-        ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
+        int ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
         assert(ret == 1);
     }
 
@@ -2571,6 +2592,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             case RUN_MODE_WORKER: {
                 pthread_t tid;
                 h2o_multithread_create_thread(&tid, NULL, ocsp_updater_thread, identity);
+                ocsp_updater_enabled = 1;
             } break;
             case RUN_MODE_MASTER:
             case RUN_MODE_DAEMON:
@@ -3550,13 +3572,21 @@ static void apply_pledge(void)
      * - proc:  Fork processes - required by OCSP updater threads
      * - exec:  Execute external programs - required by OCSP updater to spawn fetch scripts
      *
-     * Note: OCSP updater threads continue running after pledge is applied and periodically
-     * fork/exec to fetch certificate status updates (see get_ocsp_response function).
+     * The two promises that allow the process to start another one are granted only when the server
+     * is going to start one. The updater of the status of a certificate is the only part of the server
+     * that forks a process and executes a command, and it does so periodically, long after the pledge
+     * has been applied; a deployment that does not use the updater does not need the two promises,
+     * and they are the ones that would let a process that has been compromised start something of its
+     * own. The promises of a process cannot be increased afterwards, so the decision has to be made
+     * here, before the first pledge.
      */
-    if (pledge("stdio rpath wpath cpath inet dns unix proc exec", NULL) != 0)
+    const char *promises =
+        ocsp_updater_enabled ? "stdio rpath wpath cpath inet dns unix proc exec" : "stdio rpath wpath cpath inet dns unix";
+
+    if (pledge(promises, NULL) != 0)
         h2o_fatal("pledge failed: %s", h2o_strerror_r(errno, buf, sizeof(buf)));
 
-    fprintf(stderr, "[INFO] pledge restrictions applied: stdio rpath wpath cpath inet dns unix proc exec\n");
+    fprintf(stderr, "[INFO] pledge restrictions applied: %s\n", promises);
 }
 #endif
 

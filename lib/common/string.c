@@ -26,6 +26,35 @@
 #include <time.h>
 #include "h2o/string_.h"
 
+h2o_iovec_t h2o_escape_control_chars(h2o_iovec_t msg)
+{
+    size_t len = 0;
+    for (size_t i = 0; i < msg.len; ++i) {
+        unsigned char c = msg.base[i];
+        len += (c < 0x20 || c == 0x7f) ? 4 : 1;
+    }
+    if (len == 0)
+        return h2o_iovec_init(NULL, 0);
+    char *buf = h2o_mem_alloc(len);
+    char *pos = buf;
+    for (size_t i = 0; i < msg.len; ++i) {
+        unsigned char c = msg.base[i];
+        if (c < 0x20 || c == 0x7f) {
+            /* The escaped form of one control character is four characters long, and it is written
+             * without sprintf: the buffer is exactly as long as the escaped message, and sprintf
+             * would write a NUL terminator one byte past its end. */
+            *pos++ = '\\';
+            *pos++ = 'x';
+            *pos++ = "0123456789abcdef"[c >> 4];
+            *pos++ = "0123456789abcdef"[c & 0xf];
+        } else {
+            *pos++ = (char)c;
+        }
+    }
+    assert(pos == buf + len);
+    return h2o_iovec_init(buf, len);
+}
+
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t slen)
 {
     /* We do not need this check to be here, but it needs to be somewhere, see the definition of H2O_SIZE_T_LONGEST_STR */

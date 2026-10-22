@@ -256,6 +256,18 @@ static void stop_eyeballs(struct st_connect_generator_t *self)
 
 static void dispose_generator(struct st_connect_generator_t *self)
 {
+    /* The address resolution holds a pointer to the generator, and the request that owns the
+     * generator may be disposed while the resolution is in flight; the response would then be
+     * delivered to a generator that no longer exists. Cancel the requests so that the callback is
+     * never invoked after the generator is gone. */
+    if (self->getaddr_req.v4 != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req.v4);
+        self->getaddr_req.v4 = NULL;
+    }
+    if (self->getaddr_req.v6 != NULL) {
+        h2o_hostinfo_getaddr_cancel(self->getaddr_req.v6);
+        self->getaddr_req.v6 = NULL;
+    }
     stop_eyeballs(self);
     if (self->sock != NULL) {
         h2o_socket_close(self->sock);

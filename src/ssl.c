@@ -433,8 +433,20 @@ static int update_tickets(session_ticket_vector_t *tickets, uint64_t now)
             }
         } while (offending < tickets->size - 1);
     }
-    if (tickets->size >= 256)
-        h2o_fatal("no space for unique QUIC key identifier");
+    if (tickets->size >= 256) {
+        /* The store holds more tickets than the number of the identifiers that QUIC provides for them.
+         * This used to abort the process, which turned a store that someone else can write to into a
+         * way of taking the server down; drop the ticket that expires first instead. */
+        size_t oldest = 0;
+        for (size_t i = 1; i < tickets->size; ++i)
+            if (tickets->entries[i]->not_after < tickets->entries[oldest]->not_after)
+                oldest = i;
+        free_ticket(tickets->entries[oldest]);
+        memmove(tickets->entries + oldest, tickets->entries + oldest + 1,
+                sizeof(tickets->entries[0]) * (tickets->size - oldest - 1));
+        --tickets->size;
+        altered = 1;
+    }
 
     /* create new entry if necessary */
     has_valid_ticket = find_ticket_for_encryption(tickets, now) != NULL;

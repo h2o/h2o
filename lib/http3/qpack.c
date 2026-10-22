@@ -908,6 +908,8 @@ static int handle_table_state_synchronize(h2o_qpack_encoder_t *qpack, int64_t in
     if (qpack == NULL || insert_count == 0)
         goto Error;
 
+    if (insert_count > INT64_MAX - qpack->largest_known_received)
+        goto Error;
     int64_t new_value = qpack->largest_known_received + insert_count;
     if (new_value >= qpack_table_total_inserts(&qpack->table))
         goto Error;
@@ -1272,8 +1274,19 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
         if (ctx->largest_ref < ctx->qpack->largest_known_received) {
             ctx->largest_ref = ctx->qpack->largest_known_received;
         } else if (ctx->largest_ref > ctx->qpack->largest_known_received) {
-            assert(ctx->qpack->num_blocked < ctx->qpack->max_blocked);
-            ++ctx->qpack->num_blocked;
+            /* The peer has not acknowledged the insertion that this reference points to, so the
+             * stream is blocked. The number of the blocked streams is bounded by the setting of the
+             * peer; the bound used to be checked by an assertion, which is not compiled into the
+             * release builds, and the list of the unacknowledged references then grew without a
+             * limit. */
+            if (ctx->qpack->num_blocked >= ctx->qpack->max_blocked) {
+                /* Drop the oldest entry, so that the list does not grow without a limit. The peer
+                 * does not acknowledge the insertions, and the acknowledgement of the entry that is
+                 * dropped is reported by the peer as an error, which closes the connection. */
+                evict_inflight_by_index(ctx->qpack, 0);
+            } else {
+                ++ctx->qpack->num_blocked;
+            }
             is_blocking = 1;
         }
         /* mark as inflight */
