@@ -25,11 +25,16 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "quicly/constants.h"
+#include "quicly/recvstate.h"
+#include "quicly/sendstate.h"
+#include "quicly/streambuf.h"
 #include "h2o/memory.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct st_h2o_req_t;
 
 /**
  * WebTransport over HTTP/3 (draft-ietf-webtrans-http3-16)
@@ -156,6 +161,324 @@ typedef enum en_h2o_webtransport_protocol_selection_t {
 h2o_webtransport_protocol_selection_t h2o_webtransport_select_protocol(const h2o_iovec_t *lines, size_t num_lines,
                                                                        const h2o_iovec_t *supported, size_t num_supported,
                                                                        size_t *selected);
+
+/**
+ * Errors being reported through `quicly_error_t`. Application errors are conveyed as
+ * `QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(code)`, where `code` is a 32-bit WebTransport application error code, regardless of the
+ * underlying transport. The values below occupy the space that is unused by picotls and quicly.
+ */
+/**
+ * the stream is being destroyed because the session has ended (WT_SESSION_GONE on HTTP/3)
+ */
+#define H2O_WEBTRANSPORT_ERROR_SESSION_GONE ((quicly_error_t)0x2e701)
+/**
+ * the stream is being discarded because the associated session could not be found (WT_BUFFERED_STREAM_REJECTED on HTTP/3)
+ */
+#define H2O_WEBTRANSPORT_ERROR_BUFFERED_STREAM_REJECTED ((quicly_error_t)0x2e702)
+/**
+ * the peer violated the protocol (e.g., sent a malformed capsule)
+ */
+#define H2O_WEBTRANSPORT_ERROR_PROTOCOL ((quicly_error_t)0x2e703)
+/**
+ * the HTTP stream or the connection carrying the session was terminated without a WebTransport-level signal
+ */
+#define H2O_WEBTRANSPORT_ERROR_TRANSPORT ((quicly_error_t)0x2e706)
+
+typedef struct st_h2o_webtransport_session_t h2o_webtransport_session_t;
+typedef struct st_h2o_webtransport_stream_t h2o_webtransport_stream_t;
+
+/**
+ * Stream-level callbacks, having the same semantics as their counterparts in `quicly_stream_callbacks_t`.
+ */
+typedef struct st_h2o_webtransport_stream_callbacks_t {
+    /**
+     * called when the stream is destroyed; `err` is zero if both sides were closed cleanly
+     */
+    void (*on_destroy)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    /**
+     * called when the first `delta` bytes of the data being retained by the application are no longer needed
+     */
+    void (*on_send_shift)(h2o_webtransport_stream_t *stream, size_t delta);
+    /**
+     * asks the application to write up to `*len` bytes at offset `off` (relative to the retained data) into `dst`
+     */
+    void (*on_send_emit)(h2o_webtransport_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+    /**
+     * called when the peer sent STOP_SENDING; the send side has been reset with the same error code when this is invoked
+     */
+    void (*on_send_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    /**
+     * called when data is received; `off` is relative to `recvstate.data_off`
+     */
+    void (*on_receive)(h2o_webtransport_stream_t *stream, size_t off, const void *src, size_t len);
+    /**
+     * called when the peer resets the send side
+     */
+    void (*on_receive_reset)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+} h2o_webtransport_stream_callbacks_t;
+
+struct st_h2o_webtransport_stream_t {
+    h2o_webtransport_session_t *session;
+    /**
+     * stream ID, using the numbering of QUIC regardless of the transport
+     */
+    quicly_stream_id_t stream_id;
+    const h2o_webtransport_stream_callbacks_t *callbacks;
+    /**
+     * send-side state (offsets exclude any framing added by the transport); the application calls `quicly_sendstate_shutdown`
+     * then `h2o_webtransport_stream_sync_sendbuf` to close the send side
+     */
+    quicly_sendstate_t sendstate;
+    /**
+     * receive-side state (offsets exclude any framing added by the transport)
+     */
+    quicly_recvstate_t recvstate;
+    void *data;
+};
+
+typedef struct st_h2o_webtransport_session_callbacks_t {
+    /**
+     * Called when a stream is opened by either endpoint; the callback sets `stream->callbacks`. Returns zero if successful. When an
+     * application error is returned for a stream opened by the peer, the stream is reset and / or STOP_SENDING is sent with that
+     * error; other errors close the session. When a non-zero value is returned for a locally opened stream,
+     * `h2o_webtransport_open_stream` returns that value.
+     */
+    quicly_error_t (*on_stream_open)(h2o_webtransport_stream_t *stream);
+    /**
+     * called when a datagram is received (optional)
+     */
+    void (*on_receive_datagram)(h2o_webtransport_session_t *session, h2o_iovec_t payload);
+    /**
+     * called when the peer asks for the session to be drained, or when the server starts shutting down the connection (optional)
+     */
+    void (*on_drain)(h2o_webtransport_session_t *session);
+    /**
+     * Called when the session is closed by the peer or due to an error. `err` is an application error when the peer closed the
+     * session (being `QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0)` when no error code was provided), or one of the
+     * `H2O_WEBTRANSPORT_ERROR_*` values. All streams are destroyed before this callback is invoked. The session object MUST NOT be
+     * used once this callback returns.
+     */
+    void (*on_close)(h2o_webtransport_session_t *session, quicly_error_t err, h2o_iovec_t reason);
+} h2o_webtransport_session_callbacks_t;
+
+typedef struct st_h2o_webtransport_backend_t h2o_webtransport_backend_t;
+
+struct st_h2o_webtransport_session_t {
+    /**
+     * the extended CONNECT request that established the session
+     */
+    struct st_h2o_req_t *req;
+    const h2o_webtransport_session_callbacks_t *callbacks;
+    void *data;
+    /**
+     * internal
+     */
+    const h2o_webtransport_backend_t *_backend;
+};
+
+/**
+ * Implementation of the transport-specific operations. The functions are invoked by the `h2o_webtransport_*` wrappers below.
+ */
+struct st_h2o_webtransport_backend_t {
+    quicly_error_t (*open_stream)(h2o_webtransport_session_t *session, h2o_webtransport_stream_t **stream, int unidirectional);
+    quicly_error_t (*stream_sync_sendbuf)(h2o_webtransport_stream_t *stream, int activate);
+    void (*stream_sync_recvbuf)(h2o_webtransport_stream_t *stream, size_t shift_amount);
+    void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    void (*send_datagrams)(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams);
+    void (*drain)(h2o_webtransport_session_t *session);
+    void (*close)(h2o_webtransport_session_t *session, uint32_t app_error, h2o_iovec_t reason);
+};
+
+/**
+ * Operations provided by a protocol layer that carries the streams of WebTransport sessions natively (i.e., HTTP/3). The
+ * stream-level operations have the same semantics as those of `h2o_webtransport_backend_t`. The capsules that remain on the
+ * extended CONNECT stream (WT_CLOSE_SESSION, WT_DRAIN_SESSION, DATAGRAM) are handled by the core, as are the datagrams.
+ */
+typedef struct st_h2o_webtransport_native_t {
+    quicly_error_t (*open_stream)(h2o_webtransport_session_t *session, h2o_webtransport_stream_t **stream, int unidirectional);
+    quicly_error_t (*stream_sync_sendbuf)(h2o_webtransport_stream_t *stream, int activate);
+    void (*stream_sync_recvbuf)(h2o_webtransport_stream_t *stream, size_t shift_amount);
+    void (*reset_stream)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    void (*request_stop)(h2o_webtransport_stream_t *stream, quicly_error_t err);
+    /**
+     * Called asynchronously after `h2o_webtransport_accept` returns. The protocol layer starts delivering the streams opened by the
+     * peer (including the ones that have been buffered) by calling `on_stream_open`.
+     */
+    void (*start)(h2o_webtransport_session_t *session);
+    /**
+     * Called when the session ends. The protocol layer destroys all streams of the session with
+     * H2O_WEBTRANSPORT_ERROR_SESSION_GONE, and stops referring to the session.
+     */
+    void (*detach)(h2o_webtransport_session_t *session);
+} h2o_webtransport_native_t;
+
+/**
+ * Called by the protocol layer carrying the streams natively, when an error that is fatal to the session is detected (e.g., when
+ * `on_stream_open` returned an error that is not an application error). The session is closed, and `detach` is invoked.
+ */
+void h2o_webtransport_native_error(h2o_webtransport_session_t *session, quicly_error_t err);
+/**
+ * Returns if the request is an extended CONNECT request that tries to establish a WebTransport session.
+ */
+int h2o_webtransport_is_request(struct st_h2o_req_t *req);
+/**
+ * Accepts a WebTransport session by sending a 2xx response. `protocol`, if non-empty, is the protocol chosen from those offered by
+ * WT-Available-Protocols (see `h2o_webtransport_select_protocol`), to be sent in WT-Protocol. If the session cannot be established
+ * (e.g., WebTransport is not enabled on the connection, or the request is malformed), an error response is sent and NULL is
+ * returned.
+ */
+h2o_webtransport_session_t *h2o_webtransport_accept(struct st_h2o_req_t *req, const h2o_webtransport_session_callbacks_t *callbacks,
+                                                    void *data, h2o_iovec_t protocol);
+/**
+ * Called by the protocol layer when the connection starts shutting down gracefully (i.e., GOAWAY is sent). If the request carries a
+ * WebTransport session, WT_DRAIN_SESSION is sent to the peer and `on_drain` is invoked asynchronously so that the application can
+ * wind the session down.
+ */
+void h2o_webtransport_notify_shutdown(struct st_h2o_req_t *req);
+/**
+ * Opens a stream. `on_stream_open` is invoked before this function returns. If the peer's stream limit has been reached, the
+ * stream is opened locally but the transmission is deferred until the peer raises the limit.
+ */
+static quicly_error_t h2o_webtransport_open_stream(h2o_webtransport_session_t *session, h2o_webtransport_stream_t **stream,
+                                                   int unidirectional);
+/**
+ * Notifies that new data has been added to (`activate` set to non-zero) or removed from the send buffer, like
+ * `quicly_stream_sync_sendbuf`.
+ */
+static quicly_error_t h2o_webtransport_stream_sync_sendbuf(h2o_webtransport_stream_t *stream, int activate);
+/**
+ * Notifies that `shift_amount` bytes of received data have been consumed, like `quicly_stream_sync_recvbuf`.
+ */
+static void h2o_webtransport_stream_sync_recvbuf(h2o_webtransport_stream_t *stream, size_t shift_amount);
+/**
+ * Resets the send side of the stream; `err` must be an application error.
+ */
+static void h2o_webtransport_reset_stream(h2o_webtransport_stream_t *stream, quicly_error_t err);
+/**
+ * Asks the peer to stop sending; `err` must be an application error.
+ */
+static void h2o_webtransport_request_stop(h2o_webtransport_stream_t *stream, quicly_error_t err);
+/**
+ * Sends datagrams. Datagrams might be dropped.
+ */
+static void h2o_webtransport_send_datagrams(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams);
+/**
+ * Asks the peer to drain the session.
+ */
+static void h2o_webtransport_drain(h2o_webtransport_session_t *session);
+/**
+ * Closes the session. All streams are destroyed (with H2O_WEBTRANSPORT_ERROR_SESSION_GONE) before the function returns, and
+ * `on_close` is not invoked. The session object MUST NOT be used once this function returns.
+ */
+static void h2o_webtransport_close(h2o_webtransport_session_t *session, uint32_t app_error, h2o_iovec_t reason);
+/**
+ * Returns if the stream is unidirectional.
+ */
+static int h2o_webtransport_stream_is_unidirectional(quicly_stream_id_t stream_id);
+/**
+ * Returns if the stream was opened by the server.
+ */
+static int h2o_webtransport_stream_is_server_initiated(quicly_stream_id_t stream_id);
+/**
+ * Returns if the stream has the send side, when running as a server.
+ */
+static int h2o_webtransport_stream_has_send_side(h2o_webtransport_stream_t *stream);
+/**
+ * Returns if the stream has the receive side, when running as a server.
+ */
+static int h2o_webtransport_stream_has_receive_side(h2o_webtransport_stream_t *stream);
+
+/**
+ * A simple stream buffer, being the counterpart of `quicly_streambuf_t`. The functions below assume that `stream->data` points to
+ * this structure.
+ */
+typedef struct st_h2o_webtransport_streambuf_t {
+    quicly_sendbuf_t egress;
+    ptls_buffer_t ingress;
+} h2o_webtransport_streambuf_t;
+
+/**
+ * Allocates `sz` bytes (at least the size of `h2o_webtransport_streambuf_t`) and assigns it to `stream->data`.
+ */
+int h2o_webtransport_streambuf_create(h2o_webtransport_stream_t *stream, size_t sz);
+void h2o_webtransport_streambuf_destroy(h2o_webtransport_stream_t *stream, quicly_error_t err);
+void h2o_webtransport_streambuf_egress_shift(h2o_webtransport_stream_t *stream, size_t delta);
+void h2o_webtransport_streambuf_egress_emit(h2o_webtransport_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
+int h2o_webtransport_streambuf_egress_write(h2o_webtransport_stream_t *stream, const void *src, size_t len);
+int h2o_webtransport_streambuf_egress_write_vec(h2o_webtransport_stream_t *stream, quicly_sendbuf_vec_t *vec);
+int h2o_webtransport_streambuf_egress_shutdown(h2o_webtransport_stream_t *stream);
+void h2o_webtransport_streambuf_ingress_shift(h2o_webtransport_stream_t *stream, size_t delta);
+ptls_iovec_t h2o_webtransport_streambuf_ingress_get(h2o_webtransport_stream_t *stream);
+/**
+ * The concrete function for `on_receive`. Returns zero if successful; upon failure, the stream is reset and STOP_SENDING is sent.
+ */
+int h2o_webtransport_streambuf_ingress_receive(h2o_webtransport_stream_t *stream, size_t off, const void *src, size_t len);
+
+/* inline definitions */
+
+inline quicly_error_t h2o_webtransport_open_stream(h2o_webtransport_session_t *session, h2o_webtransport_stream_t **stream,
+                                                   int unidirectional)
+{
+    return session->_backend->open_stream(session, stream, unidirectional);
+}
+
+inline quicly_error_t h2o_webtransport_stream_sync_sendbuf(h2o_webtransport_stream_t *stream, int activate)
+{
+    return stream->session->_backend->stream_sync_sendbuf(stream, activate);
+}
+
+inline void h2o_webtransport_stream_sync_recvbuf(h2o_webtransport_stream_t *stream, size_t shift_amount)
+{
+    stream->session->_backend->stream_sync_recvbuf(stream, shift_amount);
+}
+
+inline void h2o_webtransport_reset_stream(h2o_webtransport_stream_t *stream, quicly_error_t err)
+{
+    stream->session->_backend->reset_stream(stream, err);
+}
+
+inline void h2o_webtransport_request_stop(h2o_webtransport_stream_t *stream, quicly_error_t err)
+{
+    stream->session->_backend->request_stop(stream, err);
+}
+
+inline void h2o_webtransport_send_datagrams(h2o_webtransport_session_t *session, h2o_iovec_t *datagrams, size_t num_datagrams)
+{
+    session->_backend->send_datagrams(session, datagrams, num_datagrams);
+}
+
+inline void h2o_webtransport_drain(h2o_webtransport_session_t *session)
+{
+    session->_backend->drain(session);
+}
+
+inline void h2o_webtransport_close(h2o_webtransport_session_t *session, uint32_t app_error, h2o_iovec_t reason)
+{
+    session->_backend->close(session, app_error, reason);
+}
+
+inline int h2o_webtransport_stream_is_unidirectional(quicly_stream_id_t stream_id)
+{
+    return (stream_id & 2) != 0;
+}
+
+inline int h2o_webtransport_stream_is_server_initiated(quicly_stream_id_t stream_id)
+{
+    return (stream_id & 1) != 0;
+}
+
+inline int h2o_webtransport_stream_has_send_side(h2o_webtransport_stream_t *stream)
+{
+    return !h2o_webtransport_stream_is_unidirectional(stream->stream_id) ||
+           h2o_webtransport_stream_is_server_initiated(stream->stream_id);
+}
+
+inline int h2o_webtransport_stream_has_receive_side(h2o_webtransport_stream_t *stream)
+{
+    return !h2o_webtransport_stream_is_unidirectional(stream->stream_id) ||
+           !h2o_webtransport_stream_is_server_initiated(stream->stream_id);
+}
 
 #ifdef __cplusplus
 }
