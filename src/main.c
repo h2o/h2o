@@ -1938,6 +1938,7 @@ static int load_ssl_identity(h2o_configurator_command_t *cmd, SSL_CTX *ssl_ctx, 
             for (size_t i = 0; i < raw_pubkey_count; ++i)
                 assert(SHA256_Update(&mdctx, raw_pubkey[i].base, raw_pubkey[i].len) == 1);
             assert(SHA256_Final(session_ctx, &mdctx) == 1);
+            session_ctx_len = sizeof(session_ctx);
         }
         assert(session_ctx_len == sizeof(session_ctx));
         int ret = SSL_CTX_set_session_id_context(ssl_ctx, session_ctx, sizeof(session_ctx));
