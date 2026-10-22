@@ -490,7 +490,11 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                  * authoritative for a forward proxy, and h2o is a reverse proxy (the upstream is named
                  * by the configuration), so the scheme of the transport is the one that matters. Were
                  * the scheme of the target to be used, a client could make the proxy claim that it
-                 * had been reached over a scheme that it was not reached over. */
+                 * had been reached over a scheme that it was not reached over. The exception is the
+                 * masque scheme of a CONNECT-UDP request: the draft requires the client to send it as
+                 * the scheme of the target, and it does not stand for a transport. */
+                if (method_type == METHOD_CONNECT_UDP && url.scheme == &H2O_URL_SCHEME_MASQUE)
+                    conn->req.input.scheme = url.scheme;
                 conn->req.input.path = url.path;
                 host = url.authority; /* authority part of the absolute form overrides the host header field (RFC 7230 S5.4) */
             }
