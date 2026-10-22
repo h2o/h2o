@@ -21,11 +21,12 @@
  */
 
 /**
- * A WebTransport client used by t/40webtransport.t. It establishes one session over HTTP/3 (native streams,
- * draft-ietf-webtrans-http3), runs the actions given on the command line, then waits for the responses and closes the session. Events are printed to stdout, one per line:
+ * A WebTransport client used by t/40webtransport.t. It establishes one session, either over HTTP/3 (native streams,
+ * draft-ietf-webtrans-http3) or over HTTP/2 (capsules, draft-ietf-webtrans-http2), runs the actions given on the command line, then
+ * waits for the responses and closes the session. Events are printed to stdout, one per line:
  *
  *   response <status>
- *   settings wt-enabled=<0|1>
+ *   settings wt-enabled=<0|1>                      (HTTP/3 only)
  *   <client|server>-<bidi|uni>[<id>] fin "<data>"  (data longer than 64 bytes is summarized as `<N bytes, pattern ok|ng>`)
  *   <client|server>-<bidi|uni>[<id>] reset <code>
  *   <client|server>-<bidi|uni>[<id>] stop-sending <code>
@@ -82,6 +83,10 @@ struct wt_stream {
      * the quicly stream (HTTP/3)
      */
     quicly_stream_t *quic;
+    /**
+     * bytes sent (HTTP/2)
+     */
+    uint64_t bytes_sent;
     /**
      * the action (`bidi-reset` or `bidi-stop`) to be taken once the server echoes the first byte; the action is deferred so that
      * the server receives the stream header before the reset
@@ -244,8 +249,12 @@ static void on_stream_data(struct wt_stream *stream, const void *data, size_t le
     check_done();
 }
 
-static void print_error_code(quicly_error_t err)
+static void print_error_code(quicly_error_t err, int is_h3)
 {
+    if (!is_h3) {
+        printf("%" PRIu32, (uint32_t)err);
+        return;
+    }
     uint32_t app;
     if (h2o_webtransport_h3_error_to_application((uint64_t)err, &app) == 0) {
         printf("%" PRIu32, app);
@@ -258,25 +267,25 @@ static void print_error_code(quicly_error_t err)
     }
 }
 
-static void on_stream_reset(struct wt_stream *stream, uint64_t code)
+static void on_stream_reset(struct wt_stream *stream, uint64_t code, int is_h3)
 {
     if (stream->recv_done)
         return;
     stream->recv_done = 1;
     print_stream_label(stream);
     fputs(" reset ", stdout);
-    print_error_code(code);
+    print_error_code(code, is_h3);
     putchar('\n');
     if (!stream->is_local)
         ++session.server_streams_done;
     check_done();
 }
 
-static void on_stream_stop_sending(struct wt_stream *stream, uint64_t code)
+static void on_stream_stop_sending(struct wt_stream *stream, uint64_t code, int is_h3)
 {
     print_stream_label(stream);
     fputs(" stop-sending ", stdout);
-    print_error_code(code);
+    print_error_code(code, is_h3);
     putchar('\n');
 }
 
@@ -290,9 +299,10 @@ static void on_datagram(const void *data, size_t len)
 }
 
 /**
- * Handles the capsules found in `buf`, consuming those that are complete.
+ * Handles the capsules found in `buf`, consuming those that are complete. The capsules carrying WebTransport streams appear only
+ * when the session is carried by HTTP/2.
  */
-static int handle_capsules(h2o_buffer_t **buf)
+static int handle_capsules(h2o_buffer_t **buf, void (*handle_stream_capsule)(uint64_t type, h2o_iovec_t payload))
 {
     while ((*buf)->size != 0) {
         const uint8_t *src = (const uint8_t *)(*buf)->bytes, *end = src + (*buf)->size;
@@ -326,6 +336,8 @@ static int handle_capsules(h2o_buffer_t **buf)
             printf("drain\n");
             break;
         default:
+            if (handle_stream_capsule != NULL)
+                handle_stream_capsule(type, payload);
             break;
         }
         h2o_buffer_consume(buf, src + length - (const uint8_t *)(*buf)->bytes);
@@ -556,7 +568,7 @@ static void h3_handle_connect_frame(uint64_t type, ptls_iovec_t payload)
     } break;
     case H2O_HTTP3_FRAME_TYPE_DATA:
         h2o_buffer_append(&h3.capsules, payload.base, payload.len);
-        if (handle_capsules(&h3.capsules) != 0)
+        if (handle_capsules(&h3.capsules, NULL) != 0)
             exit(1);
         break;
     default:
@@ -651,7 +663,7 @@ static void h3_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
     struct h3_stream *s = qs->data;
     switch (s->kind) {
     case H3_STREAM_WT:
-        on_stream_reset(s->wt, QUICLY_ERROR_GET_ERROR_CODE(err));
+        on_stream_reset(s->wt, QUICLY_ERROR_GET_ERROR_CODE(err), 1);
         break;
     case H3_STREAM_CONNECT:
         if (!session.closed) {
@@ -668,7 +680,7 @@ static void h3_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 {
     struct h3_stream *s = qs->data;
     if (s->kind == H3_STREAM_WT)
-        on_stream_stop_sending(s->wt, QUICLY_ERROR_GET_ERROR_CODE(err));
+        on_stream_stop_sending(s->wt, QUICLY_ERROR_GET_ERROR_CODE(err), 1);
 }
 
 static const quicly_stream_callbacks_t h3_stream_callbacks = {
@@ -967,12 +979,291 @@ static int run_h3(void)
     return session.exit_status;
 }
 
+/* HTTP/2 */
+
+static struct {
+    h2o_httpclient_t *client;
+    h2o_buffer_t *outbuf;
+    int write_inflight;
+    int fin_pending;
+    int fin_sent;
+    int ended;
+} h2;
+
+static void h2_flush(void)
+{
+    if (h2.client == NULL || h2.write_inflight || h2.fin_sent || (h2.outbuf->size == 0 && !h2.fin_pending))
+        return;
+    h2.write_inflight = 1;
+    h2.fin_sent = h2.fin_pending;
+    h2o_iovec_t chunk = h2o_iovec_init(h2.outbuf->bytes, h2.outbuf->size);
+    h2.client->write_req(h2.client, chunk, h2.fin_sent);
+    h2o_buffer_consume(&h2.outbuf, chunk.len);
+}
+
+static void h2_append_varint_capsule(uint64_t type, const uint64_t *fields, size_t num_fields)
+{
+    h2o_webtransport_encode_varint_capsule(&h2.outbuf, type, fields, num_fields);
+}
+
+static struct wt_stream *h2_open_stream(int uni)
+{
+    int64_t *next = uni ? &streams.next_uni : &streams.next_bidi;
+    struct wt_stream *stream = new_stream(*next);
+    *next += 4;
+    return stream;
+}
+
+static void h2_send(struct wt_stream *stream, const void *data, size_t len, int fin)
+{
+    if (stream->send_closed && !fin)
+        return;
+    uint8_t hdr[H2O_WEBTRANSPORT_MAX_CAPSULE_HEADER_SIZE + 8], *p = hdr;
+    p = h2o_webtransport_encode_capsule_header(p, fin ? H2O_WEBTRANSPORT_CAPSULE_STREAM_FIN : H2O_WEBTRANSPORT_CAPSULE_STREAM,
+                                               quicly_encodev_capacity(stream->id) + len);
+    p = quicly_encodev(p, stream->id);
+    h2o_buffer_append(&h2.outbuf, hdr, p - hdr);
+    if (len != 0)
+        h2o_buffer_append(&h2.outbuf, data, len);
+    stream->bytes_sent += len;
+    if (fin)
+        stream->send_closed = 1;
+    h2_flush();
+}
+
+static void h2_reset(struct wt_stream *stream, uint32_t code)
+{
+    if (stream->send_closed)
+        return;
+    stream->send_closed = 1;
+    uint64_t fields[] = {stream->id, code, stream->bytes_sent}; /* reliable size equals the bytes sent (draft-15 section 6.2) */
+    h2_append_varint_capsule(H2O_WEBTRANSPORT_CAPSULE_RESET_STREAM, fields, 3);
+    h2_flush();
+}
+
+static void h2_stop(struct wt_stream *stream, uint32_t code)
+{
+    uint64_t fields[] = {stream->id, code};
+    h2_append_varint_capsule(H2O_WEBTRANSPORT_CAPSULE_STOP_SENDING, fields, 2);
+    h2_flush();
+}
+
+static void h2_send_datagram(const void *data, size_t len)
+{
+    uint8_t hdr[H2O_WEBTRANSPORT_MAX_CAPSULE_HEADER_SIZE];
+    uint8_t *p = h2o_webtransport_encode_capsule_header(hdr, H2O_WEBTRANSPORT_CAPSULE_DATAGRAM, len);
+    h2o_buffer_append(&h2.outbuf, hdr, p - hdr);
+    h2o_buffer_append(&h2.outbuf, data, len);
+    h2_flush();
+}
+
+static void h2_send_capsule(h2o_buffer_t **capsules, int fin)
+{
+    if (h2.fin_pending)
+        return;
+    h2o_buffer_append(&h2.outbuf, (*capsules)->bytes, (*capsules)->size);
+    if (fin)
+        h2.fin_pending = 1;
+    h2_flush();
+}
+
+static const struct transport h2_transport = {h2_open_stream, h2_send, h2_reset, h2_stop, h2_send_datagram, h2_send_capsule};
+
+static void h2_handle_stream_capsule(uint64_t type, h2o_iovec_t payload)
+{
+    const uint8_t *src = (const uint8_t *)payload.base, *end = src + payload.len;
+
+    switch (type) {
+    case H2O_WEBTRANSPORT_CAPSULE_STREAM:
+    case H2O_WEBTRANSPORT_CAPSULE_STREAM_FIN: {
+        uint64_t id;
+        if ((id = quicly_decodev(&src, end)) == UINT64_MAX)
+            goto Invalid;
+        struct wt_stream *stream = find_stream(id);
+        if (stream == NULL) {
+            if (!h2o_webtransport_stream_is_server_initiated(id))
+                return; /* already closed */
+            stream = new_stream(id);
+        }
+        on_stream_data(stream, src, end - src, type == H2O_WEBTRANSPORT_CAPSULE_STREAM_FIN);
+    } break;
+    case H2O_WEBTRANSPORT_CAPSULE_RESET_STREAM: {
+        uint64_t fields[3];
+        if (h2o_webtransport_decode_varint_capsule(payload, fields, 3) != 0)
+            goto Invalid;
+        struct wt_stream *stream = find_stream(fields[0]);
+        if (stream == NULL && h2o_webtransport_stream_is_server_initiated(fields[0]))
+            stream = new_stream(fields[0]);
+        if (stream != NULL)
+            on_stream_reset(stream, fields[1], 0);
+    } break;
+    case H2O_WEBTRANSPORT_CAPSULE_STOP_SENDING: {
+        uint64_t fields[2];
+        if (h2o_webtransport_decode_varint_capsule(payload, fields, 2) != 0)
+            goto Invalid;
+        struct wt_stream *stream = find_stream(fields[0]);
+        if (stream == NULL)
+            return;
+        on_stream_stop_sending(stream, fields[1], 0);
+        /* respond by resetting the stream, as QUIC stacks do */
+        h2_reset(stream, (uint32_t)fields[1]);
+    } break;
+    case H2O_WEBTRANSPORT_CAPSULE_DATAGRAM:
+        on_datagram(payload.base, payload.len);
+        break;
+    default:
+        break;
+    }
+    return;
+Invalid:
+    fprintf(stderr, "invalid capsule of type 0x%" PRIx64 "\n", type);
+    exit(1);
+}
+
+static int h2_on_body(h2o_httpclient_t *client, const char *errstr, h2o_header_t *trailers, size_t num_trailers)
+{
+    if (handle_capsules(client->buf, h2_handle_stream_capsule) != 0)
+        exit(1);
+    if (errstr != NULL) {
+        h2.client = NULL;
+        h2.ended = 1;
+        if (errstr != h2o_httpclient_error_is_eos)
+            fprintf(stderr, "%s\n", errstr);
+        if (!session.closed) {
+            printf("session-fin\n");
+            on_session_closed();
+        }
+        return -1;
+    }
+    return 0;
+}
+
+static h2o_httpclient_body_cb h2_on_head(h2o_httpclient_t *client, const char *errstr, h2o_httpclient_on_head_t *args)
+{
+    if (errstr != NULL && errstr != h2o_httpclient_error_is_eos) {
+        printf("error %s\n", errstr);
+        h2.client = NULL;
+        h2.ended = 1;
+        return NULL;
+    }
+    if (args->version != 0x200) {
+        printf("unexpected HTTP version %x\n", args->version);
+        h2.client = NULL;
+        h2.ended = 1;
+        return NULL;
+    }
+    on_established(args->status);
+    if (args->status != 200 || errstr != NULL) {
+        h2.client = NULL;
+        h2.ended = 1;
+        return NULL;
+    }
+
+    /* grant credit for the streams opened by the server, as the default limits of WebTransport over HTTP/2 are zero */
+    uint64_t max_data = RECV_WINDOW, max_streams = 100;
+    h2_append_varint_capsule(H2O_WEBTRANSPORT_CAPSULE_MAX_DATA, &max_data, 1);
+    h2_append_varint_capsule(H2O_WEBTRANSPORT_CAPSULE_MAX_STREAMS_BIDI, &max_streams, 1);
+    h2_append_varint_capsule(H2O_WEBTRANSPORT_CAPSULE_MAX_STREAMS_UNI, &max_streams, 1);
+    h2_flush();
+
+    return h2_on_body;
+}
+
+static void h2_proceed_req(h2o_httpclient_t *client, const char *errstr)
+{
+    if (errstr != NULL) {
+        fprintf(stderr, "write failed: %s\n", errstr);
+        h2.client = NULL;
+        h2.ended = 1;
+        return;
+    }
+    h2.write_inflight = 0;
+    h2_flush();
+}
+
+static h2o_httpclient_head_cb h2_on_connect(h2o_httpclient_t *client, const char *errstr, h2o_iovec_t *method, h2o_url_t *_url,
+                                            const h2o_header_t **headers, size_t *num_headers, h2o_iovec_t *body,
+                                            h2o_httpclient_proceed_req_cb *proceed_req_cb, h2o_httpclient_properties_t *props,
+                                            h2o_url_t *origin)
+{
+    if (errstr != NULL) {
+        printf("error %s\n", errstr);
+        h2.ended = 1;
+        return NULL;
+    }
+    h2.client = client;
+    h2.write_inflight = 1; /* until `proceed_req` is called after the HEADERS frame is sent */
+    *method = h2o_iovec_init(H2O_STRLIT("CONNECT"));
+    *_url = url;
+    *headers = req_headers;
+    *num_headers = num_req_headers;
+    *body = h2o_iovec_init(NULL, 0);
+    *proceed_req_cb = h2_proceed_req;
+    return h2_on_head;
+}
+
+static int run_h2(void)
+{
+    h2o_multithread_receiver_t getaddr_receiver;
+    h2o_httpclient_ctx_t ctx = {
+        .loop = h2o_evloop_create(),
+        .getaddr_receiver = &getaddr_receiver,
+        .io_timeout = timeout_ms,
+        .connect_timeout = timeout_ms,
+        .first_byte_timeout = timeout_ms,
+        .keepalive_timeout = timeout_ms,
+        .max_buffer_size = RECV_WINDOW,
+        .http2 = {.max_concurrent_streams = 100},
+        .protocol_selector = {.ratio = {.http2 = 100}},
+    };
+    h2o_multithread_queue_t *queue = h2o_multithread_create_queue(ctx.loop);
+    h2o_multithread_register_receiver(queue, ctx.getaddr_receiver, h2o_hostinfo_getaddr_receiver);
+
+    h2o_buffer_init(&h2.outbuf, &h2o_socket_buffer_prototype);
+    streams.next_bidi = 0;
+    streams.next_uni = 2;
+
+    /* advertise the per-stream limits using WebTransport-Init, as h2o_httpclient does not send WebTransport SETTINGS */
+    char init[128];
+    snprintf(init, sizeof(init), "u=%d, bl=%d, br=%d", RECV_WINDOW, RECV_WINDOW, RECV_WINDOW);
+    static h2o_iovec_t init_name = {H2O_STRLIT("webtransport-init")};
+    req_headers[num_req_headers++] = (h2o_header_t){&init_name, NULL, h2o_strdup(&pool, init, SIZE_MAX)};
+
+    h2o_httpclient_connection_pool_t *connpool = h2o_mem_alloc(sizeof(*connpool));
+    h2o_socketpool_t *sockpool = h2o_mem_alloc(sizeof(*sockpool));
+    h2o_socketpool_target_t *target = h2o_socketpool_create_target(&url, NULL);
+    h2o_socketpool_init_specific(sockpool, 10, &target, 1, NULL);
+    h2o_socketpool_set_timeout(sockpool, timeout_ms);
+    h2o_socketpool_register_loop(sockpool, ctx.loop);
+    h2o_httpclient_connection_pool_init(connpool, sockpool);
+    SSL_CTX *ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
+    h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
+    SSL_CTX_free(ssl_ctx);
+
+    h2o_httpclient_connect(NULL, &pool, NULL, &ctx, connpool, &url, "webtransport", h2_on_connect);
+
+    int64_t deadline = now_ms() + timeout_ms;
+    while (!h2.ended || h2.outbuf->size != 0) {
+        int64_t now = now_ms();
+        if (now >= deadline) {
+            printf("timeout\n");
+            return 1;
+        }
+        if (session.done && (h2.ended || now >= session.deadline))
+            break;
+        h2o_evloop_run(ctx.loop, 50);
+    }
+
+    return session.exit_status;
+}
+
 static void usage(const char *cmd)
 {
     fprintf(stderr,
             "Usage: %s [options] <url> [action...]\n"
             "Options:\n"
-            "  -3              use HTTP/3 (the default)\n"
+            "  -3              use HTTP/3 (default: HTTP/2)\n"
             "  -d <draft>      the draft of WebTransport over HTTP/3 whose handshake is used: 16 (default), or 2, 7 or 14\n"
             "  -y              with -d 2, 7 or 14: also send draft 16's SETTINGS_WT_ENABLED, without reset_stream_at\n"
             "  -H name:value   adds a request header\n"
@@ -995,7 +1286,7 @@ static void usage(const char *cmd)
 
 int main(int argc, char **argv)
 {
-    int ch;
+    int use_h3 = 0, ch;
 
     setvbuf(stdout, NULL, _IOLBF, 0);
     h2o_mem_init_pool(&pool);
@@ -1006,6 +1297,7 @@ int main(int argc, char **argv)
     while ((ch = getopt(argc, argv, "3H:e:wc:t:d:yh")) != -1) {
         switch (ch) {
         case '3':
+            use_h3 = 1;
             break;
         case 'H': {
             const char *colon = strchr(optarg, ':'), *value;
@@ -1052,8 +1344,13 @@ int main(int argc, char **argv)
     actions = argv + optind;
     num_actions = argc - optind;
 
-    transport = &h3_transport;
-    return run_h3();
+    if (use_h3) {
+        transport = &h3_transport;
+        return run_h3();
+    } else {
+        transport = &h2_transport;
+        return run_h2();
+    }
 }
 
 int __lsan_is_turned_off(void)
