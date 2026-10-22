@@ -26,6 +26,7 @@ OUTPUT=\
     configure/server_timing_directives.html \
     configure/status_directives.html \
     configure/throttle_response_directives.html \
+    configure/webtransport_directives.html \
     configure/basic_auth.html \
     configure/cgi.html \
     configure/mruby.html \
@@ -53,6 +54,7 @@ MAN = workdir/configure/quick_start.man \
       workdir/configure/reproxy_directives.man \
       workdir/configure/status_directives.man \
       workdir/configure/throttle_response_directives.man \
+      workdir/configure/webtransport_directives.man \
       workdir/configure/basic_auth.man \
       workdir/configure/cgi.man \
       workdir/configure/mruby.man \
