@@ -32,6 +32,8 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
@@ -216,6 +218,15 @@ const char h2o_socket_error_write_progress[] = "write progress";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
+
+/* The state that holds the key that authenticates the values that are exchanged with the external session store. The values of the
+ * session cache are exchanged without a seal until this is set. */
+static h2o_session_store_integrity_t store_integrity;
+
+void h2o_socket_ssl_resumption_set_integrity_key(h2o_iovec_t secret)
+{
+    h2o_session_store_init_integrity(&store_integrity, secret);
+}
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -1517,7 +1528,15 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     i2d_SSL_SESSION(session, &p);
 
     id = SSL_SESSION_get_id(session, &id_len);
-    resumption_new(sock, h2o_iovec_init(id, id_len), data);
+    if (store_integrity.configured) {
+        /* The value that is written to the store is sealed, so that the instances that share the store can tell the values that
+         * one of them has written from the values that anyone else has written. */
+        h2o_iovec_t sealed = h2o_session_store_seal(&store_integrity, data);
+        resumption_new(sock, h2o_iovec_init(id, id_len), sealed);
+        free(sealed.base);
+    } else {
+        resumption_new(sock, h2o_iovec_init(id, id_len), data);
+    }
     return 0;
 }
 
@@ -2122,6 +2141,20 @@ void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t sess
 {
     SSL_SESSION *session = NULL;
 
+    if (session_data.len != 0) {
+        if (store_integrity.configured) {
+            /* The content of the store is not trustworthy: the value is only used when it carries the seal that the instances
+             * sharing the store apply to the values that they write. A value that does not was either written before the seal was
+             * introduced, or it was written by someone else; the connection falls back to a full handshake either way. */
+            h2o_iovec_t payload = h2o_session_store_unseal(&store_integrity, session_data);
+            if (payload.base == NULL) {
+                h2o_error_printf("[ssl] the external session store returned a value that does not carry a valid seal\n");
+                session_data = h2o_iovec_init(NULL, 0);
+            } else {
+                session_data = payload;
+            }
+        }
+    }
     if (session_data.len != 0) {
         const unsigned char *p = (void *)session_data.base;
         session = d2i_SSL_SESSION(NULL, &p, (long)session_data.len);
