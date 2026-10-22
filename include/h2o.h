@@ -2322,8 +2322,12 @@ typedef struct st_h2o_proxy_config_vars_t {
     /**
      * Local addresses used for bound UDP proxying (draft-ietf-masque-connect-udp-listen), zero means disabled
      */
-    struct in_addr connect_udp_bind_v4addr;
-    struct in6_addr connect_udp_bind_v6addr;
+    struct {
+        struct {
+            struct in_addr v4;
+            struct in6_addr v6;
+        } addr;
+    } connect_udp_bind;
     struct {
         uint32_t max_concurrent_streams;
         unsigned force_cleartext : 1;
