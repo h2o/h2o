@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <math.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <sys/select.h>
@@ -202,18 +203,19 @@ static int run_loop(int fd, quicly_conn_t *client)
         fd_set readfds;
         struct timeval tv;
         do {
-            int64_t first_timeout = INT64_MAX, now = ctx.now->cb(ctx.now);
+            double now;
+            ctx.now->cb(ctx.now, &now);
+            int64_t first_timeout = INT64_MAX;
             for (i = 0; conns[i] != NULL; ++i) {
                 int64_t conn_timeout = quicly_get_first_timeout(conns[i]);
                 if (conn_timeout < first_timeout)
                     first_timeout = conn_timeout;
             }
             if (now < first_timeout) {
-                int64_t delta = first_timeout - now;
-                if (delta > 1000 * 1000)
-                    delta = 1000 * 1000;
-                tv.tv_sec = delta / 1000;
-                tv.tv_usec = (delta % 1000) * 1000;
+                double delta = fmin(first_timeout - now, 1000 * 1000);
+                int64_t delta_usec = ceil(delta * 1000);
+                tv.tv_sec = delta_usec / 1000000;
+                tv.tv_usec = delta_usec % 1000000;
             } else {
                 tv.tv_sec = 0;
                 tv.tv_usec = 0;
