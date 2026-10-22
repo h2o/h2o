@@ -511,6 +511,10 @@ struct st_h2o_globalconf_t {
          * H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02)
          */
         int legacy_drafts;
+        /**
+         * flow control limits being advertised for each session
+         */
+        h2o_webtransport_settings_t limits;
     } webtransport;
 
     struct {
@@ -1020,6 +1024,11 @@ typedef struct st_h2o_conn_callbacks_t {
      * Mandatory callback that returns a number identifying the request of a particular connection (e.g., HTTP/2 stream ID)
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
+    /**
+     * Returns the WebTransport flow control limits sent by the local endpoint and by the peer, if WebTransport using the capsule
+     * protocol has been negotiated on the connection; otherwise returns -1. The callback is optional.
+     */
+    int (*get_webtransport_settings)(h2o_conn_t *conn, h2o_webtransport_settings_t *local, h2o_webtransport_settings_t *remote);
     /**
      * Called by `h2o_webtransport_accept` for a request using a protocol that carries WebTransport streams natively. Returns the
      * operations to be used for the streams of `session`, or NULL if the session cannot be established on the request. When
