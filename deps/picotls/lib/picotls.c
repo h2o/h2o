@@ -4707,9 +4707,9 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
                              ptls_iovec_init(emitter->buf->base + sh_start_off, emitter->buf->off - sh_start_off))) != 0)
                         goto Exit;
                 });
+            if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
+                goto Exit;
             if (retry_uses_cookie) {
-                if ((ret = push_change_cipher_spec(tls, emitter)) != 0)
-                    goto Exit;
                 ret = PTLS_ERROR_STATELESS_RETRY;
             } else {
                 tls->state = PTLS_STATE_SERVER_EXPECT_SECOND_CLIENT_HELLO;
@@ -5771,9 +5771,9 @@ static int handle_client_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLS_LOG_CONN(receive_message, tls, {
-        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
-        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
-        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+        PTLS_LOG_ELEMENT_NUMBER(message, message.base[0]);
+        PTLS_LOG_ELEMENT_NUMBER(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_NUMBER(result, ret);
     });
 
     return ret;
@@ -5842,9 +5842,9 @@ static int handle_server_handshake_message(ptls_t *tls, ptls_message_emitter_t *
     PTLS_PROBE(RECEIVE_MESSAGE, tls, message.base[0], message.base + PTLS_HANDSHAKE_HEADER_SIZE,
                message.len - PTLS_HANDSHAKE_HEADER_SIZE, ret);
     PTLS_LOG_CONN(receive_message, tls, {
-        PTLS_LOG_ELEMENT_UNSIGNED(message, message.base[0]);
-        PTLS_LOG_ELEMENT_UNSIGNED(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
-        PTLS_LOG_ELEMENT_SIGNED(result, ret);
+        PTLS_LOG_ELEMENT_NUMBER(message, message.base[0]);
+        PTLS_LOG_ELEMENT_NUMBER(len, message.len - PTLS_HANDSHAKE_HEADER_SIZE);
+        PTLS_LOG_ELEMENT_NUMBER(result, ret);
     });
 
     return ret;
@@ -7099,9 +7099,9 @@ void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, co
     }
 }
 
-void ptls_log__do_push_element_signed32(const char *prefix, size_t prefix_len, int32_t v)
+void ptls_log__do_push_element_signed(const char *prefix, size_t prefix_len, int v)
 {
-    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-2147483648"), "%" PRId32, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof(v) * 3 + 2, "%d", v);
 }
 
 void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, int64_t v)
@@ -7109,14 +7109,20 @@ void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, i
     pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("-9223372036854775808"), "%" PRId64, v);
 }
 
-void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len, uint32_t v)
+void ptls_log__do_push_element_unsigned(const char *prefix, size_t prefix_len, unsigned v)
 {
-    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("4294967295"), "%" PRIu32, v);
+    pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof(v) * 3 + 1, "%u", v);
 }
 
 void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v)
 {
     pushf_logbuf_or_invalidate(prefix, prefix_len, sizeof("18446744073709551615"), "%" PRIu64, v);
+}
+
+void ptls_log__do_push_element_double(const char *prefix, size_t prefix_len, double v)
+{
+    /* .9 is enough precision for logging; 64 bytes is far more than enough, and we have assert in pushf_logbuf_or_invalidate */
+    pushf_logbuf_or_invalidate(prefix, prefix_len, 64, "%.9g", v);
 }
 
 void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v)

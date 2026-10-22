@@ -1,0 +1,205 @@
+use strict;
+use warnings;
+use Test::More;
+use Time::HiRes qw(sleep);
+use t::Util;
+
+my $client_prog = bindir() . "/webtransport-client";
+plan skip_all => "$client_prog not found"
+    unless -e $client_prog;
+
+sub spawn_wt_server {
+    my ($enabled, $extra) = @_;
+    $extra //= '';
+    spawn_h2o(<< "EOT");
+webtransport: @{[ $enabled ? "ON" : "OFF" ]}
+${extra}hosts:
+  default:
+    paths:
+      /echo:
+        webtransport.echo: ON
+      /:
+        file.dir: @{[ DOC_ROOT ]}
+EOT
+}
+
+# h3 with the handshakes of earlier drafts, as current browsers send them: draft-02 (Chrome, Firefox), draft-07 and draft-14
+# (Safari)
+my @protocols = (
+    { name => "h3", opts => "-3", port => sub { $_[0]->{quic_port} } },
+    map { { name => "h3-draft$_", opts => "-3 -d $_", port => sub { $_[0]->{quic_port} } } } (2, 7, 14),
+);
+
+# runs the client, returning its output as an arrayref of lines, and the exit status
+sub run_client {
+    my ($server, $proto, $opts, $path, @actions) = @_;
+    my $url = "https://127.0.0.1:@{[ $proto->{port}->($server) ]}$path";
+    my $cmd = join " ", $client_prog, $proto->{opts}, $opts, "'$url'", map { "'$_'" } @actions;
+    my $out = `$cmd 2> /dev/null`;
+    my $status = $? >> 8;
+    diag "$cmd:\n$out" if $ENV{TEST_DEBUG};
+    return ([split /\n/, $out], $status);
+}
+
+# checks that the output contains all the expected lines, regardless of their order (the order of events on different streams is
+# not deterministic)
+sub has_lines {
+    my ($out, $expected, $name) = @_;
+    my %seen = map { $_ => 1 } @$out;
+    my @missing = grep { !$seen{$_} } @$expected;
+    ok !@missing, $name or diag "missing: @{[ join ', ', map { qq{'$_'} } @missing ]}\noutput:\n@{[ join qq{\n}, @$out ]}";
+}
+
+my $server = spawn_wt_server(1);
+
+for my $proto (@protocols) {
+    my $first_bidi = 4;          # stream 0 is the CONNECT stream
+    my $first_server_uni = 15;   # 3, 7, 11 are the control and QPACK streams
+
+    subtest $proto->{name} => sub {
+        subtest "echo" => sub {
+            my ($out, $status) = run_client($server, $proto, "", "/echo", "bidi:hello", "uni:world", "dgram:dg1");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "response 200",
+                "client-bidi[$first_bidi] fin \"hello\"",
+                "server-uni[$first_server_uni] fin \"world\"",
+                "datagram \"dg1\"",
+                "done",
+            ], "echoed");
+            has_lines($out, ["settings wt-enabled=1"], "settings");
+        };
+
+        subtest "large" => sub {
+            my $size = 1000000;
+            my ($out, $status) = run_client($server, $proto, "", "/echo", "bidi:\@$size", "bidi:\@$size");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "client-bidi[$first_bidi] fin <$size bytes, pattern ok>",
+                "client-bidi[@{[ $first_bidi + 4 ]}] fin <$size bytes, pattern ok>",
+            ], "echoed");
+        };
+
+        subtest "server-initiated streams" => sub {
+            my ($out, $status) = run_client($server, $proto, "-e 4", "/echo?open-bidi=2&open-uni=2");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "server-bidi[1] fin \"stream 1\\n\"",
+                "server-bidi[5] fin \"stream 5\\n\"",
+                "server-uni[$first_server_uni] fin \"stream $first_server_uni\\n\"",
+                "server-uni[@{[ $first_server_uni + 4 ]}] fin \"stream @{[ $first_server_uni + 4 ]}\\n\"",
+            ], "received");
+        };
+
+        subtest "server-initiated streams opened from a timer" => sub {
+            # written outside the handling of any input, the data must still be sent at once rather than at the next packet or
+            # timeout of the connection
+            my $started = Time::HiRes::time;
+            my ($out, $status) = run_client($server, $proto, "-e 2", "/echo?open-uni=2&delay=100");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "server-uni[$first_server_uni] fin \"stream $first_server_uni\\n\"",
+                "server-uni[@{[ $first_server_uni + 4 ]}] fin \"stream @{[ $first_server_uni + 4 ]}\\n\"",
+            ], "received");
+            cmp_ok Time::HiRes::time - $started, '<', 2, "without waiting for a timeout";
+        };
+
+        subtest "reset and stop-sending are mirrored" => sub {
+            my ($out, $status) = run_client($server, $proto, "", "/echo", "bidi-reset:7", "bidi-stop:9");
+            is $status, 0, "exit status";
+            has_lines($out, [
+                "client-bidi[$first_bidi] reset 7",
+                "client-bidi[@{[ $first_bidi + 4 ]}] stop-sending 9",
+                "client-bidi[@{[ $first_bidi + 4 ]}] reset 9",
+            ], "mirrored");
+        };
+
+        subtest "server drains" => sub {
+            my ($out, $status) = run_client($server, $proto, "", "/echo?drain", "bidi:x");
+            is $status, 0, "exit status";
+            has_lines($out, ["drain", "client-bidi[$first_bidi] fin \"x\""], "drained");
+        };
+
+        subtest "server closes" => sub {
+            my ($out, $status) = run_client($server, $proto, "-w", "/echo?close=42", "bidi:x");
+            is $status, 0, "exit status";
+            has_lines($out, ["close 42 \"bye\""], "closed");
+        };
+
+        subtest "client drains" => sub {
+            my ($out, $status) = run_client($server, $proto, "-w", "/echo", "drain");
+            is $status, 0, "exit status";
+            has_lines($out, ["close 0 \"\""], "server closes in response");
+        };
+
+        subtest "client closes" => sub {
+            my ($out, $status) = run_client($server, $proto, "-c 5", "/echo", "bidi:x");
+            is $status, 0, "exit status";
+            has_lines($out, ["client-bidi[$first_bidi] fin \"x\"", "done"], "closed");
+        };
+
+        subtest "not a WebTransport endpoint" => sub {
+            my ($out, $status) = run_client($server, $proto, "", "/nope");
+            is $status, 0, "exit status";
+            has_lines($out, ["response 404"], "rejected");
+        };
+    };
+}
+
+subtest "disabled" => sub {
+    my $server = spawn_wt_server(0);
+    subtest "h3" => sub {
+        my ($out) = run_client($server, $protocols[0], "-t 5000", "/echo", "bidi:x");
+        has_lines($out, ["settings wt-enabled=0"], "not advertised");
+        ok !grep({ $_ eq "response 200" } @$out), "not established";
+    };
+};
+
+subtest "earlier drafts turned off" => sub {
+    my $server = spawn_wt_server(1, "webtransport-legacy-drafts: OFF\n");
+    for my $draft (2, 7, 14) {
+        subtest "draft-$draft" => sub {
+            my ($out) = run_client($server, { opts => "-3 -d $draft", port => sub { $_[0]->{quic_port} } }, "-t 5000", "/echo",
+                                   "bidi:x");
+            has_lines($out, ["settings wt-enabled=0"], "not advertised");
+            ok !grep({ $_ eq "response 200" } @$out), "not established" or diag join "\n", @$out;
+        };
+    }
+    subtest "draft-16" => sub {
+        my ($out, $status) = run_client($server, $protocols[0], "", "/echo", "bidi:hello");
+        is $status, 0, "exit status";
+        has_lines($out, ["settings wt-enabled=1", "response 200", "client-bidi[4] fin \"hello\""], "still established");
+    };
+};
+
+# Some clients send draft 16's SETTINGS_WT_ENABLED with the earlier drafts' and :protocol "webtransport", but no reset_stream_at (or
+# only its provisional codepoint). They are served as the earlier draft.
+subtest "a client of draft 16 and an earlier draft, without reset_stream_at" => sub {
+    my $server = spawn_wt_server(1);
+    my ($out, $status) = run_client($server, { opts => "-3 -d 2 -y", port => sub { $_[0]->{quic_port} } }, "", "/echo",
+                                    "bidi:hello");
+    is $status, 0, "exit status";
+    has_lines($out, ["response 200", "client-bidi[4] fin \"hello\""], "served as draft 2");
+    my $off = spawn_wt_server(1, "webtransport-legacy-drafts: OFF\n");
+    ($out) = run_client($off, { opts => "-3 -d 2 -y", port => sub { $_[0]->{quic_port} } }, "-t 5000", "/echo", "bidi:x");
+    has_lines($out, ["response 400"], "refused without the earlier drafts");
+};
+
+subtest "graceful shutdown" => sub {
+    for my $proto (@protocols) {
+        subtest $proto->{name} => sub {
+            my $server = spawn_wt_server(1);
+            my $url = "https://127.0.0.1:@{[ $proto->{port}->($server) ]}/echo";
+            open my $fh, "-|", "$client_prog $proto->{opts} -w '$url' bidi:hi 2> /dev/null"
+                or die "failed to spawn $client_prog: $!";
+            sleep 3;
+            kill 'TERM', $server->{pid};
+            my @out = map { chomp; $_ } <$fh>;
+            close $fh;
+            is $? >> 8, 0, "exit status";
+            has_lines(\@out, ["drain", "close 0 \"\""], "drained, then closed by the handler");
+        };
+    }
+};
+
+done_testing;
