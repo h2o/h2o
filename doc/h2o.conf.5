@@ -2330,12 +2330,12 @@ To fine tune the behavior of QUIC, the quic attribute should be used in place of
 The quic attribute accepts following parameters.
 
 
-alternative
-A mapping that defines an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). The mapping must contain ratio, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255. The alternative settings start as a copy of the default settings (including cc and initcwnd of the listen directive); the following parameters, if specified within the mapping, override them: cc, disengage-jumpstart, ecn, initcwnd, initial-rtt, jumpstart-default, jumpstart-max, normalize-mtu, pacing, respect-app-limited, speculative-pto. Note that cc specified per host (i.e., by the listen directive of each host) is applied only to the connections using the default settings.
+alternatives
+A sequence of up to 3 mappings, each defining an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). Each mapping must contain ratio, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255; the sum of the ratios must not exceed 255, and the remaining connections use the default settings. Each alternative starts as a copy of the default settings (including cc and initcwnd of the listen directive); the following parameters, if specified within the mapping, override them: cc, disengage-jumpstart, ecn, initcwnd, initial-rtt, jumpstart-default, jumpstart-max, normalize-mtu, pacing, respect-app-limited, speculative-pto. Note that cc specified per host (i.e., by the listen directive of each host) is applied only to the connections using the default settings.
 amp-limit
 Amount of data that can be sent to the client before the client address is validated; see section 8.1 of RFC 9000. Default is 3.
 disengage-jumpstart
-A boolean flag (either OFF or ON) indicating whether jumpstart should be prepared but then not be used. When set to ON, connections for which jumpstart would have been used are counted as such (i.e., num-jumpstart-applicable), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in alternative. The default setting is OFF.
+A boolean flag (either OFF or ON) indicating whether jumpstart should be prepared but then not be used. When set to ON, connections for which jumpstart would have been used are counted as such (i.e., num-jumpstart-applicable), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in one of the alternatives. The default setting is OFF.
 ecn
 A boolean flag (either ON or OFF) indicating whether the server should use ECN signals to detect congestion. The default setting is ON. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.
 handshake-timeout-rtt-multiplier
@@ -4468,7 +4468,7 @@ Sessions are accepted by handlers; at the moment, the only handler that does so 
 
 
 The support is experimental.
-Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented; also, streams are reset using RESET_STREAM instead of RESET_STREAM_AT; therefore, the peer cannot determine to which session a stream belonged if the stream is reset before its header is received.
+Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented.
 
 
 
@@ -4481,6 +4481,22 @@ A boolean flag (ON or OFF) indicating if WebTransport is advertised to the clien
 
 When set to ON, H2O advertises the support for WebTransport in the SETTINGS frame of HTTP/3.
 It is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+Also, when set to ON, H2O offers the reset_stream_at transport parameter of QUIC, and accepts sessions over HTTP/3 only from clients that offer it as well.
+
+
+.RE
+.RE
+
+.SS webtransport-legacy-drafts
+A boolean flag (ON or OFF) indicating if the handshakes of earlier drafts of WebTransport over HTTP/3 are accepted as well.
+
+
+.PP
+
+
+Current browsers speak earlier drafts than draft-16 when establishing a session: they send :protocol webtransport instead of webtransport-h3, signal WebTransport with the SETTINGS of draft-02 (SETTINGS_ENABLE_WEBTRANSPORT), draft-07 (SETTINGS_WEBTRANSPORT_MAX_SESSIONS) or draft-14 (SETTINGS_WT_MAX_SESSIONS), and do not necessarily offer the reset_stream_at transport parameter.
+When this directive is ON and webtransport is ON, H2O also advertises the SETTINGS of draft-02 and draft-07, without which these browsers do not send their extended CONNECT, and accepts such clients.
+The session is then carried as in draft-16, which these drafts share the streams and capsules of; a stream is reset with RESET_STREAM if the client did not offer reset_stream_at.
 
 
 .RE
