@@ -22,6 +22,33 @@
 #include "../../test.h"
 #include "../../../../lib/common/string.c"
 
+static void test_escape_control_chars(void)
+{
+    h2o_iovec_t escaped;
+
+    /* the text that is not a control character is left as it is */
+    escaped = h2o_escape_control_chars(h2o_iovec_init(H2O_STRLIT("hello world")));
+    ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT("hello world")));
+    free(escaped.base);
+
+    /* a control character is replaced by its hexadecimal escape */
+    escaped = h2o_escape_control_chars(h2o_iovec_init(H2O_STRLIT("a\nb")));
+    ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT("a\\x0ab")));
+    free(escaped.base);
+
+    /* so is the escape character itself, and the delete character */
+    escaped = h2o_escape_control_chars(h2o_iovec_init(H2O_STRLIT("\x1b[31m")));
+    ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT("\\x1b[31m")));
+    free(escaped.base);
+    escaped = h2o_escape_control_chars(h2o_iovec_init(H2O_STRLIT("\x7f")));
+    ok(h2o_memis(escaped.base, escaped.len, H2O_STRLIT("\\x7f")));
+    free(escaped.base);
+
+    /* an empty message is an empty message */
+    escaped = h2o_escape_control_chars(h2o_iovec_init(NULL, 0));
+    ok(escaped.base == NULL && escaped.len == 0);
+}
+
 static void test_strstr(void)
 {
     ok(h2o_strstr("abcd", 4, "bc", 2) == 1);
@@ -443,6 +470,7 @@ static void test_strtosizefwd(void)
 
 void test_lib__common__string_c(void)
 {
+    subtest("escape_control_chars", test_escape_control_chars);
     subtest("strstr", test_strstr);
     subtest("stripws", test_stripws);
     subtest("get_filext", test_get_filext);

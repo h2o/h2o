@@ -54,6 +54,12 @@ extern "C" {
  * @param len length of the source string (the result of strlen(s) used in case len is SIZE_MAX)
  * @return buffer pointing to the duplicated string (buf is NUL-terminated but the length does not include the NUL char)
  */
+/**
+ * Escapes the characters that would let the text forge a line of a log, or that would alter the
+ * terminal that displays it: every control character is replaced by its hexadecimal escape. The
+ * caller owns the returned buffer and has to release it with `free()`.
+ */
+h2o_iovec_t h2o_escape_control_chars(h2o_iovec_t msg);
 h2o_iovec_t h2o_strdup(h2o_mem_pool_t *pool, const char *s, size_t len);
 /**
  * variant of h2o_strdup that calls h2o_mem_alloc_shared

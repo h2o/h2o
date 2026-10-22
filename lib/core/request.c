@@ -243,30 +243,9 @@ static void retain_original_response(h2o_req_t *req)
 /* The message of the error log is under the control of the peer, or of the application, and it may
  * contain anything at all. The characters that would let it forge a line of the error log, or that
  * would alter the terminal that displays the log, are escaped. */
-static h2o_iovec_t escape_error_log_message(h2o_mem_pool_t *pool, h2o_iovec_t msg)
-{
-    size_t len = 0;
-    for (size_t i = 0; i < msg.len; ++i) {
-        unsigned char c = msg.base[i];
-        len += (c < 0x20 || c == 0x7f) ? 4 : 1;
-    }
-    if (len == 0)
-        return h2o_iovec_init(NULL, 0);
-    char *buf = h2o_mem_alloc_pool(pool, char, len);
-    char *pos = buf;
-    for (size_t i = 0; i < msg.len; ++i) {
-        unsigned char c = msg.base[i];
-        if (c < 0x20 || c == 0x7f)
-            pos += sprintf(pos, "\\x%02x", c);
-        else
-            *pos++ = (char)c;
-    }
-    return h2o_iovec_init(buf, len);
-}
-
 void h2o_write_error_log(h2o_iovec_t prefix, h2o_iovec_t msg)
 {
-    h2o_iovec_t escaped = escape_error_log_message(NULL, msg);
+    h2o_iovec_t escaped = h2o_escape_control_chars(msg);
     /* use writev(2) to emit error atomically */
     struct iovec vecs[] = {{prefix.base, prefix.len}, {escaped.base, escaped.len}, {"\n", 1}};
     H2O_BUILD_ASSERT(sizeof(vecs) / sizeof(vecs[0]) <= IOV_MAX);
@@ -283,7 +262,7 @@ static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_
      * in its entirety below, therefore the truncation affects only the copy that is retained by the request and that is
      * exposed to the access log. */
     if (req->error_logs->size < H2O_MAX_ERROR_LOG_SIZE) {
-        h2o_iovec_t escaped = escape_error_log_message(&req->pool, msg);
+        h2o_iovec_t escaped = h2o_escape_control_chars(msg);
         size_t capacity = H2O_MAX_ERROR_LOG_SIZE - req->error_logs->size;
         size_t prefix_len = prefix.len < capacity ? prefix.len : capacity;
         size_t msg_len;
@@ -292,6 +271,7 @@ static void on_default_error_callback(void *data, h2o_iovec_t prefix, h2o_iovec_
         msg_len = escaped.len < capacity ? escaped.len : capacity;
         if (msg_len > 0)
             h2o_buffer_append(&req->error_logs, escaped.base, msg_len);
+        free(escaped.base);
     }
 
     if (req->pathconf->error_log.emit_request_errors) {
