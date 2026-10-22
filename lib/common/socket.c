@@ -34,6 +34,7 @@
 #include <openssl/err.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
+#include <openssl/x509v3.h>
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
@@ -1617,6 +1618,44 @@ Exit:
 #endif
 }
 
+/* A session that is resumed carries the peer certificate and the result of verifying it, as they were recorded when the session was
+ * established, and OpenSSL does not verify the certificate of the peer again when a session is resumed. The content of an external
+ * session store is not trustworthy, and a session may also have been established by another virtual host; the certificate that a
+ * resumed session carries is therefore verified again, against the trust store of the context that accepted the connection. */
+static const char *verify_resumed_peer_certificate(SSL *ssl)
+{
+    X509 *cert;
+    STACK_OF(X509) * chain;
+    X509_STORE_CTX *sctx;
+    const char *err = NULL;
+
+    if (!SSL_is_server(ssl) || !SSL_session_reused(ssl))
+        return NULL;
+    if ((SSL_get_verify_mode(ssl) & SSL_VERIFY_PEER) == 0)
+        return NULL;
+
+    if ((cert = SSL_get_peer_certificate(ssl)) == NULL) {
+        /* The certificate that the session carries is the identity of the client; a vhost that requires the clients to present one
+         * cannot accept a session that does not. */
+        if ((SSL_get_verify_mode(ssl) & SSL_VERIFY_FAIL_IF_NO_PEER_CERT) != 0)
+            return "the client certificate is missing";
+        return NULL;
+    }
+
+    if ((sctx = X509_STORE_CTX_new()) == NULL) {
+        X509_free(cert);
+        return h2o_socket_error_ssl_handshake;
+    }
+    /* on the server side, the chain that SSL_get_peer_cert_chain returns does not include the certificate of the client itself */
+    X509_STORE_CTX_init(sctx, SSL_CTX_get_cert_store(SSL_get_SSL_CTX(ssl)), cert, SSL_get_peer_cert_chain(ssl));
+    X509_STORE_CTX_set_purpose(sctx, X509_PURPOSE_SSL_CLIENT);
+    if (X509_verify_cert(sctx) != 1)
+        err = X509_verify_cert_error_string(X509_STORE_CTX_get_error(sctx));
+    X509_STORE_CTX_free(sctx);
+    X509_free(cert);
+    return err;
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     assert(sock->ssl->handshake.cb != NULL);
@@ -1626,6 +1665,9 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         shutdown_ssl(sock, NULL);
         return;
     }
+    if (err == NULL)
+        err = verify_resumed_peer_certificate(sock->ssl->ossl);
+
     if (err == NULL) {
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
