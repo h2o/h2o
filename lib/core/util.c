@@ -495,12 +495,6 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (sock->input->size > H2O_MAX_PROXY_LINE_LENGTH) {
-        accept_data_callbacks.destroy(data);
-        h2o_socket_close(sock);
-        return;
-    }
-
     struct sockaddr_storage addr;
     socklen_t addrlen;
     ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr, &addrlen);
@@ -508,6 +502,13 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
     case -1: /* error, just pass the input to the next handler */
         break;
     case -2: /* incomplete */
+        /* The line has not been received in full yet. A peer that sends more than the length of the
+         * longest line of the protocol is not speaking it, and the buffer would otherwise keep
+         * growing until the handshake times out. */
+        if (sock->input->size > H2O_MAX_PROXY_LINE_LENGTH) {
+            accept_data_callbacks.destroy(data);
+            h2o_socket_close(sock);
+        }
         return;
     default:
         h2o_buffer_consume(&sock->input, r);
