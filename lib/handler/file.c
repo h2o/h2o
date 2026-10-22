@@ -544,18 +544,10 @@ static int send_dir_listing(h2o_req_t *req, const char *path, size_t path_len, i
     return 0;
 }
 
-/* the maximum number of the ranges that a single request may ask for; the ranges are coalesced
- * before they are counted, and the ones that remain are the parts of the file that the request
- * asks for, so the response is not larger than the file */
+/* the maximum number of the ranges that a single request may ask for; the response carries no more
+ * than this many of the ranges that were requested, and never more bytes than the file holds, so
+ * that the multipart response cannot be used to amplify the size of the request */
 #define H2O_MAX_RANGES 16
-
-static int compare_ranges(const void *_x, const void *_y)
-{
-    const size_t *x = _x, *y = _y;
-    if (x[0] != y[0])
-        return x[0] < y[0] ? -1 : 1;
-    return 0;
-}
 
 static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, size_t file_size, size_t *ret)
 {
@@ -640,32 +632,22 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             }
         needs_comma = 1;
     } while (H2O_UNLIKELY(buf < buf_end));
-    /* Sort the ranges and coalesce the ones that overlap or touch, so that a request that asks for
-     * the same bytes many times does not make the response many times as long as the file. The
-     * number of the ranges is bounded as well, so that the multipart response cannot be used to
-     * amplify the size of the request either. */
-    if (ranges.size > 2) {
-        qsort(ranges.entries, ranges.size / 2, sizeof(ranges.entries[0]) * 2, compare_ranges);
-        size_t n = 0;
-        for (size_t i = 0; i < ranges.size; i += 2) {
-            size_t start = ranges.entries[i], count = ranges.entries[i + 1];
-            if (n > 0) {
-                size_t last_start = ranges.entries[n - 2], last_count = ranges.entries[n - 1];
-                if (start <= last_start + last_count) {
-                    /* the ranges overlap or touch; merge them */
-                    size_t end = start + count, last_end = last_start + last_count;
-                    if (end > last_end)
-                        ranges.entries[n - 1] = end - last_start;
-                    continue;
-                }
-            }
-            ranges.entries[n++] = start;
-            ranges.entries[n++] = count;
+    /* A request that asks for the same part of the file many times, or for many parts in small
+     * pieces, makes the multipart response many times as long as the file, which amplifies the size
+     * of the request. The response carries at most H2O_MAX_RANGES of the ranges that were requested,
+     * and never more bytes than the file holds. The ranges are served in the order in which they
+     * were requested, and the ones that do not fit are not served; every part of a multipart
+     * response names the range that it carries, so the client can tell which ones were served. */
+    if (ranges.size / 2 > H2O_MAX_RANGES)
+        ranges.size = H2O_MAX_RANGES * 2;
+    {
+        size_t total = 0, n = 0;
+        while (n < ranges.size && ranges.entries[n + 1] <= file_size - total) {
+            total += ranges.entries[n + 1];
+            n += 2;
         }
         ranges.size = n;
     }
-    if (ranges.size / 2 > H2O_MAX_RANGES)
-        ranges.size = H2O_MAX_RANGES * 2;
 
     *ret = ranges.size / 2;
     return ranges.entries;
