@@ -28,6 +28,7 @@
 <li><a href="configure/status_directives.html">Status</a>
 <li><a href="configure/server_timing_directives.html">Server Timing</a>
 <li><a href="configure/throttle_response_directives.html">Throttle Response</a>
+<li><a href="configure/webtransport_directives.html">WebTransport</a>
 </ul>
 </li>
 <li>How-To
