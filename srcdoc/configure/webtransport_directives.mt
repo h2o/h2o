@@ -3,7 +3,7 @@
 
 <p>
 <a href="https://datatracker.ietf.org/wg/webtrans/about/">WebTransport</a> lets a client exchange streams and datagrams with a server within a session established by an extended CONNECT request.
-H2O supports WebTransport over HTTP/3 (<a href="https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/">draft-ietf-webtrans-http3-16</a>).
+H2O supports WebTransport over HTTP/2 (<a href="https://datatracker.ietf.org/doc/draft-ietf-webtrans-http2/">draft-ietf-webtrans-http2-15</a>) and over HTTP/3 (<a href="https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/">draft-ietf-webtrans-http3-16</a>).
 Sessions are accepted by handlers; at the moment, the only handler that does so is the echo handler, which is meant for testing.
 </p>
 
@@ -26,8 +26,9 @@ EOT
 )->(sub {
 ?>
 <p>
-When set to <code>ON</code>, H2O advertises the support for WebTransport in the SETTINGS frame of HTTP/3.
-It is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+When set to <code>ON</code>, H2O advertises the support for WebTransport in the SETTINGS frame.
+Over HTTP/2, WebTransport is advertised along with the flow control limits of each session, and only on TLS connections.
+Over HTTP/3, it is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
 Also, when set to <code>ON</code>, H2O offers the <a href="https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/">reset_stream_at</a> transport parameter of QUIC, and accepts sessions over HTTP/3 only from clients that offer it as well.
 </p>
 ? })
