@@ -201,6 +201,19 @@ int h2o_webtransport_decode_capsule_header(const uint8_t **src, const uint8_t *e
     return 0;
 }
 
+int h2o_webtransport_decode_varint_capsule(h2o_iovec_t payload, uint64_t *fields, size_t num_fields)
+{
+    const uint8_t *src = (const uint8_t *)payload.base, *end = src + payload.len;
+
+    for (size_t i = 0; i != num_fields; ++i)
+        if ((fields[i] = ptls_decode_quicint(&src, end)) == UINT64_MAX)
+            return H2O_WEBTRANSPORT_DECODE_INVALID;
+    if (src != end)
+        return H2O_WEBTRANSPORT_DECODE_INVALID;
+
+    return 0;
+}
+
 int h2o_webtransport_decode_close_session(h2o_iovec_t payload, uint32_t *app_error, h2o_iovec_t *reason)
 {
     const uint8_t *src = (const uint8_t *)payload.base;
@@ -214,7 +227,8 @@ int h2o_webtransport_decode_close_session(h2o_iovec_t payload, uint32_t *app_err
     return 0;
 }
 
-/* The following functions implement the subset of RFC 9651 section 4.2 that is necessary for parsing WT-Available-Protocols. Each function advances `*src` only when successful. */
+/* The following functions implement the subset of RFC 9651 section 4.2 that is necessary for parsing WT-Available-Protocols and
+ * WebTransport-Init. Each function advances `*src` only when successful. */
 
 static int sf_is_digit(uint8_t c)
 {
@@ -466,6 +480,32 @@ static int sf_parse_parameters(const uint8_t **src, const uint8_t *end)
     return 1;
 }
 
+static int sf_parse_inner_list(const uint8_t **src, const uint8_t *end)
+{
+    const uint8_t *p = *src;
+
+    if (p == end || *p++ != '(')
+        return 0;
+    while (1) {
+        sf_skip_sp(&p, end);
+        if (p == end)
+            return 0;
+        if (*p == ')') {
+            ++p;
+            break;
+        }
+        if (!sf_parse_bare_item(&p, end, NULL, NULL) || !sf_parse_parameters(&p, end))
+            return 0;
+        if (p == end || (*p != ' ' && *p != ')'))
+            return 0;
+    }
+    if (!sf_parse_parameters(&p, end))
+        return 0;
+
+    *src = p;
+    return 1;
+}
+
 /**
  * Consumes the separator between members of a List or a Dictionary. Returns 1 if another member follows, 0 at the end of the
  * line, or -1 if the input is malformed.
@@ -526,4 +566,57 @@ h2o_webtransport_protocol_selection_t h2o_webtransport_select_protocol(const h2o
         return H2O_WEBTRANSPORT_PROTOCOL_NONE;
     *selected = found;
     return H2O_WEBTRANSPORT_PROTOCOL_SELECTED;
+}
+
+int h2o_webtransport_parse_init_header(const h2o_iovec_t *lines, size_t num_lines, h2o_webtransport_init_params_t *params)
+{
+    h2o_webtransport_init_params_t parsed = *params;
+
+    for (size_t l = 0; l != num_lines; ++l) {
+        const uint8_t *src = (const uint8_t *)lines[l].base, *end = src + lines[l].len;
+        sf_skip_sp(&src, end);
+        if (src == end)
+            continue;
+        int more;
+        do {
+            h2o_iovec_t key;
+            int is_integer = 0;
+            int64_t value = 0;
+            if (!sf_parse_key(&src, end, &key))
+                return -1;
+            if (src != end && *src == '=') {
+                ++src;
+                if (src != end && *src == '(') {
+                    if (!sf_parse_inner_list(&src, end))
+                        return -1;
+                } else {
+                    if (!sf_parse_bare_item(&src, end, &is_integer, &value) || !sf_parse_parameters(&src, end))
+                        return -1;
+                }
+            } else {
+                /* a member without a value is Boolean true */
+                if (!sf_parse_parameters(&src, end))
+                    return -1;
+            }
+            /* when a key appears more than once, the last value wins (RFC 9651 section 4.2.2) */
+            uint64_t *slot = NULL;
+            if (h2o_memis(key.base, key.len, H2O_STRLIT("u"))) {
+                slot = &parsed.max_stream_data_uni;
+            } else if (h2o_memis(key.base, key.len, H2O_STRLIT("bl"))) {
+                slot = &parsed.max_stream_data_bidi_local;
+            } else if (h2o_memis(key.base, key.len, H2O_STRLIT("br"))) {
+                slot = &parsed.max_stream_data_bidi_remote;
+            }
+            if (slot != NULL) {
+                if (!is_integer || value < 0)
+                    return -1;
+                *slot = (uint64_t)value;
+            }
+        } while ((more = sf_parse_member_separator(&src, end)) == 1);
+        if (more < 0)
+            return -1;
+    }
+
+    *params = parsed;
+    return 0;
 }
