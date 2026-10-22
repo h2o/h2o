@@ -637,7 +637,7 @@ static void convert_error(h2o_webtransport_stream_t *stream, quicly_error_t err)
     assert(err != 0);
     if (!QUICLY_ERROR_IS_QUIC_APPLICATION(err))
         err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0);
-    if (h2o_webtransport_stream_has_send_side(stream) && quicly_sendstate_is_open(&stream->sendstate))
+    if (h2o_webtransport_stream_has_send_side(stream) && !quicly_sendstate_transfer_complete(&stream->sendstate))
         h2o_webtransport_reset_stream(stream, err);
     if (h2o_webtransport_stream_has_receive_side(stream))
         h2o_webtransport_request_stop(stream, err);
@@ -791,7 +791,13 @@ int h2o_webtransport_streambuf_egress_write_vec(h2o_webtransport_stream_t *strea
     sb->vecs.entries[sb->vecs.size++] = *vec;
     sb->bytes_written += vec->len;
 
-    return (int)h2o_webtransport_stream_sync_sendbuf(stream, 1);
+    int ret;
+    if ((ret = (int)h2o_webtransport_stream_sync_sendbuf(stream, 1)) != 0) {
+        /* revert, so that the vector is not retained when returning an error */
+        --sb->vecs.size;
+        sb->bytes_written -= vec->len;
+    }
+    return ret;
 }
 
 int h2o_webtransport_streambuf_egress_shutdown(h2o_webtransport_stream_t *stream)
@@ -837,7 +843,7 @@ int h2o_webtransport_streambuf_ingress_receive(h2o_webtransport_stream_t *stream
 
     if (len != 0) {
         int ret;
-        if ((ret = ptls_buffer_reserve(rb, off + len - rb->off)) != 0) {
+        if (rb->off < off + len && (ret = ptls_buffer_reserve(rb, off + len - rb->off)) != 0) {
             convert_error(stream, ret);
             return -1;
         }
