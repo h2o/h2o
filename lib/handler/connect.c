@@ -42,6 +42,11 @@ struct st_connect_handler_t {
 #define UDP_BOUND_OVERHEAD (8 + 1 + 16 + 2) /* Context ID, IP version, IPv6 address, UDP port */
 #define UDP_BIND_BUFFER_LIMIT (64 * 1024)
 
+#define UDP_CAPSULE_TYPE_DATAGRAM 0x00 /* also UDP_PACKET in draft-03 */
+#define UDP_CAPSULE_TYPE_COMPRESSION_ASSIGN 0x11
+#define UDP_CAPSULE_TYPE_COMPRESSION_ACK 0x12
+#define UDP_CAPSULE_TYPE_COMPRESSION_CLOSE 0x13
+
 struct st_udp_capsule_t {
     uint64_t type;
     uint64_t context_id;
@@ -783,19 +788,19 @@ static int udp_decode_target(quicly_address_t *dest, const uint8_t **src, const 
 static int udp_decode_capsule_payload(struct st_udp_capsule_t *capsule, const uint8_t **src, const uint8_t *end, int is_draft03)
 {
     switch (capsule->type) {
-    case 0: /* DATAGRAM, or UDP_PACKET in draft-03 */
+    case UDP_CAPSULE_TYPE_DATAGRAM:
         if (!is_draft03 && (capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
             return -1;
         capsule->data.datagram = h2o_iovec_init(*src, end - *src);
         *src = end;
         break;
-    case 0x11: /* COMPRESSION_ASSIGN */
+    case UDP_CAPSULE_TYPE_COMPRESSION_ASSIGN:
         if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX ||
             udp_decode_target(&capsule->data.assign, src, end) != 0)
             return -1;
         break;
-    case 0x12: /* COMPRESSION_ACK */
-    case 0x13: /* COMPRESSION_CLOSE */
+    case UDP_CAPSULE_TYPE_COMPRESSION_ACK:
+    case UDP_CAPSULE_TYPE_COMPRESSION_CLOSE:
         if ((capsule->context_id = ptls_decode_quicint(src, end)) == UINT64_MAX)
             return -1;
         break;
@@ -824,7 +829,7 @@ static int udp_decode_capsule(struct st_udp_capsule_t *capsule, const uint8_t **
         return -2;
     }
 
-    if (is_draft03 && capsule->type != 0) {
+    if (is_draft03 && capsule->type != UDP_CAPSULE_TYPE_DATAGRAM) {
         *src += length; /* draft-03 has no bind control capsules */
         return 0;
     }
@@ -909,13 +914,14 @@ static int udp_write_core(struct st_connect_generator_t *self, uint64_t context_
 
 static int udp_handle_capsule(struct st_connect_generator_t *self, struct st_udp_capsule_t capsule)
 {
-    if (capsule.type == 0) /* DATAGRAM, or UDP_PACKET in draft-03 */
+    if (capsule.type == UDP_CAPSULE_TYPE_DATAGRAM)
         return udp_write_core(self, capsule.context_id, capsule.data.datagram);
 
     if (self->udp.bound_v4sock == NULL && self->udp.bound_v6sock == NULL)
         return 0;
 
-    if (capsule.type == 0x11) { /* COMPRESSION_ASSIGN */
+    switch (capsule.type) {
+    case UDP_CAPSULE_TYPE_COMPRESSION_ASSIGN: {
         uint64_t context_id = capsule.context_id;
         if (context_id == 0 || (context_id & 1) != 0)
             return -1;
@@ -923,18 +929,24 @@ static int udp_handle_capsule(struct st_connect_generator_t *self, struct st_udp
             if (self->udp.bound_context_id != 0)
                 return -1;
             self->udp.bound_context_id = context_id;
-            return udp_send_context_response(self, 0x12, context_id); /* COMPRESSION_ACK */
+            return udp_send_context_response(self, UDP_CAPSULE_TYPE_COMPRESSION_ACK, context_id);
         } else {
-            return udp_send_context_response(self, 0x13, context_id); /* compressed contexts are unsupported */
+            /* compressed contexts are unsupported */
+            return udp_send_context_response(self, UDP_CAPSULE_TYPE_COMPRESSION_CLOSE, context_id);
         }
-    } else if (capsule.type == 0x13) { /* COMPRESSION_CLOSE */
+    }
+    case UDP_CAPSULE_TYPE_COMPRESSION_CLOSE: {
         uint64_t context_id = capsule.context_id;
         if (context_id == 0)
             return -1;
         if (context_id == self->udp.bound_context_id)
             self->udp.bound_context_id = 0;
-    } else if (capsule.type == 0x12) { /* the proxy did not assign a context */
+        break;
+    }
+    case UDP_CAPSULE_TYPE_COMPRESSION_ACK: /* the proxy did not assign a context */
         return -1;
+    default:
+        break;
     }
     return 0;
 }
@@ -1112,7 +1124,7 @@ static void udp_on_read(h2o_socket_t *sock, const char *err)
             payload.len += length_len;
         }
         /* prepend Datagram Capsule Type */
-        *--payload.base = 0;
+        *--payload.base = UDP_CAPSULE_TYPE_DATAGRAM;
         payload.len += 1;
         assert(payload.base >= self->udp.ingress.buf);
         h2o_buffer_append(&self->udp.ingress.streambuf, payload.base, payload.len);
