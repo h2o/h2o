@@ -28,6 +28,7 @@ EOT
 # h3 with the handshakes of earlier drafts, as current browsers send them: draft-02 (Chrome, Firefox), draft-07 and draft-14
 # (Safari)
 my @protocols = (
+    { name => "h2", opts => "", port => sub { $_[0]->{tls_port} } },
     { name => "h3", opts => "-3", port => sub { $_[0]->{quic_port} } },
     map { { name => "h3-draft$_", opts => "-3 -d $_", port => sub { $_[0]->{quic_port} } } } (2, 7, 14),
 );
@@ -55,8 +56,9 @@ sub has_lines {
 my $server = spawn_wt_server(1);
 
 for my $proto (@protocols) {
-    my $first_bidi = 4;          # stream 0 is the CONNECT stream
-    my $first_server_uni = 15;   # 3, 7, 11 are the control and QPACK streams
+    my $is_h3 = $proto->{name} =~ /^h3/;
+    my $first_bidi = $is_h3 ? 4 : 0;           # stream 0 is the CONNECT stream in HTTP/3
+    my $first_server_uni = $is_h3 ? 15 : 3;    # 3, 7, 11 are the control and QPACK streams in HTTP/3
 
     subtest $proto->{name} => sub {
         subtest "echo" => sub {
@@ -69,11 +71,12 @@ for my $proto (@protocols) {
                 "datagram \"dg1\"",
                 "done",
             ], "echoed");
-            has_lines($out, ["settings wt-enabled=1"], "settings");
+            has_lines($out, ["settings wt-enabled=1"], "settings") if $is_h3;
         };
 
         subtest "large" => sub {
-            my $size = 1000000;
+            # the size is limited for HTTP/2 by the default receive window of the stream (256KB) that the server advertises
+            my $size = $is_h3 ? 1000000 : 200000;
             my ($out, $status) = run_client($server, $proto, "", "/echo", "bidi:\@$size", "bidi:\@$size");
             is $status, 0, "exit status";
             has_lines($out, [
@@ -150,8 +153,12 @@ for my $proto (@protocols) {
 
 subtest "disabled" => sub {
     my $server = spawn_wt_server(0);
-    subtest "h3" => sub {
+    subtest "h2" => sub {
         my ($out) = run_client($server, $protocols[0], "-t 5000", "/echo", "bidi:x");
+        ok !grep({ $_ eq "response 200" } @$out), "not established" or diag join "\n", @$out;
+    };
+    subtest "h3" => sub {
+        my ($out) = run_client($server, $protocols[1], "-t 5000", "/echo", "bidi:x");
         has_lines($out, ["settings wt-enabled=0"], "not advertised");
         ok !grep({ $_ eq "response 200" } @$out), "not established";
     };
@@ -168,7 +175,7 @@ subtest "earlier drafts turned off" => sub {
         };
     }
     subtest "draft-16" => sub {
-        my ($out, $status) = run_client($server, $protocols[0], "", "/echo", "bidi:hello");
+        my ($out, $status) = run_client($server, $protocols[1], "", "/echo", "bidi:hello");
         is $status, 0, "exit status";
         has_lines($out, ["settings wt-enabled=1", "response 200", "client-bidi[4] fin \"hello\""], "still established");
     };
@@ -224,7 +231,8 @@ hosts:
         webtransport.echo: ON
 EOT
     my ($client_uni, $server_uni) = (6, 15); # 2 is the client's HTTP/3 control stream; 3, 7, 11 are the server's
-    for my $proto (@protocols) {
+    # over HTTP/2, the streams of a session are capsules on its CONNECT stream, with no STOP_SENDING or RESET_STREAM of their own
+    for my $proto (grep { $_->{name} =~ /^h3/ } @protocols) {
         subtest $proto->{name} => sub {
             my $tracer = H2ologTracer->new({path => $sock});
             my ($out, $status) = run_client($server, $proto, "-w -l 500", "/echo?close=42", "uni-open:hi", "bidi:x");
