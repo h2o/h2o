@@ -14,9 +14,14 @@ Detailed, validated build/test/CI notes: `.github/copilot-instructions.md` (igno
 
 - Toolchain comes from MSYS2 clang64 on `PATH` (`H:\msys64`): clang, cmake, make, perl are available; gcc, ruby, Docker, and any WSL distro are NOT.
 - The MSYS2 `msys` environment *does* have a POSIX gcc (`H:\msys64\usr\bin\gcc.exe`) and POSIX headers, so
-  `gcc -fsyntax-only` works as a fast compile check of changed sources; it cannot link (no OpenSSL for that
-  environment), so it verifies syntax, not the build.
-- h2o targets POSIX systems and is not a supported Windows target, so the full build/test/CI pipeline cannot run here. For full verification use CI on Linux; on this box stick to reading/static analysis or MSYS2 experiments you confirm yourself.
+  `gcc -fsyntax-only` works as a fast compile check of changed sources.
+- **h2o builds and its unit tests run in the `msys` environment** (a Cygwin-like POSIX layer on Windows), with
+  `msys/openssl-devel`, `msys/zlib-devel` and `msys/cmake` installed. `misc/msys-build.sh` does it: it applies the
+  few portability adjustments from the outside (so the source tree is not modified), builds, and runs the unit tests.
+  Four groups of the unit tests fail there for reasons of the environment rather than of the code (`serverutil.c`,
+  `file.c`, `issues/293.c`, `src/ssl.c`); the script knows them and fails on anything else. This is the fast
+  feedback loop — seconds instead of a CI cycle. The Perl end-to-end tests still assume Linux and stay in the CI.
+- h2o targets POSIX systems and is not a supported Windows target, so the full CI pipeline cannot run here. For full verification use CI on Linux.
 
 ## Build & test
 
