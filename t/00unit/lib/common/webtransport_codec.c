@@ -201,18 +201,23 @@ static void test_capsules(void)
 {
     h2o_buffer_t *buf;
     const uint8_t *src, *end;
-    uint64_t type, length;
+    uint64_t type, length, fields[3];
 
     h2o_buffer_init(&buf, &h2o_socket_buffer_prototype);
 
-    /* a capsule of varints (of type 0x190b4d3e, being WT_MAX_STREAM_DATA of draft-ietf-webtrans-http2) */
-    h2o_webtransport_encode_varint_capsule(&buf, UINT64_C(0x190b4d3e), (uint64_t[]){4, 65536}, 2);
+    /* WT_MAX_STREAM_DATA */
+    h2o_webtransport_encode_varint_capsule(&buf, H2O_WEBTRANSPORT_CAPSULE_MAX_STREAM_DATA, (uint64_t[]){4, 65536}, 2);
     ok(buf->size == 4 + 1 + 1 + 4);
     ok(memcmp(buf->bytes, "\x99\x0b\x4d\x3e\x05\x04\x80\x01\x00\x00", 10) == 0);
     src = (const uint8_t *)buf->bytes;
     end = src + buf->size;
     ok(h2o_webtransport_decode_capsule_header(&src, end, &type, &length) == 0);
-    ok(type == UINT64_C(0x190b4d3e) && length == 5 && end - src == 5);
+    ok(type == H2O_WEBTRANSPORT_CAPSULE_MAX_STREAM_DATA && length == 5 && end - src == 5);
+    ok(h2o_webtransport_decode_varint_capsule(h2o_iovec_init(src, length), fields, 2) == 0);
+    ok(fields[0] == 4 && fields[1] == 65536);
+    /* the number of fields must match exactly */
+    ok(h2o_webtransport_decode_varint_capsule(h2o_iovec_init(src, length), fields, 1) == H2O_WEBTRANSPORT_DECODE_INVALID);
+    ok(h2o_webtransport_decode_varint_capsule(h2o_iovec_init(src, length), fields, 3) == H2O_WEBTRANSPORT_DECODE_INVALID);
     /* every truncation of the header is incomplete, and leaves the cursor untouched */
     for (size_t len = 0; len != 5; ++len) {
         src = (const uint8_t *)buf->bytes;
@@ -371,6 +376,46 @@ static void test_select_protocol(void)
     }
 }
 
+static int parse_init1(const char *field, h2o_webtransport_init_params_t *params)
+{
+    h2o_iovec_t line = h2o_iovec_init(field, strlen(field));
+    *params = (h2o_webtransport_init_params_t){1, 2, 3};
+    return h2o_webtransport_parse_init_header(&line, 1, params);
+}
+
+static void test_init_header(void)
+{
+    h2o_webtransport_init_params_t params;
+
+    ok(parse_init1("u=100, bl=200, br=300", &params) == 0);
+    ok(params.max_stream_data_uni == 100 && params.max_stream_data_bidi_local == 200 && params.max_stream_data_bidi_remote == 300);
+    /* absent keys are left untouched */
+    ok(parse_init1("bl=0", &params) == 0);
+    ok(params.max_stream_data_uni == 1 && params.max_stream_data_bidi_local == 0 && params.max_stream_data_bidi_remote == 3);
+    ok(parse_init1("", &params) == 0);
+    ok(params.max_stream_data_uni == 1 && params.max_stream_data_bidi_local == 2 && params.max_stream_data_bidi_remote == 3);
+    /* unknown keys are ignored, whatever their values are; parameters of known keys are ignored */
+    ok(parse_init1("x=\"s\", y, z=(1 2);p=?1, w=1.5, u=999999999999999;q=1", &params) == 0);
+    ok(params.max_stream_data_uni == 999999999999999 && params.max_stream_data_bidi_local == 2);
+    /* the last value wins */
+    ok(parse_init1("u=1, u=7", &params) == 0);
+    ok(params.max_stream_data_uni == 7);
+
+    /* the known keys must be non-negative Integers; nothing is updated upon error */
+    static const char *const invalid[] = {"u=-1",   "u=1.5", "u",        "u=\"1\"", "u=(1)", "u=?1",
+                                          "br=abc", "u=1,",  "u=1 bl=2", "U=1",     "u=",    "u=1234567890123456"};
+    for (size_t i = 0; i != PTLS_ELEMENTSOF(invalid); ++i) {
+        ok(parse_init1(invalid[i], &params) == -1);
+        ok(params.max_stream_data_uni == 1 && params.max_stream_data_bidi_local == 2 && params.max_stream_data_bidi_remote == 3);
+    }
+
+    /* field lines constitute one Dictionary */
+    h2o_iovec_t lines[] = {{H2O_STRLIT("u=10")}, {H2O_STRLIT("br=30, u=11")}};
+    params = (h2o_webtransport_init_params_t){1, 2, 3};
+    ok(h2o_webtransport_parse_init_header(lines, 2, &params) == 0);
+    ok(params.max_stream_data_uni == 11 && params.max_stream_data_bidi_local == 2 && params.max_stream_data_bidi_remote == 30);
+}
+
 void test_lib__common__webtransport_codec_c(void)
 {
     subtest("stream-prefix", test_stream_prefix);
@@ -379,4 +424,5 @@ void test_lib__common__webtransport_codec_c(void)
     subtest("utf8", test_utf8);
     subtest("capsules", test_capsules);
     subtest("select-protocol", test_select_protocol);
+    subtest("init-header", test_init_header);
 }
