@@ -39,11 +39,19 @@ h2o_iovec_t h2o_escape_control_chars(h2o_iovec_t msg)
     char *pos = buf;
     for (size_t i = 0; i < msg.len; ++i) {
         unsigned char c = msg.base[i];
-        if (c < 0x20 || c == 0x7f)
-            pos += sprintf(pos, "\\x%02x", c);
-        else
+        if (c < 0x20 || c == 0x7f) {
+            /* The escaped form of one control character is four characters long, and it is written
+             * without sprintf: the buffer is exactly as long as the escaped message, and sprintf
+             * would write a NUL terminator one byte past its end. */
+            *pos++ = '\\';
+            *pos++ = 'x';
+            *pos++ = "0123456789abcdef"[c >> 4];
+            *pos++ = "0123456789abcdef"[c & 0xf];
+        } else {
             *pos++ = (char)c;
+        }
     }
+    assert(pos == buf + len);
     return h2o_iovec_init(buf, len);
 }
 
