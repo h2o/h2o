@@ -626,7 +626,6 @@ static void on_handler_dispose(h2o_handler_t *_handler)
 
     free(handler->config.source.base);
     free(handler->config.path);
-    free(handler);
 }
 
 static void stringify_address(h2o_conn_t *conn, socklen_t (*cb)(h2o_conn_t *conn, struct sockaddr *), mrb_state *mrb,

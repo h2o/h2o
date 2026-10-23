@@ -1835,11 +1835,11 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
         if (bufs[i].len == 0)
             continue;
         /* copy one body vector */
-        payload_size += bufs[i].len;
         stream->sendbuf.vecs.entries[dst_slot++] = (struct st_h2o_http3_server_sendvec_t){
             .vec = bufs[i],
-            .entity_offset = stream->sendbuf.final_body_size,
+            .entity_offset = stream->sendbuf.final_body_size + payload_size,
         };
+        payload_size += bufs[i].len;
     }
     if (payload_size != 0) {
         /* build DATA frame header */
@@ -2006,6 +2006,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     stream->qpack_blocked_ref = 0;
     stream->qpack_blocked_ever = 0;
     stream->req_streaming_eos_delivered = 0;
+    stream->datagram_flow_id = UINT64_MAX;
     stream->req_body = NULL;
     memset(&stream->stats, 0, sizeof(stream->stats));
 
@@ -2289,12 +2290,13 @@ static void on_h3_destroy(h2o_quic_conn_t *h3_)
     }
 
     /* unlink and dispose */
-    if (h2o_timer_is_linked(&conn->timeout))
-        h2o_timer_unlink(&conn->timeout);
     if (h2o_timer_is_linked(&conn->_graceful_shutdown_timeout))
         h2o_timer_unlink(&conn->_graceful_shutdown_timeout);
     h2o_http3_dispose_conn(&conn->h3);
     kh_destroy(stream, conn->datagram_flows);
+    /* destroying a request-streaming stream might have armed the timer (see `check_run_blocked`) */
+    if (h2o_timer_is_linked(&conn->timeout))
+        h2o_timer_unlink(&conn->timeout);
 
     /* check consistency post-disposal */
     assert(conn->num_streams.recv_headers == 0);
@@ -2398,7 +2400,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     req_scheduler_init(&conn->scheduler.reqs);
     conn->scheduler.uni.active = 0;
     conn->scheduler.uni.conn_blocked = 0;
-    conn->datagram_flows = kh_init(stream);
+    if ((conn->datagram_flows = kh_init(stream)) == NULL)
+        h2o_fatal("no memory");
     conn->skip_jumpstart_token_until =
         quicly_cc_calc_initial_cwnd(ctx->super.quic->initcwnd_packets, ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */

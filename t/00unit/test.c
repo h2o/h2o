@@ -194,6 +194,7 @@ int main(int argc, char **argv)
 #endif
 
         subtest("lib/t/test.c/loopback", test_loopback);
+        subtest("lib/common/socketpool.c", test_lib__common__socketpool_c);
         subtest("lib/fastcgi.c", test_lib__handler__fastcgi_c);
         subtest("lib/file.c", test_lib__handler__file_c);
         subtest("lib/gzip.c", test_lib__handler__gzip_c);

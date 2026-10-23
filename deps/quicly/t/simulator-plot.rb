@@ -53,20 +53,40 @@ def parse_simulator_output(lines)
   end
 end
 
-def build_values(events, labels, show_queue)
-  src_to_label = {}
-  next_label_index = 0
+# Clients are given addresses in the order they are created, which is the order of the flow blocks, the server having taken the
+# first one. Deriving the mapping from that order rather than from the order the flows are first seen keeps the labels correct
+# even when the flows are started at different times (-s).
+def build_src_to_label(labels)
+  labels.each_with_index.to_h { |label, index| [index + 2, label] }
+end
 
-  assign_label = lambda do |src|
-    return nil if src.nil?
-    return src_to_label[src] if src_to_label.key?(src)
-    return nil if next_label_index >= labels.length
+# Computes the egress rate of each flow at the bottleneck, by bucketing `dequeue` events into fixed-width buckets. This is what
+# the bottleneck actually forwarded, in contrast to `bytes-available`, which is the in-order delivery to the application and
+# therefore stalls while a loss is being recovered. A "total" series is emitted alongside the per-flow ones.
+def build_throughput_values(events, src_to_label, bucket)
+  rows = Jrf.new(
+    proc { select(_["bottleneck"] == "dequeue" && src_to_label.key?(_["packet-src"])) },
+    proc do
+      {
+        "at" => ((_["at"] - 1000.0) / bucket).floor * bucket,
+        "flow" => src_to_label.fetch(_["packet-src"]),
+        "bytes" => _["packet-size"]
+      }
+    end
+  ).call(events)
 
-    label = labels[next_label_index]
-    src_to_label[src] = label
-    next_label_index += 1
-    label
+  values = rows.group_by { |row| [row["at"], row["flow"]] }.map do |(at, flow), grouped|
+    { "at" => at, "value" => grouped.sum { |row| row["bytes"] } / bucket, "flow" => flow, "metric" => "throughput" }
   end
+  values += rows.group_by { |row| row["at"] }.map do |at, grouped|
+    { "at" => at, "value" => grouped.sum { |row| row["bytes"] } / bucket, "flow" => "total", "metric" => "throughput" }
+  end
+
+  values.sort_by { |value| [value["at"], value["flow"]] }
+end
+
+def build_values(events, labels, show_queue)
+  src_to_label = build_src_to_label(labels)
 
   Jrf.new(
     proc do
@@ -77,7 +97,7 @@ def build_values(events, labels, show_queue)
     end,
     proc do
       if _.key?("bytes-available")
-        flow = labels.length == 1 ? labels[0] : assign_label.call(_["packet-src"])
+        flow = labels.length == 1 ? labels[0] : src_to_label[_["packet-src"]]
         if flow.nil?
           select(false)
         else
@@ -99,7 +119,7 @@ def build_values(events, labels, show_queue)
   ).call(events)
 end
 
-def build_spec(values:, length:, title:, show_queue:, width:, height:, flow_count:)
+def build_spec(values:, length:, title:, show_queue:, width:, height:, flow_count:, throughput: false)
   x_encoding = {
     "field" => "at",
     "type" => "quantitative",
@@ -109,14 +129,14 @@ def build_spec(values:, length:, title:, show_queue:, width:, height:, flow_coun
 
   layers = [
     {
-      "transform" => [{ "filter" => "datum.metric == 'deliver'" }],
+      "transform" => [{ "filter" => "datum.metric == '#{throughput ? "throughput" : "deliver"}'" }],
       "mark" => { "type" => "line" },
       "encoding" => {
         "x" => x_encoding,
         "y" => {
           "field" => "value",
           "type" => "quantitative",
-          "title" => "bytes available"
+          "title" => throughput ? "throughput (bytes/sec)" : "bytes available"
         }
       }
     }
@@ -163,7 +183,8 @@ def build_spec(values:, length:, title:, show_queue:, width:, height:, flow_coun
       }
     end
   else
-    if flow_count > 1
+    # in throughput mode there is always more than one series, as the total is drawn alongside the per-flow ones
+    if throughput || flow_count > 1
       layers[0]["encoding"]["color"] = {
         "field" => "flow",
         "type" => "nominal",
@@ -207,6 +228,10 @@ cc = "pico"
 length = 1.0
 network_name = "DSL"
 show_queue = false
+aqm = nil
+isolate = false
+throughput = false
+bucket = nil
 output_prefix = "simulator"
 render = true
 auto_open = true
@@ -227,6 +252,10 @@ OptionParser.new do |opt|
     network_name = v
   end
   opt.on("--queue") { show_queue = true }
+  opt.on("-A SPEC") { |v| aqm = v }
+  opt.on("-F") { isolate = true }
+  opt.on("--throughput") { throughput = true }
+  opt.on("--bucket=SECONDS", Float) { |v| bucket = v }
   opt.on("--output=PREFIX") { |v| output_prefix = v }
   opt.on("--title=TEXT") { |v| title_override = v }
   opt.on("--width=PX", Integer) { |v| width = v }
@@ -240,6 +269,12 @@ raise ArgumentError, "no flows given; expected: -- label <opts...> -- ..." if fl
 if show_queue && flows.length > 1
   raise ArgumentError, "--queue cannot be used when multiple flows are given"
 end
+raise ArgumentError, "--throughput and --queue cannot be used together" if throughput && show_queue
+raise ArgumentError, "--bucket requires --throughput" if bucket && !throughput
+raise ArgumentError, "--bucket must be positive" if bucket && bucket <= 0
+
+# one bucket per 1/200 of the simulated period; the RTT would be a more natural unit but it is a per-flow property (-d)
+bucket ||= length / 200.0
 
 network = NETWORKS.fetch(network_name)
 cmd = [
@@ -250,6 +285,9 @@ cmd = [
   "-l", length.to_s,
   "-c", cc
 ]
+# `-A` and `-F` are global options of the simulator, and the global part of the command line is the part this script builds
+cmd.push("-A", aqm) if aqm
+cmd.push("-F") if isolate
 flows.each do |_label, flow_opts|
   cmd << "--"
   cmd.concat(flow_opts)
@@ -258,13 +296,19 @@ end
 labels = flows.map(&:first)
 values = nil
 Open3.popen3(*cmd) do |_stdin, stdout, stderr, wait_thr|
-  values = build_values(parse_simulator_output(stdout.each_line), labels, show_queue)
+  events = parse_simulator_output(stdout.each_line)
+  values = if throughput
+             build_throughput_values(events, build_src_to_label(labels), bucket)
+           else
+             build_values(events, labels, show_queue)
+           end
   err = stderr.read
   status = wait_thr.value
   raise "simulator failed: #{err.strip}" unless status.success?
 end
 
-missing = labels.reject { |label| values.any? { |value| value["flow"] == label && value["metric"] == "deliver" } }
+metric = throughput ? "throughput" : "deliver"
+missing = labels.reject { |label| values.any? { |value| value["flow"] == label && value["metric"] == metric } }
 raise "simulator did not emit data for flows: #{missing.join(", ")}" unless missing.empty?
 raise "no data produced by simulator" if values.empty?
 
@@ -275,7 +319,8 @@ spec = build_spec(
   show_queue: show_queue,
   width: width,
   height: height,
-  flow_count: flows.length
+  flow_count: flows.length,
+  throughput: throughput
 )
 spec_json = JSON.pretty_generate(spec)
 

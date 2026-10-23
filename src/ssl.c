@@ -391,7 +391,7 @@ static int encrypt_ticket_ptls(ptls_encrypt_ticket_t *_self, ptls_t *tls, int is
 
 static ptls_encrypt_ticket_t *create_encrypt_ticket_ptls(const quicly_context_t *quic, const h2o_http3_qpack_context_t *qpack)
 {
-    struct encrypt_ticket_ptls_t *self = malloc(sizeof(*self));
+    struct encrypt_ticket_ptls_t *self = h2o_mem_alloc(sizeof(*self));
     *self = (struct encrypt_ticket_ptls_t){{encrypt_ticket_ptls}};
     if (quic != NULL) {
         self->is_quic = 1;
@@ -774,13 +774,13 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
         fprintf(stderr, "[lib/ssl.c] %s:redisCommand GET failed:%s\n", __func__, ctx->errstr);
         goto Exit;
     }
-    if (reply->type == REDIS_REPLY_STRING) {
-        int r = parse_tickets(&tickets, reply->str, reply->len, errbuf);
-        freeReplyObject(reply);
-        if (r != 0) {
-            fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
-            goto Exit;
-        }
+    int r = 0;
+    if (reply->type == REDIS_REPLY_STRING)
+        r = parse_tickets(&tickets, reply->str, reply->len, errbuf);
+    freeReplyObject(reply);
+    if (r != 0) {
+        fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
+        goto Exit;
     }
     if (tickets.size > 1)
         qsort(tickets.entries, tickets.size, sizeof(tickets.entries[0]), ticket_sort_compare);

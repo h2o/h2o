@@ -83,7 +83,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         ctx->globalconf->proxy.http3.ecn == self->config.http3.ecn && !self->config.tunnel_enabled)
         return;
 
-    h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*ctx));
+    h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*client_ctx));
     *client_ctx = (h2o_httpclient_ctx_t){
         .loop = ctx->loop,
         .getaddr_receiver = &ctx->receivers.hostinfo_getaddr,

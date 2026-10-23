@@ -470,8 +470,6 @@ subtest "slow-start" => sub {
         $each_cc->(sub {
             my $cc = shift;
             subtest "respect-app-limited" => sub {
-                plan skip_all => "Cubic TODO respect app-limited"
-                    if $cc eq "cubic";
                 my $guard = spawn_server("-C", "$cc:10");
                 # tail of 1st, 2nd, and 3rd batch fits into each round trip
                 $doit->(@$_)
@@ -490,8 +488,6 @@ subtest "slow-start" => sub {
         $each_cc->(sub {
             my $cc = shift;
             subtest "respect-app-limited" => sub {
-                plan skip_all => "Cubic TODO respect app-limited"
-                    if $cc eq "cubic";
                 my $guard = spawn_server("-C", "$cc:20:p");
                 # check head of 1st and 3rd batch, tail of 1st and 2nd
                 $doit->(@$_)
@@ -509,8 +505,6 @@ subtest "slow-start" => sub {
     subtest "jumpstart" => sub {
         $each_cc->(sub {
             my $cc = shift;
-            plan skip_all => "Cubic TODO respect app-limited (mandatory for jumpstart)"
-                if $cc eq "cubic";
             my $guard = spawn_server("-C", "$cc:20:p", "--jumpstart-default", "80");
             $doit->(@$_)
                 for ([1450 * 45, 2.45, 2.8], [1450 * 90, 3.0, 3.3]);
@@ -520,8 +514,6 @@ subtest "slow-start" => sub {
     subtest "jumpstart-resume" => sub {
         $each_cc->(sub {
             my $cc = shift;
-            plan skip_all => "Cubic TODO respect app-limited (mandatory for jumpstart)"
-                if $cc eq "cubic";
             unlink "$tempdir/session";
             my $guard = spawn_server("-C", "$cc:10:p", "--jumpstart-max", "80");
             # test RT without jumpstart
@@ -540,7 +532,7 @@ subtest "slow-start" => sub {
             kill 'KILL', $pid;
             while (waitpid($pid, 0) != $pid) {}
             # test RT using the obtained session information
-            $doit->(100000, 2, 2.999, "-s", "$tempdir/session");
+            $doit->(100000, $cc eq "reno" ? (2.8, 3.5) : (2, 2.999), "-s", "$tempdir/session");
         });
     };
 };

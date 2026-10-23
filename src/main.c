@@ -573,7 +573,7 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
         h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
-                                   identity->certificate_file.str, strerror(errno));
+                                   identity->key_file.str, strerror(errno));
         return 0;
     }
 
@@ -1026,7 +1026,7 @@ static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, pt
 
         ptls_clear_memory(digest, digestlen);
         free(digest);
-        return 0;
+        return ret;
     }
 
     /* select the signature scheme or return an error */
@@ -2070,8 +2070,8 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
 static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_ech_create_opener_t **_opener,
                          ptls_iovec_t *retry_configs)
 {
-    struct ech_create_opener_t *opener =
-        h2o_mem_alloc(sizeof(opener) + sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
+    struct ech_create_opener_t *opener = h2o_mem_alloc(offsetof(struct ech_create_opener_t, configs) +
+                                                       sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
     *opener = (struct ech_create_opener_t){{ech_create_opener}};
     *_opener = &opener->super;
 
@@ -4073,7 +4073,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         *dst++ = 6;
         memcpy(dst, addr->sin6.sin6_addr.s6_addr, 16);
         dst += 16;
-        memcpy(dst, &addr->sin.sin_port, 2);
+        memcpy(dst, &addr->sin6.sin6_port, 2);
         dst += 2;
         break;
     case AF_UNSPEC:
@@ -4167,6 +4167,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     int fd;
     h2o_context_t *h2octx = ctx->accept_ctx.ctx;
 
+    if (ttl == 0)
+        return 0;
+
     /* determine the file descriptor to which the packets should be forwarded, or return */
     if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid->node_id) {
         /* inter-node forwarding */
@@ -4206,7 +4209,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
 
     /* forward (TODO coalesce packets that were coalesced upon receipt) */
     char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
+    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl - 1);
     for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(fd, vec, 2);
@@ -4250,6 +4253,10 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
+    /* drop packets that do not have an IPv4 or IPv6 source address; QUIC runs only over IP */
+    if (!(encapsulated.srcaddr.sa.sa_family == AF_INET || encapsulated.srcaddr.sa.sa_family == AF_INET6))
+        return 0;
+
     /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
@@ -4263,7 +4270,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
             return 1;
         break;
     }
-    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+    if (encapsulated.srcaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
         struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
         if (listener_config->quic.sibling != NULL) {
             int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
@@ -4279,7 +4286,8 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     msg->msg_iov[0].iov_len -= encapsulated.offset;
     *destaddr = encapsulated.destaddr;
     *srcaddr = encapsulated.srcaddr;
-    *ttl = encapsulated.ttl;
+    /* clamp the TTL; as the envelope is unauthenticated and therefore could be spoofed */
+    *ttl = encapsulated.ttl < h3ctx->default_ttl ? encapsulated.ttl : h3ctx->default_ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
     PTLS_LOG(h2o, h3_forwarded_packet_receive, {
@@ -4521,7 +4529,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
-    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
@@ -5226,7 +5234,7 @@ int main(int argc, char **argv)
         size_t i;
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
-        conf.server_starter.bound_fd_map = malloc(conf.server_starter.num_fds);
+        conf.server_starter.bound_fd_map = h2o_mem_alloc(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
     }
 
@@ -5506,7 +5514,7 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
-    conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
+    conf.threads = h2o_mem_alloc(sizeof(conf.threads[0]) * conf.thread_map.size);
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);

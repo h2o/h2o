@@ -49,13 +49,15 @@ static int change_epoll_mode(struct st_h2o_evloop_socket_t *sock, uint32_t event
 
     if ((sock->_flags & H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED) == 0) {
         op = EPOLL_CTL_ADD;
-        sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
     } else {
         op = EPOLL_CTL_MOD;
     }
     while ((ret = epoll_ctl(loop->ep, op, sock->fd, &ev)) != 0 && errno == EINTR)
         ;
-    return ret == 0;
+    if (ret != 0)
+        return 0;
+    sock->_flags |= H2O_SOCKET_FLAG__EPOLL_IS_REGISTERED;
+    return 1;
 }
 
 static int delete_from_epoll_on_close(struct st_h2o_evloop_socket_t *sock)
@@ -95,8 +97,10 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
             if (cmsg != NULL) {
                 struct sock_extended_err *ee = (void *)CMSG_DATA(cmsg);
                 if (ee->ee_errno == 0 && ee->ee_origin == SO_EE_ORIGIN_ZEROCOPY) {
-                    /* for each range being obtained, convert the wrapped value to 64-bit, then release the memory */
-                    for (uint32_t c32 = ee->ee_info; c32 <= ee->ee_data; ++c32) {
+                    /* for each range being obtained, convert the wrapped value to 64-bit, then release the memory; the range might
+                     * wrap around */
+                    uint32_t c32 = ee->ee_info;
+                    do {
                         uint64_t c64 = (sock->super._zerocopy->first_counter & 0xffffffff00000000) | c32;
                         if (c64 < sock->super._zerocopy->first_counter)
                             c64 += 0x100000000;
@@ -111,7 +115,7 @@ static int handle_zerocopy_notification(struct st_h2o_evloop_socket_t *sock)
                             }
                             --h2o_socket_num_zerocopy_buffers_inflight;
                         }
-                    }
+                    } while (c32++ != ee->ee_data);
                 }
             }
             made_progress = 1;
