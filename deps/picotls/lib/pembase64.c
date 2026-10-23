@@ -189,12 +189,10 @@ int ptls_base64_decode(const char *text, ptls_base64_decode_state_t *state, ptls
                 /* test for fin or continuation */
                 if (state->nbo < 3) {
                     /* Check that there are only trainling blanks on this line */
-                    while (text[text_index] != 0) {
-                        c = text[text_index++];
-
-                        if (c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0x0B || c == 0x0C) {
-                            continue;
-                        }
+                    for (; text[text_index] != 0; ++text_index) {
+                        c = text[text_index];
+                        if (!(c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == 0x0B || c == 0x0C))
+                            break;
                     }
                     if (text[text_index] == 0) {
                         state->status = PTLS_BASE64_DECODE_DONE;

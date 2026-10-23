@@ -1662,14 +1662,17 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
 /**
  * create a client object to handle new TLS connection
+ * NULL indicates allocation failure.
  */
 ptls_t *ptls_client_new(ptls_context_t *ctx);
 /**
  * create a server object to handle new TLS connection
+ * NULL indicates allocation failure.
  */
 ptls_t *ptls_server_new(ptls_context_t *ctx);
 /**
  * creates an object handle new TLS connection
+ * NULL indicates allocation failure.
  */
 static ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
 /**

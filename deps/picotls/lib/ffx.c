@@ -36,7 +36,7 @@ int ptls_ffx_setup_crypto(ptls_cipher_context_t *_ctx, ptls_cipher_algorithm_t *
     ptls_ffx_context_t *ctx = (ptls_ffx_context_t *)_ctx;
     ptls_cipher_context_t *enc_ctx = NULL;
     size_t len = (bit_length + 7) / 8;
-    uint8_t last_byte_mask[8] = {0xFF, 0xFE, 0xFC, 0xF8, 0xF0, 0xE0, 0xC0, 0x80};
+    uint8_t last_byte_mask[8] = {0xFF, 0x80, 0xC0, 0xE0, 0xF0, 0xF8, 0xFC, 0xFE};
 
     assert(len <= 32 && len >= 2);
     assert(ctx->super.do_dispose == NULL);
@@ -71,8 +71,6 @@ int ptls_ffx_setup_crypto(ptls_cipher_context_t *_ctx, ptls_cipher_algorithm_t *
         ctx->super.do_dispose = ffx_dispose;
         ctx->super.do_init = ffx_init;
         ctx->super.do_transform = ffx_encrypt;
-    } else {
-        ffx_dispose(_ctx);
     }
 
     return ret;

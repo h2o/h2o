@@ -404,8 +404,10 @@ Exit:
     if (ret == 0) {
         *_ctx = &ctx->super;
     } else {
-        if (ctx != NULL)
+        if (ctx != NULL) {
+            ctx->privkey = NULL; /* do not free eckey in case of error, as the caller retains the ownership */
             x9_62_free_context(ctx);
+        }
         *_ctx = NULL;
     }
     return ret;
@@ -1007,9 +1009,9 @@ Exit:
 
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey)
 {
-    int ret, id;
+    int ret;
 
-    switch (id = EVP_PKEY_id(pkey)) {
+    switch (EVP_PKEY_id(pkey)) {
 
     case EVP_PKEY_EC: {
         /* obtain eckey */
@@ -1110,7 +1112,10 @@ static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_
     self->super = (ptls_async_job_t){async_sign_ctx_free, async_sign_ctx_get_fd};
     self->scheme = scheme;
     self->ctx = ctx;
-    self->waitctx = ASYNC_WAIT_CTX_new();
+    if ((self->waitctx = ASYNC_WAIT_CTX_new()) == NULL) {
+        free(self);
+        return NULL;
+    }
     self->job = NULL;
     self->siglen = siglen;
     memset(self->sig, 0, siglen);
@@ -1140,6 +1145,10 @@ static int do_sign_async(ptls_buffer_t *outbuf, ptls_async_job_t **_async)
         break;
     case ASYNC_FINISH:
         async->job = NULL;
+        if (ret != 1) { /* the return value of EVP_DigestSignFinal */
+            ret = PTLS_ERROR_LIBRARY;
+            break;
+        }
         ptls_buffer_pushv(outbuf, async->sig, async->siglen);
         ret = 0;
         break;
@@ -1976,7 +1985,11 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char
                 ret = PTLS_ALERT_BAD_CERTIFICATE;
                 goto Exit;
             }
-            sk_X509_push(chain, interm);
+            if (sk_X509_push(chain, interm) == 0) {
+                X509_free(interm);
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
         }
         ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), server_name, &ossl_x509_err);
     } else {
