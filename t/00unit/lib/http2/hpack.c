@@ -718,7 +718,7 @@ static void test_content_length(void)
     h2o_mem_init_pool(&req.pool);
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_headers_map,
-                                &content_length, &expect, NULL, NULL, (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1,
+                                &content_length, &expect, NULL, (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1,
                                 sizeof(REQUEST_PREFIX CONTENT_LENGTH_1) - 1, &err_desc);
     ok(r == 0);
     ok(content_length == 1);
@@ -731,8 +731,7 @@ static void test_content_length(void)
     err_desc = NULL;
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_headers_map,
-                                &content_length, &expect, NULL, NULL,
-                                (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1 CONTENT_LENGTH_2,
+                                &content_length, &expect, NULL, (const uint8_t *)REQUEST_PREFIX CONTENT_LENGTH_1 CONTENT_LENGTH_2,
                                 sizeof(REQUEST_PREFIX CONTENT_LENGTH_1 CONTENT_LENGTH_2) - 1, &err_desc);
     ok(r == H2O_HTTP2_ERROR_PROTOCOL);
     ok(err_desc != NULL);
@@ -763,7 +762,7 @@ static void test_path_validation(void)
     h2o_mem_init_pool(&req.pool);
     r = h2o_hpack_parse_request(&req.pool, h2o_hpack_decode_header, &header_table, &req.input.method, &req.input.scheme,
                                 &req.input.authority, &req.input.path, &req.upgrade, &req.headers, &pseudo_headers_map,
-                                &content_length, &expect, NULL, NULL, (const uint8_t *)REQUEST_WITH_SPACE_IN_PATH,
+                                &content_length, &expect, NULL, (const uint8_t *)REQUEST_WITH_SPACE_IN_PATH,
                                 sizeof(REQUEST_WITH_SPACE_IN_PATH) - 1, &err_desc);
     ok(r == H2O_HTTP2_ERROR_PROTOCOL);
     ok(err_desc != NULL);
