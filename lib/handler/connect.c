@@ -28,6 +28,15 @@
 
 #define MODULE_NAME "lib/handler/connect.c"
 
+/**
+ * Maximum Capsule Value size accepted on CONNECT-UDP streams.
+ *
+ * The limit is as large as the largest permitted UDP datagram capsule, the only capsule type we handle: up to 8 bytes of Context ID
+ * followed by the 65,527 byte UDP payload limit defined by RFC 9298, Section 5. Though clients are allowed to send capsules of
+ * arbitrary type, we treat capsules exceeding this limit as an error instead of buffering or skipping them.
+ */
+#define MAX_CAPSULE_SIZE (8 + 65527)
+
 struct st_connect_handler_t {
     h2o_handler_t super;
     h2o_proxy_config_vars_t config;
@@ -708,7 +717,7 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
+static size_t udp_get_next_chunk(h2o_iovec_t *datagram, const char *start, size_t len, int *skip)
 {
     const uint8_t *bytes = (const uint8_t *)start;
     const uint8_t *end = bytes + len;
@@ -716,14 +725,16 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
 
     chunk_type = ptls_decode_quicint(&bytes, end);
     if (chunk_type == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
+    if (chunk_length > MAX_CAPSULE_SIZE)
+        return SIZE_MAX;
 
     /* chunk is incomplete */
     if (end - bytes < chunk_length)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
 
     /*
      * https://tools.ietf.org/html/draft-ietf-masque-connect-udp-03#section-6
@@ -731,9 +742,9 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
      * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
      */
     *skip = chunk_type != 0;
-    *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
+    *datagram = h2o_iovec_init(bytes, chunk_length);
 
-    return h2o_iovec_init(bytes, chunk_length);
+    return bytes + chunk_length - (const uint8_t *)start;
 }
 
 static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
@@ -762,7 +773,7 @@ static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
     self->src_req->proceed_req(self->src_req, NULL);
 }
 
-static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
+static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
 {
     int from_buf = 0;
     size_t off = 0;
@@ -771,16 +782,21 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
 
     if (self->udp.egress.buf->size != 0) {
         from_buf = 1;
-        if (chunk.len != 0)
+        if (chunk.len != 0) {
+            if (self->udp.egress.buf->size > MAX_CAPSULE_SIZE || chunk.len > MAX_CAPSULE_SIZE - self->udp.egress.buf->size)
+                return -1;
             h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
+        }
         chunk.base = self->udp.egress.buf->bytes;
         chunk.len = self->udp.egress.buf->size;
     }
     do {
         int skip = 0;
-        size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip);
-        if (datagram.base == NULL)
+        h2o_iovec_t datagram;
+        size_t to_consume = udp_get_next_chunk(&datagram, chunk.base + off, chunk.len - off, &skip);
+        if (to_consume == SIZE_MAX)
+            return -1;
+        if (to_consume == 0)
             break;
         if (!skip)
             udp_write_core(self, datagram);
@@ -794,6 +810,7 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     }
 
     h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
+    return 0;
 }
 
 static int udp_write_stream(void *_self, int is_end_stream)
@@ -812,14 +829,7 @@ static int udp_write_stream(void *_self, int is_end_stream)
     if (is_end_stream)
         self->write_closed = 1;
 
-    /* if the socket is not yet open, buffer input and return */
-    if (self->sock == NULL) {
-        h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
-        return 0;
-    }
-
-    udp_do_write_stream(self, chunk);
-    return 0;
+    return udp_do_write_stream(self, chunk) == 0 ? 0 : 1;
 }
 
 static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t num_datagrams)
@@ -947,7 +957,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
     /* write any data if provided, or just call the proceed_req callback */
-    self->src_req->write_req.cb(self, self->no_req_streaming);
+    if (self->src_req->write_req.cb(self, self->no_req_streaming) != 0)
+        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io);
 
     return 1;
 }
