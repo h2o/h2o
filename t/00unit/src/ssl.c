@@ -48,23 +48,27 @@ static int encrypt_and_decrypt_ticket_once(ptls_encrypt_ticket_t *encryptor, ptl
 
 static void test_encrypt_ticket_ptls(void)
 {
-    /* create three encryptors, TLS, QUIC(spec_context), QUIC(another_context) */
+    /* create four encryptors, TLS, QUIC(spec_context), QUIC(another_context), QUIC(qpack-zero) */
     quicly_context_t alt_quic = quicly_spec_context;
     ++alt_quic.transport_params.max_streams_uni;
-    ptls_encrypt_ticket_t *tls_enc = create_encrypt_ticket_ptls(NULL),
-                          *quic_enc1 = create_encrypt_ticket_ptls(&quicly_spec_context),
-                          *quic_enc2 = create_encrypt_ticket_ptls(&alt_quic);
+    h2o_http3_qpack_context_t qpack = {.decoder_table_capacity = 4096}, qpack_zero = {0};
+    ptls_encrypt_ticket_t *tls_enc = create_encrypt_ticket_ptls(NULL, NULL),
+                          *quic_enc1 = create_encrypt_ticket_ptls(&quicly_spec_context, &qpack),
+                          *quic_enc2 = create_encrypt_ticket_ptls(&alt_quic, &qpack),
+                          *quic_qpack_zero = create_encrypt_ticket_ptls(&quicly_spec_context, &qpack_zero);
 
     /* check that ticket decryption succeeds when the conditions match */
     ok(encrypt_and_decrypt_ticket_once(tls_enc, tls_enc) == 0);
     ok(encrypt_and_decrypt_ticket_once(quic_enc1, quic_enc1) == 0);
     ok(encrypt_and_decrypt_ticket_once(quic_enc2, quic_enc2) == 0);
+    ok(encrypt_and_decrypt_ticket_once(quic_qpack_zero, quic_qpack_zero) == 0);
 
     /* but that 0-RTT is rejected when the conditions do not match */
     ok(encrypt_and_decrypt_ticket_once(tls_enc, quic_enc1) ==
        PTLS_ERROR_REJECT_EARLY_DATA); /* TP mismatch detected before content mismatch */
     ok(encrypt_and_decrypt_ticket_once(quic_enc1, tls_enc) == PTLS_ALERT_DECODE_ERROR);
     ok(encrypt_and_decrypt_ticket_once(quic_enc1, quic_enc2) == PTLS_ERROR_REJECT_EARLY_DATA);
+    ok(encrypt_and_decrypt_ticket_once(quic_enc1, quic_qpack_zero) == PTLS_ERROR_REJECT_EARLY_DATA);
 }
 
 const uint64_t UTC2000 = (365 * 30 + 7) * 86400;

@@ -86,10 +86,13 @@ struct st_util_save_ticket_t {
     char fn[MAXPATHLEN];
 };
 
-static int util_save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src)
+static int util_save_ticket_cb(ptls_save_ticket_t *_self, ptls_t *tls, ptls_iovec_t src,
+                               const ptls_save_ticket_properties_t *properties)
 {
     struct st_util_save_ticket_t *self = (struct st_util_save_ticket_t *)_self;
     FILE *fp;
+
+    (void)properties;
 
     if ((fp = fopen(self->fn, "wb")) == NULL) {
         fprintf(stderr, "failed to open file:%s:%s\n", self->fn, strerror(errno));

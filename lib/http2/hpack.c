@@ -90,7 +90,7 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
         return NULL;
     if ((entry->flags & NGHTTP2_HUFF_SYM) != 0) {
         *dst++ = entry->sym;
-        *seen_char_types |= (entry->flags & NGHTTP2_HUFF_INVALID_CHARS);
+        *seen_char_types |= (entry->flags & (NGHTTP2_HUFF_INVALID_CHARS | NGHTTP2_HUFF_UPPER_CASE_CHAR));
     }
     *state = entry->state;
     *maybe_eos = (entry->flags & NGHTTP2_HUFF_ACCEPTED) != 0;
@@ -640,8 +640,8 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
 }
 
 int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, int *status,
-                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src,
-                             size_t len, const char **err_desc)
+                             h2o_headers_t *headers, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
+                             const char **err_desc)
 {
     if (status != NULL)
         *status = 0;

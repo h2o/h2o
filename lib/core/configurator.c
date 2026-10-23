@@ -866,10 +866,18 @@ static int on_config_custom_handler(h2o_configurator_command_t *cmd, h2o_configu
         exts[1] = NULL;
         break;
     case YOML_TYPE_SEQUENCE: {
+        if (ext_node->data.sequence.size == 0) {
+            h2o_configurator_errprintf(cmd, ext_node, "`extensions` must not be empty");
+            return -1;
+        }
         exts = alloca((ext_node->data.sequence.size + 1) * sizeof(*exts));
         size_t i;
         for (i = 0; i != ext_node->data.sequence.size; ++i) {
             yoml_t *n = ext_node->data.sequence.elements[i];
+            if (n->type != YOML_TYPE_SCALAR) {
+                h2o_configurator_errprintf(cmd, n, "`extensions` must be a scalar or sequence of scalar");
+                return -1;
+            }
             if ((exts[i] = normalize_ext(cmd, n)) == NULL)
                 return -1;
         }
@@ -1180,8 +1188,6 @@ void h2o_configurator__dispose_configurators(h2o_globalconf_t *conf)
     while (!h2o_linklist_is_empty(&conf->configurators)) {
         h2o_configurator_t *c = H2O_STRUCT_FROM_MEMBER(h2o_configurator_t, _link, conf->configurators.next);
         h2o_linklist_unlink(&c->_link);
-        if (c->dispose != NULL)
-            c->dispose(c);
         destroy_configurator(c);
     }
 }

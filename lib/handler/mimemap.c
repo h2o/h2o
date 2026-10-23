@@ -191,6 +191,7 @@ h2o_mimemap_t *h2o_mimemap_clone(h2o_mimemap_t *src)
 
     dst->extmap = kh_init(extmap);
     dst->typeset = kh_init(typeset);
+    dst->num_dynamic = 0;
     kh_foreach(src->extmap, ext, type, {
         int r;
         khiter_t iter = kh_put(extmap, dst->extmap, ext, &r);

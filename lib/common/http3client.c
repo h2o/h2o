@@ -384,11 +384,10 @@ struct st_h2o_httpclient__h3_conn_t *create_connection(h2o_httpclient_ctx_t *ctx
         origin = &pool->socketpool->targets.entries[0]->url;
 
     static const h2o_http3_conn_callbacks_t callbacks = {{destroy_connection_on_transport_close}, handle_control_stream_frame};
-    static const h2o_http3_qpack_context_t qpack_ctx = {0 /* TODO */};
 
     struct st_h2o_httpclient__h3_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
 
-    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &qpack_ctx, ctx->http3->max_frame_payload_size);
+    h2o_http3_init_conn(&conn->super, &ctx->http3->h3, &callbacks, &ctx->http3->qpack, ctx->http3->max_frame_payload_size);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
     conn->ctx = ctx;
     h2o_url_copy(NULL, &conn->server.origin_url, origin);
@@ -541,8 +540,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
     }
     h2o_qpack_section_stats_t unused = {0};
     if ((ret = h2o_qpack_parse_response(req->super.pool, req->conn->super.qpack.dec, req->quic->stream_id, &status, &headers,
-                                        &datagram_flow_id, &unused, header_ack, &header_ack_len, frame.payload, frame.length,
-                                        err_desc)) != 0) {
+                                        &datagram_flow_id, 0 /* client has no blocked-streams budget */, NULL, &unused, header_ack,
+                                        &header_ack_len, frame.payload, frame.length, err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INCOMPLETE) {
             /* the request is blocked by the QPACK stream */
             req->handle_input = NULL; /* FIXME */
@@ -593,9 +592,11 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
-    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
-    if (req->super._cb.on_body == NULL)
+    if (req->super._cb.on_body == NULL) {
+        req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_CLOSED;
         return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
+    }
+    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
 
     /* handle body */
     req->handle_input = handle_input_expect_data_frame;
@@ -633,8 +634,16 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
     }
     memcpy(dst, req->sendbuf->bytes + off, *len);
 
-    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX)
+    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX) {
         call_proceed_req(req, NULL);
+        /* `proceed_req` might have synchronously either appended data by calling `do_write_req`, or raised an error:
+         *  * in the case of an error the stream is detached and quicly sends a reset,
+         *  * if data has been appended, notify quicly by clearing `*wrote_all`. */
+        if (qs->data == NULL)
+            return;
+        if (req->sendbuf->size > off + *len)
+            *wrote_all = 0;
+    }
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -967,7 +976,7 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
         return;
 
     struct st_h2o_http3client_req_t *req = qs->data;
-    if (req->on_read_datagrams != NULL)
+    if (req != NULL && req->on_read_datagrams != NULL)
         req->on_read_datagrams(&req->super, &payload, 1);
 }
 

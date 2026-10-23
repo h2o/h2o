@@ -38,26 +38,31 @@ static cubic_float_t calc_cubic_t(const quicly_cc_t *cc, int64_t now)
     return clock_delta / 1000; /* ms -> s */
 }
 
-/* RFC 8312, Equation 1; using bytes as unit instead of MSS */
-static uint32_t calc_w_cubic(const quicly_cc_t *cc, cubic_float_t t_sec, uint32_t max_udp_payload_size)
+/* RFC 9438, Figure 1; using bytes as unit instead of MSS */
+static cubic_float_t calc_w_cubic(const quicly_cc_t *cc, cubic_float_t t_sec, uint32_t max_udp_payload_size)
 {
     cubic_float_t tk = t_sec - cc->state.cubic.k;
     return (QUICLY_CUBIC_C * (tk * tk * tk) * max_udp_payload_size) + cc->state.cubic.w_max;
 }
 
-/* RFC 8312, Equation 2 */
-/* K depends solely on W_max, so we update both together on congestion events */
-static void update_cubic_k(quicly_cc_t *cc, uint32_t max_udp_payload_size)
+/* RFC 9438, Figure 2 */
+static void update_cubic_k(quicly_cc_t *cc, uint32_t cwnd_epoch, uint32_t max_udp_payload_size)
 {
-    cubic_float_t w_max_mss = cc->state.cubic.w_max / (cubic_float_t)max_udp_payload_size;
-    cc->state.cubic.k = cbrt(w_max_mss * ((1 - QUICLY_CUBIC_BETA) / QUICLY_CUBIC_C));
+    if (cc->state.cubic.w_max > cwnd_epoch) {
+        cubic_float_t window_delta_mss = (cc->state.cubic.w_max - cwnd_epoch) / (cubic_float_t)max_udp_payload_size;
+        cc->state.cubic.k = cbrt(window_delta_mss / QUICLY_CUBIC_C);
+    } else {
+        cc->state.cubic.k = 0;
+    }
 }
 
-/* RFC 8312, Equation 4; using bytes as unit instead of MSS */
-static uint32_t calc_w_est(const quicly_cc_t *cc, cubic_float_t t_sec, cubic_float_t rtt_sec, uint32_t max_udp_payload_size)
+/* RFC 9438, Figure 4; using bytes as unit instead of MSS */
+static uint32_t update_w_est(quicly_cc_t *cc, uint32_t bytes, uint32_t max_udp_payload_size)
 {
-    return (cc->state.cubic.w_max * QUICLY_CUBIC_BETA) +
-           ((3 * (1 - QUICLY_CUBIC_BETA) / (1 + QUICLY_CUBIC_BETA)) * (t_sec / rtt_sec) * max_udp_payload_size);
+    cubic_float_t alpha =
+        cc->state.cubic.w_est >= cc->state.cubic.cwnd_prior ? 1 : 3 * (1 - QUICLY_CUBIC_BETA) / (1 + QUICLY_CUBIC_BETA);
+    cc->state.cubic.w_est += alpha * bytes / cc->cwnd * max_udp_payload_size;
+    return cc->state.cubic.w_est < UINT32_MAX ? cc->state.cubic.w_est : UINT32_MAX;
 }
 
 /* TODO: Avoid increase if sender was application limited. */
@@ -87,22 +92,22 @@ static void cubic_on_acked(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t 
     cubic_float_t t_sec = calc_cubic_t(cc, now);
     cubic_float_t rtt_sec = loss->rtt.smoothed / (cubic_float_t)1000; /* ms -> s */
 
-    uint32_t w_cubic = calc_w_cubic(cc, t_sec, max_udp_payload_size);
-    uint32_t w_est = calc_w_est(cc, t_sec, rtt_sec, max_udp_payload_size);
+    cubic_float_t w_cubic = calc_w_cubic(cc, t_sec, max_udp_payload_size);
+    uint32_t w_est = update_w_est(cc, bytes, max_udp_payload_size);
 
     if (w_cubic < w_est) {
-        /* RFC 8312, Section 4.2; TCP-Friendly Region */
-        /* Prevent cwnd from shrinking if W_est is reduced due to RTT increase */
-        if (w_est > cc->cwnd)
-            cc->cwnd = w_est;
+        /* RFC 9438, Section 4.3; Reno-Friendly Region */
+        cc->cwnd = w_est;
     } else {
-        /* RFC 8312, Section 4.3/4.4; CUBIC Region */
+        /* RFC 9438, Sections 4.4 and 4.5; Concave and Convex Regions */
         cubic_float_t w_cubic_target = calc_w_cubic(cc, t_sec + rtt_sec, max_udp_payload_size);
-        /* After fast convergence W_max < W_last_max holds, and hence W_cubic(0) = beta * W_max < beta * W_last_max = cwnd.
-         * cwnd could thus shrink without this check (but only after fast convergence). */
-        if (w_cubic_target > cc->cwnd)
-            /* (W_cubic(t+RTT) - cwnd)/cwnd * MSS = (W_cubic(t+RTT)/cwnd - 1) * MSS */
-            cc->cwnd = quicly_u32_add_saturating(cc->cwnd, ((w_cubic_target / cc->cwnd) - 1) * max_udp_payload_size);
+        /* RFC 9438, Section 4.2 bounds target to make the increase non-decreasing and slower than slow start. */
+        if (w_cubic_target < cc->cwnd)
+            w_cubic_target = cc->cwnd;
+        if (w_cubic_target > 1.5 * cc->cwnd)
+            w_cubic_target = 1.5 * cc->cwnd;
+        /* (W_cubic(t+RTT) - cwnd)/cwnd * MSS = (W_cubic(t+RTT)/cwnd - 1) * MSS */
+        cc->cwnd = quicly_u32_add_saturating(cc->cwnd, ((w_cubic_target / cc->cwnd) - 1) * max_udp_payload_size);
     }
 
     if (cc->cwnd_maximum < cc->cwnd)
@@ -130,31 +135,24 @@ static void cubic_on_lost(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     }
 
     cc->state.cubic.avoidance_start = now;
-    cc->state.cubic.w_max = cc->cwnd;
+    cc->state.cubic.cwnd_prior = cc->cwnd;
 
-    /* RFC 8312, Section 4.6; Fast Convergence */
-    /* w_last_max is initialized to zero; therefore this condition is false when exiting slow start */
-    if (cc->state.cubic.w_max < cc->state.cubic.w_last_max) {
-        cc->state.cubic.w_last_max = cc->state.cubic.w_max;
-        cc->state.cubic.w_max *= (1.0 + QUICLY_CUBIC_BETA) / 2.0;
-    } else {
-        cc->state.cubic.w_last_max = cc->state.cubic.w_max;
-    }
-    update_cubic_k(cc, max_udp_payload_size);
+    /* RFC 9438, Section 4.7; compare cwnd with the effective W_max retained from the previous congestion event. */
+    if (cc->cwnd < cc->state.cubic.w_max)
+        cc->state.cubic.w_max = cc->cwnd * ((1.0 + QUICLY_CUBIC_BETA) / 2.0);
+    else
+        cc->state.cubic.w_max = cc->cwnd;
 
-    /* RFC 8312, Section 4.5; Multiplicative Decrease */
+    /* RFC 9438, Section 4.6; Multiplicative Decrease */
     cc->cwnd *= cc->ssthresh == UINT32_MAX ? 0.5 : QUICLY_CUBIC_BETA; /* without HyStart++, we overshoot by 2x in slowstart */
     if (cc->cwnd < QUICLY_MIN_CWND * max_udp_payload_size)
         cc->cwnd = QUICLY_MIN_CWND * max_udp_payload_size;
     cc->ssthresh = cc->cwnd;
+    cc->state.cubic.w_est = cc->cwnd;
+    update_cubic_k(cc, cc->cwnd, max_udp_payload_size);
 
     if (cc->cwnd_minimum > cc->cwnd)
         cc->cwnd_minimum = cc->cwnd;
-}
-
-static void cubic_on_persistent_congestion(quicly_cc_t *cc, const quicly_loss_t *loss, int64_t now)
-{
-    /* TODO */
 }
 
 static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t bytes, int64_t now)
@@ -172,10 +170,11 @@ static void cubic_on_sent(quicly_cc_t *cc, const quicly_loss_t *loss, uint32_t b
     cc->state.cubic.last_sent_time = now;
 }
 
-static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
+static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd, int normalize_mtu)
 {
     memset(cc, 0, sizeof(quicly_cc_t));
-    cc->type = &quicly_cc_type_cubic;
+    cc->type = &quicly_cc_type_cubic_legacy;
+    cc->normalize_mtu = normalize_mtu;
     cc->cwnd = cc->cwnd_initial = cc->cwnd_maximum = initcwnd;
     cc->ssthresh = cc->cwnd_minimum = UINT32_MAX;
     cc->exit_slow_start_at = INT64_MAX;
@@ -185,15 +184,16 @@ static void cubic_reset(quicly_cc_t *cc, uint32_t initcwnd)
 
 static int cubic_on_switch(quicly_cc_t *cc)
 {
-    if (cc->type == &quicly_cc_type_cubic)
+    if (cc->type == &quicly_cc_type_cubic_legacy)
         return 1;
 
-    if (cc->type == &quicly_cc_type_reno || cc->type == &quicly_cc_type_pico) {
+    if (cc->type == &quicly_cc_type_reno || cc->type == &quicly_cc_type_cubic || cc->type == &quicly_cc_type_pico ||
+        cc->type == &quicly_cc_type_cuback) {
         /* When in slow start, state can be reused as-is; otherwise, restart. */
         if (cc->cwnd_exiting_slow_start == 0) {
-            cc->type = &quicly_cc_type_cubic;
+            cc->type = &quicly_cc_type_cubic_legacy;
         } else {
-            cubic_reset(cc, cc->cwnd_initial);
+            cubic_reset(cc, cc->cwnd_initial, cc->normalize_mtu);
         }
         return 1;
     }
@@ -201,18 +201,12 @@ static int cubic_on_switch(quicly_cc_t *cc)
     return 0;
 }
 
-static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int64_t now)
+static void cubic_init(quicly_init_cc_t *self, quicly_cc_t *cc, uint32_t initcwnd, int normalize_mtu, int64_t now)
 {
-    cubic_reset(cc, initcwnd);
+    cubic_reset(cc, initcwnd, normalize_mtu);
 }
 
-quicly_cc_type_t quicly_cc_type_cubic = {"cubic",
-                                         &quicly_cc_cubic_init,
-                                         cubic_on_acked,
-                                         cubic_on_lost,
-                                         cubic_on_persistent_congestion,
-                                         cubic_on_sent,
-                                         cubic_on_switch,
-                                         NULL,
-                                         quicly_cc_jumpstart_enter};
-quicly_init_cc_t quicly_cc_cubic_init = {cubic_init};
+quicly_cc_type_t quicly_cc_type_cubic_legacy = {
+    "cubic-legacy", &quicly_cc_cubic_legacy_init, cubic_on_acked, cubic_on_lost, cubic_on_sent, cubic_on_switch,
+    NULL,           quicly_cc_jumpstart_enter};
+quicly_init_cc_t quicly_cc_cubic_legacy_init = {cubic_init};

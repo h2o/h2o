@@ -378,7 +378,7 @@ static void test_vector(void)
         0x4d, 0x91, 0x9d, 0x48, 0x43, 0xb1, 0xca, 0x70, 0xa2, 0xd8, 0xd3, 0xf7, 0x25, 0xea, 0xd1, 0x39, 0x13, 0x77, 0xdc, 0xc0};
     quicly_decoded_packet_t packet;
     struct st_quicly_cipher_context_t ingress, egress;
-    uint64_t pn, next_expected_pn = 0;
+    uint64_t pn;
     ptls_iovec_t payload;
     int ret;
 
@@ -392,8 +392,7 @@ static void test_vector(void)
     ret = setup_initial_encryption(&ptls_openssl_aes128gcmsha256, &ingress, &egress, packet.cid.dest.encrypted, 0,
                                    ptls_iovec_init(salt->initial, sizeof(salt->initial)), NULL);
     ok(ret == 0);
-    ok(decrypt_packet(ingress.header_protection, aead_decrypt_fixed_key, ingress.aead, &next_expected_pn, &packet, &pn, &payload) ==
-       0);
+    ok(decrypt_packet(ingress.header_protection, aead_decrypt_fixed_key, ingress.aead, 0, &packet, &pn, &payload) == 0);
     ok(pn == 2);
     ok(sizeof(expected_payload) <= payload.len);
     ok(memcmp(expected_payload, payload.base, sizeof(expected_payload)) == 0);
@@ -966,6 +965,45 @@ static void test_record_receipt(void)
     do_test_ack_frequency_ack_logic();
 }
 
+static void test_is_duplicate_pn(void)
+{
+    quicly_ranges_t ranges;
+
+    /* at the beginning of a connection, the ack queue is empty and the first packet number being expected is zero */
+    quicly_ranges_init(&ranges);
+    ok(!is_duplicate_pn(&ranges, 0, 0));
+
+    /* packets at or above the one being expected next are never duplicate */
+    ok(quicly_ranges_add(&ranges, 0, 5) == 0);
+    ok(!is_duplicate_pn(&ranges, 5, 5));
+    ok(!is_duplicate_pn(&ranges, 6, 5));
+
+    /* packet numbers covered by the ack queue are duplicate */
+    ok(is_duplicate_pn(&ranges, 4, 5));
+    ok(is_duplicate_pn(&ranges, 0, 5));
+
+    /* packet numbers within a gap have not been received yet */
+    ok(quicly_ranges_add(&ranges, 8, 11) == 0);
+    ok(!is_duplicate_pn(&ranges, 5, 11));
+    ok(!is_duplicate_pn(&ranges, 7, 11));
+    ok(is_duplicate_pn(&ranges, 8, 11));
+    ok(is_duplicate_pn(&ranges, 10, 11));
+    ok(is_duplicate_pn(&ranges, 3, 11));
+
+    /* packet numbers below the oldest range being retained are discarded, as we cannot tell if they have been processed */
+    quicly_ranges_clear(&ranges);
+    ok(quicly_ranges_add(&ranges, 8, 11) == 0);
+    ok(is_duplicate_pn(&ranges, 7, 11));
+    ok(is_duplicate_pn(&ranges, 0, 11));
+
+    /* ditto, when the ack queue has been emptied by the peer acknowledging our ACKs */
+    quicly_ranges_clear(&ranges);
+    ok(is_duplicate_pn(&ranges, 10, 11));
+    ok(!is_duplicate_pn(&ranges, 11, 11));
+
+    quicly_ranges_clear(&ranges);
+}
+
 static void test_ack_frequency(void)
 {
     quicly_conn_t *client, *server;
@@ -1496,6 +1534,7 @@ int main(int argc, char **argv)
     subtest("ranges", test_ranges);
     subtest("rate", test_rate);
     subtest("record-receipt", test_record_receipt);
+    subtest("is-duplicate-pn", test_is_duplicate_pn);
     subtest("frame", test_frame);
     subtest("maxsender", test_maxsender);
     subtest("pacer", test_pacer);

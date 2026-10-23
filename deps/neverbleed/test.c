@@ -19,13 +19,17 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <assert.h>
+#include <errno.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/opensslconf.h>
 #include <openssl/opensslv.h>
 
@@ -42,6 +46,14 @@
 
 #include "neverbleed.h"
 
+static neverbleed_t nb;
+
+#ifdef OPENSSL_IS_BORINGSSL
+static void setup_boringssl_key_method(SSL_CTX *ctx);
+static int boringssl_get_pkey_index(void);
+static void boringssl_free_pkey_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp);
+#endif
+
 #ifdef NEVERBLEED_TEST_ECDSA
 static void setup_ecc_key(SSL_CTX *ssl_ctx)
 {
@@ -53,6 +65,84 @@ static void setup_ecc_key(SSL_CTX *ssl_ctx)
     }
     SSL_CTX_set_tmp_ecdh(ssl_ctx, key);
     EC_KEY_free(key);
+}
+#endif
+
+#ifdef OPENSSL_IS_BORINGSSL
+static void boringssl_free_pkey_callback(void *parent, void *ptr, CRYPTO_EX_DATA *ad, int idx, long argl, void *argp)
+{
+    if (ptr != NULL)
+        EVP_PKEY_free(ptr);
+}
+
+static int boringssl_get_pkey_index(void)
+{
+    static volatile int index;
+    static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&mutex);
+    if (!index) {
+        index = SSL_CTX_get_ex_new_index(0, NULL, NULL, NULL, boringssl_free_pkey_callback);
+    }
+    pthread_mutex_unlock(&mutex);
+    return index;
+}
+
+static enum ssl_private_key_result_t boringssl_sign(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out,
+                                                    uint16_t signature_algorithm, const uint8_t *in, size_t len)
+{
+    neverbleed_iobuf_t buf = {NULL};
+    void *digest = NULL;
+    size_t digestlen = 0;
+    SSL_CTX *ctx = SSL_get_SSL_CTX(ssl);
+    EVP_PKEY *pkey = SSL_CTX_get_ex_data(ctx, boringssl_get_pkey_index());
+    const EVP_MD *md = SSL_get_signature_algorithm_digest(signature_algorithm);
+    int rsa_pss = SSL_is_signature_algorithm_rsa_pss(signature_algorithm);
+
+    neverbleed_start_digestsign(&buf, pkey, md, in, len, rsa_pss);
+    neverbleed_transaction_write(&nb, &buf);
+    neverbleed_transaction_read(&nb, &buf);
+    neverbleed_finish_digestsign(&buf, &digest, &digestlen);
+
+    assert(digestlen <= max_out);
+    memcpy(out, digest, digestlen);
+    *outlen = digestlen;
+
+    free(digest);
+    return ssl_private_key_success;
+}
+
+static enum ssl_private_key_result_t boringssl_decrypt(SSL *ssl, uint8_t *out, size_t *outlen, size_t max_out, const uint8_t *in,
+                                                       size_t len)
+{
+    neverbleed_iobuf_t buf = {NULL};
+    void *digest = NULL;
+    size_t digestlen = 0;
+    SSL_CTX *ctx = SSL_get_SSL_CTX(ssl);
+    EVP_PKEY *pkey = SSL_CTX_get_ex_data(ctx, boringssl_get_pkey_index());
+
+    neverbleed_start_decrypt(&buf, pkey, in, len);
+    neverbleed_transaction_write(&nb, &buf);
+    neverbleed_transaction_read(&nb, &buf);
+    neverbleed_finish_decrypt(&buf, &digest, &digestlen);
+
+    assert(digestlen <= max_out);
+    memcpy(out, digest, digestlen);
+    *outlen = digestlen;
+
+    free(digest);
+    return ssl_private_key_success;
+}
+
+static void setup_boringssl_key_method(SSL_CTX *ctx)
+{
+    EVP_PKEY *pkey = SSL_CTX_get0_privatekey(ctx);
+    EVP_PKEY_up_ref(pkey);
+    SSL_CTX_set_ex_data(ctx, boringssl_get_pkey_index(), pkey);
+    static const SSL_PRIVATE_KEY_METHOD meth = {
+        .sign = boringssl_sign,
+        .decrypt = boringssl_decrypt,
+    };
+    SSL_CTX_set_private_key_method(ctx, &meth);
 }
 #endif
 
@@ -69,7 +159,7 @@ int dumb_https_server(unsigned short port, SSL_CTX *ctx)
     setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &reuse_flag, sizeof(reuse_flag));
     sin.sin_family = AF_INET;
     sin.sin_addr.s_addr = htonl(0x7f000001);
-    sin.sin_port = htons(8888);
+    sin.sin_port = htons(port);
     if (bind(listen_fd, (void *)&sin, sizeof(sin)) != 0) {
         fprintf(stderr, "bind failed:%s\n", strerror(errno));
         return 111;
@@ -110,7 +200,6 @@ int main(int argc, char **argv)
 {
     unsigned short port;
     SSL_CTX *ctx;
-    neverbleed_t nb;
     char errbuf[NEVERBLEED_ERRBUF_SIZE];
     int use_privsep;
 
@@ -155,6 +244,9 @@ int main(int argc, char **argv)
             fprintf(stderr, "failed to load private key from file:%s:%s\n", argv[4], errbuf);
             return 111;
         }
+#ifdef OPENSSL_IS_BORINGSSL
+        setup_boringssl_key_method(ctx);
+#endif
     } else {
         if (SSL_CTX_use_PrivateKey_file(ctx, argv[4], SSL_FILETYPE_PEM) != 1) {
             fprintf(stderr, "failed to load private key from file:%s\n", argv[4]);

@@ -184,6 +184,18 @@ static void test_hpack(void)
         ok(soft_errors == 0);
         ok(err_desc == NULL);
     }
+    {
+        /* upper case chars in header names are rejected, as is the case for names sent without huffman encoding */
+        uint8_t huffcode[32];
+        size_t huffcode_len = h2o_hpack_encode_huffman(huffcode, (const uint8_t *)H2O_STRLIT("x-Foo"));
+        ok(huffcode_len != SIZE_MAX);
+        char buf[32];
+        unsigned soft_errors = 0;
+        const char *err_desc = NULL;
+        size_t len = h2o_hpack_decode_huffman(buf, &soft_errors, huffcode, huffcode_len, 1, &err_desc);
+        ok(len == SIZE_MAX);
+        ok(err_desc == h2o_hpack_err_found_upper_case_in_header_name);
+    }
     h2o_mem_clear_pool(&pool);
 
     note("decode_string_bogus");

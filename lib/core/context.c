@@ -62,6 +62,7 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic = quicly_spec_context;
     h3ctx->quic.tls = &h3ctx->tls;
     h3ctx->quic.transport_params.max_streams_uni = 10;
+    h3ctx->quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     if (!use_ecn)
         h3ctx->quic.enable_ratio.ecn = 0;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
@@ -76,11 +77,12 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
 
     /* http3 client-specific fields */
+    h3ctx->qpack = (h2o_http3_qpack_context_t){0}; /* TODO: expose proxy.http3.qpack-* knobs and consider enabling by default */
     h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
                                                                                            directions */
 
     /* h2o server http3 integration */
-    h2o_socket_t *socks[2], **sp = socks;
+    h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
     if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
         ++sp;
     if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)

@@ -805,6 +805,34 @@ listen:
 .fi
 .PP
 
+Listening on a Multipath TCP socket
+
+If the type attribute is set to mptcp, h2o will listen on a Multipath TCP socket, instead of a TCP one.
+Support for this listener type is available only in worker mode and when h2o is built with -DWITH_MPTCP=ON.
+
+
+.PP
+.BR Example:\ 
+Listen Directive for Multipath TCP
+.PP
+.nf
+.RS
+# accept HTTPS on port 443 with Multipath TCP
+listen:
+  type: mptcp
+  port: 443
+  ssl:
+    key-file: /path/to/key-file
+    certificate-file: /path/to/certificate-file
+
+.RE
+.fi
+.PP
+
+
+
+Multipath TCP is fully backwards compatible with regular TCP clients.
+
 
 .RE
 .RE
@@ -1729,13 +1757,17 @@ Enables on-the-fly compression of HTTP response.
 .PP
 
 
-If the argument is ON, both brotli and gzip compression are enabled.
-If the argument is OFF, on-the-fly compression is disabled.
+If the argument is ON, gzip is enabled for compression. Brotli and zstd will also be enabled when the server was built with their support.
 If the argument is a sequence, the elements are the list of compression algorithms to be enabled.
-If the argument is a mapping, each key specifies the compression algorithm to be enabled, and the values specify the quality of the algorithms.
 
 
-When both brotli and gzip are enabled and if the client supports both, H2O is hard-coded to prefer brotli.
+The default qualities specified for each compression method are: 1 for gzip, 1 for brotli, and 3 for zstd. To override the qualities, use a mapping with each key-value pair specifying the compression algorithm and the quality (gzip: 1-9, br: 0-11, zstd: 1-22).
+
+
+When multiple algorithms are enabled and the client supports more than one, H2O prefers brotli, then zstd, then gzip.
+
+
+If the argument is OFF, on-the-fly compression is disabled.
 
 .PP
 .BR Example:\ 
@@ -1747,10 +1779,14 @@ Enabling on-the-fly compression
 compress: ON
 
 # enable by name
-compress: [ gzip, br ]
+compress: [ gzip, br, zstd ]
 
 # enable gzip only
 compress: [ gzip ]
+
+# tune zstd quality
+compress:
+  zstd: 7
 
 .RE
 .fi
@@ -2313,7 +2349,9 @@ See Section 18.2 of RFC 9000. Default is 1,472.
 pacing
 A boolean flag (either OFF or ON) indicating whether sent packets should be paced. The default setting is OFF.
 qpack-encoder-table-capacity
-Size of the QPACK encoder table. Default is 4,096.
+Size of the QPACK encoder table, in bytes. Controls the maximum size of the dynamic table that h2o will use for encoding the response headers. Setting this field to 0 disables the use of the dynamic table. Default is 16,384.
+qpack-decoder-table-capacity
+Size of the QPACK decoder table, in bytes. Setting this to a non-zero value advertises SETTINGS_QPACK_MAX_TABLE_CAPACITY to the peer, allowing the peer to use dynamic-table references when encoding request headers. Default is 16,384.
 respect-app-limited
 This boolean flag (either OFF or ON) indicates whether the server should respect the notion of rate limited traffic when adjusting the size of the congestion window, as detailed in RFC 7661. The default setting is ON.
 retry
@@ -3606,7 +3644,7 @@ Setup a CONNECT proxy, taking an access control list as the argument.
 .PP
 
 
-Each element of the access control list starts with either + or - followed by an wildcard (*) or an IP address with an optional netmask and an optional port number.
+Each element of the access control list starts with either + or - followed by a wildcard (*) or an IP address with an optional netmask and an optional port number or port range.
 
 
 When a CONNECT request is received and the name resolution of the connect target is complete, the access control list is searched from top to bottom.
@@ -3623,15 +3661,17 @@ Simple HTTPS proxy
 .nf
 .RS
 proxy.connect:
-- "-192.168.0.0/24"  # reject any attempts to local network
-- "+*:443"           # accept attempts to port 443 of any host
+- "-192.168.0.0/24"    # reject any attempts to local network
+- "+*:443"             # accept attempts to port 443 of any host
+- "+10.0.0.0/8:80-443" # accept attempts to ports 80 through 443 of 10.0.0.0/8
 
 .RE
 .fi
 .PP
 
 
-Note: The precise syntax of the access control list element is address:port/netmask. This is because the URL parser is reused.
+The syntax of each access control list element is address[/netmask][:port], where port is either a single port number, an inclusive range expressed as low-high, or * meaning any port (which is also the default when the port is omitted).
+For backward compatibility, the netmask may instead be specified after the port (i.e., address:port/netmask).
 
 
 The directive can only be used for the root path (i.e., /), as the classic CONNECT does not specify the path.
@@ -3647,6 +3687,14 @@ Setup a CONNECT-UDP gateway defined by RFC 9298.
 
 
 Supplied argument is an access control list, using the same format as that of proxy.connect.
+
+
+To be compatible with clients using the default URI Template defined in RFC 9298, the handler should be registered at path /.well-known/masque/udp/:
+
+paths:
+  "/.well-known/masque/udp":
+    proxy.connect-udp:
+      - "+*"
 
 
 Support for draft-03 of the CONNECT-UDP protocol is controlled separately; see proxy.connect.masque-draft-03.

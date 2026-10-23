@@ -50,6 +50,7 @@ struct st_h2o_status_collector_t {
         h2o_req_t *req;
         h2o_multithread_receiver_t *receiver;
     } src;
+    h2o_globalconf_t *globalconf;
     size_t num_remaining_threads_atomic;
     H2O_VECTOR(struct st_status_ctx_t) status_ctx;
 };
@@ -88,6 +89,12 @@ static void send_response(struct st_h2o_status_collector_t *collector)
 
     req = collector->src.req;
     if (!req) {
+        /* the request has been closed; let the handlers release the contexts */
+        for (i = 0; i < collector->globalconf->statuses.size; i++) {
+            h2o_status_handler_t *sh = collector->globalconf->statuses.entries[i];
+            if (collector->status_ctx.entries[i].active && sh->init != NULL)
+                sh->final(collector->status_ctx.entries[i].ctx, collector->globalconf, NULL);
+        }
         h2o_mem_release_shared(collector);
         return;
     }
@@ -143,6 +150,8 @@ static void on_collect_notify(h2o_multithread_receiver_t *receiver, h2o_linklist
 
 static void on_collector_dispose(void *_collector)
 {
+    struct st_h2o_status_collector_t *collector = _collector;
+    free(collector->status_ctx.entries);
 }
 
 static void on_req_close(void *p)
@@ -163,7 +172,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
         for (i = 0; i < req->conn->ctx->globalconf->statuses.size; i++) {
             h2o_status_handler_t *sh;
 
-            h2o_vector_reserve(&req->pool, &collector->status_ctx, collector->status_ctx.size + 1);
+            h2o_vector_reserve(NULL, &collector->status_ctx, collector->status_ctx.size + 1);
             sh = req->conn->ctx->globalconf->statuses.entries[i];
 
             if (status_list.base) {
@@ -181,6 +190,7 @@ static int on_req_json(struct st_h2o_root_status_handler_t *self, h2o_req_t *req
         }
         collector->src.req = req;
         collector->src.receiver = &status_ctx->receiver;
+        collector->globalconf = req->conn->ctx->globalconf;
         collector->num_remaining_threads_atomic = self->receivers.size;
 
         for (i = 0; i != self->receivers.size; ++i) {
@@ -252,7 +262,8 @@ static void on_context_dispose(h2o_handler_t *_self, h2o_context_t *ctx)
         if (self->receivers.entries[i] == &status_ctx->receiver)
             break;
     assert(i != self->receivers.size);
-    memmove(self->receivers.entries + i + 1, self->receivers.entries + i, self->receivers.size - i - 1);
+    memmove(self->receivers.entries + i, self->receivers.entries + i + 1,
+            (self->receivers.size - i - 1) * sizeof(self->receivers.entries[0]));
     --self->receivers.size;
 
     h2o_multithread_unregister_receiver(ctx->queue, &status_ctx->receiver);

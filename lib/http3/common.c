@@ -337,17 +337,15 @@ static void qpack_encoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_
         return;
     }
 
-    int64_t *unblocked_stream_ids;
-    size_t num_unblocked;
+    uint64_t insert_count;
     int ret;
     const char *err_desc = NULL;
-    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &unblocked_stream_ids, &num_unblocked, src, src_end, &err_desc)) !=
-        0) {
+    if ((ret = h2o_qpack_decoder_handle_input(conn->qpack.dec, &insert_count, src, src_end, &err_desc)) != 0) {
         h2o_quic_close_connection(&conn->super, ret, err_desc);
         return;
     }
-
-    /* TODO handle unblocked streams */
+    if (insert_count != 0)
+        get_callbacks(conn)->qpack_unblock_streams(conn, insert_count);
 }
 
 static void qpack_decoder_stream_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http3_ingress_unistream_t *stream,
@@ -412,21 +410,29 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         return;
 
     /* read the type, or just return if incomplete */
-    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+    const uint8_t *p = *src;
+    if ((type = quicly_decodev(&p, src_end)) == UINT64_MAX)
         return;
+    *src = p;
 
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
+        if (conn->_control_streams.ingress.control != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.control = stream;
         stream->bytes_received = &conn->stats.bytes_received.control_stream;
         stream->handle_input = control_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_ENCODER:
+        if (conn->_control_streams.ingress.qpack_encoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_encoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_encoder;
         stream->handle_input = qpack_encoder_stream_handle_input;
         break;
     case H2O_HTTP3_STREAM_TYPE_QPACK_DECODER:
+        if (conn->_control_streams.ingress.qpack_decoder != NULL)
+            goto Duplicate;
         conn->_control_streams.ingress.qpack_decoder = stream;
         stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
@@ -438,6 +444,11 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
     }
 
     return stream->handle_input(conn, stream, src, src_end, is_eos);
+
+Duplicate:
+    /* permit only one control, encoder, and decoder stream per peer (RFC 9114 Section 6.2.1, RFC 9204 Section 4.2) */
+    h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_STREAM_CREATION, "duplicate critical stream");
+    stream->handle_input = discard_handle_input;
 }
 
 static void egress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err)
@@ -531,7 +542,7 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         *p++ = 6;
         memcpy(p, addr->sin6.sin6_addr.s6_addr, 16);
         p += 16;
-        memcpy(p, &addr->sin.sin_port, 2);
+        memcpy(p, &addr->sin6.sin6_port, 2);
         p += 2;
         break;
     case AF_UNSPEC:
@@ -551,8 +562,8 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     if (cipher == NULL) {
         static uint8_t key[PTLS_AES128_KEY_SIZE];
         H2O_MULTITHREAD_ONCE({ ptls_openssl_random_bytes(key, sizeof(key)); });
-        cipher = EVP_CIPHER_CTX_new();
-        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+        if ((cipher = EVP_CIPHER_CTX_new()) == NULL || !EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL))
+            h2o_fatal("failed to setup the cipher for calculating the accept hash key");
     }
 
     uint8_t buf[(1 + 16 + 2) * 2 + QUICLY_MAX_CID_LEN_V1 + PTLS_AES_BLOCK_SIZE] = {0};
@@ -653,8 +664,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
         /* forward 1-RTT packets belonging to different nodes, threads */
-        if (ttl == 0)
-            return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  destaddr, srcaddr, ttl, packets, num_packets))
@@ -713,7 +722,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                          * the destination being claimed by the DCID */
                         uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                         uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                        if (ctx->forward_packets != NULL &&
                             (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                             ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                  num_packets);
@@ -741,8 +750,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
                      * that is supposed to be handled by another node. forward it. */
-                    if (ttl == 0)
-                        return;
                     if (ctx->forward_packets != NULL)
                         ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                              num_packets);
@@ -1280,10 +1287,21 @@ void h2o_http3_dispose_conn(h2o_http3_conn_t *conn)
     h2o_quic_dispose_conn(&conn->super);
 }
 
+static uint64_t calc_max_blocked_streams(h2o_http3_conn_t *conn)
+{
+    if (conn->qpack.ctx->decoder_table_capacity == 0)
+        return 0;
+    uint64_t max_blocked = quicly_get_context(conn->super.quic)->transport_params.max_streams_bidi;
+    assert(max_blocked == 0 || get_callbacks(conn)->qpack_unblock_streams != NULL ||
+           !"connection enables QPACK blocked-stream support but provides no qpack_unblock_streams callback");
+    return max_blocked;
+}
+
 static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t capacity)
 {
     ptls_buffer_t buf;
     int ret = 0;
+    uint64_t max_blocked_streams = calc_max_blocked_streams(conn);
 
     ptls_buffer_init(&buf, bytebuf, capacity);
 
@@ -1301,6 +1319,14 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_H3_DATAGRAM_DRAFT03);
             ptls_buffer_push_quicint(&buf, 1);
         };
+        if (conn->qpack.ctx->decoder_table_capacity != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
+            ptls_buffer_push_quicint(&buf, conn->qpack.ctx->decoder_table_capacity);
+        }
+        if (max_blocked_streams != 0) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_BLOCKED_STREAMS);
+            ptls_buffer_push_quicint(&buf, max_blocked_streams);
+        }
         ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
         ptls_buffer_push_quicint(&buf, 1);
     });
@@ -1323,8 +1349,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic)
     if (quicly_get_state(quic) > QUICLY_STATE_CONNECTED)
         goto Exit;
 
-    /* create decoder with the table size set to zero; see SETTINGS sent below. */
-    conn->qpack.dec = h2o_qpack_create_decoder(0, 100 /* FIXME */);
+    conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
         uint8_t firstflight[32];
@@ -1456,7 +1481,7 @@ Malformed:
     return H2O_HTTP3_ERROR_FRAME;
 }
 
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id)
 {
     struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
@@ -1471,11 +1496,11 @@ void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id
 
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len)
 {
-    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_encoder;
+    struct st_h2o_http3_egress_unistream_t *stream = conn->_control_streams.egress.qpack_decoder;
 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
-    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1));
+    H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)

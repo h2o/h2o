@@ -87,9 +87,28 @@ sub server_features {
     open my $fh, "-|", bindir() . "/h2o", "--version"
         or die "failed to invoke: h2o --version:$!";
     <$fh>; # skip h2o version
-    +{
-        map { chomp($_); split /:/, $_, 2 } <$fh>
-    };
+
+    my %features;
+    while (my $line = <$fh>) {
+        chomp $line;
+        my ($name, $value) = split/\s*:\s*/, $line, 2;
+        $features{$name} = $value;
+    }
+
+    # In CI, EXPECTED_SERVER_FEATURES pins the set of features that the build should advertise. It is an exact match over `*: YES`
+    # lines, so that both missing coverage and newly-added feature gates require an explicit CI expectation update, instead of
+    # silently changing which tests can be skipped.
+    if ($ENV{EXPECTED_SERVER_FEATURES}) {
+        my $expected = join ", ", sort split /\s*,\s*/, $ENV{EXPECTED_SERVER_FEATURES};
+        my $actual = join ", ", sort grep { $features{$_} eq "YES" } keys %features;
+        BAIL_OUT join "\n",
+            "h2o server feature set mismatch",
+            "  expected features: $expected",
+            "  actual features: $actual"
+            if $expected ne $actual;
+    }
+
+    \%features;
 }
 
 sub exec_unittest {

@@ -141,6 +141,7 @@ typedef void (*h2o_quic_notify_connection_update_cb)(h2o_quic_ctx_t *ctx, h2o_qu
  * When `node_id` is not NULL, the forwarded packet is an Handshake or a 1-RTT packet.  Application should forward the packet to
  * given thread / node if the values are valid.  Otherwise, it should return false, which in turn triggers the code that checks if
  * the packet is a stateless reset.
+ * @param ttl TTL of the packets; the callback must drop the packet if the value is 0, or decrement the value as it forwards them
  * @return true if packet was forwarded (or was forwardable), otherwise false
  */
 typedef int (*h2o_quic_forward_packets_cb)(h2o_quic_ctx_t *ctx, const uint64_t *node_id, uint32_t thread_id,
@@ -288,11 +289,16 @@ typedef struct st_h2o_http3_qpack_context_t {
      * peer_settings.encoder_table_capacity).
      */
     uint32_t encoder_table_capacity;
+    /**
+     * Table capacity we advertise to the peer for its encoder.
+     */
+    uint32_t decoder_table_capacity;
 } h2o_http3_qpack_context_t;
 
 typedef struct st_h2o_http3_conn_callbacks_t {
     h2o_quic_conn_callbacks_t super;
     void (*handle_control_stream_frame)(h2o_http3_conn_t *conn, uint64_t type, const uint8_t *payload, size_t len);
+    void (*qpack_unblock_streams)(h2o_http3_conn_t *conn, uint64_t insert_count);
 } h2o_http3_conn_callbacks_t;
 
 struct st_h2o_http3_conn_t {
@@ -469,7 +475,7 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
 /**
  *
  */
-void h2o_http3_send_qpack_stream_cancel(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id);
+void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t stream_id);
 /**
  *
  */

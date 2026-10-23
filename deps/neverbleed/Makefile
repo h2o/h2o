@@ -12,7 +12,10 @@ all:    $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LIBS) $(LDFLAGS)
 
+check: $(TARGET)
+	prove -v t/test_handshake.t
+
 clean:
 	rm -fr $(OBJS) $(TARGET)
 
-.PHONY: clean
+.PHONY: clean check

@@ -250,8 +250,8 @@ void test_build_destination_escaping(void)
             req.path = req.input.path = h2o_iovec_init(tests[i].input + j, strlen(tests[i].input) - j);
             req.norm_indexes = NULL;
             int has_null_char = 1;
-            req.path_normalized = h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes,
-                                                         &has_null_char);
+            req.path_normalized =
+                h2o_url_normalize_path(&req.pool, req.path.base, req.path.len, &req.query_at, &req.norm_indexes, &has_null_char);
             dest = h2o_build_destination(&req, tests[i].dest, strlen(tests[i].dest), escape);
             note("%s: %d, %sskipping the leading '/'", tests[i].input, i, !j ? "not " : "");
             ok(dest.len == strlen(tests[i].output));

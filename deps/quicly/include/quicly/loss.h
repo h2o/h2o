@@ -70,7 +70,7 @@ typedef struct quicly_loss_conf_t {
     }
 
 /**
- * Holds RTT variables. We use this structure differently from the specification:
+ * Holds RTT variables in the unit of milliseconds. We use this structure differently from the specification:
  * * if the first sample has been obtained should be checked by doing: `latest != 0`
  * * smoothed and variance are available even before the first RTT sample is obtained
  */
@@ -80,13 +80,14 @@ typedef struct quicly_rtt_t {
      */
     uint32_t minimum;
     /**
-     * Current smoothed RTT value.
+     * Current smoothed RTT value. The type has been changed to float because the EWMA advances by (latest - smoothed) / 8 per
+     * sample. If it is int, latest would be ignored unless latest - smoothed > 7.
      */
-    uint32_t smoothed;
+    float smoothed;
     /**
-     * Current estimate of RTT variance.
+     * Current estimate of RTT variance, also in float.
      */
-    uint32_t variance;
+    float variance;
     /**
      * Value of the latest RTT sample.
      */
@@ -219,7 +220,7 @@ inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, u
     rtt->minimum = UINT32_MAX;
     rtt->latest = 0;
     rtt->smoothed = initial_rtt;
-    rtt->variance = initial_rtt / 2;
+    rtt->variance = initial_rtt / 2.f;
 }
 
 inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t ack_delay)
@@ -240,18 +241,19 @@ inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t a
     /* update smoothed_rtt and rttvar */
     if (is_first_sample) {
         rtt->smoothed = rtt->latest;
-        rtt->variance = rtt->latest / 2;
+        rtt->variance = rtt->latest / 2.f;
     } else {
-        uint32_t absdiff = rtt->smoothed >= rtt->latest ? rtt->smoothed - rtt->latest : rtt->latest - rtt->smoothed;
-        rtt->variance = (rtt->variance * 3 + absdiff) / 4;
-        rtt->smoothed = (rtt->smoothed * 7 + rtt->latest) / 8;
+        float latest = (float)rtt->latest;
+        float absdiff = rtt->smoothed >= latest ? rtt->smoothed - latest : latest - rtt->smoothed;
+        rtt->variance = rtt->variance * 0.75f + absdiff * 0.25f;
+        rtt->smoothed = rtt->smoothed * 0.875f + latest * 0.125f;
     }
     assert(rtt->smoothed != 0);
 }
 
 inline uint32_t quicly_rtt_get_pto(quicly_rtt_t *rtt, uint32_t max_ack_delay, uint32_t min_pto)
 {
-    return rtt->smoothed + (rtt->variance != 0 ? rtt->variance * 4 : min_pto) + max_ack_delay;
+    return (uint32_t)(rtt->smoothed + (rtt->variance * 4 >= min_pto ? rtt->variance * 4 : min_pto)) + max_ack_delay;
 }
 
 inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, uint32_t initial_rtt, const uint16_t *max_ack_delay,
@@ -386,7 +388,6 @@ inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
     if (ack_delay_millisecs > *r->max_ack_delay)
         ack_delay_millisecs = *r->max_ack_delay;
     quicly_rtt_update(&r->rtt, (uint32_t)(now - sent_at), ack_delay_millisecs);
-
 }
 
 inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,

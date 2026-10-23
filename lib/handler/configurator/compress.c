@@ -24,13 +24,15 @@
 
 #define DEFAULT_GZIP_QUALITY 1
 #define DEFAULT_BROTLI_QUALITY 1
+#define DEFAULT_ZSTD_QUALITY 3
 
 struct compress_configurator_t {
     h2o_configurator_t super;
     h2o_compress_args_t *vars, _vars_stack[H2O_CONFIGURATOR_NUM_LEVELS + 1];
 };
 
-static const h2o_compress_args_t all_off = {0, {-1}, {-1}}, all_on = {100, {DEFAULT_GZIP_QUALITY}, {DEFAULT_BROTLI_QUALITY}};
+static const h2o_compress_args_t all_off = {0, {-1}, {-1}, {-1}},
+                                 all_on = {100, {DEFAULT_GZIP_QUALITY}, {DEFAULT_BROTLI_QUALITY}, {DEFAULT_ZSTD_QUALITY}};
 
 static int on_config_gzip(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
@@ -97,16 +99,18 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
                 self->vars->gzip.quality = DEFAULT_GZIP_QUALITY;
             } else if (element->type == YOML_TYPE_SCALAR && strcasecmp(element->data.scalar, "br") == 0) {
                 self->vars->brotli.quality = DEFAULT_BROTLI_QUALITY;
+            } else if (element->type == YOML_TYPE_SCALAR && strcasecmp(element->data.scalar, "zstd") == 0) {
+                self->vars->zstd.quality = DEFAULT_ZSTD_QUALITY;
             } else {
-                h2o_configurator_errprintf(cmd, element, "element of the sequence must be either of: `gzip`, `br`");
+                h2o_configurator_errprintf(cmd, element, "element of the sequence must be either of: `gzip`, `br`, `zstd`");
                 return -1;
             }
         }
         break;
     case YOML_TYPE_MAPPING: {
-        yoml_t **gzip_node, **br_node;
+        yoml_t **gzip_node, **br_node, **zstd_node;
         *self->vars = all_off;
-        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip:*,br:*", &gzip_node, &br_node) != 0)
+        if (h2o_configurator_parse_mapping(cmd, node, NULL, "gzip:*,br:*,zstd:*", &gzip_node, &br_node, &zstd_node) != 0)
             return -1;
         if (gzip_node != NULL && obtain_quality(*gzip_node, 1, 9, DEFAULT_GZIP_QUALITY, &self->vars->gzip.quality) != 0) {
             h2o_configurator_errprintf(cmd, *gzip_node,
@@ -116,6 +120,11 @@ static int on_config_compress(h2o_configurator_command_t *cmd, h2o_configurator_
         if (br_node != NULL && obtain_quality(*br_node, 0, 11, DEFAULT_BROTLI_QUALITY, &self->vars->brotli.quality) != 0) {
             h2o_configurator_errprintf(cmd, *br_node,
                                        "value of br attribute must be either of `OFF`, `ON` or an integer between 0 and 11");
+            return -1;
+        }
+        if (zstd_node != NULL && obtain_quality(*zstd_node, 1, 22, DEFAULT_ZSTD_QUALITY, &self->vars->zstd.quality) != 0) {
+            h2o_configurator_errprintf(cmd, *zstd_node,
+                                       "value of zstd attribute must be either of `OFF`, `ON` or an integer between 1 and 22");
             return -1;
         }
     } break;
@@ -141,7 +150,7 @@ static int on_config_exit(h2o_configurator_t *configurator, h2o_configurator_con
     struct compress_configurator_t *self = (void *)configurator;
 
     if (ctx->pathconf != NULL && !h2o_configurator_at_extension_level(ctx) &&
-        (self->vars->gzip.quality != -1 || self->vars->brotli.quality != -1))
+        (self->vars->gzip.quality != -1 || self->vars->brotli.quality != -1 || self->vars->zstd.quality != -1))
         h2o_compress_register(ctx->pathconf, self->vars);
 
     --self->vars;
@@ -168,4 +177,5 @@ void h2o_compress_register_configurator(h2o_globalconf_t *conf)
     c->vars = c->_vars_stack;
     c->vars->gzip.quality = -1;
     c->vars->brotli.quality = -1;
+    c->vars->zstd.quality = -1;
 }
