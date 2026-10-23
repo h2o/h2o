@@ -38,8 +38,8 @@ h2o_iovec_t h2o_session_store_seal(h2o_session_store_integrity_t *ctx, h2o_iovec
     h2o_iovec_t sealed;
     unsigned maclen = 0;
 
-    assert(ctx->configured);
-    assert(payload.base != NULL);
+    if (!ctx->configured)
+        return h2o_iovec_init(NULL, 0);
 
     sealed.base = h2o_mem_alloc(1 + H2O_SESSION_STORE_MAC_SIZE + payload.len);
     sealed.base[0] = 1; /* the version of the envelope */
@@ -56,7 +56,11 @@ h2o_iovec_t h2o_session_store_unseal(h2o_session_store_integrity_t *ctx, h2o_iov
     unsigned char mac[H2O_SESSION_STORE_MAC_SIZE];
     unsigned maclen = 0;
 
-    assert(ctx->configured);
+    /* an instance that does not hold the key refuses the values of the store; a value that is written without a seal is refused by
+     * the instances that hold it, so that the store of a fleet that is configured halfway yields nothing rather than the keys of
+     * whoever wrote last */
+    if (!ctx->configured)
+        return h2o_iovec_init(NULL, 0);
     if (sealed.len < 1 + H2O_SESSION_STORE_MAC_SIZE || sealed.base[0] != 1)
         return h2o_iovec_init(NULL, 0);
     HMAC(EVP_sha256(), ctx->key, H2O_SESSION_STORE_MAC_SIZE, (const unsigned char *)sealed.base + 1 + H2O_SESSION_STORE_MAC_SIZE,

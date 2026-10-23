@@ -736,7 +736,7 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     /* if we need to update the tickets, atomically update the value in memcached, and request refetch to the caller */
     if (update_tickets(&tickets, now) != 0) {
         tickets_serialized = serialize_tickets(&tickets);
-        if (tickets_serialized.base != NULL) {
+        if (tickets_serialized.base != NULL && conf.integrity.secret.base != NULL) {
             /* the keys are sealed, so that the instances that share the store can tell the values that one of them has written
              * from the values that anyone else has written */
             h2o_iovec_t sealed = h2o_session_store_seal(&conf.integrity.ctx, tickets_serialized);
@@ -833,7 +833,7 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
 
     if (update_tickets(&tickets, now) != 0) {
         tickets_serialized = serialize_tickets(&tickets);
-        if (tickets_serialized.base != NULL) {
+        if (tickets_serialized.base != NULL && conf.integrity.secret.base != NULL) {
             /* the keys are sealed, so that the instances that share the store can tell the values that one of them has written
              * from the values that anyone else has written */
             h2o_iovec_t sealed = h2o_session_store_seal(&conf.integrity.ctx, tickets_serialized);

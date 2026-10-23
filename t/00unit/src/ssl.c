@@ -186,6 +186,11 @@ static void test_memcached_ticket_update(void)
     yrmcds_response resp;
     yrmcds_error err;
 
+    /* the values that are exchanged with the store are sealed, and the configuration of the server
+     * derives the key that seals them from the secret of the configuration; the test derives it the
+     * same way, so that the values that the test writes to the store and reads from it round-trip */
+    h2o_session_store_init_integrity(&conf.integrity.ctx, h2o_iovec_init(H2O_STRLIT("the secret of the test")));
+
     /* obtain port number (or skip) */
     if ((memc_port_str = getenv("MEMCACHED_PORT")) == NULL) {
         printf("MEMCACHED_PORT is not defined; skipping tests\n");

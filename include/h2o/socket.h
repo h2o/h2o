@@ -477,7 +477,8 @@ typedef struct st_h2o_session_store_integrity_t {
 void h2o_session_store_init_integrity(h2o_session_store_integrity_t *ctx, h2o_iovec_t secret);
 /**
  * seals a value that is about to be written to an external session store, by prefixing it with an HMAC of the value. The buffer of
- * the returned value is allocated using malloc(3), and the caller is responsible for freeing it.
+ * the returned value is allocated using malloc(3), and the caller is responsible for freeing it. If the context has not been
+ * initialized with a secret, {NULL, 0} is returned, and the caller is expected not to write the value to the store.
  */
 h2o_iovec_t h2o_session_store_seal(h2o_session_store_integrity_t *ctx, h2o_iovec_t payload);
 /**
