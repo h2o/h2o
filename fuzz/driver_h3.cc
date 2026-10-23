@@ -176,7 +176,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     assert(ret == 0);
     assert(stream != NULL);
 
-    quicly_recvstate_update(&stream->recvstate, 0, &Size, 1, 63);
+    quicly_recvstate_update(&stream->recvstate, 0, &Size, 1, Size);
     stream->callbacks->on_receive(stream, 0, Data, Size);
 
     uint64_t loop_start = h2o_now(ctx.loop);

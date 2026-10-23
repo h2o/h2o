@@ -849,7 +849,7 @@ DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stre
 static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
 {
     if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-        return stream->quic->recvstate.received.ranges[0].end;
+        return stream->quic->recvstate.data_off + quicly_recvstate_bytes_available(&stream->quic->recvstate);
 
     /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
      * byte count. */
