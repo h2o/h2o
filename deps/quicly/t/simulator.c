@@ -858,8 +858,9 @@ static void stream_on_receive_cb(quicly_stream_t *stream, size_t off, const void
     assert(!quicly_is_client(stream->conn));
     assert(!quicly_recvstate_transfer_complete(&stream->recvstate));
 
-    if (stream->recvstate.data_off < stream->recvstate.received.ranges[0].end)
-        quicly_stream_sync_recvbuf(stream, stream->recvstate.received.ranges[0].end - stream->recvstate.data_off);
+    size_t bytes_available = quicly_recvstate_bytes_available(&stream->recvstate);
+    if (bytes_available != 0)
+        quicly_stream_sync_recvbuf(stream, bytes_available);
 
     struct sockaddr *peer = quicly_get_peername(stream->conn);
     assert(peer->sa_family == AF_INET);

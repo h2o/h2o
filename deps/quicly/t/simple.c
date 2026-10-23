@@ -288,6 +288,53 @@ static void test_reset_after_close(void)
     ok(server_streambuf->is_detached);
 }
 
+static quicly_error_t flatten_failing_vec(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len)
+{
+    return QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321);
+}
+
+static void discard_failing_vec(quicly_sendbuf_vec_t *vec)
+{
+}
+
+static void test_flatten_error_after_close(void)
+{
+    static const quicly_streambuf_sendvec_callbacks_t failing_vec_callbacks = {flatten_failing_vec, discard_failing_vec};
+    quicly_stream_t *client_stream, *server_stream;
+    test_streambuf_t *client_streambuf, *server_streambuf;
+    quicly_error_t ret;
+
+    ret = quicly_open_stream(client, &client_stream, 0);
+    ok(ret == 0);
+    client_streambuf = client_stream->data;
+
+    /* write data that cannot be flattened then close, as an application serving a file would do */
+    quicly_sendbuf_vec_t vec = {&failing_vec_callbacks, 5, NULL};
+    ok(quicly_streambuf_egress_write_vec(client_stream, &vec) == 0);
+    ok(quicly_streambuf_egress_shutdown(client_stream) == 0);
+
+    /* the failure to flatten should be converted to RESET_STREAM, without any data being sent */
+    transmit(client, server);
+
+    server_stream = quicly_get_stream(server, client_stream->stream_id);
+    assert(server_stream != NULL);
+    server_streambuf = server_stream->data;
+    ok(server_streambuf->error_received.reset_stream == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+    ok(buffer_is(&server_streambuf->super.ingress, ""));
+    /* STOP_SENDING is also sent, upon which the server resets its sending side */
+    ok(server_streambuf->error_received.stop_sending == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(54321));
+
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
+    transmit(server, client);
+
+    ok(client_streambuf->is_detached);
+
+    quic_now += QUICLY_DELAYED_ACK_TIMEOUT;
+    transmit(client, server);
+
+    ok(server_streambuf->is_detached);
+}
+
 static void tiny_stream_window(void)
 {
     quicly_max_stream_data_t max_stream_data_orig = quic_ctx.transport_params.max_stream_data;
@@ -604,6 +651,7 @@ void test_simple(void)
     subtest("reset-then-close", test_reset_then_close);
     subtest("send-then-close", test_send_then_close);
     subtest("reset-after-close", test_reset_after_close);
+    subtest("flatten-error-after-close", test_flatten_error_after_close);
     subtest("tiny-stream-window", tiny_stream_window);
     subtest("reset-during-loss", test_reset_during_loss);
     subtest("close", test_close);

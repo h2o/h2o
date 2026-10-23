@@ -575,6 +575,12 @@ struct st_quicly_conn_streamgroup_state_t {
          * Number of packets that were delayed processing and successfully used.                                                   \
          */                                                                                                                        \
         uint64_t delayed_used;                                                                                                     \
+        /**                                                                                                                        \
+         * number of packets that arrived over an inferior path and were processed on the path that was already the primary        \
+         * one. Together with `promoted_to_inferior_path`, this is how an application observes that the connection has come        \
+         * to be carried over an inferior path.                                                                                    \
+         */                                                                                                                        \
+        uint64_t received_on_inferior_primary_path;                                                                                \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -644,6 +650,14 @@ struct st_quicly_conn_streamgroup_state_t {
          * number of paths that were deemed as ECN black holes                                                                     \
          */                                                                                                                        \
         uint64_t ecn_failed;                                                                                                       \
+        /**                                                                                                                        \
+         * number of connections accepted from a packet that arrived over an inferior path                                         \
+         */                                                                                                                        \
+        uint64_t accepted_on_inferior_path;                                                                                        \
+        /**                                                                                                                        \
+         * number of times a packet that arrived over an inferior path promoted that path to be the primary path                   \
+         */                                                                                                                        \
+        uint64_t promoted_to_inferior_path;                                                                                        \
     } num_paths;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -757,7 +771,8 @@ typedef struct st_quicly_stats_t {
     apply(num_packets.sent_promoted_paths, "num-packets.sent-promoted-paths")                                                      \
     apply(num_packets.ack_received_promoted_paths, "num-packets.ack-received-promoted-paths")                                      \
     apply(num_packets.max_delayed, "num-packets.max-delayed")                                                                      \
-    apply(num_packets.delayed_used, "num-packets.delayed-used")
+    apply(num_packets.delayed_used, "num-packets.delayed-used")                                                                    \
+    apply(num_packets.received_on_inferior_primary_path, "num-packets.received-on-inferior-primary-path")
 
 #define QUICLY_STATS_FOREACH_NUM_BYTES(apply)                                                                                      \
     apply(num_bytes.received, "num-bytes.received")                                                                                \
@@ -806,6 +821,8 @@ typedef struct st_quicly_stats_t {
     apply(num_paths.closed_no_dcid, "num-paths.closed-no-dcid")                                                                    \
     apply(num_paths.ecn_validated, "num-paths.ecn-validated")                                                                      \
     apply(num_paths.ecn_failed, "num-paths.ecn-failed")                                                                            \
+    apply(num_paths.accepted_on_inferior_path, "num-paths.accepted-on-inferior-path")                                              \
+    apply(num_paths.promoted_to_inferior_path, "num-paths.promoted-to-inferior-path")                                              \
     apply(num_ptos, "num-ptos")                                                                                                    \
     apply(num_handshake_timeouts, "num-handshake-timeouts")                                                                        \
     apply(num_initial_handshake_exceeded, "num-initial-handshake-exceeded")                                                        \
@@ -1066,13 +1083,6 @@ struct st_quicly_stream_t {
          * size of the receive window
          */
         uint32_t window;
-        /**
-         * Maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`.
-         * As discussed in https://github.com/h2o/quicly/issues/278, this value should be proportional to the size of the receive
-         * window, so that the receive window can be maintained even in the worst case, where every one of the two packets being
-         * sent are received.
-         */
-        uint32_t max_ranges;
     } _recv_aux;
 };
 
@@ -1147,6 +1157,14 @@ typedef struct st_quicly_decoded_packet_t {
      * if it is the first packet within the datagram
      */
     uint8_t first_packet : 1;
+    /**
+     * if the datagram carrying this packet arrived over a network path that the application considers inferior to a direct one,
+     * e.g. one that reached this node by being relayed through another. quicly attaches no meaning to what makes a path
+     * inferior; it merely propagates the flag onto the counters in `quicly_stats_t::num_paths` so that the application can tell
+     * when the connection has come to be carried over such a path. `quicly_decode_packet` always clears this bit; applications
+     * that know better set it after decoding.
+     */
+    uint8_t inferior_path : 1;
     /**
      *
      */
@@ -1366,8 +1384,14 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  *                                from the address provided by `buf`, and that succeeding packets (if any) will be contiguously laid
  *                                out. This constraint reduces the number of vectors that need to be passed to the kernel when using
  *                                GSO.
- * @return 0 if successful, otherwise an error. When an error is returned, the caller must call `quicly_close` to discard the
- *         connection context.
+ * @return 0 if successful, otherwise one of the following:
+ *         * QUICLY_ERROR_FREE_CONNECTION - the connection has been closed (e.g., the closing period has ended, or the idle timeout
+ *           has fired). The caller must call `quicly_free` to discard the connection.
+ *         * QUICLY_ERROR_STATE_EXHAUSTION - the peer caused the endpoint to retain too much state. The caller may either close the
+ *           connection by calling `quicly_close` with this error code then continue calling `quicly_send`, or discard the
+ *           connection by calling `quicly_free`.
+ *         * other errors (e.g., PTLS_ERROR_NO_MEMORY) - the connection might have been left in an inconsistent state. The caller
+ *           must call `quicly_free` to discard the connection, without trying to close it.
  */
 quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                            size_t *num_datagrams, void *buf, size_t bufsize);
@@ -1389,7 +1413,17 @@ size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, v
  */
 quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn);
 /**
- *
+ * Processes a received packet. Errors found in the packet (e.g., protocol violations by the peer) are not reported through the
+ * return value; instead, quicly initiates the closure of the connection, which is reported to the application through the `closed`
+ * callback.
+ * @return 0 if successful, otherwise one of the following:
+ *         * QUICLY_ERROR_PACKET_IGNORED - the packet has been discarded, or buffered for later processing. The connection remains
+ *           usable.
+ *         * QUICLY_ERROR_STATE_EXHAUSTION - the peer caused the endpoint to retain too much state. The caller may either close the
+ *           connection by calling `quicly_close` with this error code then continue calling `quicly_send`, or discard the
+ *           connection by calling `quicly_free`.
+ *         * other errors (e.g., PTLS_ERROR_NO_MEMORY) - the connection might have been left in an inconsistent state. The caller
+ *           must call `quicly_free` to discard the connection, without trying to close it.
  */
 quicly_error_t quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                               quicly_decoded_packet_t *packet);
