@@ -1665,7 +1665,10 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         shutdown_ssl(sock, NULL);
         return;
     }
-    if (err == NULL)
+    /* The handshakes that picotls completes (TLS 1.3, and the TLS 1.2 connections that have been transferred to it) leave
+     * `ossl` NULL, and they do not resume the sessions that the external session store holds - the sessions of picotls are
+     * resumed using the tickets, whose keys the seal of the store protects. The check runs only on the OpenSSL path. */
+    if (err == NULL && sock->ssl->ossl != NULL)
         err = verify_resumed_peer_certificate(sock->ssl->ossl);
 
     if (err == NULL) {
