@@ -15,7 +15,7 @@ plan skip_all => "$cli not found"
     unless -e $cli;
 
 my $server = spawn_h2o(<< "EOT");
-max-request-entity-size: 4096
+limit-request-body: 4096
 hosts:
   default:
     paths:

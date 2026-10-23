@@ -75,7 +75,7 @@ subtest "continuation on wrong stream is a protocol error" => sub {
         last unless defined $frame[0];
         next unless $frame[0] == 0x07; # GOAWAY
         $goaway_payload = $frame[3];
-        $error_code = unpack("N", substr($goaway_payload, -4));
+        $error_code = unpack("N", substr($goaway_payload, 4, 4));
         last;
     }
 
