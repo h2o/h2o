@@ -1606,6 +1606,27 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         shutdown_ssl(sock, NULL);
         return;
     }
+    /* Verify the peer name on every successful client handshake, including those that complete after flushing the final flight
+     * (e.g., TLS 1.3). */
+    if (err == NULL && sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl)) {
+        X509 *cert = SSL_get_peer_certificate(sock->ssl->ossl);
+        if (cert != NULL) {
+            switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {
+            case MatchFound:
+                /* ok */
+                break;
+            case MatchNotFound:
+                err = h2o_socket_error_ssl_cert_name_mismatch;
+                break;
+            default:
+                err = h2o_socket_error_ssl_cert_invalid;
+                break;
+            }
+            X509_free(cert);
+        } else {
+            err = h2o_socket_error_ssl_no_cert;
+        }
+    }
     if (err == NULL) {
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
@@ -1921,25 +1942,6 @@ Redo:
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
         if (ret == 1) {
-            if (!SSL_is_server(sock->ssl->ossl)) {
-                X509 *cert = SSL_get_peer_certificate(sock->ssl->ossl);
-                if (cert != NULL) {
-                    switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {
-                    case MatchFound:
-                        /* ok */
-                        break;
-                    case MatchNotFound:
-                        err = h2o_socket_error_ssl_cert_name_mismatch;
-                        break;
-                    default:
-                        err = h2o_socket_error_ssl_cert_invalid;
-                        break;
-                    }
-                    X509_free(cert);
-                } else {
-                    err = h2o_socket_error_ssl_no_cert;
-                }
-            }
             goto Complete;
         }
         if (sock->ssl->input.encrypted->size != 0) {
