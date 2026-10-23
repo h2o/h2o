@@ -52,11 +52,13 @@ sub h3_qpack_encoder_stream {
     return quicint(2) . pack("H*", "ff20881c6490b2cd39ba7f");
 }
 
-# a HEADERS frame that carries a GET request for /qpack-dynamic; the request does not carry a
-# content-length header, and the QPACK-encoded field section is the one that the test of the QPACK
-# dynamic table uses, so that the request is decoded by the server without any additional setup
+# a HEADERS frame that carries a POST request for /qpack-dynamic; the request does not carry a
+# content-length header. The QPACK-encoded field section is derived from the one that the test of
+# the QPACK dynamic table uses, with the method changed from GET (static index 17, encoded as 0xd1)
+# to POST (static index 20, encoded as 0xd4), so that the server parks the stream in the state that
+# receives the body
 sub h3_request_headers {
-    my $payload = pack("H*", "0280d1d7500161518b63b5632755a4f550e9313f10");
+    my $payload = pack("H*", "0280d4d7500161518b63b5632755a4f550e9313f10");
     return h3_frame(1, $payload);
 }
 

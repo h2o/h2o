@@ -30,12 +30,6 @@ EOC
 
 my $server = spawn_h2o(<< "EOT");
 http2-idle-timeout: 20
-listen:
-  type: quic
-  port: $h2g->{quic_port}
-  ssl:
-    key-file: examples/h2o/server.key
-    certificate-file: examples/h2o/server.crt
 hosts:
   default:
     paths:
@@ -44,8 +38,6 @@ hosts:
         proxy.ssl.verify-peer: OFF
         proxy.http2.ratio: 100
 EOT
-
-wait_port($h2g->{tls_port});
 
 run_with_curl($server, sub {
     my ($proto, $port, $curl_cmd) = @_;
