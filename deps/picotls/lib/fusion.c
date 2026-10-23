@@ -2222,7 +2222,7 @@ int ptls_fusion_is_supported_by_cpu(void)
         __cpuid(cpu_info, 1);
         leaf1_ecx = cpu_info[2];
 
-        if (/* PCLMUL */ (leaf1_ecx & (1 << 5)) != 0 && /* AES */ (leaf1_ecx & (1 << 25)) != 0) {
+        if (/* PCLMUL */ (leaf1_ecx & (1 << 1)) != 0 && /* AES */ (leaf1_ecx & (1 << 25)) != 0) {
             uint32_t leaf7_ebx, leaf7_ecx;
             __cpuid(cpu_info, 7);
             leaf7_ebx = cpu_info[1];
@@ -2231,7 +2231,7 @@ int ptls_fusion_is_supported_by_cpu(void)
             is_supported = /* AVX2 */ (leaf7_ebx & (1 << 5)) != 0;
 
             /* enable 256-bit mode if possible */
-            if (is_supported && (leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_aesni256)
+            if (is_supported && (leaf7_ecx & 0x600) == 0x600 && !ptls_fusion_can_aesni256)
                 ptls_fusion_can_aesni256 = 1;
         }
     }
@@ -2263,7 +2263,7 @@ int ptls_fusion_is_supported_by_cpu(void)
         return 0;
 
     /* enable 256-bit mode if possible */
-    if ((leaf7_ecx & 0x600) != 0 && !ptls_fusion_can_aesni256)
+    if ((leaf7_ecx & 0x600) == 0x600 && !ptls_fusion_can_aesni256)
         ptls_fusion_can_aesni256 = 1;
 
     return 1;

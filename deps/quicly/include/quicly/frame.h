@@ -80,7 +80,7 @@ extern "C" {
 #define QUICLY_ACK_FRAME_CAPACITY (1 + 8 + 8 + 1)
 #define QUICLY_PATH_CHALLENGE_FRAME_CAPACITY (1 + 8)
 #define QUICLY_STREAM_FRAME_CAPACITY (1 + 8 + 8 + 1)
-#define QUICLY_ACK_FREQUENCY_FRAME_CAPACITY (1 + 8 + 8 + 8 + 8)
+#define QUICLY_ACK_FREQUENCY_FRAME_CAPACITY (2 + 8 + 8 + 8 + 8)
 
 /**
  * maximum number of ACK blocks (inclusive)

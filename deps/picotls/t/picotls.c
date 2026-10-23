@@ -537,7 +537,7 @@ static void test_ffx(void)
     static uint8_t ffx_test_iv[16] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
     static uint8_t ffx_test_bad_iv[16] = {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26};
 
-    static uint8_t ffx_test_mask[8] = {0x00, 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F};
+    static uint8_t ffx_test_mask[8] = {0x00, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
     ptls_cipher_context_t *ffx_enc = NULL;
     ptls_cipher_context_t *ffx_dec = NULL;
     ptls_cipher_context_t *ffx_dec_bad = NULL;
@@ -629,6 +629,22 @@ static void test_base64_decode(void)
     ret = ptls_base64_decode("a\xFF"
                              "b",
                              &state, &buf);
+    ok(ret != 0);
+
+    buf.off = 0;
+
+    /* blanks following padding are accepted */
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ= \r\n", &state, &buf);
+    ok(ret == 0);
+    ok(buf.off == 11);
+    ok(memcmp(buf.base, "hello world", 11) == 0);
+
+    buf.off = 0;
+
+    /* other characters following padding are rejected */
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ=x", &state, &buf);
     ok(ret != 0);
 
     ptls_buffer_dispose(&buf);

@@ -765,16 +765,16 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (i != accepted_packet_index) {
             quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
             switch (ret) {
-            case QUICLY_ERROR_STATE_EXHAUSTION:
-            case PTLS_ERROR_NO_MEMORY:
+            case 0:
+                if (ctx->quic_stats != NULL)
+                    ++ctx->quic_stats->packet_processed;
+                break;
+            case QUICLY_ERROR_PACKET_IGNORED:
+                break;
+            default:
                 fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
                 conn->callbacks->destroy_connection(conn);
                 return;
-            }
-            if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
-                if (ctx->quic_stats != NULL) {
-                    ++ctx->quic_stats->packet_processed;
-                }
             }
         }
     }
@@ -1390,12 +1390,13 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
             break;
         }
         break;
+    default:
+        fprintf(stderr, "%s: `quicly_send()` returned ret:%" PRId64 "\n", __func__, ret);
+        /* fall through */
     case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_FREE_CONNECTION:
         conn->callbacks->destroy_connection(conn);
         return 0;
-    default:
-        h2o_fatal("quicly_send returned %" PRId64, ret);
     }
 
     h2o_quic_schedule_timer(conn);

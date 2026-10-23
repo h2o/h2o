@@ -740,6 +740,7 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
     quicly_address_t local;
     quicly_error_t ret;
     quicly_conn_t *conn = NULL;
+    int64_t exit_at = INT64_MAX;
 
     signal(SIGTERM, on_client_signal);
 
@@ -764,6 +765,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
             int64_t timeout_at = conn != NULL ? quicly_get_first_timeout(conn) : INT64_MAX;
             if (enqueue_requests_at < timeout_at)
                 timeout_at = enqueue_requests_at;
+            if (exit_at < timeout_at)
+                timeout_at = exit_at;
             if (timeout_at != INT64_MAX) {
                 quicly_context_t *ctx = quicly_get_context(conn);
                 double now;
@@ -822,9 +825,12 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                         send_datagram_frame = 0;
                     }
                     if (exit_after_handshake) {
+                        /* Once the handshake is confirmed, exit after spending 100ms to deliver an ACK for HANDSHAKE_DONE,
+                         * absorbing the probes that the server might send in the meantime. */
                         quicly_stats_t stats;
-                        if (quicly_get_stats(conn, &stats) == 0 && stats.handshake_confirmed_msec != UINT64_MAX)
-                            exit(0);
+                        if (exit_at == INT64_MAX && quicly_get_stats(conn, &stats) == 0 &&
+                            stats.handshake_confirmed_msec != UINT64_MAX)
+                            exit_at = ceil(now + 100);
                     } else {
                         if (quicly_num_streams(conn) == 0) {
                             if (request_interval != 0 && client_gotsig != SIGTERM) {
@@ -861,6 +867,8 @@ static int run_client(int fd, struct sockaddr *sa, const char *host)
                 }
             }
         }
+        if (exit_at <= now)
+            exit(0);
     }
 }
 
@@ -1304,8 +1312,8 @@ static void usage(const char *cmd)
            "                            retry_configs from the server\n"
            "  --ech-key <file>          ECH private key for each ECH config provided by\n"
            "                            --ech-config\n"
-           "  --exit-after-handshake    immediately exits once the handshake concludes,\n"
-           "                            without sending application data\n"
+           "  --exit-after-handshake    exits once the handshake concludes, without sending\n"
+           "                            application data\n"
            "  -f fraction               increases the induced ack frequency to specified\n"
            "                            fraction of CWND (default: 0)\n"
            "  -G                        enable UDP generic segmentation offload\n"

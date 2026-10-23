@@ -29,13 +29,13 @@ extern "C" {
 #include <assert.h>
 #include <stddef.h>
 #include "picotls.h"
-#include "quicly/ranges.h"
+#include "quicly/bplus_ranges.h"
 
 typedef struct st_quicly_recvstate_t {
     /**
      * ranges that have been received (starts and remains non-empty until transfer completes)
      */
-    quicly_ranges_t received;
+    quicly_bplus_ranges_t received;
     /**
      * starting offset of data
      */
@@ -50,13 +50,18 @@ void quicly_recvstate_init(quicly_recvstate_t *state);
 void quicly_recvstate_init_closed(quicly_recvstate_t *state);
 void quicly_recvstate_dispose(quicly_recvstate_t *state);
 static int quicly_recvstate_transfer_complete(quicly_recvstate_t *state);
+/**
+ * Returns the number of bytes that have been received contiguously from `data_off`. Cannot be used once a reset has been received
+ * (i.e., after `on_receive_reset` is called).
+ */
 static size_t quicly_recvstate_bytes_available(quicly_recvstate_t *state);
 /**
  * Records that the range identified by (off, *len) has been received. When 0 (success) is returned, *len contains the number of
  * bytes that might have been newly received and therefore need to be written to the receive buffer (this number of bytes counts
- * backward from the end of given range).
+ * backward from the end of given range). `max_committed` is the maximum offset that the peer is permitted to send; it determines
+ * the maximum number of gaps being permitted.
  */
-quicly_error_t quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, size_t max_ranges);
+quicly_error_t quicly_recvstate_update(quicly_recvstate_t *state, uint64_t off, size_t *len, int is_fin, uint64_t max_committed);
 quicly_error_t quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t eos_at, uint64_t *bytes_missing);
 
 /* inline definitions */
@@ -68,7 +73,7 @@ inline int quicly_recvstate_transfer_complete(quicly_recvstate_t *state)
 
 inline size_t quicly_recvstate_bytes_available(quicly_recvstate_t *state)
 {
-    uint64_t total = quicly_recvstate_transfer_complete(state) ? state->eos : state->received.ranges[0].end;
+    uint64_t total = quicly_recvstate_transfer_complete(state) ? state->eos : state->received.first.ranges[0].end;
     assert(state->data_off <= total);
     return total - state->data_off;
 }
