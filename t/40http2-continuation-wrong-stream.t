@@ -80,7 +80,7 @@ subtest "continuation on wrong stream is a protocol error" => sub {
     }
 
     ok(defined $error_code, "a GOAWAY is received");
-    is($error_code, 0x00000002, "the error code is PROTOCOL_ERROR") if defined $error_code;
+    is($error_code, 0x00000001, "the error code is PROTOCOL_ERROR") if defined $error_code;
 
     close $sock;
 };

@@ -63,15 +63,13 @@ sub h3_request_headers {
 subtest "request body without content-length exceeding the limit is rejected" => sub {
     my $conn = t::RawConnection->new("127.0.0.1", $server->{quic_port}, cli => $cli, alpn => ["h3"]);
 
-    # send the control stream, the QPACK encoder stream, and a request whose HEADERS frame does not
-    # close the stream; the DATA frames that follow carry a body that exceeds the limit
-    my $data = stream_frame(2, h3_control_stream());
-    $data .= stream_frame(6, h3_qpack_encoder_stream());
-    $data .= stream_frame(0, h3_request_headers()); # HEADERS, the stream stays open
-    for my $i (1 .. 4) {
-        $data .= stream_frame(0, h3_frame(0, "X" x 2048)); # 4 * 2048 = 8192 > 4096
+    # the setup and the HEADERS frame fit in one packet
+    $conn->send(stream_frame(2, h3_control_stream()) . stream_frame(6, h3_qpack_encoder_stream()) .
+                stream_frame(0, h3_request_headers()));
+    # the DATA frames are sent one per packet, as a QUIC packet carries at most ~1400 bytes of payload
+    for my $i (1 .. 5) {
+        $conn->send(stream_frame(0, h3_frame(0, "X" x 1024))); # 5 * 1024 = 5120 > 4096
     }
-    $conn->send($data);
 
     ok wait_request_rejected($conn), "the server rejects the stream whose body exceeds the limit";
 };
