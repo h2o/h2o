@@ -32,6 +32,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <openssl/err.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
+#include <openssl/x509v3.h>
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <sys/ioctl.h>
 #endif
@@ -216,6 +219,15 @@ const char h2o_socket_error_write_progress[] = "write progress";
 
 static void (*resumption_get_async)(h2o_socket_t *sock, h2o_iovec_t session_id);
 static void (*resumption_new)(h2o_socket_t *sock, h2o_iovec_t session_id, h2o_iovec_t session_data);
+
+/* The state that holds the key that authenticates the values that are exchanged with the external session store. The values of the
+ * session cache are exchanged without a seal until this is set. */
+static h2o_session_store_integrity_t store_integrity;
+
+void h2o_socket_ssl_resumption_set_integrity_key(h2o_iovec_t secret)
+{
+    h2o_session_store_init_integrity(&store_integrity, secret);
+}
 
 #if H2O_USE_LIBUV
 #include "socket/uv-binding.c.h"
@@ -1517,7 +1529,15 @@ static int on_async_resumption_new(SSL *ssl, SSL_SESSION *session)
     i2d_SSL_SESSION(session, &p);
 
     id = SSL_SESSION_get_id(session, &id_len);
-    resumption_new(sock, h2o_iovec_init(id, id_len), data);
+    if (store_integrity.configured) {
+        /* The value that is written to the store is sealed, so that the instances that share the store can tell the values that
+         * one of them has written from the values that anyone else has written. */
+        h2o_iovec_t sealed = h2o_session_store_seal(&store_integrity, data);
+        resumption_new(sock, h2o_iovec_init(id, id_len), sealed);
+        free(sealed.base);
+    } else {
+        resumption_new(sock, h2o_iovec_init(id, id_len), data);
+    }
     return 0;
 }
 
@@ -1598,6 +1618,44 @@ Exit:
 #endif
 }
 
+/* A session that is resumed carries the peer certificate and the result of verifying it, as they were recorded when the session was
+ * established, and OpenSSL does not verify the certificate of the peer again when a session is resumed. The content of an external
+ * session store is not trustworthy, and a session may also have been established by another virtual host; the certificate that a
+ * resumed session carries is therefore verified again, against the trust store of the context that accepted the connection. */
+static const char *verify_resumed_peer_certificate(SSL *ssl)
+{
+    X509 *cert;
+    STACK_OF(X509) * chain;
+    X509_STORE_CTX *sctx;
+    const char *err = NULL;
+
+    if (!SSL_is_server(ssl) || !SSL_session_reused(ssl))
+        return NULL;
+    if ((SSL_get_verify_mode(ssl) & SSL_VERIFY_PEER) == 0)
+        return NULL;
+
+    if ((cert = SSL_get_peer_certificate(ssl)) == NULL) {
+        /* The certificate that the session carries is the identity of the client; a vhost that requires the clients to present one
+         * cannot accept a session that does not. */
+        if ((SSL_get_verify_mode(ssl) & SSL_VERIFY_FAIL_IF_NO_PEER_CERT) != 0)
+            return "the client certificate is missing";
+        return NULL;
+    }
+
+    if ((sctx = X509_STORE_CTX_new()) == NULL) {
+        X509_free(cert);
+        return h2o_socket_error_ssl_handshake;
+    }
+    /* on the server side, the chain that SSL_get_peer_cert_chain returns does not include the certificate of the client itself */
+    X509_STORE_CTX_init(sctx, SSL_CTX_get_cert_store(SSL_get_SSL_CTX(ssl)), cert, SSL_get_peer_cert_chain(ssl));
+    X509_STORE_CTX_set_purpose(sctx, X509_PURPOSE_SSL_CLIENT);
+    if (X509_verify_cert(sctx) != 1)
+        err = X509_verify_cert_error_string(X509_STORE_CTX_get_error(sctx));
+    X509_STORE_CTX_free(sctx);
+    X509_free(cert);
+    return err;
+}
+
 static void on_handshake_complete(h2o_socket_t *sock, const char *err)
 {
     assert(sock->ssl->handshake.cb != NULL);
@@ -1607,6 +1665,12 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
         shutdown_ssl(sock, NULL);
         return;
     }
+    /* The handshakes that picotls completes (TLS 1.3, and the TLS 1.2 connections that have been transferred to it) leave
+     * `ossl` NULL, and they do not resume the sessions that the external session store holds - the sessions of picotls are
+     * resumed using the tickets, whose keys the seal of the store protects. The check runs only on the OpenSSL path. */
+    if (err == NULL && sock->ssl->ossl != NULL)
+        err = verify_resumed_peer_certificate(sock->ssl->ossl);
+
     if (err == NULL) {
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
@@ -2122,6 +2186,20 @@ void h2o_socket_ssl_resume_server_handshake(h2o_socket_t *sock, h2o_iovec_t sess
 {
     SSL_SESSION *session = NULL;
 
+    if (session_data.len != 0) {
+        if (store_integrity.configured) {
+            /* The content of the store is not trustworthy: the value is only used when it carries the seal that the instances
+             * sharing the store apply to the values that they write. A value that does not was either written before the seal was
+             * introduced, or it was written by someone else; the connection falls back to a full handshake either way. */
+            h2o_iovec_t payload = h2o_session_store_unseal(&store_integrity, session_data);
+            if (payload.base == NULL) {
+                h2o_error_printf("[ssl] the external session store returned a value that does not carry a valid seal\n");
+                session_data = h2o_iovec_init(NULL, 0);
+            } else {
+                session_data = payload;
+            }
+        }
+    }
     if (session_data.len != 0) {
         const unsigned char *p = (void *)session_data.base;
         session = d2i_SSL_SESSION(NULL, &p, (long)session_data.len);

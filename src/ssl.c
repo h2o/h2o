@@ -97,6 +97,14 @@ static struct {
             uint16_t port;
         } redis;
     } store;
+    struct {
+        /* the secret of the configuration; the values that are exchanged with the external session store are sealed with a HMAC
+         * that is keyed with it, so that a value that anyone else has written to the store is not taken over */
+        h2o_iovec_t secret;
+        /* the key that is derived from the secret; used by the updaters of the session tickets, which run in a thread of their own
+         */
+        h2o_session_store_integrity_t ctx;
+    } integrity;
 } conf;
 
 H2O_NORETURN static void *cache_cleanup_thread(void *_contexts)
@@ -156,12 +164,14 @@ static void setup_cache_memcached(SSL_CTX **contexts, size_t num_contexts)
     h2o_memcached_context_t *memc_ctx =
         h2o_memcached_create_context(conf.store.memcached.host, conf.store.memcached.port, conf.store.memcached.text_protocol,
                                      conf.cache.vars.memcached.num_threads, conf.cache.vars.memcached.prefix);
+    h2o_socket_ssl_resumption_set_integrity_key(conf.integrity.secret);
     h2o_accept_setup_memcached_ssl_resumption(memc_ctx, conf.lifetime);
     setup_cache_enable(contexts, num_contexts, 1);
 }
 
 static void setup_cache_redis(SSL_CTX **contexts, size_t num_contexts)
 {
+    h2o_socket_ssl_resumption_set_integrity_key(conf.integrity.secret);
     h2o_accept_setup_redis_ssl_resumption(conf.store.redis.host, conf.store.redis.port, conf.lifetime,
                                           conf.cache.vars.redis.prefix);
     setup_cache_enable(contexts, num_contexts, 1);
@@ -706,7 +716,14 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
         goto Exit;
     }
     if (resp.status == YRMCDS_STATUS_OK) {
-        int r = parse_tickets(&tickets, resp.data, resp.data_len, errbuf);
+        h2o_iovec_t payload = h2o_session_store_unseal(&conf.integrity.ctx, h2o_iovec_init(resp.data, resp.data_len));
+        if (payload.base == NULL) {
+            /* the value was written before the seal was introduced, or it was written by someone else; the keys that it holds are
+             * not taken over, and the value that this instance writes when the keys are rotated replaces it */
+            fprintf(stderr, "[lib/ssl.c] %s:the value of the ticket store does not carry a valid seal\n", __func__);
+            goto Exit;
+        }
+        int r = parse_tickets(&tickets, payload.base, payload.len, errbuf);
         h2o_mem_set_secure((void *)resp.data, 0, resp.data_len);
         if (r != 0) {
             fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
@@ -719,6 +736,13 @@ static int ticket_memcached_update_tickets(yrmcds *conn, h2o_iovec_t key, time_t
     /* if we need to update the tickets, atomically update the value in memcached, and request refetch to the caller */
     if (update_tickets(&tickets, now) != 0) {
         tickets_serialized = serialize_tickets(&tickets);
+        if (tickets_serialized.base != NULL && conf.integrity.secret.base != NULL) {
+            /* the keys are sealed, so that the instances that share the store can tell the values that one of them has written
+             * from the values that anyone else has written */
+            h2o_iovec_t sealed = h2o_session_store_seal(&conf.integrity.ctx, tickets_serialized);
+            free(tickets_serialized.base);
+            tickets_serialized = sealed;
+        }
         if (resp.status == YRMCDS_STATUS_NOTFOUND) {
             if ((err = yrmcds_add(conn, key.base, key.len, tickets_serialized.base, tickets_serialized.len, 0, conf.lifetime, 0, 0,
                                   &serial)) != 0) {
@@ -787,8 +811,18 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
         goto Exit;
     }
     int r = 0;
-    if (reply->type == REDIS_REPLY_STRING)
-        r = parse_tickets(&tickets, reply->str, reply->len, errbuf);
+    if (reply->type == REDIS_REPLY_STRING) {
+        h2o_iovec_t payload = h2o_session_store_unseal(&conf.integrity.ctx, h2o_iovec_init(reply->str, reply->len));
+        if (payload.base != NULL) {
+            r = parse_tickets(&tickets, payload.base, payload.len, errbuf);
+        } else {
+            /* the value was written before the seal was introduced, or it was written by someone else; the keys that it holds are
+             * not taken over, and the value that this instance writes when the keys are rotated replaces it */
+            fprintf(stderr, "[lib/ssl.c] %s:the value of the ticket store does not carry a valid seal\n", __func__);
+            strcpy(errbuf, "the value does not carry a valid seal");
+            r = -1;
+        }
+    }
     freeReplyObject(reply);
     if (r != 0) {
         fprintf(stderr, "[lib/ssl.c] %s:failed to parse response:%s\n", __func__, errbuf);
@@ -799,6 +833,13 @@ static int ticket_redis_update_tickets(redisContext *ctx, h2o_iovec_t key, time_
 
     if (update_tickets(&tickets, now) != 0) {
         tickets_serialized = serialize_tickets(&tickets);
+        if (tickets_serialized.base != NULL && conf.integrity.secret.base != NULL) {
+            /* the keys are sealed, so that the instances that share the store can tell the values that one of them has written
+             * from the values that anyone else has written */
+            h2o_iovec_t sealed = h2o_session_store_seal(&conf.integrity.ctx, tickets_serialized);
+            free(tickets_serialized.base);
+            tickets_serialized = sealed;
+        }
         if ((reply = redisCommand(ctx, "SETEX %s %d %s", key.base, conf.lifetime, tickets_serialized.base)) == NULL) {
             fprintf(stderr, "[lib/ssl.c] %s:redisCommand SETEX failed:%s\n", __func__, ctx->errstr);
             goto Exit;
@@ -923,16 +964,16 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
     int modes;
     yoml_t **mode_node, **cache_store, **cache_memcached_num_threads, **cache_memcached_prefix, **cache_redis_prefix,
         **ticket_store, **ticket_cipher, **ticket_hash, **ticket_memcached_prefix, **ticket_redis_prefix, **ticket_file,
-        **memcached_node, **redis_node, **lifetime;
+        **memcached_node, **redis_node, **lifetime, **integrity_key;
 
     if (h2o_configurator_parse_mapping(
             cmd, node, "mode:*",
             "cache-store:*,cache-memcached-num-threads:*,cache-memcached-prefix:s,cache-redis-prefix:s,"
             "ticket-store:*,ticket-cipher:s,ticket-hash:s,ticket-memcached-prefix:s,ticket-redis-prefix:s,"
-            "ticket-file:s,memcached:m,redis:m,lifetime:*",
+            "ticket-file:s,memcached:m,redis:m,lifetime:*,integrity-key:s",
             &mode_node, &cache_store, &cache_memcached_num_threads, &cache_memcached_prefix, &cache_redis_prefix, &ticket_store,
             &ticket_cipher, &ticket_hash, &ticket_memcached_prefix, &ticket_redis_prefix, &ticket_file, &memcached_node,
-            &redis_node, &lifetime) != 0)
+            &redis_node, &lifetime, &integrity_key) != 0)
         return -1;
 
     switch (h2o_configurator_get_one_of(cmd, *mode_node, "off,cache,ticket,all")) {
@@ -1097,6 +1138,23 @@ int ssl_session_resumption_on_config(h2o_configurator_command_t *cmd, h2o_config
         return -1;
     }
 
+    if ((uses_memcached || uses_redis) && integrity_key != NULL) {
+        conf.integrity.secret = h2o_strdup(NULL, (*integrity_key)->data.scalar, SIZE_MAX);
+        if (conf.integrity.secret.len == 0) {
+            h2o_configurator_errprintf(cmd, *integrity_key, "`integrity-key` must not be empty");
+            return -1;
+        }
+    }
+    if ((uses_memcached || uses_redis) && conf.integrity.secret.base == NULL) {
+        /* The store is typically not authenticated, and its content is taken over wholesale: the values that the instances that
+         * share the store exchange are therefore sealed, and the secret that keys the seal is mandatory. */
+        h2o_configurator_errprintf(cmd, node,
+                                   "the use of an external session store requires `integrity-key`, the secret that is shared by "
+                                   "every instance that uses the store, so that the values that anyone else writes to the store "
+                                   "are not taken over");
+        return -1;
+    }
+
     if (lifetime != NULL) {
         if (h2o_configurator_scanf(cmd, *lifetime, "%u", &conf.lifetime) != 0)
             return -1;
@@ -1125,6 +1183,9 @@ void ssl_setup_session_resumption(SSL_CTX **contexts, size_t num_contexts, struc
 #if H2O_USE_SESSION_TICKETS
     if (num_contexts == 0)
         return;
+
+    if (conf.integrity.secret.base != NULL)
+        h2o_session_store_init_integrity(&conf.integrity.ctx, conf.integrity.secret);
 
     if (startup_barrier != NULL) {
         h2o_barrier_add(startup_barrier, 1);

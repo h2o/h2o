@@ -528,6 +528,7 @@ SET(LIB_SOURCE_FILES
     lib/common/multithread.c
     lib/common/redis.c
     lib/common/serverutil.c
+    lib/common/session-store.c
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c
@@ -649,6 +650,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/httpclient.c
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
+    t/00unit/lib/common/session-store.c
     t/00unit/lib/common/socket.c
     t/00unit/lib/common/socketpool.c
     t/00unit/lib/common/string.c
@@ -689,6 +691,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/httpclient.c
     lib/common/multithread.c
     lib/common/serverutil.c
+    lib/common/session-store.c
     lib/common/socket.c
     lib/common/socketpool.c
     lib/common/string.c

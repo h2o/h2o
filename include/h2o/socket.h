@@ -461,6 +461,37 @@ void h2o_socket_ssl_async_resumption_init(h2o_socket_ssl_resumption_get_async_cb
  */
 void h2o_socket_ssl_async_resumption_setup_ctx(SSL_CTX *ctx);
 /**
+ * the size of the HMAC that authenticates a value that is exchanged with an external session store
+ */
+#define H2O_SESSION_STORE_MAC_SIZE 32
+/**
+ * the state that holds the key that authenticates the values that are exchanged with an external session store
+ */
+typedef struct st_h2o_session_store_integrity_t {
+    int configured;
+    uint8_t key[H2O_SESSION_STORE_MAC_SIZE];
+} h2o_session_store_integrity_t;
+/**
+ * derives the key that authenticates the values that are exchanged with an external session store from the given secret
+ */
+void h2o_session_store_init_integrity(h2o_session_store_integrity_t *ctx, h2o_iovec_t secret);
+/**
+ * seals a value that is about to be written to an external session store, by prefixing it with an HMAC of the value. The buffer of
+ * the returned value is allocated using malloc(3), and the caller is responsible for freeing it. If the context has not been
+ * initialized with a secret, {NULL, 0} is returned, and the caller is expected not to write the value to the store.
+ */
+h2o_iovec_t h2o_session_store_seal(h2o_session_store_integrity_t *ctx, h2o_iovec_t payload);
+/**
+ * opens a value that has been read from an external session store; returns the value that the seal covers (a view into the given
+ * buffer), or {NULL, 0} if the value does not carry a valid seal.
+ */
+h2o_iovec_t h2o_session_store_unseal(h2o_session_store_integrity_t *ctx, h2o_iovec_t sealed);
+/**
+ * sets the key that authenticates the values of the session cache that h2o exchanges with the external session store (the key is
+ * derived from the given secret). Until this is called, the values of the session cache are exchanged without a seal.
+ */
+void h2o_socket_ssl_resumption_set_integrity_key(h2o_iovec_t secret);
+/**
  * returns the name of the protocol selected using either NPN or ALPN (ALPN has the precedence).
  * @param sock the socket
  */

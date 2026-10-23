@@ -1472,6 +1472,20 @@ Default is <code>h2o:ssl-session-cache:</code>.
 </dd>
 </dl>
 
+<h4 id="ssl-session-resumption-integrity">Integrity of the External Stores</h4>
+<p>
+An external store (<code>memcached</code> or <code>redis</code>) is typically not authenticated, and its content is taken over wholesale: the values that the instances that share the store exchange include the states that the server resumes, and the keys that encrypt the session tickets. Whoever can write to the store could therefore make the server resume a state of their choosing, on a virtual host that authenticates its clients with certificates.
+</p>
+<p>
+The values that h2o writes to the store are therefore sealed with a HMAC that is keyed with the value of the <code>integrity-key</code> attribute, and the values that do not carry the seal are not taken over: a session that does not is resumed through a full handshake instead, and the keys of the session tickets that do not are not used. The seal does not alter what the TLS clients see; it is carried in the values that the instances that share the store exchange, and the instances that share a store must be configured with the same value.
+</p>
+<dl>
+<dt>integrity-key:</dt>
+<dd>
+the secret that is used for sealing the values that the instances that share the store exchange. The attribute is mandatory when <code>cache-store</code> or <code>ticket-store</code> is <code>memcached</code> or <code>redis</code>; the server refuses to start without it. The values that were written before the attribute was configured are not taken over either, and are replaced when the sealed values are written.
+</dd>
+</dl>
+
 <h4 id="ssl-session-resumption-ticket-based">Attributes for Ticket-based Resumption</h4>
 <p>
 Ticket-based session resumption uses ticket encryption key(s) to encrypt the keys used for encrypting the data transmitted over TLS connections.
