@@ -364,8 +364,9 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
 
 static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
                                 h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, ssize_t *expect_header_index,
-                                ssize_t *entity_header_index)
+                                ssize_t *entity_header_index, int *force_close)
 {
+    int has_content_length = 0, has_transfer_encoding = 0;
     *entity_header_index = -1;
     *expect_header_index = -1;
 
@@ -391,9 +392,11 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                         host->base = (char *)src[i].value;
                         host->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
+                        has_content_length = 1;
                         if (*entity_header_index == -1)
                             *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
+                        has_transfer_encoding = 1;
                         *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
                         *expect_header_index = i;
@@ -414,6 +417,9 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
         }
     }
 
+    /* RFC 9112 section 6.1 requires closing the connection after responding to a request containing both headers. */
+    *force_close = has_content_length && has_transfer_encoding;
+
     return NULL;
 }
 
@@ -432,6 +438,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
     enum { METHOD_NORMAL, METHOD_CONNECT, METHOD_CONNECT_UDP } method_type;
+    int force_close;
     const char *ret;
 
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
@@ -451,7 +458,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     /* init headers */
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade,
-                            expect_header_index, entity_header_index)) != NULL)
+                            expect_header_index, entity_header_index, &force_close)) != NULL)
         return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
@@ -525,8 +532,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                 /* defaults to keep-alive if >= HTTP/1.1 */
                 conn->req.http1_is_persistent = 1;
             }
-            /* disable keep-alive if shutdown is requested */
-            if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+            /* disable keep-alive if required by request framing or if shutdown is requested */
+            if (force_close || conn->super.ctx->shutdown_requested)
                 conn->req.http1_is_persistent = 0;
         }
     }
