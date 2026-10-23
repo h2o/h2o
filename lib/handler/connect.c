@@ -431,12 +431,12 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 
     /* Store addresses, or convert error to ACL denial. */
     if (errstr == NULL) {
+        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
         if (self->is_tcp) {
             assert(res->ai_socktype == SOCK_STREAM);
         } else {
             assert(res->ai_socktype == SOCK_DGRAM);
         }
-        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
         if (!store_server_addresses(self, res))
             set_last_error(self, ERROR_CLASS_ACCESS_PROHIBITED, "destination_ip_prohibited");
     } else {

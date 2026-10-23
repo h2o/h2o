@@ -695,7 +695,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         /* handle the request */
         stream->req.is_tunnel_req = 1;
         goto ProcessImmediately;
-        return 0;
     }
 
     /* handle expect: 100-continue */
@@ -1178,7 +1177,15 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
             ssize_t delta = (int32_t)conn->peer_settings.initial_window_size - (int32_t)prev_initial_window_size;
             h2o_http2_stream_t *stream;
-            kh_foreach_value(conn->streams, stream, { update_stream_output_window(stream, delta); });
+            int window_overflow = 0;
+            kh_foreach_value(conn->streams, stream, {
+                if (update_stream_output_window(stream, delta) != 0)
+                    window_overflow = 1;
+            });
+            if (window_overflow) {
+                *err_desc = "flow control window overflow";
+                return H2O_HTTP2_ERROR_FLOW_CONTROL;
+            }
             resume_send(conn);
         }
     }

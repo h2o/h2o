@@ -180,7 +180,9 @@ static int on_config_tunnel(h2o_configurator_command_t *cmd, h2o_configurator_co
 static SSL_CTX *create_ssl_ctx(void)
 {
     long options;
-    SSL_CTX *ctx = SSL_CTX_new(SSLv23_client_method());
+    SSL_CTX *ctx;
+    if ((ctx = SSL_CTX_new(SSLv23_client_method())) == NULL)
+        h2o_fatal("no memory");
     options = SSL_CTX_get_options(ctx) | SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
 #ifdef SSL_OP_NO_RENEGOTIATION
     /* introduced in openssl 1.1.0h */
@@ -246,8 +248,11 @@ static int on_config_ssl_verify_peer(h2o_configurator_command_t *cmd, h2o_config
 static int on_config_ssl_cafile(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     struct proxy_configurator_t *self = (void *)cmd->configurator;
-    X509_STORE *store = X509_STORE_new();
+    X509_STORE *store;
     int ret = -1;
+
+    if ((store = X509_STORE_new()) == NULL)
+        h2o_fatal("no memory");
 
     if (X509_STORE_load_locations(store, node->data.scalar, NULL) == 1) {
         update_ssl_ctx(&self->vars->ssl_ctx, store, -1, NULL);

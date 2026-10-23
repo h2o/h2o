@@ -592,9 +592,11 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         on_head.forward_datagram.read_ = &req->on_read_datagrams;
     }
     req->super._cb.on_body = req->super._cb.on_head(&req->super, frame_is_eos ? h2o_httpclient_error_is_eos : NULL, &on_head);
-    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
-    if (req->super._cb.on_body == NULL)
+    if (req->super._cb.on_body == NULL) {
+        req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_CLOSED;
         return frame_is_eos ? 0 : H2O_HTTP3_ERROR_INTERNAL;
+    }
+    req->response_state = H2O_HTTP3CLIENT_RESPONSE_STATE_BODY;
 
     /* handle body */
     req->handle_input = handle_input_expect_data_frame;
@@ -632,8 +634,16 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
     }
     memcpy(dst, req->sendbuf->bytes + off, *len);
 
-    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX)
+    if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX) {
         call_proceed_req(req, NULL);
+        /* `proceed_req` might have synchronously either appended data by calling `do_write_req`, or raised an error:
+         *  * in the case of an error the stream is detached and quicly sends a reset,
+         *  * if data has been appended, notify quicly by clearing `*wrote_all`. */
+        if (qs->data == NULL)
+            return;
+        if (req->sendbuf->size > off + *len)
+            *wrote_all = 0;
+    }
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -966,7 +976,7 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
         return;
 
     struct st_h2o_http3client_req_t *req = qs->data;
-    if (req->on_read_datagrams != NULL)
+    if (req != NULL && req->on_read_datagrams != NULL)
         req->on_read_datagrams(&req->super, &payload, 1);
 }
 

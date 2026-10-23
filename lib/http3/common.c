@@ -410,8 +410,10 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         return;
 
     /* read the type, or just return if incomplete */
-    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+    const uint8_t *p = *src;
+    if ((type = quicly_decodev(&p, src_end)) == UINT64_MAX)
         return;
+    *src = p;
 
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
@@ -540,7 +542,7 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         *p++ = 6;
         memcpy(p, addr->sin6.sin6_addr.s6_addr, 16);
         p += 16;
-        memcpy(p, &addr->sin.sin_port, 2);
+        memcpy(p, &addr->sin6.sin6_port, 2);
         p += 2;
         break;
     case AF_UNSPEC:
@@ -560,8 +562,8 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     if (cipher == NULL) {
         static uint8_t key[PTLS_AES128_KEY_SIZE];
         H2O_MULTITHREAD_ONCE({ ptls_openssl_random_bytes(key, sizeof(key)); });
-        cipher = EVP_CIPHER_CTX_new();
-        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+        if ((cipher = EVP_CIPHER_CTX_new()) == NULL || !EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL))
+            h2o_fatal("failed to setup the cipher for calculating the accept hash key");
     }
 
     uint8_t buf[(1 + 16 + 2) * 2 + QUICLY_MAX_CID_LEN_V1 + PTLS_AES_BLOCK_SIZE] = {0};
@@ -662,8 +664,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
         /* forward 1-RTT packets belonging to different nodes, threads */
-        if (ttl == 0)
-            return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  destaddr, srcaddr, ttl, packets, num_packets))
@@ -722,7 +722,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                          * the destination being claimed by the DCID */
                         uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                         uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                        if (ctx->forward_packets != NULL &&
                             (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                             ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                  num_packets);
@@ -750,8 +750,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
                      * that is supposed to be handled by another node. forward it. */
-                    if (ttl == 0)
-                        return;
                     if (ctx->forward_packets != NULL)
                         ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                              num_packets);
