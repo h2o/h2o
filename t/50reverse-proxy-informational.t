@@ -30,6 +30,29 @@ subtest 'forward 103 Early Hints' => sub {
     do_forward(103);
 };
 
+subtest 'hop-by-hop headers of an informational response are not forwarded (VULN-028)' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=103&hopbyhop=1&link=1'`;
+        like $resp, qr{^HTTP/[\d.]+ 103}mi, "the early hints response is forwarded";
+        (my $eh, $resp) = split(/\r\n\r\n/, $resp, 2);
+        like $eh, qr{^link: </index.js>; rel=preload}mi, "the link header is forwarded";
+        # the hop-by-hop headers of the upstream response must not reach the client
+        unlike $eh, qr{^connection:}mi, "connection is dropped from the informational response";
+        unlike $eh, qr{^upgrade:}mi, "upgrade is dropped from the informational response";
+        unlike $eh, qr{^keep-alive:}mi, "keep-alive is dropped from the informational response";
+        unlike $eh, qr{^transfer-encoding:}mi, "transfer-encoding is dropped from the informational response";
+    });
+};
+
 subtest 'send 103' => sub {
     my $server = spawn_h2o(<< "EOT");
 send-informational: all

@@ -300,17 +300,28 @@ builder {
         my $query = Plack::Request->new($env)->query_parameters;
         my $status = $query->get('status') || 100;
         my $fh = $env->{"psgix.io"};
+        # the headers that a proxy must drop from a response that it forwards (RFC 9110 7.6.1)
+        my @hopbyhop = (
+            ($query->get('hopbyhop') ? (
+                "connection: keep-alive",
+                "upgrade: websocket",
+                "keep-alive: timeout=5",
+                "transfer-encoding: chunked",
+            ) : ()),
+        );
         print $fh join(
             "\r\n",
             "HTTP/1.1 $status OK",
             ($query->get('link') ? (
                 "link: </index.js>; rel=preload",
             ) : ()),
+            @hopbyhop,
             "",
             "HTTP/1.1 $status OK",
             ($query->get('link') ? (
                 "link: </style.css>; rel=preload",
             ) : ()),
+            @hopbyhop,
             "",
             "HTTP/1.1 200 OK",
             "connection: close",
