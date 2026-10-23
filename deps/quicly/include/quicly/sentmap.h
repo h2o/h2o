@@ -41,9 +41,9 @@ typedef struct st_quicly_sent_packet_t {
      */
     uint64_t packet_number;
     /**
-     *
+     * time at which the packet was sent (or INFINITY for the end-of-iteration sentinel)
      */
-    int64_t sent_at;
+    double sent_at;
     /**
      * epoch to be acked in
      */
@@ -56,10 +56,6 @@ typedef struct st_quicly_sent_packet_t {
      * if the frames being contained are considered inflight (becomes zero when deemed lost or when PTO fires)
      */
     uint8_t frames_in_flight : 1;
-    /**
-     *
-     */
-    uint8_t cc_limited : 1;
     /**
      * if sent on a promoted path
      */
@@ -257,11 +253,11 @@ static int quicly_sentmap_is_open(quicly_sentmap_t *map);
 /**
  * prepares a write
  */
-quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch);
+quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, double now, uint8_t ack_epoch);
 /**
  * commits a write
  */
-static void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited, int promoted_path);
+static void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int promoted_path);
 /**
  * Allocates a slot to contain a callback for a frame.  The function MUST be called after _prepare but before _commit.
  */
@@ -300,14 +296,13 @@ inline int quicly_sentmap_is_open(quicly_sentmap_t *map)
     return map->_pending_packet != NULL;
 }
 
-inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int cc_limited, int promoted_path)
+inline void quicly_sentmap_commit(quicly_sentmap_t *map, uint16_t bytes_in_flight, int promoted_path)
 {
     assert(quicly_sentmap_is_open(map));
 
     if (bytes_in_flight != 0) {
         map->_pending_packet->data.packet.ack_eliciting = 1;
         map->_pending_packet->data.packet.cc_bytes_in_flight = bytes_in_flight;
-        map->_pending_packet->data.packet.cc_limited = cc_limited;
         map->bytes_in_flight += bytes_in_flight;
     }
     map->_pending_packet->data.packet.frames_in_flight = 1;

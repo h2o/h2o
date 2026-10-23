@@ -54,7 +54,7 @@
         if (active == 0)                                                                                                           \
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(h2o, _name, conn_state, ptls_log_getsni_h2o_conn(conn_), 1, {                                             \
-            PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_->id);                                                                         \
+            PTLS_LOG_ELEMENT_NUMBER(conn_id, conn_->id);                                                                           \
             do {                                                                                                                   \
                 _block                                                                                                             \
             } while (0);                                                                                                           \
@@ -145,7 +145,7 @@ __attribute__((noinline)) static void h2o_probe_request_header(h2o_req_t *req, u
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
     H2O_LOG_CONN(receive_request_header, req->conn, {
-        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_NUMBER(req_id, req_index);
         PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
         PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
     });
@@ -156,7 +156,7 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
 {
     H2O_PROBE_CONN(SEND_RESPONSE_HEADER, req->conn, req_index, name.base, name.len, value.base, value.len);
     H2O_LOG_CONN(send_response_header, req->conn, {
-        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
+        PTLS_LOG_ELEMENT_NUMBER(req_id, req_index);
         PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, name.base, name.len);
         PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(value, value.base, value.len);
     });
@@ -166,8 +166,8 @@ static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);
     H2O_LOG_CONN(receive_request, req->conn, {
-        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
-        PTLS_LOG_ELEMENT_SIGNED(http_version, req->version);
+        PTLS_LOG_ELEMENT_NUMBER(req_id, req_index);
+        PTLS_LOG_ELEMENT_NUMBER(http_version, req->version);
     });
 
     PTLS_LOG_DEFINE_POINT(h2o, receive_request_header, receive_request_header_logpoint);
@@ -195,8 +195,8 @@ static inline void h2o_probe_log_response(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(SEND_RESPONSE, req->conn, req_index, req->res.status);
     H2O_LOG_CONN(send_response, req->conn, {
-        PTLS_LOG_ELEMENT_UNSIGNED(req_id, req_index);
-        PTLS_LOG_ELEMENT_SIGNED(status, req->res.status);
+        PTLS_LOG_ELEMENT_NUMBER(req_id, req_index);
+        PTLS_LOG_ELEMENT_NUMBER(status, req->res.status);
     });
     PTLS_LOG_DEFINE_POINT(h2o, send_response_header, send_response_header_logpoint);
     if (H2O_PROBE_IS_ENABLED(SEND_RESPONSE_HEADER) ||

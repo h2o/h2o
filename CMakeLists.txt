@@ -500,6 +500,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/openssl.c
     deps/picotls/lib/cifra/random.c
     deps/picotls/lib/cifra/x25519.c
+    deps/quicly/lib/bplus_ranges.c
     deps/quicly/lib/cc-cubic.c
     deps/quicly/lib/cc-pico.c
     deps/quicly/lib/defaults.c
@@ -596,7 +597,6 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/connection.c
     lib/http2/frame.c
@@ -672,7 +672,6 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
     t/00unit/lib/handler/throttle_resp.c
-    t/00unit/lib/http2/cache_digests.c
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
@@ -713,7 +712,6 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/mimemap.c
     lib/handler/redirect.c
     lib/handler/throttle_resp.c
-    lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c

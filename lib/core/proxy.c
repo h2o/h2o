@@ -180,7 +180,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
-        if (keepalive) {
+        /* A rejected CONNECT must close the HTTP/1.1 connection, as tunnel data might have been sent before the response. */
+        if (keepalive && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));

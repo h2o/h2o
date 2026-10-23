@@ -868,8 +868,8 @@ static size_t generate_tls_records_from_one_vec(h2o_socket_t *sock, const void *
 
     SOCKET_PROBE(WRITE_TLS_RECORD, sock, tls_write_size, sock->ssl->output.buf.off);
     H2O_LOG_SOCK(write_tls_record, sock, {
-        PTLS_LOG_ELEMENT_UNSIGNED(write_size, tls_write_size);
-        PTLS_LOG_ELEMENT_UNSIGNED(bytes_buffered, sock->ssl->output.buf.off);
+        PTLS_LOG_ELEMENT_NUMBER(write_size, tls_write_size);
+        PTLS_LOG_ELEMENT_NUMBER(bytes_buffered, sock->ssl->output.buf.off);
     });
     return tls_write_size;
 }
@@ -930,8 +930,8 @@ void h2o_socket_write(h2o_socket_t *sock, h2o_iovec_t *bufs, size_t bufcnt, h2o_
         size_t num_bytes = 0;
         for (size_t i = 0; i < bufcnt; ++i)
             num_bytes += bufs[i].len;
-        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
-        PTLS_LOG_ELEMENT_UNSIGNED(bufcnt, bufcnt);
+        PTLS_LOG_ELEMENT_NUMBER(num_bytes, num_bytes);
+        PTLS_LOG_ELEMENT_NUMBER(bufcnt, bufcnt);
         PTLS_LOG_ELEMENT_PTR(cb, cb);
     });
 
@@ -1671,6 +1671,27 @@ static void on_handshake_complete(h2o_socket_t *sock, const char *err)
     if (err == NULL && sock->ssl->ossl != NULL)
         err = verify_resumed_peer_certificate(sock->ssl->ossl);
 
+    /* Verify the peer name on every successful client handshake, including those that complete after flushing the final flight
+     * (e.g., TLS 1.3). */
+    if (err == NULL && sock->ssl->ossl != NULL && !SSL_is_server(sock->ssl->ossl)) {
+        X509 *cert = SSL_get_peer_certificate(sock->ssl->ossl);
+        if (cert != NULL) {
+            switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {
+            case MatchFound:
+                /* ok */
+                break;
+            case MatchNotFound:
+                err = h2o_socket_error_ssl_cert_name_mismatch;
+                break;
+            default:
+                err = h2o_socket_error_ssl_cert_invalid;
+                break;
+            }
+            X509_free(cert);
+        } else {
+            err = h2o_socket_error_ssl_no_cert;
+        }
+    }
     if (err == NULL) {
         /* Post-handshake setup: set record_overhead, zerocopy, switch to picotls */
         if (sock->ssl->ptls == NULL) {
@@ -1986,25 +2007,6 @@ Redo:
         flush_pending_ssl(sock, ret == 1 ? on_handshake_complete : proceed_handshake);
     } else {
         if (ret == 1) {
-            if (!SSL_is_server(sock->ssl->ossl)) {
-                X509 *cert = SSL_get_peer_certificate(sock->ssl->ossl);
-                if (cert != NULL) {
-                    switch (validate_hostname(sock->ssl->handshake.client.server_name, cert)) {
-                    case MatchFound:
-                        /* ok */
-                        break;
-                    case MatchNotFound:
-                        err = h2o_socket_error_ssl_cert_name_mismatch;
-                        break;
-                    default:
-                        err = h2o_socket_error_ssl_cert_invalid;
-                        break;
-                    }
-                    X509_free(cert);
-                } else {
-                    err = h2o_socket_error_ssl_no_cert;
-                }
-            }
             goto Complete;
         }
         if (sock->ssl->input.encrypted->size != 0) {

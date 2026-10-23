@@ -102,7 +102,6 @@ struct st_h2o_http2_stream_t {
      * points to http2_conn_t::num_streams::* in which the stream is counted
      */
     h2o_http2_conn_num_streams_t *_num_streams_slot;
-    h2o_cache_digests_t *cache_digests;
     union {
         struct {
             uint32_t parent_stream_id;

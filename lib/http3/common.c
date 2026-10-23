@@ -766,16 +766,16 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (i != accepted_packet_index) {
             quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
             switch (ret) {
-            case QUICLY_ERROR_STATE_EXHAUSTION:
-            case PTLS_ERROR_NO_MEMORY:
+            case 0:
+                if (ctx->quic_stats != NULL)
+                    ++ctx->quic_stats->packet_processed;
+                break;
+            case QUICLY_ERROR_PACKET_IGNORED:
+                break;
+            default:
                 fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
                 conn->callbacks->destroy_connection(conn);
                 return;
-            }
-            if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
-                if (ctx->quic_stats != NULL) {
-                    ++ctx->quic_stats->packet_processed;
-                }
             }
         }
     }
@@ -1081,8 +1081,8 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             PTLS_LOG(h2o, h3_frame_receive, {
-                PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
-                PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+                PTLS_LOG_ELEMENT_NUMBER(frame_type, frame->type);
+                PTLS_LOG_ELEMENT_NUMBER(payload_len, frame->length);
             });
             *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
@@ -1095,11 +1095,11 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
     PTLS_LOG(h2o, h3_frame_receive, {
-        PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+        PTLS_LOG_ELEMENT_NUMBER(frame_type, frame->type);
         if (frame->payload != NULL) {
             PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
         } else {
-            PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+            PTLS_LOG_ELEMENT_NUMBER(payload_len, frame->length);
         }
     });
 
@@ -1391,12 +1391,13 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
             break;
         }
         break;
+    default:
+        fprintf(stderr, "%s: `quicly_send()` returned ret:%" PRId64 "\n", __func__, ret);
+        /* fall through */
     case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_FREE_CONNECTION:
         conn->callbacks->destroy_connection(conn);
         return 0;
-    default:
-        h2o_fatal("quicly_send returned %" PRId64, ret);
     }
 
     h2o_quic_schedule_timer(conn);

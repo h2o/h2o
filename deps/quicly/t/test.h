@@ -48,6 +48,7 @@ int buffer_is(ptls_buffer_t *buf, const char *s);
 size_t transmit(quicly_conn_t *src, quicly_conn_t *dst);
 int max_data_is_equal(quicly_conn_t *client, quicly_conn_t *server);
 
+void test_bplus_ranges(void);
 void test_ranges(void);
 void test_rate(void);
 void test_frame(void);

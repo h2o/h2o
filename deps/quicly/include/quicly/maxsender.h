@@ -35,44 +35,63 @@ typedef struct st_quicly_maxsender_t {
     /**
      * maximum value being announced (never decreases)
      */
-    int64_t max_committed;
+    int64_t committed;
     /**
-     * maximum value being acked by remote peer
+     * maximum value known to have reached the remote peer
      */
-    int64_t max_acked;
+    int64_t acked;
     /**
-     * number of maximums inflight
+     * set when a frame carrying `committed` is deemed lost; cleared when `committed` is sent again or acked, including late-acks
      */
-    size_t num_inflight;
+    unsigned lost : 1;
     /**
-     *
+     * set when the remote peer reports being blocked at `committed`; a new value is sent as soon as one greater than `committed`
+     * becomes available, regardless of the update ratio
      */
-    unsigned force_send : 1;
+    unsigned remote_blocked : 1;
 } quicly_maxsender_t;
 
 typedef struct st_quicly_maxsender_sent_t {
-    uint64_t inflight : 1;
-    uint64_t value : 63;
+    int64_t value;
 } quicly_maxsender_sent_t;
 
 static void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value);
 static void quicly_maxsender_dispose(quicly_maxsender_t *m);
-static void quicly_maxsender_request_transmit(quicly_maxsender_t *m);
-static int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, uint32_t window_size,
+/**
+ * Called when the remote peer reports being blocked at `blocked_at`. If the value is the latest one being sent, it is known to have
+ * reached the peer, and the next value is sent as soon as it becomes available. Otherwise, the report is ignored, as a greater
+ * value is either inflight or being resent.
+ */
+static void quicly_maxsender_blocked(quicly_maxsender_t *m, uint64_t blocked_at);
+/**
+ * Returns if a new value (`buffered_from + window_size`) should be sent. This is the case when the latest value has been lost, when
+ * the remote peer is blocked and the new value is greater than the latest one, when the latest value falls within
+ * `update_ratio` of the window, or when the available room doubles the unused credit. `consumed` is the amount of credit already
+ * used by the peer (received bytes or opened streams). With no unused credit, any increase is sent immediately.
+ */
+static int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, int64_t consumed, uint32_t window_size,
                                             uint32_t update_ratio);
+/**
+ * Returns if a BLOCKED frame carrying `local_max` should be sent; i.e., if it has not been sent yet, or if it has been lost. The
+ * function does not determine if the endpoint is blocked; the caller must call it only while being blocked by `local_max`.
+ */
 static int quicly_maxsender_should_send_blocked(quicly_maxsender_t *m, int64_t local_max);
 static void quicly_maxsender_record(quicly_maxsender_t *m, int64_t value, quicly_maxsender_sent_t *sent);
-static void quicly_maxsender_acked(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent);
-static void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent);
+/**
+ * Updates the state when the frame recorded as `sent` is acked or deemed lost. Returns if `committed` needs to be sent again for it
+ * to reach the peer; i.e., if the frame carried `committed` and has been deemed lost, while `committed` is not known to have
+ * reached the peer by other means.
+ */
+static int quicly_maxsender_on_ack(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent, int acked);
 
 /* inline definitions */
 
 inline void quicly_maxsender_init(quicly_maxsender_t *m, int64_t initial_value)
 {
-    m->max_committed = initial_value;
-    m->max_acked = initial_value;
-    m->num_inflight = 0;
-    m->force_send = 0;
+    m->committed = initial_value;
+    m->acked = initial_value;
+    m->lost = 0;
+    m->remote_blocked = 0;
 }
 
 inline void quicly_maxsender_dispose(quicly_maxsender_t *m)
@@ -80,55 +99,71 @@ inline void quicly_maxsender_dispose(quicly_maxsender_t *m)
     (void)m;
 }
 
-inline void quicly_maxsender_request_transmit(quicly_maxsender_t *m)
+inline void quicly_maxsender_blocked(quicly_maxsender_t *m, uint64_t blocked_at)
 {
-    m->force_send = 1;
+    if (blocked_at == (uint64_t)m->committed) {
+        m->acked = m->committed;
+        m->lost = 0;
+        m->remote_blocked = 1;
+    }
 }
 
-inline int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, uint32_t window_size,
+inline int quicly_maxsender_should_send_max(quicly_maxsender_t *m, int64_t buffered_from, int64_t consumed, uint32_t window_size,
                                             uint32_t update_ratio)
 {
-    if (m->force_send)
+    /* resend if the latest value has been lost */
+    if (m->lost)
+        return 1;
+
+    /* Near exhaustion, advertise room at 1, 2, 4, ... instead of waiting for a fixed fraction of the window. Comparing the
+     * additional credit with the unused credit is equivalent to doubling the room, without multiplying offsets. */
+    int64_t new_value = buffered_from + window_size;
+    if (new_value > m->committed && (m->remote_blocked || new_value - m->committed >= m->committed - consumed))
         return 1;
 
     /* ratio is permil (1/1024) */
     int64_t threshold = buffered_from + ((int64_t)window_size * update_ratio) / 1024;
-    return (m->num_inflight != 0 ? m->max_committed : m->max_acked) <= threshold;
+    return m->committed <= threshold;
 }
 
 inline int quicly_maxsender_should_send_blocked(quicly_maxsender_t *m, int64_t local_max)
 {
-    return m->max_committed < local_max;
+    /* resend if the latest value has been lost */
+    if (m->lost)
+        return 1;
+
+    /* send if the value is new */
+    return m->committed < local_max;
 }
 
 inline void quicly_maxsender_record(quicly_maxsender_t *m, int64_t value, quicly_maxsender_sent_t *sent)
 {
-    assert(value >= m->max_committed);
-    m->max_committed = value;
-    ++m->num_inflight;
-    m->force_send = 0;
-    sent->inflight = 1;
+    assert(value >= m->committed);
+    if (value > m->committed)
+        m->remote_blocked = 0;
+    m->committed = value;
+    m->lost = 0;
     sent->value = value;
 }
 
-inline void quicly_maxsender_acked(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent)
+inline int quicly_maxsender_on_ack(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent, int acked)
 {
-    if (m->max_acked < (int64_t)sent->value)
-        m->max_acked = sent->value;
-    /* num_inflight should not be adjusted in case of a late ACK */
-    if (sent->inflight) {
-        assert(m->num_inflight != 0);
-        --m->num_inflight;
-        sent->inflight = 0;
+    if (acked) {
+        if (m->acked < sent->value)
+            m->acked = sent->value;
+        /* an ACK might be a late one, arriving after the frame has been deemed lost */
+        if (m->acked == m->committed)
+            m->lost = 0;
+        return 0;
     }
-}
 
-inline void quicly_maxsender_lost(quicly_maxsender_t *m, quicly_maxsender_sent_t *sent)
-{
-    /* the function must be called at most once (when LOST event occurs, but not EXPIRED), hence assert and always decrement */
-    assert(m->num_inflight != 0);
-    --m->num_inflight;
-    sent->inflight = 0;
+    /* A frame carrying an older value needs no action, as a newer one carrying `committed` has been sent. Nor does the loss of a
+     * frame carrying `committed` after `committed` has reached the peer, e.g., through a late ACK of an earlier copy. */
+    if (sent->value != m->committed || m->acked == m->committed)
+        return 0;
+
+    m->lost = 1;
+    return 1;
 }
 
 #ifdef __cplusplus

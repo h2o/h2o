@@ -587,13 +587,14 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
     for (element_index = 0; element_index != logconf->elements.size; ++element_index) {
         struct log_element_t *element = logconf->elements.entries + element_index;
 
-/* reserve capacity + suffix.len */
+/* reserve capacity + suffix.len or the NUL character */
 #define RESERVE(capacity)                                                                                                          \
     do {                                                                                                                           \
-        if ((capacity) + element->suffix.len > line_end - pos) {                                                                   \
+        size_t required = (capacity) + (element->suffix.len < 1 ? 1 : element->suffix.len);                                        \
+        if (required > line_end - pos) {                                                                                           \
             size_t off = pos - line;                                                                                               \
             size_t size = line_end - line;                                                                                         \
-            line = expand_line_buf(line, &size, off + (capacity) + element->suffix.len, should_realloc_on_expand);                 \
+            line = expand_line_buf(line, &size, off + required, should_realloc_on_expand);                                         \
             pos = line + off;                                                                                                      \
             line_end = line + size;                                                                                                \
             should_realloc_on_expand = 1;                                                                                          \
@@ -656,6 +657,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
                 size_t len = req->input.path.len - req->input.query_at;
                 RESERVE(len * unsafe_factor);
                 pos = append_unsafe_string(pos, req->input.path.base + req->input.query_at, len);
+            } else {
+                RESERVE(0);
             }
             break;
         case ELEMENT_TYPE_REQUEST_LINE: /* %r */
@@ -952,7 +955,7 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             break;
 
         default:
-            assert(!"unknown type");
+            h2o_fatal("unknown log element of type:%u", element->type);
             break;
         }
 

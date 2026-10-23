@@ -626,8 +626,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
-        0) {
+                                       &stream->req.content_length, &expect, NULL, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -746,8 +745,8 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     int ret;
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
-                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, NULL,
-                                       src, len, err_desc)) != 0)
+                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
+                                       err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -1912,14 +1911,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     if (h2o_find_header(&src_stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
         return;
 
-    if (src_stream->cache_digests != NULL) {
-        h2o_iovec_t url = h2o_concat(&src_stream->req.pool, src_stream->req.input.scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
-                                     src_stream->req.input.authority, h2o_iovec_init(abspath, abspath_len));
-        if (h2o_cache_digests_lookup_by_url(src_stream->cache_digests, url.base, url.len) == H2O_CACHE_DIGESTS_STATE_FRESH)
-            return;
-    }
-
-    /* delayed initialization of casper (cookie-based), that MAY be used together to cache-digests */
+    /* delayed initialization of casper (cookie-based) */
     if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
         if (!src_stream->pull.casper_is_ready) {
             src_stream->pull.casper_is_ready = 1;
