@@ -76,7 +76,11 @@ EOT
 
 sub run_client {
     my ($server, $opts) = @_;
-    run_openssl_client({ host => "127.0.0.1", port => $server->{port}, opts => "-no_ticket $opts" });
+    # the request is sent with every connection, so that the response is the observable that tells
+    # whether the server served the connection; the flight of an abbreviated handshake reaches the
+    # client before the server has finished processing it, so a session that the server refuses does
+    # not look like a failed handshake to the client - the request simply is not served
+    run_openssl_client({ host => "127.0.0.1", port => $server->{port}, opts => "-no_ticket $opts", request_default => 1 });
 }
 
 sub parse_handshake {
@@ -90,9 +94,11 @@ subtest "honest clients are not affected" => sub {
     my $server = spawn(integrity_key => "h2o-test-integrity-key", client_ca => "misc/test-ca/intermediate/ca.crt");
     my $lines = run_client($server, "$client_cert_opts -sess_out $tempdir/session");
     is parse_handshake($lines), "New";
+    like $lines, qr{HTTP/1\.[01] \d{3}}, "the request of the full handshake is served";
     sleep 1; # wait for h2o to commit to the store
     $lines = run_client($server, "$client_cert_opts -sess_in $tempdir/session");
     is parse_handshake($lines), "Reused";
+    like $lines, qr{HTTP/1\.[01] \d{3}}, "the request of the resumed handshake is served";
 };
 
 subtest "a value that does not carry the seal is not taken over" => sub {
@@ -101,14 +107,16 @@ subtest "a value that does not carry the seal is not taken over" => sub {
     my $server = spawn(integrity_key => "another-integrity-key", client_ca => "misc/test-ca/intermediate/ca.crt");
     my $lines = run_client($server, "$client_cert_opts -sess_in $tempdir/session");
     is parse_handshake($lines), "New";
+    like $lines, qr{HTTP/1\.[01] \d{3}}, "the request of the fallback handshake is served";
 };
 
 subtest "the certificate that a resumed session carries is verified again" => sub {
     # the session was established against the intermediate CA; the instance that verifies the
-    # clients against the root CA alone cannot vouch for the identity that the session carries
+    # clients against the root CA alone cannot vouch for the identity that the session carries, and
+    # the request that the connection carries is not served
     my $server = spawn(integrity_key => "h2o-test-integrity-key", client_ca => "misc/test-ca/root/ca.crt");
     my $lines = run_client($server, "$client_cert_opts -sess_in $tempdir/session");
-    like $lines, qr/ssl handshake failure/, "the handshake of a session that carries an identity the vhost does not vouch for fails";
+    unlike $lines, qr{HTTP/1\.[01] \d{3}}, "the request of a session that carries an identity the vhost does not vouch for is not served";
 };
 
 done_testing;
