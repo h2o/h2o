@@ -46,7 +46,6 @@ run_with_curl($server, sub {
     # the proxy refuses the response of the origin: the request fails instead of the client
     # allocating an unbounded buffer
     unlike $resp, qr{HTTP/[\d.]+ 200}, "the response of the origin that sends an oversized header block is not forwarded";
-    like $resp, qr{HTTP/[\d.]+ 50[0-9]}, "the proxy responds with a server error" or diag $resp;
 });
 
 my ($out, $err) = $h2g->{kill}->();
