@@ -1,6 +1,7 @@
 use strict;
 use warnings;
 use IO::Select;
+use IO::Socket::INET;
 use Test::More;
 use Time::HiRes qw(time);
 use t::RawConnection;
@@ -8,11 +9,22 @@ use t::Util;
 
 # A request that does not carry a content-length header is not bounded by it: the size of the body
 # is bounded by the limit that applies to the request entity, as it is in HTTP/2. Verify that a
-# request whose body exceeds the limit is rejected (VULN-005).
+# request whose body exceeds the limit is rejected (VULN-005). The proxy is used as the handler, as
+# it is the handler that reads the body of the request before responding; the file handler responds
+# immediately and the stream leaves the state that receives the body before the DATA frames arrive.
 
 my $cli = bindir() . "/quicly/cli";
 plan skip_all => "$cli not found"
     unless -e $cli;
+
+# create a socket to keep an empty port in use; the upstream accepts connections but never responds,
+# so that the proxy parks the stream in the state that receives the body
+my $upstream = IO::Socket::INET->new(
+    LocalAddr => "127.0.0.1",
+    LocalPort => 0,
+    Proto     => "tcp",
+) or die "failed to open socket:$!";
+my $upstream_port = $upstream->sockport;
 
 my $server = spawn_h2o(<< "EOT");
 limit-request-body: 4096
@@ -20,7 +32,8 @@ hosts:
   default:
     paths:
       "/":
-        file.dir: @{[ DOC_ROOT ]}
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+        proxy.timeout.io: 30000
 EOT
 
 sub quicint {
@@ -83,7 +96,7 @@ done_testing;
 sub wait_request_rejected {
     my $conn = shift;
     my $select = IO::Select->new($conn->{sock});
-    my $deadline = time + 5;
+    my $deadline = time + 10;
     while ((my $timeout = $deadline - time) > 0) {
         return 0
             unless $select->can_read($timeout);
