@@ -21,3 +21,25 @@ defined. The length of the input is zero in that case, so nothing is ever read f
 the behaviour of the function is unchanged.
 
 **Files touched:** `lib/picotls.c` (`empty_input`, `ptls_handshake()`).
+
+---
+
+## applying zero offset to null pointer in the early data decryption
+
+The upstream rework of the early data decryption (commit aef42753d, the
+extraction of picotls at 4b8e871) introduced a new instance of the
+undefined behaviour that the earlier patch of this file fixed: the
+pointer that holds the input of `ptls_decrypt_early_data` is NULL when
+there is no early data, and the code calculated the end of the input by
+adding the length to it, which is `NULL + 0` when there is no early
+data and is undefined behaviour. The undefined behaviour sanitizer of
+the CI reports it:
+`runtime error: applying zero offset to null pointer` at
+`deps/picotls/lib/picotls.c:6164`.
+
+The end of the input is now calculated only when the input is not NULL,
+so that the arithmetic is defined. The length of the input is zero in
+that case, so nothing is ever read from the buffer, and the behaviour
+of the function is unchanged.
+
+**Files touched:** `lib/picotls.c` (`ptls_decrypt_early_data`).
