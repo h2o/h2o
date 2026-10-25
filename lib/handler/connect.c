@@ -1320,6 +1320,7 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
 {
     uint32_t target_v4addr = 0;
     uint16_t target_port;
+    int target_is_v4 = 0;
 
     /* reject anything other than v4/v6, as well as converting the values to native format */
     switch (target->sa_family) {
@@ -1327,10 +1328,19 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
         struct sockaddr_in *sin = (void *)target;
         target_v4addr = ntohl(sin->sin_addr.s_addr);
         target_port = ntohs(sin->sin_port);
+        target_is_v4 = 1;
     } break;
-    case AF_INET6:
-        target_port = htons(((struct sockaddr_in6 *)target)->sin6_port);
-        break;
+    case AF_INET6: {
+        struct sockaddr_in6 *sin6 = (void *)target;
+        target_port = htons(sin6->sin6_port);
+        /* IPv4-mapped addresses (::ffff:a.b.c.d) reach the IPv4 host when connected to, so they are also matched against IPv4
+         * entries */
+        if (IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr)) {
+            const uint8_t *b = sin6->sin6_addr.s6_addr + 12;
+            target_v4addr = (uint32_t)b[0] << 24 | (uint32_t)b[1] << 16 | (uint32_t)b[2] << 8 | b[3];
+            target_is_v4 = 1;
+        }
+    } break;
     default:
         return 0;
     }
@@ -1346,7 +1356,7 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
         case H2O_CONNECT_ACL_ADDRESS_ANY:
             break;
         case H2O_CONNECT_ACL_ADDRESS_V4: {
-            if (target->sa_family != AF_INET)
+            if (!target_is_v4)
                 goto Next;
             if (entry->addr.v4 != (target_v4addr & TO_BITMASK(uint32_t, entry->addr_mask)))
                 goto Next;
