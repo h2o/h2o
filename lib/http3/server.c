@@ -582,7 +582,7 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
     if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
         /* send STOP_SENDING unless RESET_STREAM was received; we send STOP_SENDING even if all data up to EOS have been received,
          * as it is allowed and might be beneficial in case ACKs are lost */
-        if (!(quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX))
+        if (stream->quic->recvstate.app_error_code == UINT64_MAX)
             quicly_request_stop(stream->quic, stop_sending_code);
         cancel_qpack_decoder(stream);
         if (h2o_linklist_is_linked(&stream->link))
@@ -848,15 +848,7 @@ DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stre
 
 static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
 {
-    if (!quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-        return stream->quic->recvstate.data_off + quicly_recvstate_bytes_available(&stream->quic->recvstate);
-
-    /* On reset, recvstate has no final size and clears received ranges. In that case, data_off is the best available contiguous
-     * byte count. */
-    if (stream->quic->recvstate.eos == UINT64_MAX)
-        return stream->quic->recvstate.data_off;
-
-    return stream->quic->recvstate.eos;
+    return stream->quic->recvstate.data_off + quicly_recvstate_bytes_available(&stream->quic->recvstate);
 }
 
 DEFINE_NUMERIC_LOGGER(request_stream_bytes, "%" PRIu64, get_request_stream_size(stream))
@@ -1130,7 +1122,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
 {
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
 
-    if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT)
+    if (stream->state >= H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT || stream->quic->recvstate.app_error_code != UINT64_MAX)
         return;
     if (stream->qpack_blocked_ref != 0)
         return;
@@ -1267,8 +1259,7 @@ static void proceed_request_streaming(h2o_req_t *_req, const char *errstr)
     assert(errstr != NULL || !h2o_linklist_is_linked(&stream->link));
     assert(conn->num_streams_req_streaming != 0 || stream->req.is_tunnel_req);
 
-    int reset_received = quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.eos == UINT64_MAX;
-    if (errstr != NULL || reset_received) {
+    if (errstr != NULL || stream->quic->recvstate.app_error_code != UINT64_MAX) {
         close_request_streaming(stream);
         shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 1, 1);
         return;

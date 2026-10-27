@@ -58,12 +58,6 @@ struct st_quicly_bplus_ranges_path_t {
 
 #define EMPTY_RANGE ((quicly_range_t){UINT64_MAX, UINT64_MAX})
 
-static void init_leaf(quicly_bplus_ranges_node_t *node)
-{
-    for (int i = 0; i < FANOUT; ++i)
-        node->ranges[i] = EMPTY_RANGE;
-}
-
 /**
  * Returns the number of ranges in the leaf whose start is <= x, which is also the index of the first range whose start is > x. As
  * the ranges are sorted and unused slots hold UINT64_MAX, the number is found by a binary search of fixed steps (8, 4, 2, 1),
@@ -164,7 +158,7 @@ static uint64_t remove_entry_at(quicly_bplus_ranges_node_t *node, int index)
 }
 
 /**
- * returns if `ranges->last` points into the given leaf; `ranges->last` must be non-NULL
+ * returns if `ranges->last` points into the given leaf
  */
 static int holds_last(quicly_bplus_ranges_t *ranges, quicly_bplus_ranges_node_t *leaf)
 {
@@ -305,11 +299,8 @@ static quicly_error_t insert_range(quicly_bplus_ranges_t *ranges, struct st_quic
         }
     }
     insert_range_at(node, pos, (quicly_range_t){start, end});
-    if (ranges->last == NULL) {
-        ranges->last = node->ranges + pos;
-    } else if (holds_last(ranges, node)) {
+    if (holds_last(ranges, node))
         ++ranges->last;
-    }
     ++ranges->num_ranges;
 
     /* insert the high half of the split node to the parent, splitting the parent if full */
@@ -464,17 +455,12 @@ static void free_children(quicly_bplus_ranges_t *ranges, quicly_bplus_ranges_nod
     }
 }
 
-void quicly_bplus_ranges_clear(quicly_bplus_ranges_t *ranges)
+void quicly_bplus_ranges_dispose(quicly_bplus_ranges_t *ranges)
 {
     if (ranges->height > 1) {
         free_children(ranges, ranges->root, ranges->height);
         free(ranges->root);
     }
-    init_leaf(&ranges->first);
-    ranges->num_ranges = 0;
-    ranges->height = 1;
-    ranges->root = &ranges->first;
-    ranges->last = NULL;
 }
 
 quicly_error_t quicly_bplus_ranges_add(quicly_bplus_ranges_t *ranges, uint64_t start, uint64_t end, uint64_t max_committed)
@@ -487,7 +473,7 @@ quicly_error_t quicly_bplus_ranges_add(quicly_bplus_ranges_t *ranges, uint64_t s
         return 0;
 
     /* fast path; when the range starts within or right after the last range, only the last range can be touched */
-    if (ranges->last != NULL && ranges->last->start <= start && start <= ranges->last->end) {
+    if (ranges->last->start <= start && start <= ranges->last->end) {
         if (ranges->last->end < end)
             ranges->last->end = end;
         return 0;

@@ -141,9 +141,7 @@ void quicly_request_stop(quicly_stream_t *stream, quicly_error_t err)
 void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err)
 {
     /* dispose sendbuf state */
-    quicly_sendstate_reset(&stream->sendstate);
-
-    stream->_send_aux.reset_stream.sender_state = QUICLY_SENDER_STATE_SEND;
+    quicly_sendstate_reset(&stream->sendstate, QUICLY_ERROR_GET_ERROR_CODE(err), 0);
 
     /* inline expansion of resched_stream_data() */
     /* TODO: consider streams_blocked? */
