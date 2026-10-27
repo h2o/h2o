@@ -38,6 +38,12 @@
 extern "C" {
 #endif
 
+/* Users of the library are recommended to use the up-to-date master branch. But for those who prefer using versions, the release
+ * branch is also updated each time a new commit is pushed to the master branch; incrementing the minor version by one. */
+#define PICOHTTPPARSER_VERSION "1.dev"
+#define PICOHTTPPARSER_VERSION_MAJOR 1
+#define PICOHTTPPARSER_VERSION_MINOR 99999999 /* master is treated as newer than any 1.x snapshot */
+
 /* contains name and value of a header (name == NULL if is a continuing line
  * of a multiline header */
 struct phr_header {
