@@ -578,8 +578,9 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     size_t bytes_to_encrypt = ((p - buf) + PTLS_AES_BLOCK_SIZE - 1) / PTLS_AES_BLOCK_SIZE * PTLS_AES_BLOCK_SIZE;
     assert(bytes_to_encrypt <= sizeof(buf));
 
-    { /* encrypt */
-        EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, NULL);
+    { /* encrypt (IV is given explicitly, as OpenSSL 3 does not reset the IV of a reused CBC context when NULL is given) */
+        static const uint8_t iv[PTLS_AES_BLOCK_SIZE] = {0};
+        EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, iv);
         int bytes_encrypted = 0, ret = EVP_EncryptUpdate(cipher, buf, &bytes_encrypted, buf, (int)bytes_to_encrypt);
         assert(ret);
         assert(bytes_encrypted == bytes_to_encrypt);
