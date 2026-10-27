@@ -491,12 +491,17 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 
     struct sockaddr_storage addr;
     socklen_t addrlen;
-    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr, &addrlen);
+    /* PROXY v1 line is at most 107 bytes including CRLF (section 2.1 of the spec) */
+    static const size_t max_line_len = 107;
+    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size < max_line_len ? sock->input->size : max_line_len,
+                                 (void *)&addr, &addrlen);
     switch (r) {
     case -1: /* error, just pass the input to the next handler */
         break;
     case -2: /* incomplete */
-        return;
+        if (sock->input->size < max_line_len)
+            return;
+        break; /* CRLF not found within the max length, pass the input to the next handler */
     default:
         h2o_buffer_consume(&sock->input, r);
         if (addrlen != 0)
