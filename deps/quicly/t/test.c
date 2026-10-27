@@ -2819,6 +2819,32 @@ static void test_stop_sending_after_fin(int fin_state)
 }
 
 /**
+ * A FIN below the bytes already received is a FINAL_SIZE_ERROR (RFC 9000 Section 4.5). The final size must not be recorded, as the
+ * application might have consumed bytes beyond it.
+ */
+static void test_fin_below_received(void)
+{
+    /* STREAM(id=0, len=10), STREAM(id=0, len=5, FIN) */
+    static const uint8_t data[] = {0x0a, 0x00, 0x0a, '0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+    static const uint8_t fin[] = {0x0b, 0x00, 0x05, '0', '1', '2', '3', '4'};
+    quicly_conn_t *client, *server;
+    quicly_stream_t *stream;
+
+    test_setup_connected_peers(&client, &server);
+
+    ok(inject_frames(server, data, sizeof(data)) == 0);
+    ok((stream = quicly_get_stream(server, 0)) != NULL);
+    quicly_streambuf_ingress_shift(stream, 10);
+
+    ok(inject_frames(server, fin, sizeof(fin)) == QUICLY_TRANSPORT_ERROR_FINAL_SIZE);
+    ok(stream->recvstate.eos == UINT64_MAX);
+    ok(!quicly_recvstate_transfer_complete(&stream->recvstate));
+
+    quicly_free(client);
+    quicly_free(server);
+}
+
+/**
  * A reset that completes the transfer by itself, all bytes below its Reliable Size having been received, ends the stream through
  * `on_receive` if the Reliable Size is non-zero, or if `on_receive_reset` is NULL; otherwise through `on_receive_reset`.
  */
@@ -3213,6 +3239,7 @@ int main(int argc, char **argv)
     subtest("reset-stream-at-data-above", test_reset_stream_at_data_above);
     subtest("reset-stream-at-gap-above", test_reset_stream_at_gap_above);
     subtest("reset-stream-at-after-fin", test_reset_stream_at_after_fin);
+    subtest("fin-below-received", test_fin_below_received);
     subtest("reset-stream-at-completing", test_reset_completing_transfer, 3, 1, 0);
     subtest("reset-stream-at-zero-completing", test_reset_completing_transfer, 0, 1, 0);
     subtest("reset-stream-completing", test_reset_completing_transfer, 0, 0, 0);

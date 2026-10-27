@@ -51,9 +51,9 @@ quicly_error_t quicly_recvstate_update(quicly_recvstate_t *state, uint64_t *off,
      * to the reliable size */
     if (state->eos == UINT64_MAX) {
         if (is_fin) {
-            state->eos = *off + *len;
-            if (state->eos < state->received.last->end)
+            if (*off + *len < state->received.last->end)
                 return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
+            state->eos = *off + *len;
         }
     } else if (*off + *len > state->eos) {
         if (state->app_error_code == UINT64_MAX)
