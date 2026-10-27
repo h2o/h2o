@@ -556,7 +556,14 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (reset_stream_if_disregarded(conn, stream))
         return;
 
-    /* update state, buffer the data */
+    /* buffer the data */
+    if (!h2o_buffer_try_append(&stream->req_body.buf, payload.base, payload.len)) {
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM);
+        h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
+    /* update state */
     int req_queued = stream->req.proceed_req != NULL;
     if (is_end_stream) {
         if (stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
@@ -571,7 +578,6 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
             set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
         }
     }
-    h2o_buffer_append(&stream->req_body.buf, payload.base, payload.len);
 
     /* if in request streaming mode: either submit the chunk or just keep it, and return */
     if (stream->req_body.streamed) {
