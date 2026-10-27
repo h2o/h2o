@@ -792,14 +792,14 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
 
-#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT32_LONGEST_STR ".000"
+#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT64_LONGEST_STR ".000"
 
 size_t stringify_duration(char *buf, int64_t usec)
 {
-    int32_t msec = (int32_t)(usec / 1000);
-    usec -= ((int64_t)msec * 1000);
+    int64_t msec = usec / 1000;
+    usec -= msec * 1000;
     char *pos = buf;
-    pos += sprintf(pos, "dur=%" PRId32, msec);
+    pos += sprintf(pos, "dur=%" PRId64, msec);
     if (usec != 0) {
         *pos++ = '.';
         int denom;
