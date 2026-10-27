@@ -603,7 +603,6 @@ LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
     #deps/quicly/lib/cc-cubic.c
