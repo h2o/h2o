@@ -63,6 +63,21 @@ subtest "unsetunless" => sub  {
     do_test('proxy.header.unsetunless: [ "a" ]', "-Ha:1 -Hb:2", "a: 1", "b: 2");
     do_test('proxy.header.unsetunless: [ "c" ]', "-Ha:1 -Hb:2 -Hc:3", "c: 3", ["a: 1", "b: 2"]);
 };
+subtest "unsetunless retains request body" => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+        proxy.header.unsetunless: [ "a" ]
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent --data hello $proto://127.0.0.1:$port/echo`;
+        is $resp, "hello";
+    });
+};
 subtest "unset" => sub  {
     do_test('proxy.header.unset: [ "a", ]', "-Ha:1 -Hb:2", "b: 2", "a: 1");
 };
