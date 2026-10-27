@@ -703,7 +703,7 @@ DECL_SEND_ERROR_DEFERRED(502)
 static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
 {
     if (input.len < limit) {
-        memcpy(dst, input.base, input.len);
+        h2o_memcpy(dst, input.base, input.len);
         return input.len;
     } else {
         memcpy(dst, input.base, (limit - 3));
