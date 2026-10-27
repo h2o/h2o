@@ -12,7 +12,7 @@ use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
-use Net::EmptyPort qw(check_port);
+use Net::EmptyPort qw(check_port wait_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -832,6 +832,10 @@ EOC
     }, +{ stderr => 1 });
 
     $backend->{tls_port} = $backend_port;
+
+    # wait until h2get starts listening, otherwise h2o might fail to connect to the backend
+    wait_port($backend_port);
+
     return $backend;
 }
 # usage: see t/90h2olog.t
