@@ -85,7 +85,10 @@ static void remove_header_unless(h2o_headers_t *headers, h2o_headers_command_t *
     size_t src, dst = 0;
 
     for (src = 0; src != headers->size; ++src) {
-        if (!is_in_list(headers->entries[src].name->base, headers->entries[src].name->len, cmd))
+        h2o_iovec_t *name = headers->entries[src].name;
+        /* remove the header unless it is listed, or is one that cannot be rewritten */
+        if (!(h2o_iovec_is_token(name) && h2o_headers_is_prohibited_name((const h2o_token_t *)name)) &&
+            !is_in_list(name->base, name->len, cmd))
             continue;
         /* not matched */
         if (dst != src)
