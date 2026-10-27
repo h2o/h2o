@@ -901,6 +901,8 @@ char *h2o_log_request(h2o_logconf_t *logconf, h2o_req_t *req, size_t *len, char 
             pos += sprintf(pos, "%" PRIu64, req->proxy_stats.bytes_read.body);
             break;
         case ELEMENT_TYPE_PROXY_SSL_SESSION_REUSED:
+            if (req->proxy_stats.conn.ssl.session_reused == -1) /* not TLS */
+                goto EmitNull;
             RESERVE(1);
             *pos++ = (req->proxy_stats.conn.ssl.session_reused) ? '1' : '0';
             break;
