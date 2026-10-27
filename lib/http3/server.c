@@ -155,7 +155,7 @@ struct st_h2o_http3_server_conn_t {
             uint32_t send_body;
             uint32_t close_wait;
         };
-        uint32_t counters[1];
+        uint32_t counters[H2O_HTTP3_SERVER_STREAM_STATE_CLOSE_WAIT + 1];
     } num_streams;
     /**
      * Number of streams that is request streaming. The state can be in either one of SEND_HEADERS, SEND_BODY, CLOSE_WAIT.
@@ -447,6 +447,7 @@ static struct st_h2o_http3_server_conn_t *get_conn(struct st_h2o_http3_server_st
 
 static uint32_t *get_state_counter(struct st_h2o_http3_server_conn_t *conn, enum h2o_http3_server_stream_state state)
 {
+    H2O_BUILD_ASSERT(sizeof(conn->num_streams.counters) == sizeof(conn->num_streams));
     return conn->num_streams.counters + (size_t)state;
 }
 
