@@ -1038,6 +1038,19 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     if (self->src_req->proceed_req == NULL)
         self->no_req_streaming = 1;
 
+    /* Unless the host is an IP address, append a dot so that the resolver treats the name as fully-qualified and does not try the
+     * search domains (e.g., those listed in resolv.conf). */
+    if (host.base[host.len - 1] != '.') {
+        char *buf = h2o_mem_alloc_pool(&req->pool, char, host.len + 2);
+        memcpy(buf, host.base, host.len);
+        buf[host.len] = '\0';
+        struct in6_addr addr;
+        if (inet_pton(AF_INET, buf, &addr) != 1 && inet_pton(AF_INET6, buf, &addr) != 1) {
+            buf[host.len] = '.';
+            host = h2o_iovec_init(buf, host.len + 1);
+        }
+    }
+
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
 
