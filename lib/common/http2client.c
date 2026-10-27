@@ -317,6 +317,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         pool = stream->super.pool;
         status = &stream->input.status;
         headers = &stream->input.headers;
+        *headers = (h2o_headers_t){NULL}; /* start a new list, keeping the one passed for the preceding 1xx response intact */
     } else {
         pool = &conn->rst_streams_pool;
         status = &dummy_status;

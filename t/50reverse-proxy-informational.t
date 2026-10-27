@@ -118,6 +118,32 @@ EOT
     is(scalar(@m), 2) or diag $resp;
 };
 
+subtest 'http2 upstream' => sub {
+    my $backend = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: https://127.0.0.1:$backend->{tls_port}
+        proxy.http2.ratio: 100
+        proxy.ssl.verify-peer: OFF
+EOT
+    my $resp = `curl --http1.1 --silent --dump-header /dev/stdout 'http://127.0.0.1:$server->{port}/1xx?status=103&link=1'`;
+    like $resp, qr{^HTTP/1.1 103 .*?\r\nlink: </index.js>}s, "103 forwarded";
+    my ($final) = $resp =~ m{^(HTTP/1.1 200 .*?)\r\n\r\n}ms;
+    ok defined $final, "final response" or diag $resp;
+    unlike $final, qr{^link:}mi, "headers of 103 not included in final response";
+};
+
 done_testing();
 
 sub do_forward {
