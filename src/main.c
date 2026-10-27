@@ -3224,6 +3224,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 
     if (strcmp(type, "unix") == 0) {
 
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a unix socket");
+            return -1;
+        }
         if (cc_node != NULL)
             h2o_configurator_errprintf(cmd, *cc_node, "[warning] cannot set congestion controller for unix socket");
         if (initcwnd_node != NULL)
@@ -3278,6 +3282,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #endif
     ) {
         /* TCP socket */
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a TCP socket");
+            return -1;
+        }
 #if !defined(TCP_CONGESTION)
         if (cc_node != NULL)
             h2o_configurator_errprintf(
