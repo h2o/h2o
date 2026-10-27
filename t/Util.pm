@@ -629,7 +629,7 @@ sub wait_debugger {
     print STDERR "waiting debugger for pid $pid ..\n";
     while ($timeout-- != 0) {
         my $out = `ps -p $pid -o 'state' | tail -n 1`;
-        if ($out =~ /^(T|.+X).*$/) {
+        if ($out =~ /^(T|t|.+X).*$/) {
             print STDERR "debugger attached\n";
             return 1;
         }
