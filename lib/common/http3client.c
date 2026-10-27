@@ -261,6 +261,7 @@ static void destroy_connection(struct st_h2o_httpclient__h3_conn_t *conn, const 
     h2o_timer_unlink(&conn->timeout);
     free(conn->server.origin_url.authority.base);
     free(conn->server.origin_url.host.base);
+    free(conn->server.origin_url.path.base);
     free(conn->handshake_properties.client.session_ticket.base);
     h2o_http3_dispose_conn(&conn->super);
     free(conn);
