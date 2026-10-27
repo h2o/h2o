@@ -998,6 +998,11 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     }
     if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
           stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
+        /* Upstream has stopped reading the request body after sending a complete response, and RST_STREAM(NO_ERROR) is being
+         * delayed until that response is sent (see `proceed_request`). Ignore DATA frames that arrive in the meantime, instead of
+         * resetting the stream and discarding the response. */
+        if (stream->delayed_rst_stream_no_error)
+            return 0;
         stream->reset_by_peer_action = 1;
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
