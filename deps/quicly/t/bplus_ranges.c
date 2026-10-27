@@ -109,7 +109,7 @@ static int check(quicly_bplus_ranges_t *ranges, quicly_ranges_t *expected)
         fail("num_ranges mismatch");
         goto Exit;
     }
-    if (ranges->last != (collected.num_ranges != 0 ? collected.last_seen : NULL)) {
+    if (ranges->last != collected.last_seen) {
         fail("`last` does not point to the last range");
         goto Exit;
     }
@@ -161,27 +161,11 @@ static void test_basic(void)
     ok(ranges.first.ranges[0].start == 0 && ranges.first.ranges[0].end == 100);
     ok(check(&ranges, NULL));
 
-    quicly_bplus_ranges_clear(&ranges);
-    ok(ranges.num_ranges == 0);
-    ok(ranges.last == NULL);
-    ok(check(&ranges, NULL));
-
-    /* add to empty */
-    ok(quicly_bplus_ranges_add(&ranges, 5, 6, NO_LIMIT) == 0);
-    ok(ranges.num_ranges == 1);
-    ok(check(&ranges, NULL));
-
     /* empty range is ignored */
-    ok(quicly_bplus_ranges_add(&ranges, 100, 100, NO_LIMIT) == 0);
+    ok(quicly_bplus_ranges_add(&ranges, 200, 200, NO_LIMIT) == 0);
     ok(ranges.num_ranges == 1);
 
-    /* extend the first range downward */
-    ok(quicly_bplus_ranges_add(&ranges, 3, 6, NO_LIMIT) == 0);
-    ok(ranges.num_ranges == 1);
-    ok(ranges.first.ranges[0].start == 3 && ranges.first.ranges[0].end == 6);
-    ok(check(&ranges, NULL));
-
-    quicly_bplus_ranges_clear(&ranges);
+    quicly_bplus_ranges_dispose(&ranges);
 }
 
 static void test_limit(void)
@@ -225,7 +209,7 @@ static void test_limit(void)
     ok(quicly_bplus_ranges_add(&ranges, 5000, 5001, 1024 * 99) == QUICLY_ERROR_STATE_EXHAUSTION);
     ok(check(&ranges, &expected));
 
-    quicly_bplus_ranges_clear(&ranges);
+    quicly_bplus_ranges_dispose(&ranges);
     quicly_ranges_clear(&expected);
 }
 
@@ -280,7 +264,7 @@ static void test_fill_gaps(void)
     ok(check(&ranges, &expected));
 
     free(order);
-    quicly_bplus_ranges_clear(&ranges);
+    quicly_bplus_ranges_dispose(&ranges);
     quicly_ranges_clear(&expected);
 }
 
@@ -306,7 +290,7 @@ static void test_swallow(void)
                 success = add_both(&ranges, &expected, start, end) && check(&ranges, &expected);
             if (success)
                 success = add_both(&ranges, &expected, start - 9, end + 9) && check(&ranges, &expected);
-            quicly_bplus_ranges_clear(&ranges);
+            quicly_bplus_ranges_dispose(&ranges);
             quicly_ranges_clear(&expected);
         }
     }
@@ -376,7 +360,7 @@ static int test_fragmented_order(int order)
     }
 
     free(indices);
-    quicly_bplus_ranges_clear(&ranges);
+    quicly_bplus_ranges_dispose(&ranges);
     quicly_ranges_clear(&expected);
     return success;
 }

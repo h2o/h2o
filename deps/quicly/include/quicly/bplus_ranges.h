@@ -70,7 +70,7 @@ typedef struct st_quicly_bplus_ranges_t {
      */
     quicly_bplus_ranges_node_t *root;
     /**
-     * last range; NULL if `num_ranges == 0`
+     * last range
      */
     quicly_range_t *last;
     /**
@@ -85,9 +85,9 @@ typedef struct st_quicly_bplus_ranges_t {
  */
 static void quicly_bplus_ranges_init(quicly_bplus_ranges_t *ranges);
 /**
- * frees all memory and makes the structure empty
+ * frees all memory
  */
-void quicly_bplus_ranges_clear(quicly_bplus_ranges_t *ranges);
+void quicly_bplus_ranges_dispose(quicly_bplus_ranges_t *ranges);
 /**
  * Adds given range, merging it with the ranges it overlaps or touches. `max_committed` is the maximum offset that the peer is
  * permitted to send. A range disjoint from all existing ones is rejected with QUICLY_ERROR_STATE_EXHAUSTION if `num_ranges` has

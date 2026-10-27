@@ -186,15 +186,9 @@ void quicly_recvbuf_shift(quicly_stream_t *stream, ptls_buffer_t *rb, size_t del
 
 ptls_iovec_t quicly_recvbuf_get(quicly_stream_t *stream, ptls_buffer_t *rb)
 {
-    size_t avail;
-
-    if (quicly_recvstate_transfer_complete(&stream->recvstate)) {
-        avail = rb->off;
-    } else {
-        avail = quicly_recvstate_bytes_available(&stream->recvstate);
-    }
-
-    return ptls_iovec_init(rb->base, avail);
+    /* Hand out what the receive state deems available rather than the whole buffer; the two differ when the stream has been
+     * reset, the buffer possibly retaining bytes above the offset at which the stream was deemed to end. */
+    return ptls_iovec_init(rb->base, quicly_recvstate_bytes_available(&stream->recvstate));
 }
 
 int quicly_recvbuf_receive(quicly_stream_t *stream, ptls_buffer_t *rb, size_t off, const void *src, size_t len)
@@ -252,6 +246,24 @@ int quicly_streambuf_egress_shutdown(quicly_stream_t *stream)
     int ret;
 
     if ((ret = quicly_sendstate_shutdown(&stream->sendstate, sbuf->egress.bytes_written)) != 0)
+        return ret;
+    return quicly_stream_sync_sendbuf(stream, 1);
+}
+
+quicly_error_t quicly_streambuf_egress_reset(quicly_stream_t *stream, quicly_error_t err, uint64_t reliable_size)
+{
+    assert(reliable_size <= ((quicly_streambuf_t *)stream->data)->egress.bytes_written &&
+           "cannot commit to delivering bytes that have not been written");
+
+    quicly_error_t ret;
+
+    /* the two have different semantics; a Reliable Size of zero is a RESET_STREAM, which needs no sync */
+    if (reliable_size == 0) {
+        quicly_reset_stream(stream, err);
+        return 0;
+    }
+
+    if ((ret = quicly_set_reset_stream_at(stream, err, reliable_size)) != 0)
         return ret;
     return quicly_stream_sync_sendbuf(stream, 1);
 }
