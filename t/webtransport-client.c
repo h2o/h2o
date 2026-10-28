@@ -112,6 +112,7 @@ static unsigned expected_server_streams;
 static int wait_close;
 static uint32_t close_code;
 static int64_t timeout_ms = 10000;
+static int64_t linger_ms = 0;
 
 static struct {
     struct wt_stream *list[MAX_STREAMS];
@@ -391,6 +392,8 @@ static void run_actions(void)
             transport->send(stream, "x", 1, 0);
             stream->deferred_action = transport->stop;
             stream->deferred_code = parse_code(arg);
+        } else if (IS("uni-open") && arg != NULL) {
+            send_text_or_pattern(transport->open_stream(1), arg, 0);
         } else if (IS("dgram") && arg != NULL) {
             transport->send_datagram(arg, strlen(arg));
             ++session.datagrams_sent;
@@ -856,10 +859,12 @@ static int run_h3(void)
     }
     h3_send_control_stream();
 
-    int64_t deadline = now_ms() + timeout_ms, closing = 0;
+    int64_t deadline = now_ms() + timeout_ms, closing = 0, linger_until = INT64_MAX;
     while (1) {
         int64_t now = now_ms();
-        if (session.done && !closing && (session.closed || now >= session.deadline)) {
+        if (session.closed && linger_until == INT64_MAX)
+            linger_until = now + linger_ms; /* acknowledge what the server sends after the session's end, as a browser does */
+        if (session.done && !closing && ((session.closed && now >= linger_until) || now >= session.deadline)) {
             quicly_close(h3.conn, H2O_HTTP3_ERROR_NONE, "");
             closing = 1;
         }
@@ -922,12 +927,14 @@ static void usage(const char *cmd)
             "  -w              wait for the server to close the session\n"
             "  -c <code>       error code used for closing the session (default: 0)\n"
             "  -t <msec>       timeout (default: 10000)\n"
+            "  -l <msec>       time the connection is kept open after the session is closed (default: 0)\n"
             "Actions:\n"
             "  bidi:<text>     opens a bidirectional stream and sends <text> followed by FIN\n"
             "  uni:<text>      opens a unidirectional stream and sends <text> followed by FIN\n"
             "                  (`@<size>` can be used in place of <text> to send a pattern of given size)\n"
             "  bidi-reset:<code> opens a bidirectional stream, sends a byte, then resets it once echoed\n"
             "  bidi-stop:<code> opens a bidirectional stream, sends a byte, then sends STOP_SENDING once echoed\n"
+            "  uni-open:<text> opens a unidirectional stream and sends <text>, leaving the stream open\n"
             "  dgram:<text>    sends a datagram\n"
             "  drain           sends WT_DRAIN_SESSION\n"
             "  close:<code>[:<reason>] closes the session\n",
@@ -945,7 +952,7 @@ int main(int argc, char **argv)
     SSL_library_init();
     OpenSSL_add_all_algorithms();
 
-    while ((ch = getopt(argc, argv, "3H:e:wc:t:h")) != -1) {
+    while ((ch = getopt(argc, argv, "3H:e:wc:t:l:h")) != -1) {
         switch (ch) {
         case '3':
             break;
@@ -971,6 +978,9 @@ int main(int argc, char **argv)
             break;
         case 't':
             timeout_ms = strtoll(optarg, NULL, 10);
+            break;
+        case 'l':
+            linger_ms = strtoll(optarg, NULL, 10);
             break;
         default:
             usage(argv[0]);
