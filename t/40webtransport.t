@@ -3,6 +3,8 @@ use warnings;
 use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
+use File::Temp ();
+use JSON::PP ();
 
 my $client_prog = bindir() . "/webtransport-client";
 plan skip_all => "$client_prog not found"
@@ -164,6 +166,64 @@ subtest "graceful shutdown" => sub {
             close $fh;
             is $? >> 8, 0, "exit status";
             has_lines(\@out, ["drain", "close 0 \"\""], "drained, then closed by the handler");
+        };
+    }
+};
+
+# The STOP_SENDING and RESET_STREAM frames of the streams of a session that has ended (but for a send side with bytes to send) are
+# sent once the peer has the end of the session: Chrome, given the STOP_SENDING ahead of the end of the session while a read is
+# pending on an incoming unidirectional stream, never settles `WebTransport.closed` (https://crbug.com/579037664). `uni-open` leaves
+# such a pair open: the client's stream and its echo. The client stays connected for a while after the close, to acknowledge it.
+subtest "server closes with streams open" => sub {
+    my $tempdir = File::Temp::tempdir(CLEANUP => 1);
+    my $sock = "$tempdir/h2olog.sock";
+    my $server = spawn_h2o(<< "EOT");
+webtransport: ON
+listen:
+  type: unix
+  port: $sock
+hosts:
+  default:
+    h2olog: ON
+    paths:
+      /echo:
+        webtransport.echo: ON
+EOT
+    my ($client_uni, $server_uni) = (6, 15); # 2 is the client's HTTP/3 control stream; 3, 7, 11 are the server's
+    for my $proto (@protocols) {
+        subtest $proto->{name} => sub {
+            my $tracer = H2ologTracer->new({path => $sock});
+            my ($out, $status) = run_client($server, $proto, "-w -l 500", "/echo?close=42", "uni-open:hi", "bidi:x");
+            is $status, 0, "exit status";
+            has_lines($out, ["close 42 \"bye\""], "closed");
+            my $find = sub {
+                my ($type, $stream_id, @events) = @_;
+                my ($at) = grep { $events[$_]{type} =~ $type && $events[$_]{stream_id} == $stream_id } 0 .. $#events;
+                $at;
+            };
+            my ($trace, @events) = ('');
+            for (1 .. 50) {
+                $trace .= $tracer->get_trace();
+                @events = map { JSON::PP::decode_json($_) } grep { /^\{/ } split /\n/, $trace;
+                last if defined $find->(qr/^reset_stream(_at)?_send$/, $server_uni, @events);
+                sleep 0.1;
+            }
+            my $events_desc = join "\n", map { "$_->{type} stream=@{[ $_->{stream_id} // '-' ]}" }
+                grep { $_->{type} =~ /^(stream_acked|reset_stream(_at)?_send|stop_sending_send)$/ } @events;
+            # the acknowledgement that reaches the largest offset of the CONNECT stream (stream 0), i.e., its end
+            my ($end, $end_acked_at) = (-1);
+            for my $i (0 .. $#events) {
+                my $e = $events[$i];
+                next unless $e->{type} eq 'stream_acked' && $e->{stream_id} == 0 && $e->{off} + $e->{len} > $end;
+                ($end, $end_acked_at) = ($e->{off} + $e->{len}, $i);
+            }
+            ok defined $end_acked_at, "the end of the session is acknowledged" or return diag $events_desc;
+            for ([qr/^stop_sending_send$/, $client_uni, "the client's stream is stopped"],
+                 [qr/^reset_stream(_at)?_send$/, $server_uni, "its echo is reset"]) {
+                my ($type, $stream_id, $name) = @$_;
+                my $at = $find->($type, $stream_id, @events);
+                ok defined $at && $at > $end_acked_at, "$name after the end of the session is acknowledged" or diag $events_desc;
+            }
         };
     }
 };

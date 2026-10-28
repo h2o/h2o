@@ -230,6 +230,11 @@ struct st_h2o_http3_server_conn_t {
          */
         h2o_linklist_t streams;
         /**
+         * streams of a session that has ended, to be stopped and reset once the peer has the end of the session, using
+         * st_h2o_http3_server_wt_stream_t::link (see `wt_stream_abandon_ended`)
+         */
+        h2o_linklist_t closing;
+        /**
          * streams having data to send, using st_h2o_http3_server_wt_stream_t::sched_link
          */
         struct {
@@ -370,6 +375,7 @@ static int foreach_request(h2o_conn_t *_conn, int (*cb)(h2o_req_t *req, void *cb
 static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_idle_connection(h2o_conn_t *_conn);
 static void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err);
+static void wt_reset_closing(struct st_h2o_http3_server_conn_t *conn);
 static void record_stream_stats(struct st_h2o_http3_server_stream_t *stream);
 static quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src,
                                                  const uint8_t *src_end, int in_generator, const char **err_desc);
@@ -1076,6 +1082,7 @@ void on_stream_destroy(quicly_stream_t *qs, quicly_error_t err)
 
     if (conn->wt.session_stream == stream) {
         assert(conn->wt.session == NULL);
+        wt_reset_closing(conn);
         conn->wt.session_stream = NULL;
         conn->wt.session_ended = 0;
         conn->wt.started = 0;
@@ -1185,6 +1192,8 @@ static void on_send_shift(quicly_stream_t *qs, size_t delta)
                    stream->proceed_requested);
         } else {
             collect_quic_performance_metrics(stream);
+            if (get_conn(stream)->wt.session_stream == stream)
+                wt_reset_closing(get_conn(stream)); /* the peer has the end of the session */
             if (quicly_stream_has_receive_side(0, stream->quic->stream_id)) {
                 quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_EARLY_RESPONSE);
                 cancel_qpack_decoder(stream);
@@ -1273,6 +1282,8 @@ static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 {
     struct st_h2o_http3_server_stream_t *stream = qs->data;
 
+    if (get_conn(stream)->wt.session_stream == stream)
+        wt_reset_closing(get_conn(stream));
     shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_CANCELLED, err, 0, 0);
 }
 
@@ -2352,6 +2363,61 @@ static void wt_stream_abandon(struct st_h2o_http3_server_wt_stream_t *ws, quicly
 }
 
 /**
+ * Whether the send side of a stream is open with every byte written acknowledged. Then there is nothing to send nor to retransmit,
+ * and resetting it can wait.
+ */
+static int wt_send_side_is_idle(struct st_h2o_http3_server_wt_stream_t *ws)
+{
+    quicly_stream_t *qs = ws->quic;
+
+    return qs != NULL && quicly_stream_has_send_side(0, qs->stream_id) && quicly_sendstate_is_open(&qs->sendstate) &&
+           qs->sendstate.app_error_code == UINT64_MAX && !ws->send.app_pending && qs->sendstate.pending.num_ranges == 0 &&
+           qs->sendstate.acked.ranges[0].end == qs->sendstate.size_inflight;
+}
+
+/**
+ * Ends a stream of a session that has ended, as `wt_stream_abandon` does, except that its STOP_SENDING and RESET_STREAM wait until
+ * the peer has the end of the session (`wt_reset_closing`); only a send side with bytes to (re)transmit, which the stream can no
+ * longer provide, is reset at once. Chrome, given the STOP_SENDING of one of its unidirectional streams ahead of the end of the
+ * session while a read is pending on an incoming unidirectional stream, never settles `WebTransport.closed`, and Chromium crashes
+ * the renderer (https://crbug.com/579037664).
+ */
+static void wt_stream_abandon_ended(struct st_h2o_http3_server_wt_stream_t *ws)
+{
+    if (ws->quic == NULL || ws->conn->wt.disposing) {
+        wt_stream_abandon(ws, H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
+        return;
+    }
+    wt_stream_unlink(ws);
+    ws->state = WT_STREAM_STATE_ABANDONED;
+    wt_stream_dispose_recvbuf(ws);
+    if (!wt_send_side_is_idle(ws))
+        wt_reset_quic(ws, wt_to_h3_error(H2O_WEBTRANSPORT_ERROR_SESSION_GONE));
+    wt_discard_input(ws);
+    h2o_linklist_insert(&ws->conn->wt.closing, &ws->link);
+}
+
+/**
+ * Sends the STOP_SENDING and RESET_STREAM frames left by `wt_stream_abandon_ended`, once the peer has acknowledged the end of the
+ * session (or the session stream has been stopped or destroyed).
+ */
+static void wt_reset_closing(struct st_h2o_http3_server_conn_t *conn)
+{
+    quicly_error_t code = wt_to_h3_error(H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
+
+    if (h2o_linklist_is_empty(&conn->wt.closing))
+        return;
+    while (!h2o_linklist_is_empty(&conn->wt.closing)) {
+        struct st_h2o_http3_server_wt_stream_t *ws =
+            H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, link, conn->wt.closing.next);
+        h2o_linklist_unlink(&ws->link);
+        wt_stop_quic(ws, code);
+        wt_reset_quic(ws, code);
+    }
+    h2o_quic_schedule_timer(&conn->h3.super);
+}
+
+/**
  * refuses a stream that has not been delivered to the session
  */
 static void wt_stream_reject(struct st_h2o_http3_server_wt_stream_t *ws, quicly_error_t err)
@@ -2899,7 +2965,7 @@ static void wt_native_detach(h2o_webtransport_session_t *session)
     while (!h2o_linklist_is_empty(&conn->wt.streams)) {
         struct st_h2o_http3_server_wt_stream_t *ws =
             H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, link, conn->wt.streams.next);
-        wt_stream_abandon(ws, H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
+        wt_stream_abandon_ended(ws);
         ws->super.callbacks->on_destroy(&ws->super, H2O_WEBTRANSPORT_ERROR_SESSION_GONE);
         if (ws->quic == NULL && !ws->in_callback)
             wt_stream_free(ws);
@@ -3581,6 +3647,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_init_anchor(&conn->wt.settings_blocked);
     h2o_linklist_init_anchor(&conn->wt.pending);
     h2o_linklist_init_anchor(&conn->wt.streams);
+    h2o_linklist_init_anchor(&conn->wt.closing);
     h2o_linklist_init_anchor(&conn->wt.scheduler.active);
     h2o_linklist_init_anchor(&conn->wt.scheduler.conn_blocked);
     /* WebTransport over HTTP/3 requires the H3 DATAGRAM extension (draft-ietf-webtrans-http3-16 section 3.1) */
