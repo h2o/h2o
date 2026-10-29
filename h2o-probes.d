@@ -77,6 +77,11 @@ provider h2o {
      */
     probe send_response_header(uint64_t conn_id, uint64_t req_id, const char *name, size_t name_len, const char *value,
                                size_t value_len);
+    /**
+     * HTTP-level event, reporting the properties of the TLS handshake. Emitted once per connection. `server_name` is an empty string
+     * if SNI was not provided.
+     */
+    probe tls_properties(uint64_t conn_id, const char *server_name);
 
     /**
      * HTTP/1 server-level event, indicating that a connection has been accepted.

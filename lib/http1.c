@@ -1340,6 +1340,8 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         PTLS_LOG_ELEMENT_PTR(sock, conn->sock);
         PTLS_LOG_ELEMENT_SAFESTR(uuid, h2o_conn_get_uuid(&conn->super));
     });
+    if (sock->ssl != NULL)
+        h2o_probe_log_tls_properties(&conn->super);
 
     init_request(conn);
     reqread_start(conn);
