@@ -164,11 +164,17 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
 
 static inline void h2o_probe_log_tls_properties(h2o_conn_t *conn)
 {
-    const char *server_name = conn->callbacks->get_ssl_server_name(conn);
-    if (server_name == NULL)
-        server_name = "";
-    H2O_PROBE_CONN(TLS_PROPERTIES, conn, server_name);
-    H2O_LOG_CONN(tls_properties, conn, { PTLS_LOG_ELEMENT_UNSAFESTR(server_name, server_name, strlen(server_name)); });
+    PTLS_LOG_DEFINE_POINT(h2o, tls_properties, tls_properties_logpoint);
+    if (H2O_PROBE_IS_ENABLED(TLS_PROPERTIES) ||
+        (ptls_log_point_maybe_active(&tls_properties_logpoint) != 0 &&
+         (tls_properties_logpoint.state.active_conns &
+          ptls_log_conn_maybe_active(conn->callbacks->log_state(conn), ptls_log_getsni_h2o_conn(conn))) != 0)) {
+        const char *server_name = conn->callbacks->get_ssl_server_name(conn);
+        if (server_name == NULL)
+            server_name = "";
+        H2O_PROBE_CONN(TLS_PROPERTIES, conn, server_name);
+        H2O_LOG_CONN(tls_properties, conn, { PTLS_LOG_ELEMENT_UNSAFESTR(server_name, server_name, strlen(server_name)); });
+    }
 }
 
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
