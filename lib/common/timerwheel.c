@@ -323,7 +323,7 @@ Redo:
                 wheel = 0;
                 goto Redo;
             }
-            ctx->last_run += 1 << (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL);
+            ctx->last_run += (uint64_t)1 << (wheel * H2O_TIMERWHEEL_BITS_PER_WHEEL);
             if (ctx->last_run > now) {
                 ctx->last_run = now;
                 goto Exit;

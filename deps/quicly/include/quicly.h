@@ -139,10 +139,10 @@ QUICLY_CALLBACK_TYPE(void, receive_datagram_frame, quicly_conn_t *conn, ptls_iov
  */
 QUICLY_CALLBACK_TYPE(void, closed, quicly_conn_t *conn);
 /**
- * Returns current time in milliseconds. The returned value MUST monotonically increase (i.e., it is the responsibility of the
- * callback implementation to guarantee that the returned value never goes back to the past).
+ * Returns current time in milliseconds, retaining fractional milliseconds. The value MUST monotonically increase
+ * (i.e., it is the responsibility of the callback implementation to guarantee that the value never goes back to the past).
  */
-QUICLY_CALLBACK_TYPE0(int64_t, now);
+QUICLY_CALLBACK_TYPE(void, now, double *now);
 /**
  * called when a NEW_TOKEN token is received on a connection
  */
@@ -153,10 +153,9 @@ QUICLY_CALLBACK_TYPE(quicly_error_t, save_resumption_token, quicly_conn_t *conn,
 QUICLY_CALLBACK_TYPE(quicly_error_t, generate_resumption_token, quicly_conn_t *conn, ptls_buffer_t *buf,
                      quicly_address_token_plaintext_t *token);
 /**
- * called to initialize a congestion controller for a new connection.
- * should in turn call one of the quicly_cc_*_init functions from cc.h with customized parameters.
+ * called to initialize a congestion controller for a new connection or path.
  */
-QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, uint32_t initcwnd, int normalize_mtu, int64_t now);
+QUICLY_CALLBACK_TYPE(void, init_cc, quicly_cc_t *cc, const quicly_cc_conf_t *conf, uint16_t max_udp_payload_size, int64_t now);
 /**
  * reference counting.
  * delta must be either 1 or -1.
@@ -265,6 +264,10 @@ typedef struct st_quicly_transport_parameters_t {
     /**
      *
      */
+    uint8_t reset_stream_at : 1;
+    /**
+     *
+     */
     uint64_t active_connection_id_limit;
     /**
      *
@@ -280,6 +283,18 @@ typedef struct st_quicly_salt_t {
     } retry;
 } quicly_salt_t;
 
+/**
+ * number of alternative egress contexts (i.e., `quicly_context_t::egress[1..QUICLY_NUM_ALT_EGRESS]`)
+ */
+#define QUICLY_NUM_ALT_EGRESS 4
+
+/**
+ * values of `quicly_context_t::egress[].ecn`
+ */
+#define QUICLY_ECN_MODE_OFF 0
+#define QUICLY_ECN_MODE_CLASSIC 1
+#define QUICLY_ECN_MODE_L4S 2
+
 struct st_quicly_context_t {
     /**
      * tls context to use
@@ -293,10 +308,6 @@ struct st_quicly_context_t {
      */
     uint16_t initial_egress_max_udp_payload_size;
     /**
-     * loss detection parameters
-     */
-    quicly_loss_conf_t loss;
-    /**
      * transport parameters
      */
     quicly_transport_parameters_t transport_params;
@@ -308,10 +319,6 @@ struct st_quicly_context_t {
      * maximum number of bytes that can be transmitted on a CRYPTO stream (per each epoch)
      */
     uint32_t max_crypto_bytes;
-    /**
-     * initial CWND in terms of packet numbers
-     */
-    uint32_t initcwnd_packets;
     /**
      * (client-only) Initial QUIC protocol version used by the client. Setting this to a greased version will enforce version
      * negotiation.
@@ -345,50 +352,6 @@ struct st_quicly_context_t {
      * value to zero effectively disables the endpoint responding to path migration attempts.
      */
     uint64_t max_path_validation_failures;
-    /**
-     * Jumpstart CWND to be used when there is no previous information. If set to zero, slow start is used. Note jumpstart is
-     * possible only when the use_pacing flag is set.
-     */
-    uint32_t default_jumpstart_cwnd_packets;
-    /**
-     * Maximum jumpstart CWND to be used for connections with previous delivery rate information (i.e., resuming connections). If
-     * set to zero, slow start is used.
-     */
-    uint32_t max_jumpstart_cwnd_packets;
-    /**
-     * Probabilities for enabling jumpstart when they are configured, multiplied by 255. 0 means never, 255 (default) means always.
-     */
-    struct {
-        struct {
-            uint8_t non_resume;
-            uint8_t resume;
-        } jumpstart;
-        /**
-         * if rapid cstart should be used
-         */
-        uint8_t rapid_start;
-        /**
-         * whether to use ECN on the send side; ECN is always on on the receive side
-         */
-        uint8_t ecn;
-        /**
-         * if pacing should be used
-         */
-        uint8_t pacing;
-        /**
-         * if CC should take app-limited into consideration
-         */
-        uint8_t respect_app_limited;
-    } enable_ratio;
-    /**
-     * expand client hello so that it does not fit into one datagram
-     */
-    unsigned expand_client_hello : 1;
-    /**
-     * if CC growth should be normalized to the reference packet size rather than the path's maximum UDP payload size; enabled in
-     * the default contexts
-     */
-    unsigned normalize_cc_mtu : 1;
     /**
      *
      */
@@ -426,10 +389,6 @@ struct st_quicly_context_t {
      */
     quicly_crypto_engine_t *crypto_engine;
     /**
-     * initializes a congestion controller for given connection
-     */
-    quicly_init_cc_t *init_cc;
-    /**
      * optional refcount callback
      */
     quicly_update_open_count_t *update_open_count;
@@ -437,6 +396,65 @@ struct st_quicly_context_t {
      *
      */
     quicly_async_handshake_t *async_handshake;
+    /**
+     * expand client hello so that it does not fit into one datagram
+     */
+    unsigned expand_client_hello : 1;
+    /**
+     * probability of using each alternative egress context, multiplied by 255; `alt_egress_ratio[i]` is the probability of using
+     * `egress[i + 1]`. The sum must not exceed 255; the remainder is the probability of using `egress[0]`. All zero (default)
+     * means `egress[0]` is always used.
+     */
+    uint8_t alt_egress_ratio[QUICLY_NUM_ALT_EGRESS];
+    /**
+     * egress settings (i.e., loss recovery and congestion control); one is chosen for each connection based on `alt_egress_ratio`
+     */
+    struct st_quicly_context_egress_t {
+        /**
+         * loss detection parameters
+         */
+        quicly_loss_conf_t loss;
+        /**
+         * congestion control parameters
+         */
+        quicly_cc_conf_t cc;
+        /**
+         * Jumpstart CWND to be used when there is no previous information. If set to zero, slow start is used. Note jumpstart is
+         * possible only when the `pacing` flag is set.
+         */
+        uint32_t default_jumpstart_packets;
+        /**
+         * Maximum jumpstart CWND to be used for connections with previous delivery rate information (i.e., resuming connections).
+         * If set to zero, slow start is used.
+         */
+        uint32_t max_jumpstart_packets;
+        /**
+         * Pacing multiplier used in congestion avoidance, unless L4S is used. The value is scaled by 1024; i.e., 2048 means 2x.
+         */
+        uint16_t pacing_multiplier;
+        /**
+         * Pacing multiplier used in congestion avoidance, when L4S is used.
+         */
+        uint16_t pacing_multiplier_l4s;
+        /**
+         * prepares jumpstart but disengages before any action; provided for A/B testing between connections eligible for jumpstart
+         */
+        uint8_t disengage_jumpstart : 1;
+        /**
+         * ECN mode on the send side; ECN is always on on the receive side. `QUICLY_ECN_MODE_L4S` sends ECT(1) and reports CE
+         * marks to the congestion controller as L4S signals; it requires `pacing` to be set and a congestion controller that
+         * supports L4S (i.e., CUBACK).
+         */
+        uint8_t ecn : 2;
+        /**
+         * if pacing should be used
+         */
+        uint8_t pacing : 1;
+        /**
+         * if CC should take app-limited into consideration
+         */
+        uint8_t respect_app_limited : 1;
+    } egress[1 + QUICLY_NUM_ALT_EGRESS];
 };
 
 /**
@@ -561,6 +579,12 @@ struct st_quicly_conn_streamgroup_state_t {
          * Number of packets that were delayed processing and successfully used.                                                   \
          */                                                                                                                        \
         uint64_t delayed_used;                                                                                                     \
+        /**                                                                                                                        \
+         * number of packets that arrived over an inferior path and were processed on the path that was already the primary        \
+         * one. Together with `promoted_to_inferior_path`, this is how an application observes that the connection has come        \
+         * to be carried over an inferior path.                                                                                    \
+         */                                                                                                                        \
+        uint64_t received_on_inferior_primary_path;                                                                                \
     } num_packets;                                                                                                                 \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -595,7 +619,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency, immediate_ack;                                                                                          \
+            ack_frequency, immediate_ack, reset_stream_at;                                                                         \
     } num_frames_received, num_frames_sent;                                                                                        \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -630,6 +654,14 @@ struct st_quicly_conn_streamgroup_state_t {
          * number of paths that were deemed as ECN black holes                                                                     \
          */                                                                                                                        \
         uint64_t ecn_failed;                                                                                                       \
+        /**                                                                                                                        \
+         * number of connections accepted from a packet that arrived over an inferior path                                         \
+         */                                                                                                                        \
+        uint64_t accepted_on_inferior_path;                                                                                        \
+        /**                                                                                                                        \
+         * number of times a packet that arrived over an inferior path promoted that path to be the primary path                   \
+         */                                                                                                                        \
+        uint64_t promoted_to_inferior_path;                                                                                        \
     } num_paths;                                                                                                                   \
     /**                                                                                                                            \
      * Total number of PTOs observed during the connection.                                                                        \
@@ -648,17 +680,9 @@ struct st_quicly_conn_streamgroup_state_t {
      */                                                                                                                            \
     uint64_t num_jumpstart_applicable;                                                                                             \
     /**                                                                                                                            \
-     * Number of connections that used rapid start.                                                                                \
+     * Total number of connections that used an alternative egress context (i.e., not `egress[0]`).                                \
      */                                                                                                                            \
-    uint64_t num_rapid_start;                                                                                                      \
-    /**                                                                                                                            \
-     * Total number of connections that were paced.                                                                                \
-     */                                                                                                                            \
-    uint64_t num_paced;                                                                                                            \
-    /**                                                                                                                            \
-     * Total number of connections where app-limited state was respected by CC.                                                    \
-     */                                                                                                                            \
-    uint64_t num_respected_app_limited
+    uint64_t num_alt_egress
 
 /**
  * Stats that do not need to be gathered upon the invocation of `quicly_get_stats`. This macro is used to define the same fields in
@@ -751,7 +775,8 @@ typedef struct st_quicly_stats_t {
     apply(num_packets.sent_promoted_paths, "num-packets.sent-promoted-paths")                                                      \
     apply(num_packets.ack_received_promoted_paths, "num-packets.ack-received-promoted-paths")                                      \
     apply(num_packets.max_delayed, "num-packets.max-delayed")                                                                      \
-    apply(num_packets.delayed_used, "num-packets.delayed-used")
+    apply(num_packets.delayed_used, "num-packets.delayed-used")                                                                    \
+    apply(num_packets.received_on_inferior_primary_path, "num-packets.received-on-inferior-primary-path")
 
 #define QUICLY_STATS_FOREACH_NUM_BYTES(apply)                                                                                      \
     apply(num_bytes.received, "num-bytes.received")                                                                                \
@@ -789,7 +814,8 @@ typedef struct st_quicly_stats_t {
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(handshake_done, dir, apply)                                                                \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(datagram, dir, apply)                                                                      \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack_frequency, dir, apply)                                                                 \
-    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(immediate_ack, dir, apply)
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(immediate_ack, dir, apply)                                                                 \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(reset_stream_at, dir, apply)
 
 #define QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)                                                                             \
     apply(num_paths.created, "num-paths.created")                                                                                  \
@@ -800,13 +826,13 @@ typedef struct st_quicly_stats_t {
     apply(num_paths.closed_no_dcid, "num-paths.closed-no-dcid")                                                                    \
     apply(num_paths.ecn_validated, "num-paths.ecn-validated")                                                                      \
     apply(num_paths.ecn_failed, "num-paths.ecn-failed")                                                                            \
+    apply(num_paths.accepted_on_inferior_path, "num-paths.accepted-on-inferior-path")                                              \
+    apply(num_paths.promoted_to_inferior_path, "num-paths.promoted-to-inferior-path")                                              \
     apply(num_ptos, "num-ptos")                                                                                                    \
     apply(num_handshake_timeouts, "num-handshake-timeouts")                                                                        \
     apply(num_initial_handshake_exceeded, "num-initial-handshake-exceeded")                                                        \
     apply(num_jumpstart_applicable, "num-jumpstart-applicable")                                                                    \
-    apply(num_rapid_start, "num-rapid-start")                                                                                      \
-    apply(num_paced, "num-paced")                                                                                                  \
-    apply(num_respected_app_limited, "num-respected-app-limited")
+    apply(num_alt_egress, "num-alt-egress")
 
 /**
  * Macro for iterating QUICLY_STATS_PREBUILT_COUNTERS.
@@ -848,6 +874,10 @@ typedef struct st_quicly_stats_t {
     apply(cc.num_loss_episodes_undone, "cc.num-loss-episodes-undone")                                                              \
     apply(cc.num_loss_episodes_undone_in_startup, "cc.num-loss-episodes-undone-in-startup")                                        \
     apply(cc.num_ecn_loss_episodes, "cc.num-ecn-loss-episodes")                                                                    \
+    apply(cc.num_accel_eligible_episodes, "cc.num-accel-eligible-episodes")                                                        \
+    apply(cc.cwnd_increase_ca, "cc.cwnd-increase-ca")                                                                              \
+    apply(cc.cwnd_increase_accel, "cc.cwnd-increase-accel")                                                                        \
+    apply(cc.num_prague_reductions, "cc.num-prague-reductions")                                                                    \
     apply(delivery_rate.latest, "delivery-rate.latest")                                                                            \
     apply(delivery_rate.smoothed, "delivery-rate.smoothed")                                                                        \
     apply(delivery_rate.stdev, "delivery-rate.stdev")                                                                              \
@@ -971,11 +1001,15 @@ typedef struct st_quicly_stream_callbacks_t {
     /**
      * called when data is newly received.  `off` is the offset within the buffer (the beginning position changes as the application
      * calls `quicly_stream_sync_recvbuf`.  Applications should consult `quicly_stream_t::recvstate` to see if it has contiguous
-     * input.
+     * input.  Once `quicly_recvstate_transfer_complete` returns true, the stream has ended.  When the reliable stream reset
+     * extension (draft-ietf-quic-reliable-stream-reset) is used, the closing error code is available as
+     * `quicly_stream_t::recvstate.app_error_code`; it being UINT64_MAX indicates that the stream was closed by a FIN.
      */
     void (*on_receive)(quicly_stream_t *stream, size_t off, const void *src, size_t len);
     /**
-     * called when a RESET_STREAM frame is received
+     * called when the stream is reset with a Reliable Size of zero; i.e., by a RESET_STREAM frame or by a RESET_STREAM_AT frame
+     * carrying zero. If set to NULL, reset are notified as a zero-byte delivery to `on_receive` as if it was a reliable reset; see
+     * `on_receive`.
      */
     void (*on_receive_reset)(quicly_stream_t *stream, quicly_error_t err);
 } quicly_stream_callbacks_t;
@@ -1025,16 +1059,6 @@ struct st_quicly_stream_t {
             uint64_t error_code;
         } stop_sending;
         /**
-         * reset_stream
-         */
-        struct {
-            /**
-             * STATE_NONE until RST is generated
-             */
-            quicly_sender_state_t sender_state;
-            uint64_t error_code;
-        } reset_stream;
-        /**
          * sends receive window updates to remote peer
          */
         quicly_maxsender_t max_stream_data_sender;
@@ -1058,13 +1082,6 @@ struct st_quicly_stream_t {
          * size of the receive window
          */
         uint32_t window;
-        /**
-         * Maximum number of ranges (i.e. gaps + 1) permitted in `recvstate.ranges`.
-         * As discussed in https://github.com/h2o/quicly/issues/278, this value should be proportional to the size of the receive
-         * window, so that the receive window can be maintained even in the worst case, where every one of the two packets being
-         * sent are received.
-         */
-        uint32_t max_ranges;
     } _recv_aux;
 };
 
@@ -1139,6 +1156,14 @@ typedef struct st_quicly_decoded_packet_t {
      * if it is the first packet within the datagram
      */
     uint8_t first_packet : 1;
+    /**
+     * if the datagram carrying this packet arrived over a network path that the application considers inferior to a direct one,
+     * e.g. one that reached this node by being relayed through another. quicly attaches no meaning to what makes a path
+     * inferior; it merely propagates the flag onto the counters in `quicly_stats_t::num_paths` so that the application can tell
+     * when the connection has come to be carried over such a path. `quicly_decode_packet` always clears this bit; applications
+     * that know better set it after decoding.
+     */
+    uint8_t inferior_path : 1;
     /**
      *
      */
@@ -1358,8 +1383,14 @@ size_t quicly_send_retry(quicly_context_t *ctx, ptls_aead_context_t *token_encry
  *                                from the address provided by `buf`, and that succeeding packets (if any) will be contiguously laid
  *                                out. This constraint reduces the number of vectors that need to be passed to the kernel when using
  *                                GSO.
- * @return 0 if successful, otherwise an error. When an error is returned, the caller must call `quicly_close` to discard the
- *         connection context.
+ * @return 0 if successful, otherwise one of the following:
+ *         * QUICLY_ERROR_FREE_CONNECTION - the connection has been closed (e.g., the closing period has ended, or the idle timeout
+ *           has fired). The caller must call `quicly_free` to discard the connection.
+ *         * QUICLY_ERROR_STATE_EXHAUSTION - the peer caused the endpoint to retain too much state. The caller may either close the
+ *           connection by calling `quicly_close` with this error code then continue calling `quicly_send`, or discard the
+ *           connection by calling `quicly_free`.
+ *         * other errors (e.g., PTLS_ERROR_NO_MEMORY) - the connection might have been left in an inconsistent state. The caller
+ *           must call `quicly_free` to discard the connection, without trying to close it.
  */
 quicly_error_t quicly_send(quicly_conn_t *conn, quicly_address_t *dest, quicly_address_t *src, struct iovec *datagrams,
                            size_t *num_datagrams, void *buf, size_t bufsize);
@@ -1381,7 +1412,17 @@ size_t quicly_send_stateless_reset(quicly_context_t *ctx, const void *src_cid, v
  */
 quicly_error_t quicly_send_resumption_token(quicly_conn_t *conn);
 /**
- *
+ * Processes a received packet. Errors found in the packet (e.g., protocol violations by the peer) are not reported through the
+ * return value; instead, quicly initiates the closure of the connection, which is reported to the application through the `closed`
+ * callback.
+ * @return 0 if successful, otherwise one of the following:
+ *         * QUICLY_ERROR_PACKET_IGNORED - the packet has been discarded, or buffered for later processing. The connection remains
+ *           usable.
+ *         * QUICLY_ERROR_STATE_EXHAUSTION - the peer caused the endpoint to retain too much state. The caller may either close the
+ *           connection by calling `quicly_close` with this error code then continue calling `quicly_send`, or discard the
+ *           connection by calling `quicly_free`.
+ *         * other errors (e.g., PTLS_ERROR_NO_MEMORY) - the connection might have been left in an inconsistent state. The caller
+ *           must call `quicly_free` to discard the connection, without trying to close it.
  */
 quicly_error_t quicly_receive(quicly_conn_t *conn, struct sockaddr *dest_addr, struct sockaddr *src_addr,
                               quicly_decoded_packet_t *packet);
@@ -1481,6 +1522,15 @@ quicly_error_t quicly_get_or_open_stream(quicly_conn_t *conn, uint64_t stream_id
  */
 void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err);
 /**
+ * Marks the stream for a reliable reset, committing to the delivery of the first `reliable_size` bytes; see
+ * draft-ietf-quic-reliable-stream-reset. Similarly to a shutdown, bytes remain to be emitted, hence the stream is to be scheduled
+ * by the application calling `quicly_stream_sync_sendbuf`, rather than by this function. `reliable_size` must be non-zero; use
+ * `quicly_reset_stream` to reset a stream immediately. This function can be called up to once per stream, including after the
+ * stream has been shut down, as long as the transfer is incomplete; the application must check
+ * `quicly_sendstate_transfer_complete` beforehand, as it does before calling `quicly_reset_stream`.
+ */
+quicly_error_t quicly_set_reset_stream_at(quicly_stream_t *stream, quicly_error_t err, uint64_t reliable_size);
+/**
  *
  */
 void quicly_request_stop(quicly_stream_t *stream, quicly_error_t err);
@@ -1535,6 +1585,12 @@ void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, s
  * Sets CC to the specified type. Returns a boolean indicating if the operation was successful.
  */
 int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
+/**
+ * Returns the index of `quicly_context_t::egress[]` being used by the connection; i.e., 0 if the default egress context is being
+ * used, or a non-zero value if one of the alternatives is. The context is chosen when the connection is created, and remains
+ * unchanged for the lifetime of the connection.
+ */
+int quicly_get_alt_egress(quicly_conn_t *conn);
 /**
  *
  */
@@ -1621,10 +1677,10 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
             if (_c->stash.now != 0)                                                                                                \
-                PTLS_LOG_ELEMENT_SIGNED(time, _c->stash.now);                                                                      \
+                PTLS_LOG_ELEMENT_NUMBER(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
             if (conn_state->conn_id != 0) {                                                                                        \
-                PTLS_LOG_ELEMENT_UNSIGNED(conn_id, conn_state->conn_id);                                                           \
+                PTLS_LOG_ELEMENT_NUMBER(conn_id, conn_state->conn_id);                                                             \
             }                                                                                                                      \
             do {                                                                                                                   \
                 _block                                                                                                             \

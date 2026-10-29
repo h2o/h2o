@@ -49,12 +49,11 @@ struct st_reprocess_request_deferred_t {
 };
 
 struct st_send_error_deferred_t {
-    h2o_req_t *req;
+    struct st_deferred_request_action_t super;
     int status;
     const char *reason;
     const char *body;
     int flags;
-    h2o_timer_t _timeout;
 };
 
 static void on_deferred_action_dispose(void *_action)
@@ -681,18 +680,20 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 #define DECL_SEND_ERROR_DEFERRED(status_)                                                                                          \
     static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                               \
     {                                                                                                                              \
-        struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);          \
-        reset_response(args->req);                                                                                                 \
-        args->req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                  \
-        h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags);                                    \
+        struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, super.timeout, entry);     \
+        reset_response(args->super.req);                                                                                           \
+        args->super.req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                            \
+        h2o_send_error_generic(args->super.req, args->status, args->reason, args->body, args->flags);                              \
     }                                                                                                                              \
                                                                                                                                    \
     static void h2o_send_error_deferred_##status_(h2o_req_t *req, const char *reason, const char *body, int flags)                 \
     {                                                                                                                              \
-        struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, *args, 1);                                          \
-        *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        h2o_timer_init(&args->_timeout, send_error_deferred_cb_##status_);                                                         \
-        h2o_timer_link(req->conn->ctx->loop, 0, &args->_timeout);                                                                  \
+        struct st_send_error_deferred_t *args =                                                                                    \
+            (struct st_send_error_deferred_t *)create_deferred_action(req, sizeof(*args), send_error_deferred_cb_##status_);       \
+        args->status = status_;                                                                                                    \
+        args->reason = reason;                                                                                                     \
+        args->body = body;                                                                                                         \
+        args->flags = flags;                                                                                                       \
     }
 
 DECL_SEND_ERROR_DEFERRED(502)
@@ -702,7 +703,7 @@ DECL_SEND_ERROR_DEFERRED(502)
 static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
 {
     if (input.len < limit) {
-        memcpy(dst, input.base, input.len);
+        h2o_memcpy(dst, input.base, input.len);
         return input.len;
     } else {
         memcpy(dst, input.base, (limit - 3));

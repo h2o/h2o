@@ -525,6 +525,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
                     reader = on_body_content_length;
             }
         }
+        /* Never pool a rejected CONNECT connection; it might contain optimistically forwarded tunnel data. */
+        if (client->super.upgrade_to == h2o_httpclient_upgrade_to_connect)
+            client->_do_keepalive = 0;
     }
 
     client->state.res = STREAM_STATE_BODY;

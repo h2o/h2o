@@ -670,7 +670,7 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
         }
     } else if (req.body_size > 0) {
         *filler_remaining_bytes(client) = req.body_size;
-        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
+        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
         *proceed_req_cb = filler_proceed_request;
@@ -706,7 +706,7 @@ static void usage(const char *progname)
             "  -s <session-file>\n"
             "               file to read / write session information (atm HTTP/3 only)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
-            "  -W <bytes>   receive window size (HTTP/3 only)\n"
+            "  -W <bytes>   receive window size of request streams (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
             "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
             "               TLS is used and the provided hostname is used for peer.\n"
@@ -802,6 +802,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     h3ctx.quic.transport_params.max_datagram_frame_size = 1500;
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
@@ -878,8 +879,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'b':
-            req.body_size = atoi(optarg);
-            if (req.body_size <= 0) {
+            if (sscanf(optarg, "%zu", &req.body_size) != 1 || req.body_size == 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
                 exit(EXIT_FAILURE);
             }
@@ -984,7 +984,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse HTTP/3 receive window size (-W)\n");
                 exit(EXIT_FAILURE);
             }
-            h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
@@ -1028,7 +1027,7 @@ int main(int argc, char **argv)
             }
             break;
         case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
-            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != 1) {
                 fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
                 exit(EXIT_FAILURE);
             }
@@ -1044,10 +1043,14 @@ int main(int argc, char **argv)
             }
             for (slot = h3_key_exchanges; *slot != NULL; ++slot)
                 ;
+            if (slot == h3_key_exchanges + PTLS_ELEMENTSOF(h3_key_exchanges) - 1) {
+                fprintf(stderr, "too many key exchanges\n");
+                exit(EXIT_FAILURE);
+            }
             *slot = *named;
         } break;
         case OPT_HTTP3_NO_ECN:
-            h3ctx.quic.enable_ratio.ecn = 0;
+            h3ctx.quic.egress[0].ecn = QUICLY_ECN_MODE_OFF;
             break;
         case OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY:
             if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder.table_capacity) != 1) {
@@ -1106,7 +1109,7 @@ int main(int argc, char **argv)
 #if H2O_USE_LIBUV
 #else
     { /* initialize QUIC context */
-        h2o_socket_t *socks[2], **sp = socks;
+        h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
         if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
             ++sp;
         if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
@@ -1144,6 +1147,10 @@ int main(int argc, char **argv)
             }
         }
         is_connect = 1;
+    }
+    if (udp_sock != NULL && !is_connect) {
+        fprintf(stderr, "-X can only be used for creating a tunnel\n");
+        exit(EXIT_FAILURE);
     }
     const char *input_path = input_file;
     if (is_connect && input_path == NULL)

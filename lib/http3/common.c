@@ -410,8 +410,10 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         return;
 
     /* read the type, or just return if incomplete */
-    if ((type = quicly_decodev(src, src_end)) == UINT64_MAX)
+    const uint8_t *p = *src;
+    if ((type = quicly_decodev(&p, src_end)) == UINT64_MAX)
         return;
+    *src = p;
 
     switch (type) {
     case H2O_HTTP3_STREAM_TYPE_CONTROL:
@@ -540,7 +542,7 @@ static uint8_t *accept_hashkey_flatten_address(uint8_t *p, quicly_address_t *add
         *p++ = 6;
         memcpy(p, addr->sin6.sin6_addr.s6_addr, 16);
         p += 16;
-        memcpy(p, &addr->sin.sin_port, 2);
+        memcpy(p, &addr->sin6.sin6_port, 2);
         p += 2;
         break;
     case AF_UNSPEC:
@@ -560,8 +562,8 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     if (cipher == NULL) {
         static uint8_t key[PTLS_AES128_KEY_SIZE];
         H2O_MULTITHREAD_ONCE({ ptls_openssl_random_bytes(key, sizeof(key)); });
-        cipher = EVP_CIPHER_CTX_new();
-        EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL);
+        if ((cipher = EVP_CIPHER_CTX_new()) == NULL || !EVP_EncryptInit_ex(cipher, EVP_aes_128_cbc(), NULL, key, NULL))
+            h2o_fatal("failed to setup the cipher for calculating the accept hash key");
     }
 
     uint8_t buf[(1 + 16 + 2) * 2 + QUICLY_MAX_CID_LEN_V1 + PTLS_AES_BLOCK_SIZE] = {0};
@@ -576,8 +578,9 @@ static uint64_t calc_accept_hashkey(quicly_address_t *destaddr, quicly_address_t
     size_t bytes_to_encrypt = ((p - buf) + PTLS_AES_BLOCK_SIZE - 1) / PTLS_AES_BLOCK_SIZE * PTLS_AES_BLOCK_SIZE;
     assert(bytes_to_encrypt <= sizeof(buf));
 
-    { /* encrypt */
-        EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, NULL);
+    { /* encrypt (IV is given explicitly, as OpenSSL 3 does not reset the IV of a reused CBC context when NULL is given) */
+        static const uint8_t iv[PTLS_AES_BLOCK_SIZE] = {0};
+        EVP_EncryptInit_ex(cipher, NULL, NULL, NULL, iv);
         int bytes_encrypted = 0, ret = EVP_EncryptUpdate(cipher, buf, &bytes_encrypted, buf, (int)bytes_to_encrypt);
         assert(ret);
         assert(bytes_encrypted == bytes_to_encrypt);
@@ -662,8 +665,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     } else if (!packets[0].cid.dest.might_be_client_generated) {
         /* forward 1-RTT packets belonging to different nodes, threads */
-        if (ttl == 0)
-            return;
         uint64_t offending_node_id = packets[0].cid.dest.plaintext.node_id;
         if (ctx->forward_packets != NULL && ctx->forward_packets(ctx, &offending_node_id, packets[0].cid.dest.plaintext.thread_id,
                                                                  destaddr, srcaddr, ttl, packets, num_packets))
@@ -722,7 +723,7 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                          * the destination being claimed by the DCID */
                         uint64_t offending_node_id = packets[i].cid.dest.plaintext.node_id;
                         uint32_t offending_thread_id = packets[i].cid.dest.plaintext.thread_id;
-                        if (ctx->forward_packets != NULL && ttl > 0 &&
+                        if (ctx->forward_packets != NULL &&
                             (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id))
                             ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                                  num_packets);
@@ -750,8 +751,6 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
                 if (offending_node_id != ctx->next_cid->node_id || offending_thread_id != ctx->next_cid->thread_id) {
                     /* accept key matches to a connection being established, but DCID doesn't -- likely a second (or later) Initial
                      * that is supposed to be handled by another node. forward it. */
-                    if (ttl == 0)
-                        return;
                     if (ctx->forward_packets != NULL)
                         ctx->forward_packets(ctx, &offending_node_id, offending_thread_id, destaddr, srcaddr, ttl, packets,
                                              num_packets);
@@ -767,16 +766,16 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         if (i != accepted_packet_index) {
             quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
             switch (ret) {
-            case QUICLY_ERROR_STATE_EXHAUSTION:
-            case PTLS_ERROR_NO_MEMORY:
+            case 0:
+                if (ctx->quic_stats != NULL)
+                    ++ctx->quic_stats->packet_processed;
+                break;
+            case QUICLY_ERROR_PACKET_IGNORED:
+                break;
+            default:
                 fprintf(stderr, "%s: `quicly_receive()` returned ret:%" PRId64 "\n", __func__, ret);
                 conn->callbacks->destroy_connection(conn);
                 return;
-            }
-            if (ret != QUICLY_ERROR_PACKET_IGNORED && ret != QUICLY_ERROR_DECRYPTION_FAILED) {
-                if (ctx->quic_stats != NULL) {
-                    ++ctx->quic_stats->packet_processed;
-                }
             }
         }
     }
@@ -1082,8 +1081,8 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         if (frame->length > max_frame_payload_size) {
             H2O_PROBE(H3_FRAME_RECEIVE, frame->type, NULL, frame->length);
             PTLS_LOG(h2o, h3_frame_receive, {
-                PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
-                PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+                PTLS_LOG_ELEMENT_NUMBER(frame_type, frame->type);
+                PTLS_LOG_ELEMENT_NUMBER(payload_len, frame->length);
             });
             *err_desc = h2o_http3_err_frame_too_large;
             return H2O_HTTP3_ERROR_GENERAL_PROTOCOL; /* FIXME is this the correct code? */
@@ -1096,11 +1095,11 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
 
     H2O_PROBE(H3_FRAME_RECEIVE, frame->type, frame->payload, frame->length);
     PTLS_LOG(h2o, h3_frame_receive, {
-        PTLS_LOG_ELEMENT_UNSIGNED(frame_type, frame->type);
+        PTLS_LOG_ELEMENT_NUMBER(frame_type, frame->type);
         if (frame->payload != NULL) {
             PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(payload, frame->payload, frame->length);
         } else {
-            PTLS_LOG_ELEMENT_UNSIGNED(payload_len, frame->length);
+            PTLS_LOG_ELEMENT_NUMBER(payload_len, frame->length);
         }
     });
 
@@ -1392,12 +1391,13 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
             break;
         }
         break;
+    default:
+        fprintf(stderr, "%s: `quicly_send()` returned ret:%" PRId64 "\n", __func__, ret);
+        /* fall through */
     case QUICLY_ERROR_STATE_EXHAUSTION:
     case QUICLY_ERROR_FREE_CONNECTION:
         conn->callbacks->destroy_connection(conn);
         return 0;
-    default:
-        h2o_fatal("quicly_send returned %" PRId64, ret);
     }
 
     h2o_quic_schedule_timer(conn);

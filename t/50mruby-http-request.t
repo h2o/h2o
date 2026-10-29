@@ -396,6 +396,45 @@ EOT
     });
 };
 
+subtest 'exception before connect' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        mruby.handler: |
+          class RaisingBody
+            def read
+              raise "raised by read"
+            end
+          end
+          class NonStringBody
+            def read
+              1
+            end
+          end
+          proc {|env|
+            errors = []
+            [
+              proc { http_request("invalid") },
+              proc { http_request("http://127.0.0.1/", { :body => RaisingBody.new }) },
+              proc { http_request("http://127.0.0.1/", { :body => NonStringBody.new }) },
+            ].each do |p|
+              begin
+                p.call
+              rescue => e
+                errors << e.message
+              end
+            end
+            GC.start
+            [200, {}, [errors.join(",")]]
+          }
+EOT
+    my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr http://127.0.0.1:$server->{port}/");
+    like $headers, qr{^HTTP/1\.1 200 }s;
+    is $body, "invaild URL,raised by read,body.read did not return string";
+};
+
 subtest 'keep-alive (h2o <=> upstream)' => sub {
     my ($upstream, $upstream_hostport) = create_upstream(keepalive => 1);
     my $spawner = sub {

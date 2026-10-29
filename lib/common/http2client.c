@@ -283,12 +283,6 @@ static void call_callback_with_error(struct st_h2o_http2client_stream_t *stream,
     }
 }
 
-static void call_stream_callbacks_with_error(struct st_h2o_http2client_conn_t *conn, const char *errstr)
-{
-    struct st_h2o_http2client_stream_t *stream;
-    kh_foreach_value(conn->streams, stream, { call_callback_with_error(stream, errstr); });
-}
-
 static int extract_content_length(const h2o_headers_t *headers, size_t *content_length, const char **err_desc)
 {
     *content_length = SIZE_MAX;
@@ -323,6 +317,7 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         pool = stream->super.pool;
         status = &stream->input.status;
         headers = &stream->input.headers;
+        *headers = (h2o_headers_t){NULL}; /* start a new list, keeping the one passed for the preceding 1xx response intact */
     } else {
         pool = &conn->rst_streams_pool;
         status = &dummy_status;
@@ -332,6 +327,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table, status, headers, NULL, src, len,
                                         err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+            if (stream == NULL)
+                return 0;
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }
@@ -365,10 +362,8 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         return 0;
     }
 
-    if ((100 <= stream->input.status && stream->input.status <= 199) ||
-        (stream->input.status == 204 || stream->input.status == 304)) {
+    if (stream->input.status == 204 || stream->input.status == 304)
         stream->input.message_body_forbidden = 1;
-    }
 
     if (!extract_content_length(&stream->input.headers, &stream->input.remaining_content_length, err_desc)) {
         ret = H2O_HTTP2_ERROR_PROTOCOL;
@@ -768,7 +763,7 @@ static int handle_settings_frame(struct st_h2o_http2client_conn_t *conn, h2o_htt
         }
         /* apply the change to window size (to all the streams but not the connection, see 6.9.2 of draft-15) */
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
-            ssize_t delta = conn->peer_settings.initial_window_size - prev_initial_window_size;
+            ssize_t delta = (int32_t)conn->peer_settings.initial_window_size - (int32_t)prev_initial_window_size;
             struct st_h2o_http2client_stream_t *stream;
             kh_foreach_value(conn->streams, stream, { update_stream_output_window((void *)stream, delta); });
 
@@ -931,20 +926,29 @@ static ssize_t expect_settings(struct st_h2o_http2client_conn_t *conn, const uin
     return ret;
 }
 
-static void close_connection_now(struct st_h2o_http2client_conn_t *conn)
+static void prepare_close_connection(struct st_h2o_http2client_conn_t *conn, const char *errstr)
 {
+    /* stop handing out the connection to new requests */
+    if (h2o_linklist_is_linked(&conn->super.link))
+        h2o_linklist_unlink(&conn->super.link);
+
+    struct st_h2o_http2client_stream_t *stream;
+    kh_foreach_value(conn->streams, stream, {
+        call_callback_with_error(stream, errstr);
+        close_stream(stream);
+    });
+}
+
+static void close_connection_now(struct st_h2o_http2client_conn_t *conn, const char *errstr)
+{
+    prepare_close_connection(conn, errstr);
+    kh_destroy(stream, conn->streams);
+
     free(conn->super.origin_url.authority.base);
     free(conn->super.origin_url.host.base);
     free(conn->super.origin_url.path.base);
 
     h2o_socket_close(conn->super.sock);
-
-    struct st_h2o_http2client_stream_t *stream;
-    kh_foreach_value(conn->streams, stream, { close_stream(stream); });
-    kh_destroy(stream, conn->streams);
-
-    if (h2o_linklist_is_linked(&conn->super.link))
-        h2o_linklist_unlink(&conn->super.link);
 
     if (h2o_timer_is_linked(&conn->io_timeout))
         h2o_timer_unlink(&conn->io_timeout);
@@ -975,21 +979,23 @@ static int close_connection_if_necessary(struct st_h2o_http2client_conn_t *conn)
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_HALF_CLOSED && conn->super.num_streams == 0)
         conn->state = H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING;
     if (conn->state == H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING) {
-        close_connection_now(conn);
+        close_connection_now(conn, h2o_httpclient_error_io);
         return 1;
     }
     return 0;
 }
 
-static int close_connection(struct st_h2o_http2client_conn_t *conn)
+static int close_connection(struct st_h2o_http2client_conn_t *conn, const char *errstr)
 {
+    prepare_close_connection(conn, errstr);
+
     conn->state = H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING;
     h2o_socket_read_stop(conn->super.sock);
 
     if (conn->output.buf_in_flight != NULL || h2o_timer_is_linked(&conn->output.defer_timeout)) {
         /* there is a pending write, let close_connection_if_necessary actually close the connection */
     } else {
-        close_connection_now(conn);
+        close_connection_now(conn, errstr);
         return -1;
     }
     return 0;
@@ -1039,7 +1045,7 @@ static void on_io_timeout(h2o_timer_t *entry)
     struct st_h2o_http2client_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, io_timeout, entry);
     struct st_h2o_http2client_stream_t *stream;
     kh_foreach_value(conn->streams, stream, { do_stream_timeout(stream); });
-    close_connection_now(conn);
+    close_connection_now(conn, h2o_httpclient_error_io_timeout);
 }
 
 static void on_keepalive_timeout(h2o_timer_t *entry)
@@ -1047,7 +1053,7 @@ static void on_keepalive_timeout(h2o_timer_t *entry)
     struct st_h2o_http2client_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http2client_conn_t, keepalive_timeout, entry);
     enqueue_goaway(conn, H2O_HTTP2_ERROR_NONE, h2o_iovec_init(NULL, 0));
     request_write(conn);
-    close_connection(conn);
+    close_connection(conn, h2o_httpclient_error_io_timeout);
 }
 
 static int parse_input(struct st_h2o_http2client_conn_t *conn)
@@ -1065,8 +1071,7 @@ static int parse_input(struct st_h2o_http2client_conn_t *conn)
                 enqueue_goaway(conn, (int)ret,
                                err_desc != NULL ? (h2o_iovec_t){(char *)err_desc, strlen(err_desc)} : (h2o_iovec_t){NULL});
             }
-            call_stream_callbacks_with_error(conn, h2o_httpclient_error_protocol_violation);
-            return close_connection(conn);
+            return close_connection(conn, h2o_httpclient_error_protocol_violation);
         }
         /* advance to the next frame */
         h2o_buffer_consume(&conn->super.sock->input, ret);
@@ -1081,8 +1086,7 @@ static void on_read(h2o_socket_t *sock, const char *err)
     h2o_timer_unlink(&conn->io_timeout);
 
     if (err != NULL) {
-        call_stream_callbacks_with_error(conn, h2o_httpclient_error_io);
-        close_connection(conn);
+        close_connection(conn, h2o_httpclient_error_io);
         return;
     }
 
@@ -1157,8 +1161,7 @@ static void on_notify_write(h2o_socket_t *sock, const char *err)
     struct st_h2o_http2client_conn_t *conn = sock->data;
 
     if (err != NULL) {
-        call_stream_callbacks_with_error(conn, h2o_httpclient_error_io);
-        close_connection_now(conn);
+        close_connection_now(conn, h2o_httpclient_error_io);
         return;
     }
     do_emit_writereq(conn);
@@ -1175,9 +1178,7 @@ static void on_write_complete(h2o_socket_t *sock, const char *err)
 
     /* close by error if necessary */
     if (err != NULL) {
-        if (conn->state != H2O_HTTP2CLIENT_CONN_STATE_IS_CLOSING)
-            call_stream_callbacks_with_error(conn, h2o_httpclient_error_io);
-        close_connection_now(conn);
+        close_connection_now(conn, h2o_httpclient_error_io);
         return;
     }
 

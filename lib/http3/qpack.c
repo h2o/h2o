@@ -253,7 +253,7 @@ static void header_table_insert(struct st_h2o_qpack_header_table_t *table, struc
         size_t count = table->last - table->first, new_capacity = count <= 2 ? 4 : count * 2;
         if (new_capacity > table->buf_end - table->buf_start) {
             struct st_h2o_qpack_header_t **newbuf = h2o_mem_alloc(sizeof(*newbuf) * new_capacity);
-            memcpy(newbuf, table->first, sizeof(*newbuf) * count);
+            h2o_memcpy(newbuf, table->first, sizeof(*newbuf) * count);
             free(table->buf_start);
             table->buf_start = newbuf;
             table->first = newbuf;
@@ -1089,9 +1089,9 @@ static int normalize_error_code(int err)
 int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, int64_t stream_id, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, uint64_t num_blocked,
-                            uint64_t *blocked_ref, h2o_qpack_section_stats_t *stats_updated, uint8_t *outbuf, size_t *outbufsize,
-                            const uint8_t *_src, size_t len, const char **err_desc)
+                            h2o_iovec_t *datagram_flow_id, uint64_t num_blocked, uint64_t *blocked_ref,
+                            h2o_qpack_section_stats_t *stats_updated, uint8_t *outbuf, size_t *outbufsize, const uint8_t *_src,
+                            size_t len, const char **err_desc)
 {
     struct st_h2o_qpack_decode_header_ctx_t ctx;
     const uint8_t *src = _src, *src_end = src + len;
@@ -1105,8 +1105,8 @@ int h2o_qpack_parse_request(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, in
         return 0;
     ctx.stats = stats_updated;
     if ((ret = h2o_hpack_parse_request(pool, decode_header, &ctx, method, scheme, authority, path, protocol, headers,
-                                       pseudo_header_exists_map, content_length, expect, digests, datagram_flow_id, src,
-                                       src_end - src, err_desc)) != 0) {
+                                       pseudo_header_exists_map, content_length, expect, datagram_flow_id, src, src_end - src,
+                                       err_desc)) != 0) {
         /* bail out if the error is a hard error, otherwise build header ack then return */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return normalize_error_code(ret);
@@ -1513,7 +1513,7 @@ static size_t flatten_string(h2o_byte_vector_t *buf, const char *src, size_t len
         /* uncompressed */
         buf->entries[buf->size] &= ~((2 << prefix_bits) - 1); /* clear huffman mark */
         flatten_int(buf, len, prefix_bits);
-        memcpy(buf->entries + buf->size, src, len);
+        h2o_memcpy(buf->entries + buf->size, src, len);
         buf->size += len;
         return len;
     } else {

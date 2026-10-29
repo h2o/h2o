@@ -53,7 +53,8 @@
 #endif
 #elif __SANITIZE_ADDRESS__ /* gcc */
 #define ASAN_IN_USE 1
-#else
+#endif
+#ifndef ASAN_IN_USE
 #define ASAN_IN_USE 0
 #endif
 
@@ -192,8 +193,9 @@ void *h2o_mem__do_alloc_pool_aligned(h2o_mem_pool_t *pool, size_t alignment, siz
 #define ALIGN_TO(x, a) (((x) + (a) - 1) & ~((a) - 1))
     void *ret;
 
-    if (sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
-        /* allocate large requests directly */
+    /* allocate large requests directly; if ASan is enabled, delegate all allocations to detect any misuse */
+    if (ASAN_IN_USE || sz >= (sizeof(pool->chunks->bytes) - sizeof(pool->chunks->next)) / 4) {
+        assert(alignment <= offsetof(struct st_h2o_mem_pool_direct_t, bytes));
         struct st_h2o_mem_pool_direct_t *newp = h2o_mem_alloc(offsetof(struct st_h2o_mem_pool_direct_t, bytes) + sz);
         newp->next = pool->directs;
         pool->directs = newp;
@@ -283,7 +285,7 @@ static unsigned buffer_size_to_power(size_t sz)
     unsigned power = sizeof(unsigned long long) * 8 - __builtin_clzll(sz) - 1;
     if (power < H2O_BUFFER_MIN_ALLOC_POWER) {
         power = H2O_BUFFER_MIN_ALLOC_POWER;
-    } else if (sz != (1 << power)) {
+    } else if (sz != ((size_t)1 << power)) {
         ++power;
     }
     return power;
@@ -458,10 +460,14 @@ h2o_iovec_t h2o_buffer_try_reserve(h2o_buffer_t **_inbuf, size_t min_guarantee)
                     fallocate_ret = ftruncate(fd, new_allocsize);
                 if (fallocate_ret != 0) {
                     h2o_perror("failed to resize temporary file");
+                    if (inbuf->_fd == -1)
+                        close(fd);
                     goto MapError;
                 }
                 if ((newp = (void *)mmap(NULL, new_allocsize, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
                     h2o_perror("mmap failed");
+                    if (inbuf->_fd == -1)
+                        close(fd);
                     goto MapError;
                 }
                 if (inbuf->_fd == -1) {

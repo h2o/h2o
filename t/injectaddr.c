@@ -71,10 +71,12 @@ int getaddrinfo(const char *host, const char *serv, const struct addrinfo *hints
 {
     static const char inject_suffix[] = ".inject.example.com";
 
-    size_t host_len;
+    size_t host_len = host != NULL ? strlen(host) : 0;
 
-    if (host == NULL || (host_len = strlen(host)) < sizeof(inject_suffix) - 1 ||
-        strcasecmp(host + host_len - (sizeof(inject_suffix) - 1), inject_suffix) != 0) {
+    if (host_len != 0 && host[host_len - 1] == '.')
+        --host_len; /* ignore the trailing dot of a fully-qualified name */
+    if (host_len < sizeof(inject_suffix) - 1 ||
+        strncasecmp(host + host_len - (sizeof(inject_suffix) - 1), inject_suffix, sizeof(inject_suffix) - 1) != 0) {
         int (*orig)(const char *, const char *, const struct addrinfo *, struct addrinfo **) = dlsym(RTLD_NEXT, "getaddrinfo");
         if (orig == NULL)
             die("failed to locate original getaddrinfo");

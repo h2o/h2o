@@ -556,7 +556,14 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (reset_stream_if_disregarded(conn, stream))
         return;
 
-    /* update state, buffer the data */
+    /* buffer the data */
+    if (!h2o_buffer_try_append(&stream->req_body.buf, payload.base, payload.len)) {
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM);
+        h2o_http2_stream_reset(conn, stream);
+        return;
+    }
+
+    /* update state */
     int req_queued = stream->req.proceed_req != NULL;
     if (is_end_stream) {
         if (stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
@@ -571,7 +578,6 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
             set_req_body_state(conn, stream, H2O_HTTP2_REQ_BODY_CLOSE_DELIVERED);
         }
     }
-    h2o_buffer_append(&stream->req_body.buf, payload.base, payload.len);
 
     /* if in request streaming mode: either submit the chunk or just keep it, and return */
     if (stream->req_body.streamed) {
@@ -626,8 +632,7 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table,
                                        &stream->req.input.method, &stream->req.input.scheme, &stream->req.input.authority,
                                        &stream->req.input.path, &stream->req.upgrade, &stream->req.headers, &header_exists_map,
-                                       &stream->req.content_length, &expect, &stream->cache_digests, NULL, src, len, err_desc)) !=
-        0) {
+                                       &stream->req.content_length, &expect, NULL, src, len, err_desc)) != 0) {
         /* all errors except invalid-header-char are connection errors */
         if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
             return ret;
@@ -695,7 +700,6 @@ static int handle_incoming_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
         /* handle the request */
         stream->req.is_tunnel_req = 1;
         goto ProcessImmediately;
-        return 0;
     }
 
     /* handle expect: 100-continue */
@@ -747,8 +751,8 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     int ret;
 
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
-                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, NULL,
-                                       src, len, err_desc)) != 0)
+                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
+                                       err_desc)) != 0)
         return ret;
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
@@ -1000,6 +1004,11 @@ static int handle_data_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame, c
     }
     if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
           stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
+        /* Upstream has stopped reading the request body after sending a complete response, and RST_STREAM(NO_ERROR) is being
+         * delayed until that response is sent (see `proceed_request`). Ignore DATA frames that arrive in the meantime, instead of
+         * resetting the stream and discarding the response. */
+        if (stream->delayed_rst_stream_no_error)
+            return 0;
         stream->reset_by_peer_action = 1;
         stream_send_error(conn, frame->stream_id, H2O_HTTP2_ERROR_STREAM_CLOSED);
         h2o_http2_stream_reset(conn, stream);
@@ -1178,7 +1187,15 @@ static int handle_settings_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *fram
         if (prev_initial_window_size != conn->peer_settings.initial_window_size) {
             ssize_t delta = (int32_t)conn->peer_settings.initial_window_size - (int32_t)prev_initial_window_size;
             h2o_http2_stream_t *stream;
-            kh_foreach_value(conn->streams, stream, { update_stream_output_window(stream, delta); });
+            int window_overflow = 0;
+            kh_foreach_value(conn->streams, stream, {
+                if (update_stream_output_window(stream, delta) != 0)
+                    window_overflow = 1;
+            });
+            if (window_overflow) {
+                *err_desc = "flow control window overflow";
+                return H2O_HTTP2_ERROR_FLOW_CONTROL;
+            }
             resume_send(conn);
         }
     }
@@ -1394,6 +1411,11 @@ static void on_read(h2o_socket_t *sock, const char *err)
                 h2o_http2_stream_t *stream =
                     H2O_STRUCT_FROM_MEMBER(h2o_http2_stream_t, _link, conn->early_data.blocked_streams.next);
                 h2o_linklist_unlink(&stream->_link);
+                if (stream->state == H2O_HTTP2_STREAM_STATE_END_STREAM) {
+                    /* the stream has been reset while being blocked (see `h2o_http2_stream_reset`) */
+                    h2o_http2_stream_close(conn, stream);
+                    continue;
+                }
                 if (!stream->blocked_by_server)
                     h2o_http2_stream_set_blocked_by_server(conn, stream, 1);
                 h2o_replay_request(&stream->req);
@@ -1895,14 +1917,7 @@ static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_le
     if (h2o_find_header(&src_stream->req.headers, H2O_TOKEN_X_FORWARDED_FOR, -1) != -1)
         return;
 
-    if (src_stream->cache_digests != NULL) {
-        h2o_iovec_t url = h2o_concat(&src_stream->req.pool, src_stream->req.input.scheme->name, h2o_iovec_init(H2O_STRLIT("://")),
-                                     src_stream->req.input.authority, h2o_iovec_init(abspath, abspath_len));
-        if (h2o_cache_digests_lookup_by_url(src_stream->cache_digests, url.base, url.len) == H2O_CACHE_DIGESTS_STATE_FRESH)
-            return;
-    }
-
-    /* delayed initialization of casper (cookie-based), that MAY be used together to cache-digests */
+    /* delayed initialization of casper (cookie-based) */
     if (src_stream->req.hostconf->http2.casper.capacity_bits != 0) {
         if (!src_stream->pull.casper_is_ready) {
             src_stream->pull.casper_is_ready = 1;

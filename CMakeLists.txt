@@ -378,6 +378,7 @@ SET(LIB_SOURCE_FILES
     deps/picotls/lib/openssl.c
     deps/picotls/lib/cifra/random.c
     deps/picotls/lib/cifra/x25519.c
+    deps/quicly/lib/bplus_ranges.c
     deps/quicly/lib/cc-cubic.c
     deps/quicly/lib/cc-pico.c
     deps/quicly/lib/defaults.c
@@ -473,7 +474,6 @@ SET(LIB_SOURCE_FILES
 
     lib/http1.c
 
-    lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/connection.c
     lib/http2/frame.c
@@ -528,6 +528,7 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/common/multithread.c
     t/00unit/lib/common/serverutil.c
     t/00unit/lib/common/socket.c
+    t/00unit/lib/common/socketpool.c
     t/00unit/lib/common/string.c
     t/00unit/lib/common/rand.c
     t/00unit/lib/common/time.c
@@ -546,7 +547,6 @@ SET(UNIT_TEST_SOURCE_FILES
     t/00unit/lib/handler/mimemap.c
     t/00unit/lib/handler/redirect.c
     t/00unit/lib/handler/throttle_resp.c
-    t/00unit/lib/http2/cache_digests.c
     t/00unit/lib/http2/casper.c
     t/00unit/lib/http2/hpack.c
     t/00unit/lib/http2/scheduler.c
@@ -566,6 +566,7 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/common/multithread.c
     lib/common/serverutil.c
     lib/common/socket.c
+    lib/common/socketpool.c
     lib/common/string.c
     lib/common/rand.c
     lib/common/time.c
@@ -584,7 +585,6 @@ LIST(REMOVE_ITEM UNIT_TEST_SOURCE_FILES
     lib/handler/mimemap.c
     lib/handler/redirect.c
     lib/handler/throttle_resp.c
-    lib/http2/cache_digests.c
     lib/http2/casper.c
     lib/http2/hpack.c
     lib/http2/scheduler.c
@@ -603,7 +603,6 @@ LIST(REMOVE_ITEM FUZZED_SOURCE_FILES
     deps/quicly/lib/loss.c
     deps/quicly/lib/quicly.c
     deps/quicly/lib/remote_cid.c
-    deps/quicly/lib/retire_cid.c
     deps/quicly/lib/sentmap.c
     deps/quicly/lib/streambuf.c
     #deps/quicly/lib/cc-cubic.c

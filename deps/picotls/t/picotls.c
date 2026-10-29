@@ -537,7 +537,7 @@ static void test_ffx(void)
     static uint8_t ffx_test_iv[16] = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25};
     static uint8_t ffx_test_bad_iv[16] = {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26};
 
-    static uint8_t ffx_test_mask[8] = {0x00, 0x01, 0x03, 0x07, 0x0F, 0x1F, 0x3F, 0x7F};
+    static uint8_t ffx_test_mask[8] = {0x00, 0x7F, 0x3F, 0x1F, 0x0F, 0x07, 0x03, 0x01};
     ptls_cipher_context_t *ffx_enc = NULL;
     ptls_cipher_context_t *ffx_dec = NULL;
     ptls_cipher_context_t *ffx_dec_bad = NULL;
@@ -629,6 +629,22 @@ static void test_base64_decode(void)
     ret = ptls_base64_decode("a\xFF"
                              "b",
                              &state, &buf);
+    ok(ret != 0);
+
+    buf.off = 0;
+
+    /* blanks following padding are accepted */
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ= \r\n", &state, &buf);
+    ok(ret == 0);
+    ok(buf.off == 11);
+    ok(memcmp(buf.base, "hello world", 11) == 0);
+
+    buf.off = 0;
+
+    /* other characters following padding are rejected */
+    ptls_base64_decode_init(&state);
+    ret = ptls_base64_decode("aGVsbG8gd29ybGQ=x", &state, &buf);
     ok(ret != 0);
 
     ptls_buffer_dispose(&buf);
@@ -1629,12 +1645,14 @@ static void test_enforce_retry(int use_cookie)
     ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
     ptls_buffer_t cbuf, sbuf, decbuf;
     size_t consumed;
+    unsigned send_change_cipher_spec_orig = ctx->send_change_cipher_spec;
     int ret;
 
     server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
     server_hs_prop.server.cookie.additional_data = ptls_iovec_init("1.2.3.4:1234", 12);
     server_hs_prop.server.enforce_retry = 1;
     server_hs_prop.server.retry_uses_cookie = use_cookie;
+    ctx->send_change_cipher_spec = 1;
 
     ptls_buffer_init(&cbuf, "", 0);
     ptls_buffer_init(&sbuf, "", 0);
@@ -1659,6 +1677,8 @@ static void test_enforce_retry(int use_cookie)
     } else {
         ok(ret == PTLS_ERROR_IN_PROGRESS);
     }
+    /* CCS is sent immediately after HRR */
+    ok(sbuf.off > 6 && memcmp(sbuf.base + sbuf.off - 6, "\x14\x03\x03\x00\x01\x01", 6) == 0);
 
     consumed = sbuf.off;
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
@@ -1697,6 +1717,7 @@ static void test_enforce_retry(int use_cookie)
     ptls_buffer_dispose(&cbuf);
     ptls_buffer_dispose(&sbuf);
     ptls_buffer_dispose(&decbuf);
+    ctx->send_change_cipher_spec = send_change_cipher_spec_orig;
 }
 
 static void test_enforce_retry_stateful(void)

@@ -288,7 +288,6 @@ __DATA__
 0 1 1 0 0 0 0 keep-alive
 0 0 0 0 0 0 0 x-forwarded-for
 0 0 0 0 0 0 0 x-traffic
-0 0 0 0 1 0 0 cache-digest
 0 0 0 0 0 0 0 x-compress-hint
 0 0 0 0 0 0 0 early-data
 0 0 0 0 0 0 0 access-control-allow-headers

@@ -1,0 +1,32 @@
+name: Release Reltest
+
+on:
+  push:
+    branches:
+    - kazuho/reltest/master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Run release automation
+      run: |
+        misc/release.rb \
+          --source-branch kazuho/reltest/master \
+          --release-branch kazuho/reltest/release \
+          --tag-prefix vtest1. \
+          --remote origin \
+          --author-name "Kazuho Oku" \
+          --author-email "kazuhooku+github-actions@gmail.com" \
+          --push
