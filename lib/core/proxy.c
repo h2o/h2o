@@ -676,7 +676,14 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
     if (status != 100 ||
         (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
         self->src_req->res.status = status;
-        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
+        self->src_req->res.headers = (h2o_headers_t){NULL};
+        h2o_vector_reserve(&self->src_req->pool, &self->src_req->res.headers, num_headers);
+        for (i = 0; i != num_headers; ++i) {
+            if (h2o_iovec_is_token(headers[i].name) &&
+                H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name)->flags.proxy_should_drop_for_res)
+                continue;
+            self->src_req->res.headers.entries[self->src_req->res.headers.size++] = headers[i];
+        }
         h2o_send_informational(self->src_req);
     } else {
         /* we don't need to forward 100 since protocol handlers have already done */
