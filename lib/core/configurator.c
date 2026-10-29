@@ -597,7 +597,7 @@ static int on_config_http2_casper(h2o_configurator_command_t *cmd, h2o_configura
 
 static int on_config_http2_dos_delay(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    return config_timeout(cmd, node, &ctx->globalconf->http2.dos_delay);
+    return h2o_configurator_scanf(cmd, node, "%" SCNu64, &ctx->globalconf->http2.dos_delay);
 }
 
 static int on_config_http3_idle_timeout(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
