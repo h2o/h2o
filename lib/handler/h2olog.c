@@ -68,7 +68,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     /* delegate the request to the next handler unless the request is accepted on a UNIX socket */
     if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX)) {
         ret = -1;
-        goto Exit;
+        goto Fail;
     }
 
     /* parse params */
@@ -83,7 +83,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                     !(0 <= params->sample_ratio && params->sample_ratio <= 1)) {
                     h2o_send_error_400(req, "Bad Request", "sample-rate must be a number between 0 and 1", 0);
                     ret = 0;
-                    goto Exit;
+                    goto Fail;
                 }
             } else if (h2o_memis(name, name_len, H2O_STRLIT("trace"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
@@ -114,7 +114,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     if (!(req->version < 0x200 && req->input.scheme == &H2O_URL_SCHEME_HTTP)) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
         ret = 0;
-        goto Exit;
+        goto Fail;
     }
 
     /* send the response, then take over the socket */
@@ -123,7 +123,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     h2o_http1_upgrade(req, NULL, 0, on_upgrade_complete, params);
     return 0;
 
-Exit:
+Fail:
     destroy_params(params);
     return ret;
 }
