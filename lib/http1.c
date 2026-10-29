@@ -612,7 +612,10 @@ static int write_req_first(void *_req, int is_end_stream)
         conn->req.write_req.cb = NULL; /* will be set to something before `proceed_req` is being invoked */
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
-        return 0;
+        if (conn->req.dispatched)
+            return 0;
+        /* handlers declined request streaming, receive the entire request body */
+        conn->req.proceed_req = NULL;
     }
 
     conn->req.write_req.cb = write_req_non_streaming;

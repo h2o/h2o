@@ -128,6 +128,9 @@ typedef struct st_h2o_handler_t {
      * callback is accessible via `req->entity`.
      * The request handler can delay replacing the callback to a later moment. In such case, the handler can determine if
      * `req->entity` already contains a complete request body by checking if `req->proceed_req` is NULL.
+     * A handler that sets this flag and declines some requests (i.e., returns -1 from `on_req`) MUST do so immediately, without
+     * touching the request body. If the succeeding handler does not support streaming, the request is processed again once the
+     * entire request body is received (see `h2o_process_request`).
      */
     unsigned supports_request_streaming : 1;
     /**
@@ -1415,9 +1418,10 @@ struct st_h2o_req_t {
      */
     unsigned char upstream_refused : 1;
     /**
-     * if h2o_process_request has been called
+     * if the request has been dispatched to a particular handler; i.e., `h2o_process_request` has been called and did not return the
+     * request to the protocol handler
      */
-    unsigned char process_called : 1;
+    unsigned char dispatched : 1;
     /**
      * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...) using the streaming API.
      * When the protocol handler returns a successful response, filters are skipped.
@@ -1592,7 +1596,9 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 int h2o_req_validate_pseudo_headers(h2o_req_t *req);
 /**
- * called by the connection layer to start processing a request that is ready
+ * called by the connection layer to start processing a request that is ready. When called with `req->proceed_req` being set, the
+ * function might return without setting `req->dispatched`, if the handlers that support request streaming declined the request.
+ * In such case, the connection layer is expected to receive the entire request body, then call the function again.
  */
 void h2o_process_request(h2o_req_t *req);
 /**

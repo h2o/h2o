@@ -1182,7 +1182,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                     if (!h2o_linklist_is_linked(&stream->link))
                         h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
                     request_run_delayed(conn);
-                } else if (!stream->req.process_called && stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
+                } else if (!stream->req.dispatched && stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
                     /* process the request, if we haven't called h2o_process_request nor send an error response */
                     switch (stream->state) {
                     case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
@@ -1313,14 +1313,17 @@ static void run_delayed(h2o_timer_t *timer)
                 stream->req.proceed_req = proceed_request_streaming;
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
                 h2o_process_request(&stream->req);
-            } else {
-                /* unblock, read the bytes in receive buffer */
-                stream->read_blocked = 0;
-                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED, 0);
-                handle_buffered_input(stream, 0);
-                if (quicly_get_state(conn->h3.super.quic) >= QUICLY_STATE_CLOSING)
-                    return;
+                if (stream->req.dispatched)
+                    continue;
+                /* handlers declined request streaming, receive the entire request body */
+                close_request_streaming(stream);
             }
+            /* unblock, read the bytes in receive buffer */
+            stream->read_blocked = 0;
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED, 0);
+            handle_buffered_input(stream, 0);
+            if (quicly_get_state(conn->h3.super.quic) >= QUICLY_STATE_CLOSING)
+                return;
         }
 
         /* process streams using request streaming, that have new data to submit */
@@ -1328,7 +1331,7 @@ static void run_delayed(h2o_timer_t *timer)
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.req_streaming.next);
             int is_end_stream = quicly_recvstate_transfer_complete(&stream->quic->recvstate);
-            assert(stream->req.process_called);
+            assert(stream->req.dispatched);
             assert(stream->req.write_req.cb != NULL);
             assert(stream->req_body != NULL);
             assert(stream->req_body->size != 0 || is_end_stream);
@@ -1349,7 +1352,7 @@ static void run_delayed(h2o_timer_t *timer)
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.pending.next);
             assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
-            assert(!stream->req.process_called);
+            assert(!stream->req.dispatched);
             assert(!stream->read_blocked);
             h2o_linklist_unlink(&stream->link);
             made_progress = 1;

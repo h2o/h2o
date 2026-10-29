@@ -163,11 +163,22 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
     h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
 
     for (; handler != end; ++handler) {
-        req->handler = *handler;
-        if ((*handler)->on_req(*handler, req) == 0)
+        /* A handler that does not support request streaming cannot process a request that has been submitted before the entire
+         * request body is received (i.e., `proceed_req` is set). In such case, return the request to the protocol handler, which
+         * calls `h2o_process_request` again once the entire request body is received. Tunnel requests are dispatched immediately,
+         * as there is no request body; what follows is the payload of the tunnel. Requests being delegated or reprocessed have
+         * `req->dispatched` set, as they have already been dispatched to a handler that might have consumed part of the request
+         * body. */
+        if (!(*handler)->supports_request_streaming && !req->dispatched && req->proceed_req != NULL && !req->is_tunnel_req)
             return;
+        req->handler = *handler;
+        if ((*handler)->on_req(*handler, req) == 0) {
+            req->dispatched = 1;
+            return;
+        }
     }
 
+    req->dispatched = 1;
     h2o_send_error_404(req, "Not Found", "not found", 0);
 }
 
@@ -368,8 +379,7 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
-    assert(!req->process_called);
-    req->process_called = 1;
+    assert(!req->dispatched);
 
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
