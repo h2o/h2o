@@ -422,8 +422,8 @@ void close_connection_now(h2o_http2_conn_t *conn)
     h2o_http2_scheduler_dispose(&conn->scheduler);
     assert(h2o_linklist_is_empty(&conn->_write.streams_to_proceed));
     assert(!h2o_timer_is_linked(&conn->_write.timeout_entry));
-    if (conn->_headers_unparsed != NULL)
-        h2o_buffer_dispose(&conn->_headers_unparsed);
+    if (conn->_continuation.buf != NULL)
+        h2o_buffer_dispose(&conn->_continuation.buf);
     if (conn->push_memo != NULL)
         h2o_cache_destroy(conn->push_memo);
     if (conn->casper != NULL)
@@ -772,30 +772,30 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if ((stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) == NULL ||
+    if (frame.stream_id != conn->_continuation.stream_id || (stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) == NULL ||
         !(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY)) {
         *err_desc = "unexpected stream id in CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if (conn->_headers_unparsed->size + frame.length <= H2O_MAX_REQLEN) {
-        h2o_buffer_reserve(&conn->_headers_unparsed, frame.length);
-        memcpy(conn->_headers_unparsed->bytes + conn->_headers_unparsed->size, frame.payload, frame.length);
-        conn->_headers_unparsed->size += frame.length;
+    if (conn->_continuation.buf->size + frame.length <= H2O_MAX_REQLEN) {
+        h2o_buffer_reserve(&conn->_continuation.buf, frame.length);
+        memcpy(conn->_continuation.buf->bytes + conn->_continuation.buf->size, frame.payload, frame.length);
+        conn->_continuation.buf->size += frame.length;
 
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
             conn->_read_expect = expect_default;
             if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
-                hret = handle_incoming_request(conn, stream, (const uint8_t *)conn->_headers_unparsed->bytes,
-                                               conn->_headers_unparsed->size, err_desc);
+                hret = handle_incoming_request(conn, stream, (const uint8_t *)conn->_continuation.buf->bytes,
+                                               conn->_continuation.buf->size, err_desc);
             } else {
-                hret = handle_trailing_headers(conn, stream, (const uint8_t *)conn->_headers_unparsed->bytes,
-                                               conn->_headers_unparsed->size, err_desc);
+                hret = handle_trailing_headers(conn, stream, (const uint8_t *)conn->_continuation.buf->bytes,
+                                               conn->_continuation.buf->size, err_desc);
             }
             if (hret != 0)
                 ret = hret;
-            h2o_buffer_dispose(&conn->_headers_unparsed);
-            conn->_headers_unparsed = NULL;
+            h2o_buffer_dispose(&conn->_continuation.buf);
+            conn->_continuation.buf = NULL;
         }
     } else {
         /* request is too large (TODO log) */
@@ -1095,10 +1095,11 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
 PREPARE_FOR_CONTINUATION:
     /* request is not complete, store in buffer */
     conn->_read_expect = expect_continuation_of_headers;
-    h2o_buffer_init(&conn->_headers_unparsed, &h2o_socket_buffer_prototype);
-    h2o_buffer_reserve(&conn->_headers_unparsed, payload.headers_len);
-    memcpy(conn->_headers_unparsed->bytes, payload.headers, payload.headers_len);
-    conn->_headers_unparsed->size = payload.headers_len;
+    conn->_continuation.stream_id = frame->stream_id;
+    h2o_buffer_init(&conn->_continuation.buf, &h2o_socket_buffer_prototype);
+    h2o_buffer_reserve(&conn->_continuation.buf, payload.headers_len);
+    memcpy(conn->_continuation.buf->bytes, payload.headers, payload.headers_len);
+    conn->_continuation.buf->size = payload.headers_len;
     return 0;
 }
 
