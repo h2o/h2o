@@ -853,10 +853,16 @@ static void on_send_next(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (err != NULL)
+    if (err != NULL) {
         close_connection(conn, 1);
-    else
-        h2o_proceed_response(&conn->req);
+        return;
+    }
+
+    /* The write is complete; the timeout is rearmed when the next one starts. Unless configured to cover the wait for the
+     * generator as well, it stops here, except while the request body is still being received. */
+    if (!conn->super.ctx->globalconf->http1.req_io_timeout_while_generating && conn->req.proceed_req == NULL)
+        set_req_io_timeout(conn, 0, NULL);
+    h2o_proceed_response(&conn->req);
 }
 
 static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)

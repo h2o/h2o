@@ -80,6 +80,7 @@ extern "C" {
 #define H2O_DEFAULT_HTTP1_REQ_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_TIMEOUT_IN_SECS * 1000)
 #define H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT_IN_SECS 5
 #define H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT (H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT_IN_SECS * 1000)
+#define H2O_DEFAULT_HTTP1_REQ_IO_TIMEOUT_WHILE_GENERATING 1
 #define H2O_DEFAULT_HTTP1_UPGRADE_TO_HTTP2 1
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS 10
 #define H2O_DEFAULT_HTTP2_IDLE_TIMEOUT (H2O_DEFAULT_HTTP2_IDLE_TIMEOUT_IN_SECS * 1000)
@@ -414,6 +415,11 @@ struct st_h2o_globalconf_t {
          * request io timeout (in milliseconds)
          */
         uint64_t req_io_timeout;
+        /**
+         * a boolean value indicating whether or not req_io_timeout also applies while waiting for the generator to provide the
+         * next part of the response (e.g., a streamed response that is idle between chunks)
+         */
+        int req_io_timeout_while_generating;
         /**
          * a boolean value indicating whether or not to upgrade to HTTP/2
          */
