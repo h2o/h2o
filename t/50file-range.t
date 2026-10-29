@@ -78,8 +78,18 @@ run_with_curl($server, sub {
             is $resp, $all_data, "content";
 
             my $headers = `$curl_cmd -r -999999 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^HTTP/[^ ]+ 200\s}mi, "200 response";
             like $headers, qr{^content-type:\s*image/jpeg\r$}mi, "content-type";
-            like $headers, qr{^content-range:\s*bytes 0-@{[length($all_data) - 1]}/@{[length $all_data]}\r}mi, "content-range";
+            unlike $headers, qr{^content-range:}mi, "no content-range";
+        };
+
+        subtest "entire" => sub {
+            my $resp = `$curl_cmd -r 0- $url`;
+            is $resp, $all_data, "content";
+
+            my $headers = `$curl_cmd -r 0- --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+            like $headers, qr{^HTTP/[^ ]+ 200\s}mi, "200 response";
+            unlike $headers, qr{^content-range:}mi, "no content-range";
         };
     };
 
@@ -94,6 +104,27 @@ run_with_curl($server, sub {
 
         my $headers = `$curl_cmd -r 100-199,1000-1099 --dump-header /dev/stderr $url 2>&1 > /dev/null`;
         like $headers, qr{^content-type:\s*multipart/byteranges; boundary=[0-9A-Za-z]{20}\r$}mi, "content-type";
+    };
+
+    subtest "multi-ranged-overlapping" => sub {
+        my $resp = `$curl_cmd -r 0-,0-,0- $url`;
+        is $resp, $all_data, "entire file is sent once";
+
+        my $headers = `$curl_cmd -r 0-,0-,0- --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+        like $headers, qr{^HTTP/[^ ]+ 200\s}mi, "200 response";
+        unlike $headers, qr{^content-range:}mi, "no content-range";
+    };
+
+    subtest "multi-ranged-too-many" => sub {
+        my $ranges = join ",", map { $_ * 2 . "-" . $_ * 2 } 0 .. 199;
+        my $headers = `$curl_cmd -r $ranges --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+        like $headers, qr{^HTTP/[^ ]+ 206\s}mi, "206 with 200 ranges";
+
+        $ranges .= ",400-400";
+        my $resp = `$curl_cmd -r $ranges $url`;
+        is $resp, $all_data, "entire file with 201 ranges";
+        $headers = `$curl_cmd -r $ranges --dump-header /dev/stderr $url 2>&1 > /dev/null`;
+        like $headers, qr{^HTTP/[^ ]+ 200\s}mi, "status 200 with 201 ranges";
     };
 });
 
