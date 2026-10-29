@@ -969,7 +969,6 @@ void proceed_request(h2o_req_t *req, const char *errstr)
             write_streaming_body(conn, stream);
         break;
     case H2O_HTTP2_REQ_BODY_CLOSE_QUEUED:
-        assert(written != 0);
         write_streaming_body(conn, stream);
         break;
     default:
