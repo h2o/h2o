@@ -241,6 +241,7 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
 static void try_connect(struct st_connect_generator_t *self);
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
+static void udp_on_read(h2o_socket_t *_sock, const char *err);
 
 static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
 {
@@ -286,14 +287,10 @@ static void dispose_generator(struct st_connect_generator_t *self)
 
 static int close_socket(struct st_connect_generator_t *self)
 {
-    int send_inflight;
+    int send_inflight = !h2o_socket_is_reading(self->sock);
 
-    if (self->is_tcp) {
+    if (self->is_tcp)
         self->tcp.recvbuf_detached = self->sock->input;
-        send_inflight = self->tcp.recvbuf_detached->size != 0;
-    } else {
-        send_inflight = !h2o_socket_is_reading(self->sock);
-    }
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
     self->sock = NULL;
@@ -304,12 +301,16 @@ static int close_socket(struct st_connect_generator_t *self)
 
 static void close_readwrite(struct st_connect_generator_t *self)
 {
-    int send_inflight = 0;
+    int send_inflight;
 
-    if (self->sock != NULL)
+    if (self->sock != NULL) {
         send_inflight = close_socket(self);
-    else if (self->is_tcp)
-        send_inflight = self->tcp.recvbuf_detached->size != 0;
+    } else {
+        /* if `h2o_send` was not inflight when the socket was closed (see the if arm above), read-close would have been notified
+         * immediately; the fact that that didn't happen implies that send is inflight, until `on_proceed` calls
+         * h2o_send(FINAL). */
+        send_inflight = 1;
+    }
 
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
@@ -648,7 +649,7 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
     }
 }
 
-static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
+static void on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
 
@@ -657,7 +658,7 @@ static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
     if (self->sock != NULL) {
         h2o_buffer_consume(&self->sock->input, self->sock->input->size);
         reset_io_timeout(self);
-        h2o_socket_read_start(self->sock, tcp_on_read);
+        h2o_socket_read_start(self->sock, self->is_tcp ? tcp_on_read : udp_on_read);
     } else {
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -890,20 +891,6 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
 }
 
-static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
-{
-    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
-
-    if (self->sock != NULL) {
-        h2o_buffer_consume(&self->sock->input, self->sock->input->size);
-        reset_io_timeout(self);
-        h2o_socket_read_start(self->sock, udp_on_read);
-    } else {
-        self->read_closed = 1;
-        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
-    }
-}
-
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
     int fd;
@@ -1019,12 +1006,11 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     self->handler = handler;
     self->src_req = req;
     self->timeout.cb = on_connect_timeout;
+    self->super.proceed = on_proceed;
     if (is_tcp) {
         self->is_tcp = 1;
-        self->super.proceed = tcp_on_proceed;
         h2o_buffer_init(&self->tcp.sendbuf, &h2o_socket_buffer_prototype);
     } else {
-        self->super.proceed = udp_on_proceed;
         h2o_buffer_init(&self->udp.egress.buf, &h2o_socket_buffer_prototype);
         self->udp.egress.delayed = (h2o_timer_t){.cb = udp_write_stream_complete_delayed};
         self->udp.is_draft03 = is_masque_draft03;
