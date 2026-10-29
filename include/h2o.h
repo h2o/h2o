@@ -1005,11 +1005,6 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
     /**
-     * An optional callback to move the ownership of the socket to the caller. It returns non-null for cleartext connections
-     * and thus the caller can call h2o_socket_export() and write cleartext to its fd.
-     */
-    h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
-    /**
      * logging callbacks (all of them are optional)
      */
     union {
