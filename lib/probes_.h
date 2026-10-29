@@ -162,6 +162,15 @@ __attribute__((noinline)) static void h2o_probe_response_header(h2o_req_t *req, 
     });
 }
 
+static inline void h2o_probe_log_tls_properties(h2o_conn_t *conn)
+{
+    const char *server_name = conn->callbacks->get_ssl_server_name(conn);
+    if (server_name == NULL)
+        server_name = "";
+    H2O_PROBE_CONN(TLS_PROPERTIES, conn, server_name);
+    H2O_LOG_CONN(tls_properties, conn, { PTLS_LOG_ELEMENT_UNSAFESTR(server_name, server_name, strlen(server_name)); });
+}
+
 static inline void h2o_probe_log_request(h2o_req_t *req, uint64_t req_index)
 {
     H2O_PROBE_CONN(RECEIVE_REQUEST, req->conn, req_index, req->version);

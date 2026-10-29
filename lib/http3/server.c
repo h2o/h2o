@@ -207,6 +207,10 @@ struct st_h2o_http3_server_conn_t {
      */
     uint64_t skip_jumpstart_token_until;
     /**
+     * if the TLS properties have been logged (see `stream_open_cb`)
+     */
+    unsigned tls_properties_logged : 1;
+    /**
      * timeout entry used for graceful shutdown
      */
     h2o_timer_t _graceful_shutdown_timeout;
@@ -1961,6 +1965,15 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
                                                         on_send_stop,      on_receive,    on_receive_reset};
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
+
+    /* log TLS properties when the client opens the first stream, as `st_h2o_http3_server_conn_t` and the server-initiated
+     * unidirectional streams are opened when receiving the 1st packet from the client, not when the handshake is complete */
+    if (quicly_stream_is_client_initiated(qs->stream_id) && !conn->tls_properties_logged) {
+        h2o_probe_log_tls_properties(&conn->super);
+        conn->tls_properties_logged = 1;
+    }
 
     /* handling of unidirectional streams is not server-specific */
     if (quicly_stream_is_unidirectional(qs->stream_id)) {
@@ -1969,9 +1982,6 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     }
 
     assert(quicly_stream_is_client_initiated(qs->stream_id));
-
-    struct st_h2o_http3_server_conn_t *conn =
-        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
 
     /* create new stream and start handling the request */
     struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));

@@ -1995,6 +1995,8 @@ void h2o_http2_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
     h2o_http2_conn_t *conn = create_conn(ctx->ctx, ctx->hosts, sock, connected_at);
     conn->http2_origin_frame = ctx->http2_origin_frame;
     sock->data = conn;
+    if (sock->ssl != NULL)
+        h2o_probe_log_tls_properties(&conn->super);
     h2o_socket_read_start(conn->sock, on_read);
     update_idle_timeout(conn);
     if (sock->input->size != 0)
