@@ -518,6 +518,38 @@ static void test_hostport(void)
     ok(h2o_memis(host.base, host.len, H2O_STRLIT("::ffff:192.0.2.1")));
     ok(port == 8081);
 
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == input.base + input.len);
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
+    ok(port == 65535);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:/"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(strcmp(ret, "/") == 0);
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
+    ok(port == 65535);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:?"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(strcmp(ret, "?") == 0);
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("127.0.0.1")));
+    ok(port == 65535);
+
+    input = h2o_iovec_init(H2O_STRLIT("[::ffff:192.0.2.1]:"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == input.base + input.len);
+    ok(h2o_memis(host.base, host.len, H2O_STRLIT("::ffff:192.0.2.1")));
+    ok(port == 65535);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:80abc"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
+
+    input = h2o_iovec_init(H2O_STRLIT("127.0.0.1:8a0/"));
+    ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
+    ok(ret == NULL);
+
     input = h2o_iovec_init(H2O_STRLIT("[::ffff:192.0.2.1:8081/"));
     ret = h2o_url_parse_hostport(input.base, input.len, &host, &port);
     ok(ret == NULL);
