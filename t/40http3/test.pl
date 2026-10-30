@@ -8,9 +8,13 @@ use Test::More;
 use t::Util;
 
 my $io_uring_batch_size;
+my $qpack_server_conf = "";
+my $multithread = 1;
 
 GetOptions(
-    'batch-size=i' => \$io_uring_batch_size
+    'batch-size=i' => \$io_uring_batch_size,
+    'qpack-server-conf=s' => \$qpack_server_conf,
+    'multithread=i' => \$multithread,
 ) or exit(1);
 
 my $tempdir = tempdir(CLEANUP => 1);
@@ -33,7 +37,7 @@ sub doit {
 listen:
   type: quic
   port: $quic_port
-  ssl:
+$qpack_server_conf  ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 num-threads: $num_threads
@@ -103,7 +107,7 @@ subtest "single-thread" => sub {
 
 subtest "multi-thread" => sub {
     doit(16);
-};
+} if $multithread;
 
 subtest "slow-echo-chunked" => sub {
     plan skip_all => 'mruby support is off'
@@ -113,7 +117,7 @@ subtest "slow-echo-chunked" => sub {
 listen:
   type: quic
   port: $quic_port
-  ssl:
+$qpack_server_conf  ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 hosts:
@@ -146,7 +150,7 @@ http3-idle-timeout: 5
 listen:
   type: quic
   port: $quic_port
-  ssl:
+$qpack_server_conf  ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 hosts:
@@ -171,7 +175,7 @@ subtest "large-headers" => sub {
 listen:
   type: quic
   port: $quic_port
-  ssl:
+$qpack_server_conf  ssl:
     key-file: examples/h2o/server.key
     certificate-file: examples/h2o/server.crt
 hosts:

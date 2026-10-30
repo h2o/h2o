@@ -145,7 +145,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         server_ctx.super.next_cid = &next_cid;
         server_ctx.accept_ctx = &accept_ctx;
         server_ctx.send_retry = 0;
-        server_ctx.qpack.encoder_table_capacity = 4096;
+        server_ctx.qpack.encoder.table_capacity = 4096;
 
         conn_callbacks.super.destroy_connection = on_destroy_connection;
 

@@ -51,7 +51,7 @@ static void test_encrypt_ticket_ptls(void)
     /* create four encryptors, TLS, QUIC(spec_context), QUIC(another_context), QUIC(qpack-zero) */
     quicly_context_t alt_quic = quicly_spec_context;
     ++alt_quic.transport_params.max_streams_uni;
-    h2o_http3_qpack_context_t qpack = {.decoder_table_capacity = 4096}, qpack_zero = {0};
+    h2o_http3_qpack_context_t qpack = {.decoder = {.table_capacity = 4096}}, qpack_zero = {0};
     ptls_encrypt_ticket_t *tls_enc = create_encrypt_ticket_ptls(NULL, NULL),
                           *quic_enc1 = create_encrypt_ticket_ptls(&quicly_spec_context, &qpack),
                           *quic_enc2 = create_encrypt_ticket_ptls(&alt_quic, &qpack),
