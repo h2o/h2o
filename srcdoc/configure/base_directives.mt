@@ -240,7 +240,7 @@ Default is 4.
 <dt id="minimum-version">minimum-version:</dt>
 <dd>
 minimum protocol version, should be one of: <code>SSLv2</code>, <code>SSLv3</code>, <code>TLSv1</code>, <code>TLSv1.1</code>, <code>TLSv1.2</code>, <code>TLSv1.3</code>.
-Default is <code>TLSv1</code>.
+Default is <code>TLSv1.2</code>.
 </dd>
 <dt id="min-version">min-version:</dt>
 <dd>

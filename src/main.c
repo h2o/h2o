@@ -2282,8 +2282,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_configurator_errprintf(cmd, *min_version, "unknown protocol version: %s", (*min_version)->data.scalar);
     VersionFound:;
     } else {
-        /* default is >= TLSv1 */
-        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        /* default is >= TLSv1.2 */
+        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1;
     }
     if (max_version != NULL) {
         if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0) {
