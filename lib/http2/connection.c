@@ -191,6 +191,13 @@ static void process_request(h2o_http2_conn_t *conn, h2o_http2_stream_t *stream)
         conn->pull_stream_ids.max_processed = stream->stream_id;
 
     h2o_process_request(&stream->req);
+
+    if (!stream->req.dispatched) {
+        /* handlers declined request streaming, receive the entire request body */
+        stream->req.proceed_req = NULL;
+        stream->req_body.streamed = 0;
+        conn->num_streams._req_streaming_in_progress--;
+    }
 }
 
 static void run_pending_requests(h2o_http2_conn_t *conn)
@@ -568,7 +575,7 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
     if (is_end_stream) {
         if (stream->state < H2O_HTTP2_STREAM_STATE_REQ_PENDING) {
             h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_REQ_PENDING);
-            if (stream->req.process_called)
+            if (stream->req.dispatched)
                 h2o_http2_stream_set_state(conn, stream, H2O_HTTP2_STREAM_STATE_SEND_HEADERS);
         }
         if (stream->req.write_req.cb != NULL) {
