@@ -2437,7 +2437,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_get_alt_egress(qconn)].cc.initcwnd_packets,
                                     ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
-    h2o_http3_setup(&conn->h3, qconn);
+    if (h2o_http3_setup(&conn->h3, qconn) != 0)
+        h2o_fatal("no memory");
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
     H2O_LOG_CONN(h3s_accept, &conn->super, {
