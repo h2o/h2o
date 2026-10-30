@@ -4487,6 +4487,21 @@ Also, when set to ON, H2O offers the reset_stream_at transport parameter of QUIC
 .RE
 .RE
 
+.SS webtransport-legacy-drafts
+A boolean flag (ON or OFF) indicating if the handshakes of earlier drafts of WebTransport over HTTP/3 are accepted as well.
+
+
+.PP
+
+
+Current browsers speak earlier drafts than draft-16 when establishing a session: they send :protocol webtransport instead of webtransport-h3, signal WebTransport with the SETTINGS of draft-02 (SETTINGS_ENABLE_WEBTRANSPORT), draft-07 (SETTINGS_WEBTRANSPORT_MAX_SESSIONS) or draft-14 (SETTINGS_WT_MAX_SESSIONS), and do not necessarily offer the reset_stream_at transport parameter.
+When this directive is ON and webtransport is ON, H2O also advertises the SETTINGS of draft-02 and draft-07, without which these browsers do not send their extended CONNECT, and accepts such clients.
+The session is then carried as in draft-16, which these drafts share the streams and capsules of; a stream is reset with RESET_STREAM if the client did not offer reset_stream_at.
+
+
+.RE
+.RE
+
 .SS webtransport.echo
 Registers a WebTransport echo handler, which is meant for testing.
 
