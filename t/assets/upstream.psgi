@@ -306,6 +306,10 @@ builder {
             ($query->get('link') ? (
                 "link: </index.js>; rel=preload",
             ) : ()),
+            ($query->get('hop-by-hop') ? (
+                "connection: keep-alive",
+                "keep-alive: timeout=5",
+            ) : ()),
             "",
             "HTTP/1.1 $status OK",
             ($query->get('link') ? (

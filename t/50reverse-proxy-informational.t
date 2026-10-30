@@ -118,6 +118,27 @@ EOT
     is(scalar(@m), 2) or diag $resp;
 };
 
+subtest 'hop-by-hop headers are not forwarded' => sub {
+    my $server = spawn_h2o(<< "EOT");
+send-informational: all
+hosts:
+  default:
+    paths:
+      /:
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+EOT
+    run_with_curl($server, sub {
+        my ($proto, $port, $curl) = @_;
+        my $resp = `$curl --silent --dump-header /dev/stdout '$proto://127.0.0.1:$port/1xx?status=103&link=1&hop-by-hop=1'`;
+        my ($info, $final) = split(/\r\n\r\n/, $resp, 2);
+        like $info, qr{^HTTP/[\d.]+ 103}mi, "103 forwarded";
+        like $info, qr{^link: </index.js>; rel=preload}mi, "link forwarded";
+        unlike $info, qr{^(?:connection|keep-alive):}mi, "hop-by-hop headers dropped";
+        like $final, qr{^HTTP/[\d.]+ 200}mi, "final response";
+        like $final, qr{\r\n\r\nhello world$}s, "response body";
+    });
+};
+
 subtest 'http2 upstream' => sub {
     my $backend = spawn_h2o(<< "EOT");
 send-informational: all
