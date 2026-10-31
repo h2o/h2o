@@ -149,6 +149,12 @@ void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err)
     scheduler->update_state(scheduler, stream);
 }
 
+quicly_error_t quicly_set_reset_stream_at(quicly_stream_t *stream, quicly_error_t err, uint64_t reliable_size)
+{
+    /* the mock peer never offers reset_stream_at */
+    return PTLS_ERROR_NOT_AVAILABLE;
+}
+
 socklen_t quicly_get_socklen(struct sockaddr *sa)
 {
     switch (sa->sa_family) {

@@ -4457,6 +4457,92 @@ hosts:
 
 
 
+.SH WEBTRANSPORT DIRECTIVES
+
+
+
+WebTransport lets a client exchange streams and datagrams with a server within a session established by an extended CONNECT request.
+H2O supports WebTransport over HTTP/3 (draft-ietf-webtrans-http3-16).
+Sessions are accepted by handlers; at the moment, the only handler that does so is the echo handler, which is meant for testing.
+
+
+
+The support is experimental.
+Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented; also, streams are reset using RESET_STREAM instead of RESET_STREAM_AT; therefore, the peer cannot determine to which session a stream belonged if the stream is reset before its header is received.
+
+
+
+.SS webtransport
+A boolean flag (ON or OFF) indicating if WebTransport is advertised to the clients.
+
+
+.PP
+
+
+When set to ON, H2O advertises the support for WebTransport in the SETTINGS frame of HTTP/3.
+It is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+
+
+.RE
+.RE
+
+.SS webtransport.echo
+Registers a WebTransport echo handler, which is meant for testing.
+
+
+.PP
+
+
+The handler accepts WebTransport sessions and echoes what it receives:
+
+
+data received on a bidirectional stream opened by the client is sent back on the same stream
+data received on a unidirectional stream opened by the client is sent back on a unidirectional stream opened by the server
+datagrams are sent back
+resets and STOP_SENDING are mirrored, using the same error code
+when the client drains the session, the session is closed
+
+
+The query string of the request can be used to exercise other code paths:
+
+
+open-bidi=N and open-uni=N: the server opens N (up to 100) streams, each sending stream  and a newline before closing
+delay=MS: the streams of open-bidi and open-uni are opened MS milliseconds (up to 10000) later, from a timer
+drain: the server drains the session immediately
+close=CODE: the server closes the session with the given error code, once the first bidirectional stream opened by the client has been echoed
+
+
+Requests that are not WebTransport are passed to the next handler.
+
+.PP
+.BR Example:\ 
+Echo handler for WebTransport
+.PP
+.nf
+.RS
+webtransport: ON
+hosts:
+  default:
+    paths:
+      /echo:
+        webtransport.echo: ON
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+webtransport
+
+.RE
+.RE
+
+
+
+
+
 .SH USING BASIC AUTHENTICATION
 
 
