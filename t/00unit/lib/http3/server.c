@@ -133,7 +133,88 @@ static void test_scheduler(void)
     ok(sched.active.smallest_urgency == H2O_ABSPRIO_NUM_URGENCY_LEVELS);
 }
 
+static void test_wt_find_range_after(void)
+{
+    quicly_recvstate_t rs;
+    const quicly_range_t *r;
+    size_t n = 0;
+
+    /* 300 ranges [2k, 2k + 1) for k = 1..300, being more than QUICLY_BPLUS_RANGES_FANOUT^2 so that the tree has three levels */
+    int all_added = 1;
+    quicly_recvstate_init(&rs);
+    for (uint64_t k = 300; k != 0; --k) {
+        uint64_t off = 2 * k;
+        size_t len = 1;
+        if (quicly_recvstate_update(&rs, &off, &len, 0, UINT64_MAX) != 0)
+            all_added = 0;
+    }
+    ok(all_added);
+    ok(rs.received.height >= 3);
+
+    /* walking from the start yields every range in order, the empty one at zero excluded */
+    for (uint64_t next = 0; (r = wt_find_range_after(rs.received.root, rs.received.height, next)) != NULL; next = r->end) {
+        ++n;
+        if (r->start != 2 * n || r->end != 2 * n + 1)
+            break;
+    }
+    ok(n == 300);
+
+    /* lookups from any offset find the first range that ends above it */
+    int all_found = 1;
+    for (uint64_t off = 0; off <= 601; ++off) {
+        uint64_t k = off < 2 ? 1 : off / 2 + off % 2;
+        r = wt_find_range_after(rs.received.root, rs.received.height, off);
+        if (k > 300 ? r != NULL : r == NULL || r->start != 2 * k)
+            all_found = 0;
+    }
+    ok(all_found);
+
+    quicly_recvstate_dispose(&rs);
+}
+#include "reliable-reset.c"
+#include "webtransport.c"
+
+static void test_wt_mirror_reset_after_fin(void)
+{
+    /* The peer sends a WebTransport stream with a 2-byte header: [0,5), a zero-length FIN at 52 beyond a gap, [22,27), then
+     * RESET_STREAM. The FIN is mirrored once the bytes after the gap arrive; the reset has to use the final size it fixed. */
+    quicly_stream_t qs = {NULL};
+    struct st_h2o_http3_server_wt_stream_t ws = {{NULL}};
+    uint64_t off, missing;
+    size_t len;
+
+    ws.quic = &qs;
+    ws.recv.base = 2;
+    quicly_recvstate_init(&qs.recvstate);
+    quicly_recvstate_init(&ws.super.recvstate);
+
+    /* the QUIC stream */
+    off = 0, len = 5;
+    ok(quicly_recvstate_update(&qs.recvstate, &off, &len, 0, UINT64_MAX) == 0);
+    off = 52, len = 0;
+    ok(quicly_recvstate_update(&qs.recvstate, &off, &len, 1, UINT64_MAX) == 0);
+    off = 22, len = 5;
+    ok(quicly_recvstate_update(&qs.recvstate, &off, &len, 0, UINT64_MAX) == 0);
+    /* its mirror, the offsets excluding the header */
+    wt_mirror_update(&ws, 0, 3, 0);
+    wt_mirror_update(&ws, 20, 5, 0);
+    wt_mirror_eos(&ws);
+    ok(ws.super.recvstate.eos == 50);
+
+    ok(quicly_recvstate_reset(&qs.recvstate, 52, 0, 11, &missing) == 0);
+    wt_mirror_reset(&ws);
+    ok(quicly_recvstate_transfer_complete(&ws.super.recvstate));
+    ok(ws.super.recvstate.app_error_code == 11);
+
+    quicly_recvstate_dispose(&ws.super.recvstate);
+    quicly_recvstate_dispose(&qs.recvstate);
+}
+
 void test_lib__http3_server(void)
 {
     subtest("scheduler", test_scheduler);
+    subtest("webtransport: walk the received ranges", test_wt_find_range_after);
+    subtest("webtransport: reset after a FIN beyond a gap", test_wt_mirror_reset_after_fin);
+    subtest("reliable reset: real TLS and H3 lifecycle", test_h3_reliable_reset);
+    subtest("webtransport: native HTTP/3 backend", test_h3_webtransport);
 }

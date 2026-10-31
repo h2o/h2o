@@ -51,6 +51,7 @@ extern "C" {
 #include "h2o/time_.h"
 #include "h2o/token.h"
 #include "h2o/url.h"
+#include "h2o/webtransport.h"
 #include "h2o/balancer.h"
 #include "h2o/http2_common.h"
 #include "h2o/send_state.h"
@@ -499,6 +500,18 @@ struct st_h2o_globalconf_t {
          */
         size_t max_concurrent_streaming_requests_per_connection;
     } http3;
+
+    struct {
+        /**
+         * if WebTransport is advertised (experimental)
+         */
+        int enabled;
+        /**
+         * if the handshakes of earlier drafts are accepted too, as current browsers use them (see
+         * H2O_WEBTRANSPORT_H3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02)
+         */
+        int legacy_drafts;
+    } webtransport;
 
     struct {
         /**
@@ -1007,6 +1020,13 @@ typedef struct st_h2o_conn_callbacks_t {
      * Mandatory callback that returns a number identifying the request of a particular connection (e.g., HTTP/2 stream ID)
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
+    /**
+     * Called by `h2o_webtransport_accept` for a request using a protocol that carries WebTransport streams natively. Returns the
+     * operations to be used for the streams of `session`, or NULL if the session cannot be established on the request. When
+     * successful, the protocol layer refers to `session` until `h2o_webtransport_native_t::detach` is called. The callback is
+     * optional.
+     */
+    const h2o_webtransport_native_t *(*webtransport_attach)(h2o_req_t *req, h2o_webtransport_session_t *session);
     /**
      * logging callbacks (all of them are optional)
      */
@@ -2059,6 +2079,13 @@ void h2o_access_log_register_configurator(h2o_globalconf_t *conf);
 /* lib/handler/server_timing.c */
 void h2o_server_timing_register(h2o_pathconf_t *pathconf, int enforce);
 void h2o_server_timing_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/webtransport_echo.c */
+/**
+ * registers a WebTransport echo handler, used for testing
+ */
+void h2o_webtransport_echo_register(h2o_pathconf_t *pathconf);
+void h2o_webtransport_echo_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/compress.c */
 
