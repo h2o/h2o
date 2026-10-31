@@ -1092,7 +1092,7 @@ static void add_inflight(h2o_qpack_encoder_t *enc, int64_t stream_id, int64_t la
 {
     h2o_vector_reserve(NULL, &enc->inflight, enc->inflight.size + 1);
     enc->inflight.entries[enc->inflight.size++] =
-        (struct st_h2o_qpack_blocked_streams_t){stream_id, largest_ref, largest_ref, {{1}}};
+        (struct st_h2o_qpack_inflight_section_t){stream_id, largest_ref, largest_ref, {{1}}};
     ++enc->num_blocked;
 }
 

@@ -98,7 +98,7 @@ struct st_h2o_qpack_header_table_t {
     size_t num_bytes, max_size;
 };
 
-struct st_h2o_qpack_blocked_streams_t {
+struct st_h2o_qpack_inflight_section_t {
     int64_t stream_id;
     int64_t largest_ref;
     int64_t smallest_ref;
@@ -162,7 +162,7 @@ struct st_h2o_qpack_encoder_t {
     /**
      * list of unacked streams
      */
-    H2O_VECTOR(struct st_h2o_qpack_blocked_streams_t) inflight;
+    H2O_VECTOR(struct st_h2o_qpack_inflight_section_t) inflight;
     /**
      * Shadow evidence used by the dynamic-table admission policy.
      */
@@ -1864,7 +1864,7 @@ static h2o_iovec_t finalize_flatten(struct st_h2o_qpack_flatten_context_t *ctx, 
         /* mark as inflight, extending the cached floor to cover this section's references */
         h2o_vector_reserve(NULL, &ctx->qpack->inflight, ctx->qpack->inflight.size + 1);
         ctx->qpack->inflight.entries[ctx->qpack->inflight.size++] =
-            (struct st_h2o_qpack_blocked_streams_t){ctx->stream_id, ctx->largest_ref, ctx->smallest_ref, {{is_blocking}}};
+            (struct st_h2o_qpack_inflight_section_t){ctx->stream_id, ctx->largest_ref, ctx->smallest_ref, {{is_blocking}}};
         if (ctx->smallest_ref < ctx->qpack->inflight_smallest_ref)
             ctx->qpack->inflight_smallest_ref = ctx->smallest_ref;
     }
