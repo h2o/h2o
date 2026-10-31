@@ -160,6 +160,10 @@ struct st_h2o_qpack_encoder_t {
      */
     size_t num_blocked;
     /**
+     * maximum number of entries in `inflight`
+     */
+    size_t max_inflight;
+    /**
      * list of unacked streams
      */
     H2O_VECTOR(struct st_h2o_qpack_inflight_section_t) inflight;
@@ -1141,7 +1145,8 @@ int h2o_qpack_parse_response(h2o_mem_pool_t *pool, h2o_qpack_decoder_t *qpack, i
 }
 
 h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint64_t peer_max_table_capacity, uint32_t local_max_table_capacity,
-                                              uint64_t max_blocked, int refine_after_full, h2o_byte_vector_t *encoder_buf)
+                                              uint64_t max_blocked, size_t max_inflight, int refine_after_full,
+                                              h2o_byte_vector_t *encoder_buf)
 {
     uint32_t header_table_size =
         peer_max_table_capacity < local_max_table_capacity ? (uint32_t)peer_max_table_capacity : local_max_table_capacity;
@@ -1151,6 +1156,7 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint64_t peer_max_table_capacity, 
     qpack->max_entries = peer_max_table_capacity / 32;
     qpack->max_blocked = max_blocked;
     qpack->num_blocked = 0;
+    qpack->max_inflight = max_inflight;
     memset(&qpack->inflight, 0, sizeof(qpack->inflight));
     if (refine_after_full) {
         shadow_cache_init(&qpack->shadow_cache, header_table_size);
@@ -1836,8 +1842,14 @@ static const size_t PREFIX_CAPACITY =
 static void prepare_flatten(struct st_h2o_qpack_flatten_context_t *ctx, h2o_qpack_encoder_t *qpack, h2o_mem_pool_t *pool,
                             int64_t stream_id, h2o_byte_vector_t *encoder_buf, h2o_qpack_section_stats_t *stats_updated)
 {
-    if (qpack != NULL)
+    if (qpack != NULL) {
         qpack->freq_add *= QPACK_FREQ_DECAY_FACTOR;
+        /* When too many sections are awaiting acknowledgement, encode without the dynamic table, as each section referring to the
+         * table adds an entry to `inflight`, which is scanned for every decoder stream instruction. Otherwise, a peer that never
+         * acknowledges sections can grow `inflight` without bound. */
+        if (qpack->inflight.size >= qpack->max_inflight)
+            qpack = NULL;
+    }
     ctx->qpack = qpack;
     ctx->pool = pool;
     ctx->stream_id = stream_id;

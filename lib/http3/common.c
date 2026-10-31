@@ -1430,7 +1430,8 @@ void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
     h2o_timer_link(conn->ctx->loop, delay, &conn->_timeout);
 }
 
-int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc)
+int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, uint64_t max_concurrent_requests,
+                                    const char **err_desc)
 {
     const uint8_t *src = payload, *src_end = src + length;
     uint64_t max_table_capacity = 0, blocked_streams = 0;
@@ -1474,9 +1475,12 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
         }
     }
 
+    /* Sections awaiting acknowledgement are bounded to twice the number of concurrent requests, leaving room for the sections that
+     * remain unacknowledged after the requests complete. */
     h2o_byte_vector_t encoder_buf = {NULL};
-    conn->qpack.enc = h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
-                                               conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
+    conn->qpack.enc =
+        h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
+                                 2 * max_concurrent_requests, conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
     if (encoder_buf.size != 0)
         h2o_http3_write_unistream(conn->_control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
     free(encoder_buf.entries);

@@ -55,7 +55,7 @@ static void do_test_simple(int use_enc_stream)
         memset(enc_stream, 0, sizeof(*enc_stream));
     }
     h2o_qpack_encoder_t *enc =
-        h2o_qpack_create_encoder(4096, 4096, 10, 1, enc_stream != NULL ? enc_stream : &(h2o_byte_vector_t){NULL});
+        h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, enc_stream != NULL ? enc_stream : &(h2o_byte_vector_t){NULL});
 
     {
         h2o_headers_t headers = {NULL};
@@ -129,7 +129,7 @@ static void test_response_fill_until_full(void)
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &enc_stream);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &enc_stream);
     h2o_qpack_section_stats_t stats = {0};
     const char *err_desc = NULL;
 
@@ -190,7 +190,7 @@ static void test_required_insert_count_wraps(void)
     static const char *names[] = {"x-a", "x-b"};
     h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(128, 10);
     h2o_byte_vector_t enc_stream = {NULL};
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &enc_stream);
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &enc_stream);
     h2o_mem_pool_t pool;
     uint64_t insert_count;
     const uint8_t *p;
@@ -269,7 +269,7 @@ static void test_response_dont_compress(void)
     h2o_mem_init_pool(&pool);
 
     { /* short cookie / set-cookie use never-indexed, non-Huffman literals and are not inserted */
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         h2o_headers_t headers = {NULL};
         h2o_byte_vector_t enc_stream = {NULL};
         h2o_qpack_section_stats_t stats = {0};
@@ -308,7 +308,7 @@ static void test_response_dont_compress(void)
 
     { /* long set-cookie follows the normal fill-till-full path */
         h2o_byte_vector_t enc_stream = {NULL};
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &enc_stream);
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &enc_stream);
         h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
         h2o_headers_t headers = {NULL};
         h2o_qpack_section_stats_t stats = {0};
@@ -1167,7 +1167,7 @@ static int shadow_cache_is_missing(struct st_h2o_qpack_shadow_cache_t *cache, ui
 
 static void test_shadow_cache(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 64, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(64, 64, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
 
     ok(enc->shadow_cache.sets != NULL);
     ok(shadow_cache_num_sets(&enc->shadow_cache) == 1);
@@ -1191,7 +1191,7 @@ static void test_shadow_cache(void)
 
 static void test_response_swap(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
@@ -1237,7 +1237,7 @@ static void test_response_swap(void)
 
 static void test_request_shadow_evidence_ages(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1284,7 +1284,7 @@ static void test_request_shadow_evidence_ages(void)
 
 static void test_response_swap_respects_inflight(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     h2o_byte_vector_t enc_stream = {NULL};
@@ -1328,7 +1328,7 @@ static void test_response_swap_respects_inflight(void)
 
 static void test_response_duplicate_near_eviction(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     static const char a_value[] = "aaaaaaaaaaaaaaaaaaaa";
@@ -1364,7 +1364,7 @@ static void test_response_duplicate_near_eviction(void)
 
 static void test_response_duplicate_near_eviction_while_referenced(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
 
@@ -1415,7 +1415,7 @@ static void fill_with_hot_tail(h2o_qpack_encoder_t *enc, h2o_mem_pool_t *pool)
 
 static void test_response_duplicate_near_eviction_keeps_unbeaten(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
 
     h2o_mem_init_pool(&pool);
@@ -1440,7 +1440,7 @@ static void test_response_duplicate_near_eviction_keeps_unbeaten(void)
 
 static void test_response_duplicate_near_eviction_literal_without_room(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
 
     h2o_mem_init_pool(&pool);
@@ -1468,7 +1468,7 @@ static void test_response_duplicate_near_eviction_literal_without_room(void)
 
 static void test_response_duplicate_near_eviction_waits_for_insert_ack(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
@@ -1498,7 +1498,7 @@ static void test_response_duplicate_near_eviction_waits_for_insert_ack(void)
 
 static void test_response_duplicate_near_eviction_oldest_quarter(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(300, 300, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
 
@@ -1529,7 +1529,7 @@ static void test_response_duplicate_near_eviction_oldest_quarter(void)
 
 static void test_response_duplicate_near_eviction_blocked_limit(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 1, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 1, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
 
@@ -1561,7 +1561,7 @@ static void test_response_duplicate_near_eviction_blocked_limit(void)
 
 static void test_response_swap_waits_for_insert_ack(void)
 {
-    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, 1, &(h2o_byte_vector_t){NULL});
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(128, 128, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
     h2o_mem_pool_t pool;
     h2o_headers_t headers = {NULL};
     uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
@@ -1591,11 +1591,43 @@ static void test_response_swap_waits_for_insert_ack(void)
     h2o_qpack_destroy_encoder(enc);
 }
 
+static void test_response_inflight_limit(void)
+{
+    h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 20, 1, &(h2o_byte_vector_t){NULL});
+    h2o_mem_pool_t pool;
+    int64_t stream_id = 0;
+
+    h2o_mem_init_pool(&pool);
+
+    /* insert x-a and acknowledge it, so that the following sections refer to it without blocking */
+    flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ack_encoder_section(enc, stream_id);
+    ok(enc->inflight.size == 0);
+
+    /* sections referring to x-a are never acknowledged; they accumulate up to the limit */
+    for (size_t i = 0; i != enc->max_inflight + 10; ++i) {
+        stream_id += 4;
+        flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    }
+    ok(enc->inflight.size == enc->max_inflight);
+
+    /* once a section is acknowledged, the dynamic table is used again */
+    ack_encoder_section(enc, 4);
+    ok(enc->inflight.size == enc->max_inflight - 1);
+    stream_id += 4;
+    flatten_response_one(enc, &pool, stream_id, &(h2o_byte_vector_t){NULL}, "x-a", "aaaaaaaaaaaaaaaaaaaa");
+    ok(enc->inflight.size == enc->max_inflight);
+    ok(enc->inflight.entries[enc->inflight.size - 1].stream_id == stream_id);
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_encoder(enc);
+}
+
 static void test_encoder_stream_input(void)
 {
     note("section acknowledgement evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1613,7 +1645,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1639,7 +1671,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement evicts non-last inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1661,7 +1693,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts the only inflight entry");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1679,7 +1711,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts last inflight entry without destroying the list");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1705,7 +1737,7 @@ static void test_encoder_stream_input(void)
 
     note("stream cancellation evicts multiple non-last inflight entries");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
         size_t len;
 
@@ -1728,7 +1760,7 @@ static void test_encoder_stream_input(void)
 
     note("insert count increment (RFC 9204 Section 4.4.3)");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         h2o_mem_pool_t pool;
         h2o_headers_t headers = {NULL};
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
@@ -1754,7 +1786,7 @@ static void test_encoder_stream_input(void)
 
     note("section acknowledgement without an outstanding section (RFC 9204 Section 4.4.1)");
     {
-        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, 1, &(h2o_byte_vector_t){NULL});
+        h2o_qpack_encoder_t *enc = h2o_qpack_create_encoder(4096, 4096, 10, SIZE_MAX, 1, &(h2o_byte_vector_t){NULL});
         uint8_t buf[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
 
         add_inflight(enc, 4, 1);
@@ -1785,6 +1817,7 @@ void test_lib__http3_qpack(void)
     subtest("response-duplicate-near-eviction-oldest-quarter", test_response_duplicate_near_eviction_oldest_quarter);
     subtest("response-duplicate-near-eviction-blocked-limit", test_response_duplicate_near_eviction_blocked_limit);
     subtest("response-swap-waits-for-insert-ack", test_response_swap_waits_for_insert_ack);
+    subtest("response-inflight-limit", test_response_inflight_limit);
     subtest("decode-literal-invalid-name", test_decode_literal_invalid_name);
     subtest("decode-literal-invalid-value", test_decode_literal_invalid_value);
     subtest("decode-referred", test_decode_referred);

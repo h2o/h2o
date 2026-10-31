@@ -478,9 +478,12 @@ void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, s
  */
 void h2o_quic_schedule_timer(h2o_quic_conn_t *conn);
 /**
- *
+ * Handles the SETTINGS frame and creates the QPACK encoder.
+ * @param max_concurrent_requests maximum number of requests that can be inflight concurrently on the connection, used to bound the
+ *                                number of QPACK sections awaiting acknowledgement
  */
-int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, const char **err_desc);
+int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *payload, size_t length, uint64_t max_concurrent_requests,
+                                    const char **err_desc);
 /**
  *
  */

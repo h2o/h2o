@@ -1959,7 +1959,9 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, 
             err = H2O_HTTP3_ERROR_MISSING_SETTINGS;
             goto Fail;
         }
-        if ((err = h2o_http3_handle_settings_frame(&conn->h3, payload, len, &err_desc)) != 0)
+        if ((err = h2o_http3_handle_settings_frame(&conn->h3, payload, len,
+                                                   quicly_get_context(conn->h3.super.quic)->transport_params.max_streams_bidi,
+                                                   &err_desc)) != 0)
             goto Fail;
         assert(h2o_http3_has_received_settings(&conn->h3));
         while (!h2o_linklist_is_empty(&conn->streams_resp_settings_blocked)) {

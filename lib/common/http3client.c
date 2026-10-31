@@ -378,7 +378,8 @@ static void handle_control_stream_frame(h2o_http3_conn_t *_conn, uint64_t type, 
             err = H2O_HTTP3_ERROR_MISSING_SETTINGS;
             goto Fail;
         }
-        if ((err = h2o_http3_handle_settings_frame(&conn->super, payload, len, &err_desc)) != 0)
+        if ((err = h2o_http3_handle_settings_frame(&conn->super, payload, len, conn->ctx->http3->max_concurrent_streams,
+                                                   &err_desc)) != 0)
             goto Fail;
         assert(h2o_http3_has_received_settings(&conn->super));
         /* issue requests (unless it has been done already due to 0-RTT key being available) */
