@@ -651,7 +651,7 @@ Default is 4.
 minimum-version:
 
 minimum protocol version, should be one of: SSLv2, SSLv3, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3.
-Default is TLSv1.
+Default is TLSv1.2.
 
 min-version:
 
@@ -2330,12 +2330,12 @@ To fine tune the behavior of QUIC, the quic attribute should be used in place of
 The quic attribute accepts following parameters.
 
 
-alternative
-A mapping that defines an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). The mapping must contain ratio, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255. The alternative settings start as a copy of the default settings (including cc and initcwnd of the listen directive); the following parameters, if specified within the mapping, override them: cc, disengage-jumpstart, ecn, initcwnd, initial-rtt, jumpstart-default, jumpstart-max, normalize-mtu, pacing, respect-app-limited, speculative-pto. Note that cc specified per host (i.e., by the listen directive of each host) is applied only to the connections using the default settings.
+alternatives
+A sequence of up to 3 mappings, each defining an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). Each mapping must contain ratio, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255; the sum of the ratios must not exceed 255, and the remaining connections use the default settings. Each alternative starts as a copy of the default settings (including cc and initcwnd of the listen directive); the following parameters, if specified within the mapping, override them: cc, disengage-jumpstart, ecn, initcwnd, initial-rtt, jumpstart-default, jumpstart-max, normalize-mtu, pacing, respect-app-limited, speculative-pto. Note that cc specified per host (i.e., by the listen directive of each host) is applied only to the connections using the default settings.
 amp-limit
 Amount of data that can be sent to the client before the client address is validated; see section 8.1 of RFC 9000. Default is 3.
 disengage-jumpstart
-A boolean flag (either OFF or ON) indicating whether jumpstart should be prepared but then not be used. When set to ON, connections for which jumpstart would have been used are counted as such (i.e., num-jumpstart-applicable), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in alternative. The default setting is OFF.
+A boolean flag (either OFF or ON) indicating whether jumpstart should be prepared but then not be used. When set to ON, connections for which jumpstart would have been used are counted as such (i.e., num-jumpstart-applicable), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in one of the alternatives. The default setting is OFF.
 ecn
 A boolean flag (either ON or OFF) indicating whether the server should use ECN signals to detect congestion. The default setting is ON. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.
 handshake-timeout-rtt-multiplier
@@ -4449,6 +4449,109 @@ hosts:
 .fi
 .PP
 
+
+.RE
+.RE
+
+
+
+
+
+.SH WEBTRANSPORT DIRECTIVES
+
+
+
+WebTransport lets a client exchange streams and datagrams with a server within a session established by an extended CONNECT request.
+H2O supports WebTransport over HTTP/2 (draft-ietf-webtrans-http2-15) and over HTTP/3 (draft-ietf-webtrans-http3-16).
+Sessions are accepted by handlers; at the moment, the only handler that does so is the echo handler, which is meant for testing.
+
+
+
+The support is experimental.
+Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented.
+
+
+
+.SS webtransport
+A boolean flag (ON or OFF) indicating if WebTransport is advertised to the clients.
+
+
+.PP
+
+
+When set to ON, H2O advertises the support for WebTransport in the SETTINGS frame.
+Over HTTP/2, WebTransport is advertised along with the flow control limits of each session, and only on TLS connections.
+Over HTTP/3, it is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+Also, when set to ON, H2O offers the reset_stream_at transport parameter of QUIC, and accepts sessions over HTTP/3 only from clients that offer it as well.
+
+
+.RE
+.RE
+
+.SS webtransport-legacy-drafts
+A boolean flag (ON or OFF) indicating if the handshakes of earlier drafts of WebTransport over HTTP/3 are accepted as well.
+
+
+.PP
+
+
+Current browsers speak earlier drafts than draft-16 when establishing a session: they send :protocol webtransport instead of webtransport-h3, signal WebTransport with the SETTINGS of draft-02 (SETTINGS_ENABLE_WEBTRANSPORT), draft-07 (SETTINGS_WEBTRANSPORT_MAX_SESSIONS) or draft-14 (SETTINGS_WT_MAX_SESSIONS), and do not necessarily offer the reset_stream_at transport parameter.
+When this directive is ON and webtransport is ON, H2O also advertises the SETTINGS of draft-02 and draft-07, without which these browsers do not send their extended CONNECT, and accepts such clients.
+The session is then carried as in draft-16, which these drafts share the streams and capsules of; a stream is reset with RESET_STREAM if the client did not offer reset_stream_at.
+
+
+.RE
+.RE
+
+.SS webtransport.echo
+Registers a WebTransport echo handler, which is meant for testing.
+
+
+.PP
+
+
+The handler accepts WebTransport sessions and echoes what it receives:
+
+
+data received on a bidirectional stream opened by the client is sent back on the same stream
+data received on a unidirectional stream opened by the client is sent back on a unidirectional stream opened by the server
+datagrams are sent back
+resets and STOP_SENDING are mirrored, using the same error code
+when the client drains the session, the session is closed
+
+
+The query string of the request can be used to exercise other code paths:
+
+
+open-bidi=N and open-uni=N: the server opens N (up to 100) streams, each sending stream  and a newline before closing
+delay=MS: the streams of open-bidi and open-uni are opened MS milliseconds (up to 10000) later, from a timer
+drain: the server drains the session immediately
+close=CODE: the server closes the session with the given error code, once the first bidirectional stream opened by the client has been echoed
+
+
+Requests that are not WebTransport are passed to the next handler.
+
+.PP
+.BR Example:\ 
+Echo handler for WebTransport
+.PP
+.nf
+.RS
+webtransport: ON
+hosts:
+  default:
+    paths:
+      /echo:
+        webtransport.echo: ON
+
+.RE
+.fi
+.PP
+
+
+.PP
+.BR See\ also:
+webtransport
 
 .RE
 .RE
