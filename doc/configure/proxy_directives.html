@@ -158,6 +158,9 @@ Following sections describe the configuration directives defined for the module.
 <li><a href="configure/proxy_directives.html#proxy.http3.ecn">
 <code>proxy.http3.ecn</code>
 </a></li>
+<li><a href="configure/proxy_directives.html#proxy.http3.max-concurrent-streams">
+<code>proxy.http3.max-concurrent-streams</code>
+</a></li>
 <li><a href="configure/proxy_directives.html#proxy.http3.ratio">
 <code>proxy.http3.ratio</code>
 </a></li>
@@ -833,6 +836,31 @@ If ECN should be used to detect congestion.
 </dd>
 </dl>
 
+
+<div id="proxy.http3.max-concurrent-streams" class="directive-head">
+<h3><a href="configure/proxy_directives.html#proxy.http3.max-concurrent-streams"><code>"proxy.http3.max-concurrent-streams"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Maximum number of concurrent requests issuable on one HTTP/3 connection to the backend server.
+</p>
+
+<p>
+When the number of requests inflight on every HTTP/3 connection to the backend server reaches this value, a new connection is established.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global, host, path, extension</dd>
+<dt>Default:</dt>
+<dd><code><pre>proxy.http3.max-concurrent-streams: 100</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/proxy_directives.html#proxy.http3.ratio"><code>proxy.http3.ratio</code></a>
+</dd>
+</dl>
 
 <div id="proxy.http3.ratio" class="directive-head">
 <div class="directive-since">experimental</div>

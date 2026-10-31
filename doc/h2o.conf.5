@@ -4002,6 +4002,22 @@ Fine-tuning QUIC Behavior
 .RE
 
 
+.SS proxy.http3.max-concurrent-streams
+Maximum number of concurrent requests issuable on one HTTP/3 connection to the backend server.
+
+.PP
+
+
+When the number of requests inflight on every HTTP/3 connection to the backend server reaches this value, a new connection is established.
+
+
+.PP
+.BR See\ also:
+proxy.http3.ratio
+
+.RE
+.RE
+
 .SS proxy.http3.ratio
 Ratio of forwarded HTTP requests with which use of HTTP/3 should be attempted.
 
