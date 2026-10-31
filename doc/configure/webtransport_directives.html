@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+<base href="../" />
+
+<!-- oktavia -->
+<link rel="stylesheet" href="assets/searchstyle.css" type="text/css" />
+<script src="search/jquery-1.9.1.min.js"></script>
+<script src="search/oktavia-jquery-ui.js"></script>
+<script src="search/oktavia-english-search.js"></script>
+<!-- /oktavia -->
+
+<link rel="stylesheet" href="assets/style.css" type="text/css" />
+
+<title>WebTransport Directives - Configure - H2O - the optimized HTTP server</title>
+</head>
+<body>
+<div id="body">
+<div id="top">
+
+<h1>
+<a href="index.html">H2O</a>
+</h1>
+<p class="description">the optimized HTTP/1.x, HTTP/2, HTTP/3 server</p>
+
+<!-- oktavia -->
+<form id="searchform">
+<input class="search" type="search" name="search" id="search" results="5" value="" placeholder="Search" />
+<div id="searchresult_box">
+<div id="close_search_box">&times;</div>
+<div id="searchresult_summary"></div>
+<div id="searchresult"></div>
+<div id="searchresult_nav"></div>
+<span class="pr">Powered by <a href="https://github.com/shibukawa/oktavia">Oktavia</a></span>
+</div>
+</form>
+<!-- /oktavia -->
+
+</div>
+
+<table id="menu">
+<tr>
+<td><a href="index.html">Top</a></td>
+<td><a href="install.html">Install</a></td>
+<td class="selected"><a href="configure.html">Configure</a></td>
+<td><a href="faq.html">FAQ</a></td>
+<td><a href="http://blog.kazuhooku.com/search/label/H2O" target="_blank">Blog</a></td>
+<td><a href="http://github.com/h2o/h2o/" target="_blank">Source</a></td>
+</tr>
+</table>
+
+<div id="main">
+
+<h2>
+<a href="configure.html">Configure</a> &gt;
+WebTransport Directives
+</h2>
+
+
+<p>
+<a href="https://datatracker.ietf.org/wg/webtrans/about/">WebTransport</a> lets a client exchange streams and datagrams with a server within a session established by an extended CONNECT request.
+H2O supports WebTransport over HTTP/3 (<a href="https://datatracker.ietf.org/doc/draft-ietf-webtrans-http3/">draft-ietf-webtrans-http3-16</a>).
+Sessions are accepted by handlers; at the moment, the only handler that does so is the echo handler, which is meant for testing.
+</p>
+
+<p>
+The support is experimental.
+Over HTTP/3, at most one session is permitted on each connection, as the flow control of WebTransport is not implemented.
+</p>
+
+<ul>
+<li><a href="configure/webtransport_directives.html#webtransport">
+<code>webtransport</code>
+</a></li>
+<li><a href="configure/webtransport_directives.html#webtransport.echo">
+<code>webtransport.echo</code>
+</a></li>
+</ul>
+
+
+<div id="webtransport" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/webtransport_directives.html#webtransport"><code>"webtransport"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+A boolean flag (<code>ON</code> or <code>OFF</code>) indicating if WebTransport is advertised to the clients.
+
+</p>
+
+<p>
+When set to <code>ON</code>, H2O advertises the support for WebTransport in the SETTINGS frame of HTTP/3.
+It is advertised only when the QUIC DATAGRAM extension is enabled; the streams of the session are subject to the flow control of QUIC.
+Also, when set to <code>ON</code>, H2O offers the <a href="https://datatracker.ietf.org/doc/draft-ietf-quic-reliable-stream-reset/">reset_stream_at</a> transport parameter of QUIC, and accepts sessions over HTTP/3 only from clients that offer it as well.
+</p>
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>global</dd>
+<dt>Default:</dt>
+<dd><code><pre>webtransport: OFF</pre></code>
+</dl>
+
+<div id="webtransport.echo" class="directive-head">
+<div class="directive-since">experimental</div>
+<h3><a href="configure/webtransport_directives.html#webtransport.echo"><code>"webtransport.echo"</code></a></h3>
+</div>
+
+<dl class="directive-desc">
+<dt>Description:</dt>
+<dd>
+<p>
+Registers a WebTransport echo handler, which is meant for testing.
+
+</p>
+
+<p>
+The handler accepts WebTransport sessions and echoes what it receives:
+</p>
+<ul>
+<li>data received on a bidirectional stream opened by the client is sent back on the same stream</li>
+<li>data received on a unidirectional stream opened by the client is sent back on a unidirectional stream opened by the server</li>
+<li>datagrams are sent back</li>
+<li>resets and STOP_SENDING are mirrored, using the same error code</li>
+<li>when the client drains the session, the session is closed</li>
+</ul>
+<p>
+The query string of the request can be used to exercise other code paths:
+</p>
+<ul>
+<li><code>open-bidi=N</code> and <code>open-uni=N</code>: the server opens N (up to 100) streams, each sending <code>stream &lt;id&gt;</code> and a newline before closing</li>
+<li><code>delay=MS</code>: the streams of <code>open-bidi</code> and <code>open-uni</code> are opened MS milliseconds (up to 10000) later, from a timer</li>
+<li><code>drain</code>: the server drains the session immediately</li>
+<li><code>close=CODE</code>: the server closes the session with the given error code, once the first bidirectional stream opened by the client has been echoed</li>
+</ul>
+<p>
+Requests that are not WebTransport are passed to the next handler.
+</p>
+<div class="example">
+<div class="caption">Example. Echo handler for WebTransport</div>
+<pre><code>webtransport: ON
+hosts:
+  default:
+    paths:
+      /echo:
+        webtransport.echo: ON
+</code></pre>
+</div>
+
+
+</dd>
+<dt><a href="configure/syntax_and_structure.html#config_levels">Level</a>:</dt>
+<dd>path</dd>
+<dt>Default:</dt>
+<dd><code><pre>webtransport.echo: OFF</pre></code>
+<dt>See also:</dt>
+<dd><a href="configure/webtransport_directives.html#webtransport"><code>webtransport</code></a>
+</dd>
+</dl>
+
+
+
+
+
+
+</div>
+<div id="footer">
+<p>
+Copyright &copy; 2015-2025 <a href="http://dena.com/intl/">DeNA Co., Ltd.</a> et al.
+</p>
+</div>
+</body>
+</html>
