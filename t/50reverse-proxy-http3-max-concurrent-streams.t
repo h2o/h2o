@@ -44,7 +44,9 @@ hosts:
           end
 EOT
 
+    # use one thread, as each thread has its own pool of connections to upstream
     my $server = spawn_h2o(<< "EOT");
+num-threads: 1
 proxy.ssl.verify-peer: OFF
 hosts:
   default:
