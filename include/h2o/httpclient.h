@@ -195,6 +195,11 @@ struct st_h2o_http3client_ctx_t {
     h2o_http3_qpack_context_t qpack;
     uint64_t max_frame_payload_size;
     /**
+     * maximum number of requests issued concurrently over a connection; once reached, new requests are issued using another
+     * connection
+     */
+    uint64_t max_concurrent_streams;
+    /**
      * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
      * connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be freed by
      * calling free (3), as well as writing the resumed transport parameters to `*resumed_tp`. Otherwise, `*address_token`,
@@ -368,6 +373,10 @@ struct st_h2o_httpclient__h3_conn_t {
      * linklist used to queue pending requests
      */
     h2o_linklist_t pending_requests;
+    /**
+     * number of requests associated to the connection, including the pending ones
+     */
+    uint64_t num_requests;
 };
 
 /**

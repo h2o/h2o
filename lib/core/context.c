@@ -33,7 +33,8 @@
 #include "picotls/fusion.h"
 #endif
 
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso)
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso,
+                                                      uint64_t max_concurrent_streams)
 {
 #if H2O_USE_LIBUV
     h2o_fatal("no HTTP/3 support for libuv");
@@ -80,6 +81,7 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
     h3ctx->qpack = (h2o_http3_qpack_context_t){0}; /* TODO: expose proxy.http3.qpack-* knobs and consider enabling by default */
     h3ctx->max_frame_payload_size = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN); /* same maximum for HEADERS frame in both
                                                                                            directions */
+    h3ctx->max_concurrent_streams = max_concurrent_streams;
 
     /* h2o server http3 integration */
     h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
@@ -195,7 +197,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     if (ctx->globalconf->proxy.protocol_ratio.http3 != 0)
         ctx->proxy.client_ctx.http3 =
             h2o_create_proxy_http3_context(ctx, ctx->globalconf->proxy.global_socketpool._ssl_ctx, ctx->globalconf->proxy.http3.ecn,
-                                           ctx->globalconf->http3.use_gso);
+                                           ctx->globalconf->http3.use_gso, ctx->globalconf->proxy.http3.max_concurrent_streams);
     ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
     h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
 
