@@ -118,6 +118,10 @@ h2o_qpack_encoder_t *h2o_qpack_create_encoder(uint64_t peer_max_table_capacity, 
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack);
 const h2o_qpack_stats_t *h2o_qpack_get_encoder_stats(h2o_qpack_encoder_t *qpack);
 /**
+ * Returns the capacity of the dynamic table being used by the encoder.
+ */
+size_t h2o_qpack_get_encoder_table_capacity(h2o_qpack_encoder_t *qpack);
+/**
  * Handles packets sent to the QPACK encoder (i.e., the bytes carried by the "decoder" stream)
  * @param qpack can be NULL
  */

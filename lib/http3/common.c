@@ -1506,6 +1506,16 @@ void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, c
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
 }
 
+h2o_byte_vector_t *h2o_http3_get_qpack_encoder_buf(h2o_http3_conn_t *conn, h2o_byte_vector_t *buf)
+{
+    /* Stop emitting new instructions when the send buffer exceeds twice the table capacity, as it is a likely indication of an
+     * attack by a peer sending blind acks while keeping the encoder stream flow-control blocked. */
+    if (conn->qpack.enc != NULL &&
+        conn->_control_streams.egress.qpack_encoder->sendbuf->size > 2 * h2o_qpack_get_encoder_table_capacity(conn->qpack.enc))
+        return NULL;
+    return buf;
+}
+
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
 {
     /* There is a moment where the transport-level close has been initiated while st_h2o_http3_server_conn_t remains.

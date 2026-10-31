@@ -867,8 +867,9 @@ void start_request(struct st_h2o_http3client_req_t *req)
     h2o_qpack_section_stats_t unused = {0};
     h2o_byte_vector_t encoder_buf = {NULL};
     h2o_iovec_t headers_frame =
-        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id, &encoder_buf, method,
-                                  url.scheme, url.authority, url.path, protocol, headers, num_headers, datagram_flow_id, &unused);
+        h2o_qpack_flatten_request(req->conn->super.qpack.enc, req->super.pool, req->quic->stream_id,
+                                  h2o_http3_get_qpack_encoder_buf(&req->conn->super, &encoder_buf), method, url.scheme,
+                                  url.authority, url.path, protocol, headers, num_headers, datagram_flow_id, &unused);
     /* TODO Unlike the server, the client uses the default stream scheduler that does not send the encoder stream ahead of the
      * request streams, so request bodies might consume the connection-level flow-control credit needed for sending the encoder
      * instructions the HEADERS frame depends on, causing a deadlock (RFC 9204 Section 2.1.3). This needs to be addressed before

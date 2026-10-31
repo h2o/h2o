@@ -490,6 +490,11 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
  */
 void h2o_http3_write_unistream(struct st_h2o_http3_egress_unistream_t *stream, const void *bytes, size_t len);
 /**
+ * Returns `buf` if the QPACK encoder is allowed to emit encoder stream instructions, or NULL if too much data is buffered in the
+ * encoder stream. The returned value is to be passed to `h2o_qpack_flatten_request` or `h2o_qpack_flatten_response`.
+ */
+h2o_byte_vector_t *h2o_http3_get_qpack_encoder_buf(h2o_http3_conn_t *conn, h2o_byte_vector_t *buf);
+/**
  * Enqueue GOAWAY frame crafted for graceful shutdown
  */
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn);

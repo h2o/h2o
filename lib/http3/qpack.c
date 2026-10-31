@@ -1180,6 +1180,11 @@ const h2o_qpack_stats_t *h2o_qpack_get_encoder_stats(h2o_qpack_encoder_t *qpack)
     return &qpack->stats;
 }
 
+size_t h2o_qpack_get_encoder_table_capacity(h2o_qpack_encoder_t *qpack)
+{
+    return qpack->table.max_size;
+}
+
 void h2o_qpack_destroy_encoder(h2o_qpack_encoder_t *qpack)
 {
     header_table_dispose(&qpack->table);
