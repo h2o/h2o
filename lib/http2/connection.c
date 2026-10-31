@@ -533,8 +533,10 @@ static void handle_request_body_chunk(h2o_http2_conn_t *conn, h2o_http2_stream_t
 
     stream->req.req_body_bytes_received += payload.len;
 
-    /* check size */
-    if (stream->req.req_body_bytes_received > conn->super.ctx->globalconf->max_request_entity_size) {
+    /* check size; tunnels are not subject to the limit, as they are always streamed and the amount of data being buffered is bounded
+     * by flow control */
+    if (!stream->req.is_tunnel_req &&
+        stream->req.req_body_bytes_received > conn->super.ctx->globalconf->max_request_entity_size) {
         stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
         h2o_http2_stream_reset(conn, stream);
         return;
