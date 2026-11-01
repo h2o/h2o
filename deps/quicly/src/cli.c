@@ -1339,7 +1339,7 @@ static void usage(const char *cmd)
            "  -i interval               interval to reissue requests (in milliseconds)\n"
            "  --jumpstart-default <wnd> jumpstart CWND size for new connections, in packets\n"
            "  --jumpstart-max <wnd>     maximum jumpstart CWND size for resuming connections\n"
-           "  -I timeout                idle timeout (in milliseconds; default: 600,000)\n"
+           "  -I timeout                idle timeout (in milliseconds; default: 30,000)\n"
            "  -K num-packets            perform key update every num-packets packets\n"
            "  -l log-file               file to log traffic secrets\n"
            "  -M <bytes>                max stream data (in bytes; default: 1MB)\n"
@@ -1877,6 +1877,7 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse idle timeout: %s\n", optarg);
                 exit(1);
             }
+            break;
         case 'K':
             if (sscanf(optarg, "%" SCNu64, &ctx.max_packets_per_key) != 1) {
                 fprintf(stderr, "failed to parse key update interval: %s\n", optarg);
