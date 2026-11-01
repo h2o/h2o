@@ -1342,6 +1342,90 @@ static void test_key_update(void)
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_KEY_UPDATE, 0, 0, 0, 1);
 }
 
+static void do_test_plaintext_alert(int to_client, int after_handshake)
+{
+    static const uint8_t close_notify[] = {PTLS_CONTENT_TYPE_ALERT, 0x03, 0x03, 0x00, 0x02, PTLS_ALERT_LEVEL_WARNING,
+                                           PTLS_ALERT_CLOSE_NOTIFY};
+    ptls_t *client = ptls_new(ctx, 0), *server = ptls_new(ctx_peer, 1);
+    ptls_buffer_t cbuf, sbuf, decbuf;
+    size_t consumed;
+    int ret;
+
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(&sbuf, "", 0);
+    ptls_buffer_init(&decbuf, "", 0);
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    cbuf.off = 0;
+
+    if (!after_handshake) {
+        if (to_client) {
+            /* feed ServerHello only, so that the client has the handshake key installed */
+            consumed = 5 + (sbuf.base[3] << 8 | sbuf.base[4]);
+            ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+            ok(ret == PTLS_ERROR_IN_PROGRESS);
+            ok(client->state == PTLS_STATE_CLIENT_EXPECT_ENCRYPTED_EXTENSIONS);
+            ok(client->traffic_protection.dec.aead != NULL);
+            /* alert sent by the client is protected by the handshake key */
+            ret = ptls_send_alert(client, &cbuf, PTLS_ALERT_LEVEL_WARNING, PTLS_ALERT_CLOSE_NOTIFY);
+            ok(ret == 0);
+            ok(cbuf.off > 0 && cbuf.base[0] == PTLS_CONTENT_TYPE_APPDATA);
+            consumed = cbuf.off;
+            ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, NULL);
+            ok(ret == PTLS_ALERT_TO_PEER_ERROR(PTLS_ALERT_CLOSE_NOTIFY));
+            cbuf.off = 0;
+            /* unprotected alert is rejected by the client */
+            consumed = sizeof(close_notify);
+            ret = ptls_handshake(client, &cbuf, close_notify, &consumed, NULL);
+            ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+        } else {
+            ok(server->state == PTLS_STATE_SERVER_EXPECT_FINISHED);
+            ok(server->traffic_protection.dec.aead != NULL);
+            /* unprotected alert is accepted by the server until it receives client Finished */
+            consumed = sizeof(close_notify);
+            ret = ptls_handshake(server, &sbuf, close_notify, &consumed, NULL);
+            ok(ret == PTLS_ALERT_TO_PEER_ERROR(PTLS_ALERT_CLOSE_NOTIFY));
+        }
+        goto Exit;
+    }
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(consumed == sbuf.off);
+    sbuf.off = 0;
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+    ok(ret == 0);
+    ok(consumed == cbuf.off);
+    ok(server->state == PTLS_STATE_SERVER_POST_HANDSHAKE);
+
+    /* an unprotected close_notify (which could have been injected by an on-path attacker) must not be taken as a closure */
+    consumed = sizeof(close_notify);
+    ret = ptls_receive(to_client ? client : server, &decbuf, close_notify, &consumed);
+    ok(ret == PTLS_ALERT_HANDSHAKE_FAILURE);
+
+Exit:
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&decbuf);
+    ptls_free(client);
+    ptls_free(server);
+}
+
+static void test_plaintext_alert(void)
+{
+    subtest("to-client-during-handshake", do_test_plaintext_alert, 1, 0);
+    subtest("to-server-during-handshake", do_test_plaintext_alert, 0, 0);
+    subtest("to-client-after-handshake", do_test_plaintext_alert, 1, 1);
+    subtest("to-server-after-handshake", do_test_plaintext_alert, 0, 1);
+}
+
 static void test_hrr_handshake(void)
 {
     test_handshake(ptls_iovec_init(NULL, 0), TEST_HANDSHAKE_HRR, 0, 0, 0, 0);
@@ -1728,6 +1812,130 @@ static void test_enforce_retry_stateful(void)
 static void test_enforce_retry_stateless(void)
 {
     test_enforce_retry(1);
+}
+
+static void do_test_pq_retry(int client_prefers_pq, int server_supports_pq, int use_cookie)
+{
+    assert(ctx->key_exchanges[0] != NULL && ctx->key_exchanges[0]->id == ctx_peer->key_exchanges[0]->id);
+
+    /* emulate a PQ group by using the classical key exchange with a private-use codepoint */
+    ptls_key_exchange_algorithm_t client_pq = {.id = 0xfe00,
+                                               .create = ctx->key_exchanges[0]->create,
+                                               .exchange = ctx->key_exchanges[0]->exchange,
+                                               .data = ctx->key_exchanges[0]->data,
+                                               .name = "fake-pq",
+                                               .post_quantum = 1},
+                                  server_pq = {.id = 0xfe00,
+                                               .create = ctx_peer->key_exchanges[0]->create,
+                                               .exchange = ctx_peer->key_exchanges[0]->exchange,
+                                               .data = ctx_peer->key_exchanges[0]->data,
+                                               .name = "fake-pq",
+                                               .post_quantum = 1};
+    ptls_key_exchange_algorithm_t *client_keyex[3], *server_keyex[3] = {ctx_peer->key_exchanges[0], NULL, NULL};
+    if (client_prefers_pq) {
+        client_keyex[0] = &client_pq;
+        client_keyex[1] = ctx->key_exchanges[0];
+    } else {
+        client_keyex[0] = ctx->key_exchanges[0];
+        client_keyex[1] = &client_pq;
+    }
+    client_keyex[2] = NULL;
+    if (server_supports_pq)
+        server_keyex[1] = &server_pq;
+
+    ptls_context_t ctx_client = *ctx, ctx_server = *ctx_peer;
+    ctx_client.key_exchanges = client_keyex;
+    ctx_server.key_exchanges = server_keyex;
+
+    /* the client sends a key share only for its most preferred group, so HRR is expected when it prefers classical */
+    int expect_retry = !client_prefers_pq && server_supports_pq;
+    uint16_t expected_group = server_supports_pq ? client_pq.id : ctx->key_exchanges[0]->id;
+
+    ptls_t *client, *server;
+    ptls_handshake_properties_t server_hs_prop = {{{{NULL}}}};
+    ptls_buffer_t cbuf, sbuf, decbuf;
+    size_t consumed;
+    int ret;
+
+    server_hs_prop.server.cookie.key = "0123456789abcdef0123456789abcdef0123456789abcdef";
+    server_hs_prop.server.retry_uses_cookie = use_cookie;
+
+    ptls_buffer_init(&cbuf, "", 0);
+    ptls_buffer_init(&sbuf, "", 0);
+    ptls_buffer_init(&decbuf, "", 0);
+
+    client = ptls_new(&ctx_client, 0);
+    server = ptls_new(&ctx_server, 1);
+
+    ret = ptls_handshake(client, &cbuf, NULL, NULL, NULL);
+    ok(ret == PTLS_ERROR_IN_PROGRESS);
+
+    consumed = cbuf.off;
+    ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+    cbuf.off = 0;
+
+    if (expect_retry) {
+        if (use_cookie) {
+            ok(ret == PTLS_ERROR_STATELESS_RETRY);
+            ptls_free(server);
+            server = ptls_new(&ctx_server, 1);
+        } else {
+            ok(ret == PTLS_ERROR_IN_PROGRESS);
+        }
+        consumed = sbuf.off;
+        ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+        ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ok(sbuf.off == consumed);
+        sbuf.off = 0;
+
+        consumed = cbuf.off;
+        ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+        ok(cbuf.off == consumed);
+        cbuf.off = 0;
+    }
+    ok(ret == 0);
+
+    consumed = sbuf.off;
+    ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
+    ok(ret == 0);
+    ok(sbuf.off == consumed);
+    sbuf.off = 0;
+
+    ret = ptls_send(client, &cbuf, "hello world", 11);
+    ok(ret == 0);
+
+    consumed = cbuf.off;
+    ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
+    ok(ret == 0);
+    ok(cbuf.off == consumed);
+    ok(decbuf.off == 11 && memcmp(decbuf.base, "hello world", 11) == 0);
+
+    ok(client->key_share->id == expected_group);
+    ok(server->key_share->id == expected_group);
+
+    ptls_free(client);
+    ptls_free(server);
+
+    ptls_buffer_dispose(&cbuf);
+    ptls_buffer_dispose(&sbuf);
+    ptls_buffer_dispose(&decbuf);
+}
+
+static void test_pq_retry(int use_cookie)
+{
+    subtest("client-prefers-classical", do_test_pq_retry, 0, 1, use_cookie);
+    subtest("client-prefers-pq", do_test_pq_retry, 1, 1, use_cookie);
+    subtest("server-without-pq", do_test_pq_retry, 0, 0, use_cookie);
+}
+
+static void test_pq_retry_stateful(void)
+{
+    test_pq_retry(0);
+}
+
+static void test_pq_retry_stateless(void)
+{
+    test_pq_retry(1);
 }
 
 static ptls_t *stateless_hrr_prepare(ptls_buffer_t *sbuf, ptls_handshake_properties_t *server_hs_prop)
@@ -2514,9 +2722,11 @@ static void test_all_handshakes_core(void)
         subtest("resumption-with-grease", test_grease_resumption);
     subtest("async-sign-certificate", test_async_sign_certificate);
     subtest("enforce-retry-stateful", test_enforce_retry_stateful);
+    subtest("pq-retry-stateful", test_pq_retry_stateful);
     if (!(ctx_peer->ech.server.create_opener != NULL && test_client_ech_configs.base != NULL)) {
         subtest("hrr-stateless-handshake", test_hrr_stateless_handshake);
         subtest("enforce-retry-stateless", test_enforce_retry_stateless);
+        subtest("pq-retry-stateless", test_pq_retry_stateless);
         subtest("stateless-hrr-aad-change", test_stateless_hrr_aad_change);
     }
     subtest("key-update", test_key_update);
@@ -2952,6 +3162,7 @@ void test_picotls(void)
     subtest("fragmented-message", test_fragmented_message);
     subtest("hrr-cipher-suite-mismatch", test_hrr_cipher_suite_mismatch);
     subtest("hrr-selected-group-matches-ch1-key-share", test_hrr_selected_group_matches_ch1_key_share);
+    subtest("plaintext-alert", test_plaintext_alert);
     subtest("handshake", test_all_handshakes);
     subtest("quic", test_quic);
     subtest("legacy-ch", test_legacy_ch);
