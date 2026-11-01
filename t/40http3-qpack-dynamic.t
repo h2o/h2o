@@ -94,7 +94,7 @@ sub h3_control_stream {
 }
 
 sub h3_qpack_encoder_stream {
-    return quicint(2) . pack("H*", "ff20881c6490b2cd39ba7f");
+    return quicint(2) . pack("H*", "3fe11f" . "ff20881c6490b2cd39ba7f"); # Set Dynamic Table Capacity=4096, insert
 }
 
 sub h3_request_headers {
