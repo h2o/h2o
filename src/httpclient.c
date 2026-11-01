@@ -90,6 +90,7 @@ static h2o_http3client_ctx_t h3ctx = {
         },
     .qpack = {.encoder = {.table_capacity = 8192, .refine_after_full = 1}},
     .max_frame_payload_size = 16384,
+    .max_concurrent_streams = 100,
 };
 static quicly_cid_plaintext_t h3_next_cid;
 static const char *session_file = NULL;

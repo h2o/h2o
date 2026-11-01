@@ -118,6 +118,10 @@ struct st_h2o_http3client_req_t {
      * flags
      */
     unsigned offered_datagram_flow_id : 1;
+    /**
+     * if the request is being counted by `conn->num_requests`
+     */
+    unsigned counted_by_conn : 1;
 };
 
 static quicly_error_t handle_input_expect_data_frame(struct st_h2o_http3client_req_t *req, const uint8_t **src,
@@ -147,10 +151,19 @@ static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payloa
     return nbytes;
 }
 
+static void uncount_request(struct st_h2o_http3client_req_t *req)
+{
+    if (req->counted_by_conn) {
+        --req->conn->num_requests;
+        req->counted_by_conn = 0;
+    }
+}
+
 static void destroy_request(struct st_h2o_http3client_req_t *req)
 {
     assert(req->quic == NULL);
 
+    uncount_request(req);
     h2o_buffer_dispose(&req->sendbuf);
     h2o_buffer_dispose(&req->recvbuf.body);
     h2o_buffer_dispose(&req->recvbuf.stream);
@@ -169,6 +182,8 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
 
 static void detach_stream(struct st_h2o_http3client_req_t *req)
 {
+    /* the request might outlive the connection once the stream is detached */
+    uncount_request(req);
     req->quic->callbacks = &quicly_stream_noop_callbacks;
     req->quic->data = NULL;
     req->quic = NULL;
@@ -195,7 +210,7 @@ static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_conne
     int should_check_target = h2o_socketpool_is_global(pool->socketpool);
 
     /* FIXME:
-     * - check connection state(e.g., max_concurrent_streams, if received GOAWAY)
+     * - check connection state(e.g., if received GOAWAY)
      * - use hashmap
      */
     for (h2o_linklist_t *l = pool->http3.conns.next; l != &pool->http3.conns; l = l->next) {
@@ -203,6 +218,8 @@ static struct st_h2o_httpclient__h3_conn_t *find_connection(h2o_httpclient_conne
         if (should_check_target && !(conn->server.origin_url.scheme == origin->scheme &&
                                      h2o_memis(conn->server.origin_url.authority.base, conn->server.origin_url.authority.len,
                                                origin->authority.base, origin->authority.len)))
+            continue;
+        if (conn->num_requests >= conn->ctx->http3->max_concurrent_streams)
             continue;
         return conn;
     }
@@ -984,7 +1001,9 @@ void h2o_httpclient__connect_h3(h2o_httpclient_t **_client, h2o_mem_pool_t *pool
                   do_update_window},
         .conn = conn,
         .proceed_req = {.cb = NULL, .bytes_inflight = SIZE_MAX},
+        .counted_by_conn = 1,
     };
+    ++conn->num_requests;
     req->super._cb.on_connect = cb;
     h2o_buffer_init(&req->sendbuf, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&req->recvbuf.body, &h2o_socket_buffer_prototype);

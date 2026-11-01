@@ -94,6 +94,7 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
+#define H2O_DEFAULT_PROXY_HTTP3_MAX_CONCURRENT_STREAMS 100
 
 #define H2O_LOG_URI_PATH "/.well-known/h2olog"
 
@@ -128,6 +129,9 @@ typedef struct st_h2o_handler_t {
      * callback is accessible via `req->entity`.
      * The request handler can delay replacing the callback to a later moment. In such case, the handler can determine if
      * `req->entity` already contains a complete request body by checking if `req->proceed_req` is NULL.
+     * A handler that sets this flag and declines some requests (i.e., returns -1 from `on_req`) MUST do so immediately, without
+     * touching the request body. If the succeeding handler does not support streaming, the request is processed again once the
+     * entire request body is received (see `h2o_process_request`).
      */
     unsigned supports_request_streaming : 1;
     /**
@@ -547,6 +551,7 @@ struct st_h2o_globalconf_t {
             uint32_t max_concurrent_streams;
         } http2;
         struct {
+            uint64_t max_concurrent_streams;
             unsigned ecn : 1;
         } http3;
 
@@ -1005,11 +1010,6 @@ typedef struct st_h2o_conn_callbacks_t {
      */
     uint64_t (*get_req_id)(h2o_req_t *req);
     /**
-     * An optional callback to move the ownership of the socket to the caller. It returns non-null for cleartext connections
-     * and thus the caller can call h2o_socket_export() and write cleartext to its fd.
-     */
-    h2o_socket_t *(*steal_socket)(h2o_conn_t *conn);
-    /**
      * logging callbacks (all of them are optional)
      */
     union {
@@ -1417,9 +1417,10 @@ struct st_h2o_req_t {
      */
     unsigned char upstream_refused : 1;
     /**
-     * if h2o_process_request has been called
+     * if the request has been dispatched to a particular handler; i.e., `h2o_process_request` has been called and did not return the
+     * request to the protocol handler
      */
-    unsigned char process_called : 1;
+    unsigned char dispatched : 1;
     /**
      * Indicates if requested to serve something other than HTTP (e.g., websocket, upgrade, CONNECT, ...) using the streaming API.
      * When the protocol handler returns a successful response, filters are skipped.
@@ -1594,7 +1595,9 @@ void h2o_dispose_request(h2o_req_t *req);
  */
 int h2o_req_validate_pseudo_headers(h2o_req_t *req);
 /**
- * called by the connection layer to start processing a request that is ready
+ * called by the connection layer to start processing a request that is ready. When called with `req->proceed_req` being set, the
+ * function might return without setting `req->dispatched`, if the handlers that support request streaming declined the request.
+ * In such case, the connection layer is expected to receive the entire request body, then call the function again.
  */
 void h2o_process_request(h2o_req_t *req);
 /**
@@ -1811,7 +1814,8 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  *
  */
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso);
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso,
+                                                      uint64_t max_concurrent_streams);
 /**
  *
  */
@@ -2326,6 +2330,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         unsigned force_cleartext : 1;
     } http2;
     struct {
+        uint64_t max_concurrent_streams;
         unsigned ecn : 1;
     } http3;
     h2o_httpclient_protocol_ratio_t protocol_ratio;

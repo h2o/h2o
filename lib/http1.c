@@ -612,7 +612,10 @@ static int write_req_first(void *_req, int is_end_stream)
         conn->req.write_req.cb = NULL; /* will be set to something before `proceed_req` is being invoked */
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
-        return 0;
+        if (conn->req.dispatched)
+            return 0;
+        /* handlers declined request streaming, receive the entire request body */
+        conn->req.proceed_req = NULL;
     }
 
     conn->req.write_req.cb = write_req_non_streaming;
@@ -1225,18 +1228,6 @@ static uint64_t get_req_id(h2o_req_t *req)
     return conn->_req_index;
 }
 
-static h2o_socket_t *steal_socket(h2o_conn_t *_conn)
-{
-    struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    h2o_socket_t *sock = conn->sock;
-
-    if (sock->ssl != NULL)
-        return NULL;
-
-    close_connection(conn, 0);
-    return sock;
-}
-
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1290,7 +1281,6 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .request_shutdown = initiate_graceful_shutdown,
     .can_zerocopy = can_zerocopy,
     .get_req_id = get_req_id,
-    .steal_socket = steal_socket,
     .log_ = {{
         .transport =
             {
@@ -1340,6 +1330,8 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         PTLS_LOG_ELEMENT_PTR(sock, conn->sock);
         PTLS_LOG_ELEMENT_SAFESTR(uuid, h2o_conn_get_uuid(&conn->super));
     });
+    if (sock->ssl != NULL)
+        h2o_probe_log_tls_properties(&conn->super);
 
     init_request(conn);
     reqread_start(conn);

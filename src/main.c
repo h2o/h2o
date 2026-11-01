@@ -2282,8 +2282,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_configurator_errprintf(cmd, *min_version, "unknown protocol version: %s", (*min_version)->data.scalar);
     VersionFound:;
     } else {
-        /* default is >= TLSv1 */
-        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        /* default is >= TLSv1.2 */
+        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1;
     }
     if (max_version != NULL) {
         if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0) {
@@ -2953,6 +2953,21 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
     hints.ai_socktype = socktype;
     hints.ai_protocol = protocol;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+
+    /* When binding to the wildcard addresses, AI_ADDRCONFIG is omitted, as it would make the set of sockets depend on non-loopback
+     * addresses for each address family being configured at startup (e.g., the IPv4 socket would be missing if DHCP has not
+     * completed yet). Rather, call `socket` to check the availability. When both families are available, `hints.ai_family` is left
+     * as AF_UNSPEC and RFC 3493 specifies that getaddrinfo returns both families with AI_ADDRCONFIG unset. */
+    if (hostname == NULL) {
+        hints.ai_flags &= ~AI_ADDRCONFIG;
+        int fd;
+#define IS_SUPPORTED(af)                                                                                                           \
+    ((fd = socket((af), socktype, protocol)) != -1 ? (close(fd), 1) : !(errno == EAFNOSUPPORT || errno == EPROTONOSUPPORT))
+        int has_v4 = IS_SUPPORTED(AF_INET), has_v6 = IS_SUPPORTED(AF_INET6);
+#undef IS_SUPPORTED
+        if (has_v4 != has_v6)
+            hints.ai_family = has_v4 ? AF_INET : AF_INET6;
+    }
 
     if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
         h2o_configurator_errprintf(cmd, node, "failed to resolve address: %s", gai_strerror(error));

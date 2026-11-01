@@ -207,6 +207,10 @@ struct st_h2o_http3_server_conn_t {
      */
     uint64_t skip_jumpstart_token_until;
     /**
+     * if the TLS properties have been logged (see `stream_open_cb`)
+     */
+    unsigned tls_properties_logged : 1;
+    /**
      * timeout entry used for graceful shutdown
      */
     h2o_timer_t _graceful_shutdown_timeout;
@@ -1218,7 +1222,7 @@ static void handle_buffered_input(struct st_h2o_http3_server_stream_t *stream, i
                     if (!h2o_linklist_is_linked(&stream->link))
                         h2o_linklist_insert(&conn->delayed_streams.req_streaming, &stream->link);
                     request_run_delayed(conn);
-                } else if (!stream->req.process_called && stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
+                } else if (!stream->req.dispatched && stream->state < H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS) {
                     /* process the request, if we haven't called h2o_process_request nor send an error response */
                     switch (stream->state) {
                     case H2O_HTTP3_SERVER_STREAM_STATE_RECV_HEADERS:
@@ -1349,14 +1353,17 @@ static void run_delayed(h2o_timer_t *timer)
                 stream->req.proceed_req = proceed_request_streaming;
                 set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS, 0);
                 h2o_process_request(&stream->req);
-            } else {
-                /* unblock, read the bytes in receive buffer */
-                stream->read_blocked = 0;
-                set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED, 0);
-                handle_buffered_input(stream, 0);
-                if (quicly_get_state(conn->h3.super.quic) >= QUICLY_STATE_CLOSING)
-                    return;
+                if (stream->req.dispatched)
+                    continue;
+                /* handlers declined request streaming, receive the entire request body */
+                close_request_streaming(stream);
             }
+            /* unblock, read the bytes in receive buffer */
+            stream->read_blocked = 0;
+            set_state(stream, H2O_HTTP3_SERVER_STREAM_STATE_RECV_BODY_UNBLOCKED, 0);
+            handle_buffered_input(stream, 0);
+            if (quicly_get_state(conn->h3.super.quic) >= QUICLY_STATE_CLOSING)
+                return;
         }
 
         /* process streams using request streaming, that have new data to submit */
@@ -1364,7 +1371,7 @@ static void run_delayed(h2o_timer_t *timer)
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.req_streaming.next);
             int is_end_stream = quicly_recvstate_transfer_complete(&stream->quic->recvstate);
-            assert(stream->req.process_called);
+            assert(stream->req.dispatched);
             assert(stream->req.write_req.cb != NULL);
             assert(stream->req_body != NULL);
             assert(stream->req_body->size != 0 || is_end_stream);
@@ -1385,7 +1392,7 @@ static void run_delayed(h2o_timer_t *timer)
             struct st_h2o_http3_server_stream_t *stream =
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, link, conn->delayed_streams.pending.next);
             assert(stream->state == H2O_HTTP3_SERVER_STREAM_STATE_REQ_PENDING);
-            assert(!stream->req.process_called);
+            assert(!stream->req.dispatched);
             assert(!stream->read_blocked);
             h2o_linklist_unlink(&stream->link);
             made_progress = 1;
@@ -2010,6 +2017,15 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
 {
     static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
                                                         on_send_stop,      on_receive,    on_receive_reset};
+    struct st_h2o_http3_server_conn_t *conn =
+        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
+
+    /* log TLS properties when the client opens the first stream, as `st_h2o_http3_server_conn_t` and the server-initiated
+     * unidirectional streams are opened when receiving the 1st packet from the client, not when the handshake is complete */
+    if (quicly_stream_is_client_initiated(qs->stream_id) && !conn->tls_properties_logged) {
+        h2o_probe_log_tls_properties(&conn->super);
+        conn->tls_properties_logged = 1;
+    }
 
     /* handling of unidirectional streams is not server-specific */
     if (quicly_stream_is_unidirectional(qs->stream_id)) {
@@ -2018,9 +2034,6 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
     }
 
     assert(quicly_stream_is_client_initiated(qs->stream_id));
-
-    struct st_h2o_http3_server_conn_t *conn =
-        H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_conn_t, h3, *quicly_get_data(qs->conn));
 
     /* create new stream and start handling the request */
     struct st_h2o_http3_server_stream_t *stream = h2o_mem_alloc(sizeof(*stream));
@@ -2475,7 +2488,8 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_get_alt_egress(qconn)].cc.initcwnd_packets,
                                     ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
-    h2o_http3_setup(&conn->h3, qconn);
+    if (h2o_http3_setup(&conn->h3, qconn) != 0)
+        h2o_fatal("no memory");
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
     H2O_LOG_CONN(h3s_accept, &conn->super, {

@@ -20,22 +20,55 @@
  * IN THE SOFTWARE.
  */
 #include "h2o.h"
+#include "h2o/http1.h"
+
+struct st_h2olog_params_t {
+    float sample_ratio;
+    char *trace;
+    char *sni;
+    char *address;
+    int appdata;
+};
+
+static void destroy_params(struct st_h2olog_params_t *params)
+{
+    free(params->trace);
+    free(params->sni);
+    free(params->address);
+    free(params);
+}
+
+static void on_upgrade_complete(void *_params, h2o_socket_t *sock, size_t reqsize)
+{
+    struct st_h2olog_params_t *params = _params;
+
+    if (sock != NULL) {
+        h2o_socket_export_t info;
+        if (h2o_socket_export(sock, &info) != 0)
+            h2o_fatal("h2o_socket_export failed");
+        /* register log fd after writing HTTP response, as log is written by multiple threads */
+        if (ptls_log_add_fd(info.fd, params->sample_ratio, params->trace, params->sni, params->address, params->appdata) != 0)
+            h2o_fatal("failed to add fd to h2olog");
+    }
+
+    destroy_params(params);
+}
 
 static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 {
     struct sockaddr_storage local;
-    float sample_ratio = 1;
-    char *trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *trace_tail = trace;
-    char *sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *sni_tail = sni;
-    char *address = h2o_mem_alloc(req->path.len + 2 /* should be enough */), *address_tail = address;
-    int appdata = 0, ret;
-    h2o_socket_t *sock;
-    h2o_socket_export_t export_info;
+    struct st_h2olog_params_t *params = h2o_mem_alloc(sizeof(*params));
+    *params = (struct st_h2olog_params_t){.sample_ratio = 1,
+                                          .trace = h2o_mem_alloc(req->path.len + 2 /* should be enough */),
+                                          .sni = h2o_mem_alloc(req->path.len + 2 /* should be enough */),
+                                          .address = h2o_mem_alloc(req->path.len + 2 /* should be enough */)};
+    char *trace_tail = params->trace, *sni_tail = params->sni, *address_tail = params->address;
+    int ret;
 
     /* delegate the request to the next handler unless the request is accepted on a UNIX socket */
     if (!(req->conn->callbacks->get_sockname(req->conn, (struct sockaddr *)&local) > 0 && local.ss_family == AF_UNIX)) {
         ret = -1;
-        goto Exit;
+        goto Fail;
     }
 
     /* parse params */
@@ -46,11 +79,11 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
         while ((name = h2o_next_token(&iter, '&', '&', &name_len, &value)) != NULL) {
             if (h2o_memis(name, name_len, H2O_STRLIT("sample-ratio"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
-                if (unescaped.base == NULL || sscanf(unescaped.base, "%f", &sample_ratio) != 1 ||
-                    !(0 <= sample_ratio && sample_ratio <= 1)) {
+                if (unescaped.base == NULL || sscanf(unescaped.base, "%f", &params->sample_ratio) != 1 ||
+                    !(0 <= params->sample_ratio && params->sample_ratio <= 1)) {
                     h2o_send_error_400(req, "Bad Request", "sample-rate must be a number between 0 and 1", 0);
                     ret = 0;
-                    goto Exit;
+                    goto Fail;
                 }
             } else if (h2o_memis(name, name_len, H2O_STRLIT("trace"))) {
                 h2o_iovec_t unescaped = h2o_uri_unescape(&req->pool, value.base, value.len);
@@ -68,7 +101,7 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
                 address_tail += unescaped.len;
                 *address_tail++ = '\0';
             } else if (h2o_memis(name, name_len, H2O_STRLIT("application-data"))) {
-                appdata = 1;
+                params->appdata = 1;
             }
         }
     }
@@ -78,28 +111,20 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
     *sni_tail = '\0';
     *address_tail = '\0';
 
-    /* steal the socket (NOTE: request, including `req->pool` is dipsosed of here, do we want to delay?) */
-    if (req->conn->callbacks->steal_socket == NULL || (sock = req->conn->callbacks->steal_socket(req->conn)) == NULL) {
+    if (!(req->version < 0x200 && req->input.scheme == &H2O_URL_SCHEME_HTTP)) {
         h2o_send_error_400(req, "Bad Request", "h2olog is available only for cleartext HTTP/1", 0);
         ret = 0;
-        goto Exit;
+        goto Fail;
     }
 
-    if (h2o_socket_export(sock, &export_info) != 0)
-        h2o_fatal("h2o_socket_export failed");
+    /* send the response, then take over the socket */
+    req->res.status = 200;
+    req->res.reason = "OK";
+    h2o_http1_upgrade(req, NULL, 0, on_upgrade_complete, params);
+    return 0;
 
-    (void)write(export_info.fd, H2O_STRLIT("HTTP/1.1 200 OK\r\n\r\n"));
-
-    /* register log fd after writing HTTP response, as log is written by multiple threads */
-    if (ptls_log_add_fd(export_info.fd, sample_ratio, trace, sni, address, appdata) != 0)
-        h2o_fatal("failed to add fd to h2olog");
-
-    ret = 0;
-
-Exit:
-    free(trace);
-    free(sni);
-    free(address);
+Fail:
+    destroy_params(params);
     return ret;
 }
 

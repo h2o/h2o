@@ -80,7 +80,9 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         ctx->globalconf->proxy.max_buffer_size == self->config.max_buffer_size &&
         ctx->globalconf->proxy.protocol_ratio.http2 == self->config.protocol_ratio.http2 &&
         ctx->globalconf->proxy.protocol_ratio.http3 == self->config.protocol_ratio.http3 &&
-        ctx->globalconf->proxy.http3.ecn == self->config.http3.ecn && !self->config.tunnel_enabled)
+        ctx->globalconf->proxy.http3.ecn == self->config.http3.ecn &&
+        ctx->globalconf->proxy.http3.max_concurrent_streams == self->config.http3.max_concurrent_streams &&
+        !self->config.tunnel_enabled)
         return;
 
     h2o_httpclient_ctx_t *client_ctx = h2o_mem_alloc(sizeof(*client_ctx));
@@ -102,7 +104,7 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
             },
         .http3 = self->config.protocol_ratio.http3 != 0
                      ? h2o_create_proxy_http3_context(ctx, self->sockpool->_ssl_ctx, self->config.http3.ecn,
-                                                      ctx->globalconf->http3.use_gso)
+                                                      ctx->globalconf->http3.use_gso, self->config.http3.max_concurrent_streams)
                      : NULL,
     };
 
