@@ -55,14 +55,6 @@ void ptlc_bcrypt_dispose()
 {
 }
 
-/**
- * Random number generation */
-
-void ptls_bcrypt_random_bytes(void *buf, size_t len)
-{
-    /* TODO: Crypto gen random */
-}
-
 /*
  * Support for symmetric ciphers
  */

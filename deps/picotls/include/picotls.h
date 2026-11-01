@@ -388,6 +388,11 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      */
     uint16_t id;
     /**
+     * if the key exchange is (or includes) a post-quantum algorithm; when both endpoints support such a group but the client sent
+     * a classical key share, the server sends HelloRetryRequest to upgrade
+     */
+    unsigned post_quantum : 1;
+    /**
      * Creates a context for asynchronous key exchange. The function is called when ClientHello is generated. The on_exchange
      * callback of the created context is called when the client receives ServerHello.
      */
