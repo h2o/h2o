@@ -94,6 +94,7 @@ extern "C" {
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_CAPACITY 4096
 #define H2O_DEFAULT_PROXY_SSL_SESSION_CACHE_DURATION 86400000 /* 24 hours */
 #define H2O_DEFAULT_PROXY_HTTP2_MAX_CONCURRENT_STREAMS 100
+#define H2O_DEFAULT_PROXY_HTTP3_MAX_CONCURRENT_STREAMS 100
 
 #define H2O_LOG_URI_PATH "/.well-known/h2olog"
 
@@ -550,6 +551,7 @@ struct st_h2o_globalconf_t {
             uint32_t max_concurrent_streams;
         } http2;
         struct {
+            uint64_t max_concurrent_streams;
             unsigned ecn : 1;
         } http3;
 
@@ -1810,7 +1812,8 @@ void h2o_context_dispose_pathconf_context(h2o_context_t *ctx, h2o_pathconf_t *pa
 /**
  *
  */
-h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso);
+h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CTX *ssl_ctx, int use_ecn, int use_gso,
+                                                      uint64_t max_concurrent_streams);
 /**
  *
  */
@@ -2325,6 +2328,7 @@ typedef struct st_h2o_proxy_config_vars_t {
         unsigned force_cleartext : 1;
     } http2;
     struct {
+        uint64_t max_concurrent_streams;
         unsigned ecn : 1;
     } http3;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
