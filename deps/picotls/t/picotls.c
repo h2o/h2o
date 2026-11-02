@@ -914,6 +914,8 @@ static ptls_t *clone_tls(ptls_t *src)
     ptls_buffer_dispose(&sess_data);
 
     check_clone(src, dest);
+    /* Handshake metadata is not included in the exported session. */
+    ok(ptls_get_negotiated_group(dest) == 0);
 
     return dest;
 }
@@ -926,6 +928,10 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     uint8_t cbuf_small[16384], sbuf_small[16384], decbuf_small[16384];
     ptls_buffer_t cbuf, sbuf, decbuf;
     size_t consumed, max_early_data_size = 0;
+    uint16_t expected_group = ticket.base != NULL && !require_client_authentication && !ctx->require_dhe_on_psk &&
+                                      !ctx_peer->require_dhe_on_psk
+                                  ? 0
+                                  : ctx_peer->key_exchanges[0]->id;
     int ret;
     const char *req = "GET / HTTP/1.0\r\n\r\n";
     const char *resp = "HTTP/1.0 200 OK\r\n\r\nhello world\n";
@@ -939,6 +945,8 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
 
     client = ptls_new(ctx, 0);
     server = ptls_new(ctx_peer, 1);
+    ok(ptls_get_negotiated_group(client) == 0);
+    ok(ptls_get_negotiated_group(server) == 0);
     ptls_buffer_init(&cbuf, cbuf_small, sizeof(cbuf_small));
     ptls_buffer_init(&sbuf, sbuf_small, sizeof(sbuf_small));
     ptls_buffer_init(&decbuf, decbuf_small, sizeof(decbuf_small));
@@ -981,6 +989,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     ret = ptls_handshake(client, &cbuf, NULL, NULL, &client_hs_prop);
     ok(ret == PTLS_ERROR_IN_PROGRESS);
     ok(cbuf.off != 0);
+    ok(ptls_get_negotiated_group(client) == 0);
 
     switch (mode) {
     case TEST_HANDSHAKE_2RTT:
@@ -988,6 +997,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     case TEST_HANDSHAKE_HRR_STATELESS:
         consumed = cbuf.off;
         ret = ptls_handshake(server, &sbuf, cbuf.base, &consumed, &server_hs_prop);
+        ok(ptls_get_negotiated_group(server) == 0);
         if (mode == TEST_HANDSHAKE_HRR_STATELESS) {
             ok(ret == PTLS_ERROR_STATELESS_RETRY);
             ptls_free(server);
@@ -1001,6 +1011,7 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         consumed = sbuf.off;
         ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, &client_hs_prop);
         ok(ret == PTLS_ERROR_IN_PROGRESS);
+        ok(ptls_get_negotiated_group(client) == 0);
         ok(sbuf.off == consumed);
         ok(cbuf.off != 0);
         sbuf.off = 0;
@@ -1053,11 +1064,14 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
         ok(decbuf.off == strlen(req));
         ok(memcmp(decbuf.base, req, decbuf.off) == 0);
         ok(!ptls_handshake_is_complete(server));
+        ok(ptls_get_negotiated_group(server) == expected_group);
         cbuf.off = 0;
         decbuf.off = 0;
 
         ret = ptls_send(server, &sbuf, resp, strlen(resp));
         ok(ret == 0);
+        ok(!ptls_handshake_is_complete(server));
+        ok(ptls_get_negotiated_group(server) == expected_group);
     } else {
         ok(consumed == cbuf.off);
         cbuf.off = 0;
@@ -1082,6 +1096,10 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     ret = ptls_handshake(client, &cbuf, sbuf.base, &consumed, NULL);
     ok(ret == 0);
     ok(cbuf.off != 0);
+    ok(ptls_handshake_is_complete(client));
+    ok(ptls_get_negotiated_group(client) == expected_group);
+    ok(!ptls_handshake_is_complete(server));
+    ok(ptls_get_negotiated_group(server) == expected_group);
     if (check_ch) {
         ok(ptls_get_server_name(client) != NULL);
         ok(strcmp(ptls_get_server_name(client), "test.example.com") == 0);
@@ -1186,6 +1204,8 @@ static void test_handshake(ptls_iovec_t ticket, int mode, int expect_ticket, int
     }
 
     /* original_server is used for the server-side checks because handshake data is never migrated */
+    ok(ptls_get_negotiated_group(client) == expected_group);
+    ok(ptls_get_negotiated_group(original_server) == expected_group);
     if (ctx_peer->ech.server.create_opener != NULL && test_client_ech_configs.len > 0) {
         ok(ptls_is_ech_handshake(client, NULL, NULL, NULL));
         ok(ptls_is_ech_handshake(original_server, NULL, NULL, NULL));
@@ -1910,8 +1930,8 @@ static void do_test_pq_retry(int client_prefers_pq, int server_supports_pq, int 
     ok(cbuf.off == consumed);
     ok(decbuf.off == 11 && memcmp(decbuf.base, "hello world", 11) == 0);
 
-    ok(client->key_share->id == expected_group);
-    ok(server->key_share->id == expected_group);
+    ok(ptls_get_negotiated_group(client) == expected_group);
+    ok(ptls_get_negotiated_group(server) == expected_group);
 
     ptls_free(client);
     ptls_free(server);
@@ -2353,6 +2373,8 @@ static void do_test_pre_shared_key(int mode)
     ret = ptls_receive(server, &decbuf, cbuf.base, &consumed);
     ok(ret == 0);
     ok(ptls_handshake_is_complete(server));
+    ok(ptls_get_negotiated_group(client) == 0);
+    ok(ptls_get_negotiated_group(server) == 0);
     ok(consumed == cbuf.off);
     cbuf.off = 0;
     ok(decbuf.off == 3);
