@@ -102,7 +102,7 @@ module H2O
           @env = env
         end
 
-        def addr(forwarded=true)
+        def addr(forwarded=false)
           raise TooEarlyError if @env['HTTP_EARLY_DATA']
           addr = @env['REMOTE_ADDR']
           if forwarded && (xff = @env['HTTP_X_FORWARDED_FOR'])

@@ -512,6 +512,9 @@ subtest "slow-start" => sub {
     };
 
     subtest "jumpstart-resume" => sub {
+        # The path has no queue; udpfw's 100-packet buffer is fully used by the 100ms propagation delay, so packets are dropped as
+        # soon as more than 99 are in flight. The training connection hence keeps losing packets in the rounds following startup,
+        # which affects the rate it records. A queue should probably be added to make the path realistic.
         $each_cc->(sub {
             my $cc = shift;
             unlink "$tempdir/session";
@@ -580,6 +583,35 @@ subtest "reset-stream-overflow" => sub {
     ok !$server->is_dead(), "server process must be alive";
     my $received = $conn->receive();
     like $received, qr/^\x1c\x03\x04/, "responds with CONNECTION_CLOSE(FLOW_CONTROL_ERROR) for RESET_STREAM";
+};
+
+subtest "reset-stream-overflow-connection" => sub {
+    # Two RESET_STREAMs, each with a final_size fitting the 1000-byte stream window but together overrunning the 1500-byte
+    # connection-wide limit. The limits are set explicitly, as a change in the defaults could otherwise mask the check.
+    my $server = spawn_server(qw(-M 1000 -m 1500));
+    my $conn = t::RawConnection->new("127.0.0.1", $port, cli => $cli);
+    $conn->send("\x04\x00\x00\x43\xe8" . "\x04\x04\x00\x43\xe8");
+    sleep 0.5;
+    ok !$server->is_dead(), "server process must be alive";
+    my $received = $conn->receive();
+    like $received, qr/^\x1c\x03\x04/, "responds with CONNECTION_CLOSE(FLOW_CONTROL_ERROR) for RESET_STREAM";
+};
+
+subtest "reliable-reset" => sub {
+    my $guard = spawn_server("--reliable-reset");
+
+    # the server ends each response with a RESET_STREAM_AT covering the whole body; the body must still arrive intact
+    my $resp = `$cli --reliable-reset -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n", "response is delivered in full";
+    my $events = slurp_file("$tempdir/events");
+    like $events, qr/"type":"reset_stream_at_receive",.*"app_error_code":123,"final_size":12,"reliable_size":12/,
+        "RESET_STREAM_AT is received";
+
+    # the extension cannot be used against a peer that does not advertise it
+    $resp = `$cli -e $tempdir/events -p /12 127.0.0.1 $port 2> /dev/null`;
+    is $resp, "hello world\n", "response is delivered to a client that does not advertise the extension";
+    $events = slurp_file("$tempdir/events");
+    unlike $events, qr/"type":"reset_stream_at_receive"/, "RESET_STREAM_AT is withheld from such a client";
 };
 
 subtest "stream-open-after-connection-close" => sub {

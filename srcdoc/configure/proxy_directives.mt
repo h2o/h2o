@@ -352,6 +352,22 @@ EOT
 
 <?
 $ctx->{directive}->(
+    name     => "proxy.http3.max-concurrent-streams",
+    levels   => [ qw(global host path extension) ],
+    desc     => q{Maximum number of concurrent requests issuable on one HTTP/3 connection to the backend server.},
+    default  => "proxy.http3.max-concurrent-streams: 100",
+    see_also => render_mt(<<EOT),
+<a href="configure/proxy_directives.html#proxy.http3.ratio"><code>proxy.http3.ratio</code></a>
+EOT
+)->(sub {
+?>
+<p>
+When the number of requests inflight on every HTTP/3 connection to the backend server reaches this value, a new connection is established.
+</p>
+? });
+
+<?
+$ctx->{directive}->(
     name         => "proxy.http3.ratio",
     levels       => [ qw(global host path extension) ],
     desc         => q{Ratio of forwarded HTTP requests with which use of HTTP/3 should be attempted.},

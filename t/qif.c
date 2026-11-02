@@ -234,7 +234,7 @@ static int decode_header_block(h2o_qpack_decoder_t *dec, h2o_mem_pool_t *pool, F
         const char *err_desc = NULL;
         if ((ret =
                  h2o_qpack_parse_request(pool, dec, stream_id, &method, &scheme, &authority, &path, &protocol, &headers,
-                                         &pseudo_header_exists_map, &content_length, &expect, NULL, &datagram_flow_id, num_blocked,
+                                         &pseudo_header_exists_map, &content_length, &expect, &datagram_flow_id, num_blocked,
                                          blocked_ref, &stats, header_ack, &header_ack_len, buf, chunk_size, &err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
                 return ret;

@@ -53,7 +53,8 @@ static int secp256r1_on_exchange(ptls_key_exchange_context_t **_ctx, int release
         goto Exit;
     }
 
-    if (peerkey.len != SECP256R1_PUBLIC_KEY_SIZE || peerkey.base[0] != TYPE_UNCOMPRESSED_PUBLIC_KEY) {
+    if (peerkey.len != SECP256R1_PUBLIC_KEY_SIZE || peerkey.base[0] != TYPE_UNCOMPRESSED_PUBLIC_KEY ||
+        !uECC_valid_public_key(peerkey.base + 1, uECC_secp256r1())) {
         ret = PTLS_ALERT_DECRYPT_ERROR;
         goto Exit;
     }
@@ -102,7 +103,8 @@ static int secp256r1_key_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iove
     uint8_t priv[SECP256R1_PRIVATE_KEY_SIZE], *pub = NULL, *secbytes = NULL;
     int ret;
 
-    if (peerkey.len != SECP256R1_PUBLIC_KEY_SIZE || peerkey.base[0] != TYPE_UNCOMPRESSED_PUBLIC_KEY) {
+    if (peerkey.len != SECP256R1_PUBLIC_KEY_SIZE || peerkey.base[0] != TYPE_UNCOMPRESSED_PUBLIC_KEY ||
+        !uECC_valid_public_key(peerkey.base + 1, uECC_secp256r1())) {
         ret = PTLS_ALERT_DECRYPT_ERROR;
         goto Exit;
     }

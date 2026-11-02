@@ -1,14 +1,23 @@
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
+use Net::EmptyPort qw(check_port);
 use Test::More;
 use t::Util;
 
-my $server = spawn_h2o(<< 'EOT');
+my $origin_port = empty_port();
+my $origin = spawn_server(
+    argv     => [ qw(plackup -s Starlet --access-log /dev/null -p), $origin_port, ASSETS_DIR . "/upstream.psgi" ],
+    is_ready => sub { check_port($origin_port) },
+);
+
+my $server = spawn_h2o(<< "EOT");
 hosts:
   default:
     paths:
       /:
+        proxy.connect:
+          - "+127.0.0.1:$origin_port"
         file.dir: examples/doc_root
 limit-request-body: 6
 EOT
@@ -71,6 +80,14 @@ subtest 'http2' => sub {
     };
     subtest "https" => sub {
         $doit->("https", "", $server->{tls_port});
+    };
+    subtest "tunnel" => sub {
+        my $client_prog = bindir() . "/h2o-httpclient";
+        plan skip_all => "$client_prog not found"
+            unless -e $client_prog;
+        # tunnels are not subject to the limit
+        like `(printf 'GET /index.txt HTTP/1.0\\r\\n\\r\\n'; sleep 1) | $client_prog -2 100 -k -m CONNECT -x https://127.0.0.1:$server->{tls_port}/ 127.0.0.1:$origin_port 2>/dev/null`,
+            qr{^HTTP/1.1 200 OK\r\n.*?\r\n\r\nhello\n$}s;
     };
 };
 

@@ -211,7 +211,10 @@ static int key_schedule(ptls_hpke_kem_t *kem, ptls_hpke_cipher_suite_t *cipher, 
                               "base_nonce", ptls_iovec_init(key_schedule_context.base, key_schedule_context.off))) != 0)
         goto Exit;
 
-    *ctx = ptls_aead_new_direct(cipher->aead, is_enc, key, base_nonce);
+    if ((*ctx = ptls_aead_new_direct(cipher->aead, is_enc, key, base_nonce)) == NULL) {
+        ret = PTLS_ERROR_NO_MEMORY;
+        goto Exit;
+    }
 
 Exit:
     ptls_buffer_dispose(&key_schedule_context);

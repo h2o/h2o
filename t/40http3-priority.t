@@ -59,6 +59,19 @@ my $get_last_log = do {
 };
 $get_last_log->();
 
+# wait until $n log lines are available; h2o writes the access-log entry slightly
+# after the client exits, so reading immediately can race and miss lines
+my $wait_for_log = sub {
+    my $n = shift;
+    my $log = '';
+    for (1..100) { # up to ~10s
+        $log .= $get_last_log->();
+        last if ($log =~ tr/\n//) >= $n;
+        sleep 0.1;
+    }
+    $log;
+};
+
 subtest "signalling" => sub {
     my $fetch = sub {
         my ($reqval, $respval) = @_;
@@ -121,7 +134,7 @@ subtest "delivery" => sub {
         my $cmd = $build_cmd->(["/120k.bin?1", "u=3"], ["/120k.bin?2", "u=3"]);
         diag $cmd;
         system "$cmd > /dev/null";
-        my $log = $get_last_log->();
+        my $log = $wait_for_log->(2);
         diag $log;
         like $log, qr{\?1 .* 200 .* u=3 .*\?2 .* 200 .* u=3 }s;
     };
@@ -129,7 +142,7 @@ subtest "delivery" => sub {
         my $cmd = $build_cmd->(["/120k.bin?1", "u=1"], ["/120k.bin?2", "u=5"]);
         diag $cmd;
         system "$cmd > /dev/null";
-        my $log = $get_last_log->();
+        my $log = $wait_for_log->(2);
         diag $log;
         like $log, qr{\?1 .* 200 .* u=1 .*\?2 .* 200 .* u=5 }s;
     };
@@ -137,7 +150,7 @@ subtest "delivery" => sub {
         my $cmd = $build_cmd->(["/120k.bin?1", "u=5"], ["/120k.bin?2", "u=1"]);
         diag $cmd;
         system "$cmd > /dev/null";
-        my $log = $get_last_log->();
+        my $log = $wait_for_log->(2);
         diag $log;
         like $log, qr{\?2 .* 200 .* u=1 .*\?1 .* 200 .* u=5 }s;
     };
@@ -147,7 +160,7 @@ subtest "delivery" => sub {
         my $cmd = $build_cmd->(["/120k.bin?1", "u=2,i=?1"], ["/120k.bin?2", "u=2,i=?1"],  ["/alice.txt?3", "u=2,i=?1"], ["/alice.txt?4", "u=5,i=?1"]);
         diag $cmd;
         system "$cmd > /dev/null";
-        my $log = $get_last_log->();
+        my $log = $wait_for_log->(4);
         diag $log;
         like $log, qr{\?3 .* 200 .* u=2,i=\?1 .*\?[12] .* 200 .* u=2,i=\?1 .*\?[12] .* 200 .* u=2,i=\?1 .*\?4 .* 200 .* u=5,i=\?1 }s;
     };

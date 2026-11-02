@@ -653,6 +653,7 @@ static struct st_mruby_subreq_t *create_subreq(h2o_mruby_context_t *ctx, mrb_val
     subreq->receiver = mrb_nil_value();
     subreq->refs.request = mrb_nil_value();
     subreq->refs.input_stream = mrb_nil_value();
+    subreq->error_stream = mrb_nil_value();
     h2o_buffer_init(&subreq->buf, &h2o_socket_buffer_prototype);
     subreq->shortcut.response = NULL;
     subreq->shortcut.body = NULL;

@@ -90,7 +90,7 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
         return NULL;
     if ((entry->flags & NGHTTP2_HUFF_SYM) != 0) {
         *dst++ = entry->sym;
-        *seen_char_types |= (entry->flags & NGHTTP2_HUFF_INVALID_CHARS);
+        *seen_char_types |= (entry->flags & (NGHTTP2_HUFF_INVALID_CHARS | NGHTTP2_HUFF_UPPER_CASE_CHAR));
     }
     *state = entry->state;
     *maybe_eos = (entry->flags & NGHTTP2_HUFF_ACCEPTED) != 0;
@@ -502,8 +502,7 @@ void h2o_hpack_dispose_header_table(h2o_hpack_header_table_t *header_table)
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
-                            const char **err_desc)
+                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc)
 {
     const uint8_t *src_end = src + len;
     size_t num_headers_decoded = 0;
@@ -605,9 +604,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         goto Next;
                     } else if (token == H2O_TOKEN_TE && h2o_lcstris(value.base, value.len, H2O_STRLIT("trailers"))) {
                         /* do not reject */
-                    } else if (token == H2O_TOKEN_CACHE_DIGEST && digests != NULL) {
-                        /* TODO cache the decoded result in HPACK, as well as delay the decoding of the digest until being used */
-                        h2o_cache_digests_load_header(digests, value.base, value.len);
                     } else if (token == H2O_TOKEN_DATAGRAM_FLOW_ID) {
                         if (datagram_flow_id != NULL)
                             *datagram_flow_id = value;
@@ -716,7 +712,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
                 h2o_token_t *token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
                 /* reject headers as defined in draft-16 8.1.2.2 */
                 if (token->flags.is_hpack_special) {
-                    if (token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_CACHE_DIGEST || token == H2O_TOKEN_HOST) {
+                    if (token == H2O_TOKEN_CONTENT_LENGTH || token == H2O_TOKEN_HOST) {
                         /* pass them through when found in response headers (TODO reconsider?) */
                     } else if (token == H2O_TOKEN_DATAGRAM_FLOW_ID) {
                         if (datagram_flow_id != NULL)

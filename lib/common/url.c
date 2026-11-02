@@ -224,14 +224,18 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
 
     /* parse port */
     if (token_start != end && *token_start == ':') {
-        uint32_t p = 0;
+        uint32_t p = 65535; /* remains 65535 (i.e., omitted) if the port is empty (RFC 9110 section 4.2.3) */
         for (++token_start; token_start != end; ++token_start) {
             if ('0' <= *token_start && *token_start <= '9') {
+                if (p == 65535)
+                    p = 0;
                 p = p * 10 + *token_start - '0';
                 if (p >= 65535)
                     return NULL;
             } else if (*token_start == '/' || *token_start == '?') {
                 break;
+            } else {
+                return NULL;
             }
         }
         *port = (uint16_t)p;

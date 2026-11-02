@@ -78,6 +78,12 @@ EOT
             or die "failed to open access_log:$!";
         map { my $l = $_; chomp $l; $l } <$fh>;
     };
+    if (defined(my $base = $args->{rebase_connection_id})) {
+        # spawn_h2o's readiness probes consume an unpredictable number of connection ids before the
+        # first request; renumber the leading connection-id field so that the first line gets $base
+        my ($first) = $log[0] =~ /^([0-9]+) /;
+        s/^([0-9]+) /@{[$1 - $first + $base]} / for @log;
+    }
 
     local $Test::Builder::Level = $Test::Builder::Level + 1;
     for (my $i = 0; $i != @$expected; ++$i) {
@@ -269,7 +275,10 @@ subtest 'extensions' => sub {
                             if $nghttp_sends_weight;
                     }
                 },
-                '%{connection-id}x %{request-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.server-name}x %{http2.stream-id}x %{http2.priority.received}x',
+                {
+                    format => '%{connection-id}x %{request-id}x %{ssl.protocol-version}x %{ssl.session-reused}x %{ssl.cipher}x %{ssl.cipher-bits}x %{ssl.server-name}x %{http2.stream-id}x %{http2.priority.received}x',
+                    rebase_connection_id => 2,
+                },
                 do {
                     my @expected = (
                         qr{^2 1 - - - - - - -$}is,

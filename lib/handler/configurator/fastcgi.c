@@ -200,7 +200,7 @@ static int create_spawnproc(h2o_configurator_command_t *cmd, yoml_t *node, const
 Error:
     if (pipe_fds[0] != -1)
         close(pipe_fds[0]);
-    if (pipe_fds[1])
+    if (pipe_fds[1] != -1)
         close(pipe_fds[1]);
     if (listen_fd != -1)
         close(listen_fd);

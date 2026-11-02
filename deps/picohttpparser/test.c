@@ -247,6 +247,12 @@ static void test_response(void)
     PARSE("HTTP/1. 200 OK\r\n\r\n", 0, -1, "invalid http version");
     PARSE("HTTP/1.2z 200 OK\r\n\r\n", 0, -1, "invalid http version 2");
     PARSE("HTTP/1.1  OK\r\n\r\n", 0, -1, "no status code");
+    PARSE("HTTP/1.1 099 OK\r\n\r\n", 0, -1, "status code below 100");
+    PARSE("HTTP/1.1 600 OK\r\n\r\n", 0, -1, "status code above 599");
+    PARSE("HTTP/1.1 100 OK\r\n\r\n", 0, 0, "status code 100");
+    ok(status == 100);
+    PARSE("HTTP/1.1 599 OK\r\n\r\n", 0, 0, "status code 599");
+    ok(status == 599);
 
     PARSE("HTTP/1.1 200\r\n\r\n", 0, 0, "accept missing trailing whitespace in status-line");
     ok(bufis(msg, msg_len, ""));
@@ -477,7 +483,7 @@ static ssize_t do_test_chunked_overhead(size_t chunk_len, size_t chunk_count, co
 
     for (size_t i = 0; i < chunk_count; ++i) {
         /* build and feed the chunk header */
-        bufsz = (size_t)sprintf(buf, "%zx%s\r\n", chunk_len, extra);
+        bufsz = (size_t)snprintf(buf, sizeof(buf), "%zx%s\r\n", chunk_len, extra);
         if ((ret = phr_decode_chunked(&dec, buf, &bufsz)) != -2)
             goto Exit;
         assert(bufsz == 0);

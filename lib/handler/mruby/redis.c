@@ -253,26 +253,37 @@ static mrb_value call_method(mrb_state *mrb, mrb_value self)
     command_ctx->receiver = mrb_nil_value();
     command_ctx->refs.command = h2o_mruby_create_data_instance(mrb, command_klass, command_ctx, &command_type);
     mrb_funcall_with_block(mrb, command_ctx->refs.command, mrb_intern_lit(mrb, "initialize"), 1, &command_args, command_block);
-    mrb_gc_register(mrb, command_ctx->refs.command);
+
+    int gc_arena = mrb_gc_arena_save(mrb);
+
+    /* convert the arguments to strings first, as the conversion might raise an exception */
+    mrb_value command_strs = mrb_ary_new_capa(mrb, command_len);
+    for (i = 0; i != command_len; ++i) {
+        mrb_value command_arg = mrb_ary_entry(command_args, i);
+        if (!mrb_symbol_p(command_arg)) {
+            command_arg = mrb_obj_as_string(mrb, command_arg);
+            mrb_string_value_cstr(mrb, &command_arg);
+        }
+        mrb_ary_push(mrb, command_strs, command_arg);
+    }
 
     const char **argv = h2o_mem_alloc(command_len * sizeof(char *));
     size_t *argvlen = h2o_mem_alloc(command_len * sizeof(size_t));
 
-    int gc_arena = mrb_gc_arena_save(mrb);
-
     /* retrieve argument array */
     for (i = 0; i != command_len; ++i) {
-        mrb_value command_arg = mrb_ary_entry(command_args, i);
+        mrb_value command_arg = mrb_ary_entry(command_strs, i);
         if (mrb_symbol_p(command_arg)) {
             mrb_int len;
             argv[i] = mrb_sym2name_len(mrb, mrb_symbol(command_arg), &len);
             argvlen[i] = len;
         } else {
-            mrb_value s = mrb_obj_as_string(mrb, command_arg);
-            argv[i] = mrb_string_value_cstr(mrb, &s);
-            argvlen[i] = mrb_string_value_len(mrb, s);
+            argv[i] = RSTRING_PTR(command_arg);
+            argvlen[i] = RSTRING_LEN(command_arg);
         }
     }
+
+    mrb_gc_register(mrb, command_ctx->refs.command);
 
     /* send command to redis */
     h2o_redis_command_argv(&client->super, on_redis_command, command_ctx, (int)command_len, argv, argvlen);

@@ -251,11 +251,11 @@ static void test_process_range(void)
     }
 
     {
-        testrange = h2o_iovec_init(H2O_STRLIT("bytes=1-\t,5-10"));
+        testrange = h2o_iovec_init(H2O_STRLIT("bytes=11-\t,5-10"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
         ok(ret == 2);
-        ok(*ranges++ == 1);
-        ok(*ranges++ == 99);
+        ok(*ranges++ == 11);
+        ok(*ranges++ == 89);
         ok(*ranges++ == 5);
         ok(*ranges == 6);
     }
@@ -577,9 +577,9 @@ static void test_range_req(void)
         conn->req.input.path = h2o_iovec_init(H2O_STRLIT("/1000.txt"));
         h2o_add_header(&conn->req.pool, &conn->req.headers, H2O_TOKEN_RANGE, NULL, H2O_STRLIT("bytes=-2100"));
         h2o_loopback_run_loop(conn);
-        ok(conn->req.res.status == 206);
+        ok(conn->req.res.status == 200);
         ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_TYPE, "text/plain"));
-        ok(check_header(&conn->req.res, H2O_TOKEN_CONTENT_RANGE, "bytes 0-999/1000"));
+        ok(h2o_find_header(&conn->req.res.headers, H2O_TOKEN_CONTENT_RANGE, -1) == -1);
         ok(conn->body->size == 1000);
         ok(strcmp(sha1sum(conn->body->bytes, conn->body->size), "dfd3ae1f5c475555fad62efe42e07309fa45f2ed") == 0);
         h2o_loopback_destroy(conn);

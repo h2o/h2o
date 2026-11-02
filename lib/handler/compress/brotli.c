@@ -118,7 +118,8 @@ h2o_compress_context_t *h2o_compress_brotli_open(h2o_mem_pool_t *pool, int quali
     self->super.name = h2o_iovec_init(H2O_STRLIT("br"));
     self->super.do_transform = compress_;
     self->super.push_buf = NULL;
-    self->state = BrotliEncoderCreateInstance(NULL, NULL, NULL);
+    if ((self->state = BrotliEncoderCreateInstance(NULL, NULL, NULL)) == NULL)
+        h2o_fatal("BrotliEncoderCreateInstance failed");
     memset(&self->bufs, 0, sizeof(self->bufs));
     self->buf_capacity = preferred_chunk_size;
     if (self->buf_capacity > estimated_content_length)

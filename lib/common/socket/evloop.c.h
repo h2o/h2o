@@ -183,7 +183,7 @@ static size_t write_vecs(struct st_h2o_evloop_socket_t *sock, h2o_iovec_t **bufs
             msg = (struct msghdr){.msg_iov = (struct iovec *)*bufs, .msg_iovlen = iovcnt};
         } while ((wret = sendmsg(sock->fd, &msg, sendmsg_flags)) == -1 && errno == EINTR);
         SOCKET_PROBE(WRITEV, &sock->super, wret);
-        H2O_LOG_SOCK(writev, &sock->super, { PTLS_LOG_ELEMENT_SIGNED(ret, wret); });
+        H2O_LOG_SOCK(writev, &sock->super, { PTLS_LOG_ELEMENT_NUMBER(ret, wret); });
 
         if (wret == -1)
             return errno == EAGAIN ? 0 : SIZE_MAX;

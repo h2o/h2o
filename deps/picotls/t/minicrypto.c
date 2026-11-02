@@ -34,6 +34,26 @@
 static void test_secp256r1_key_exchange(void)
 {
     test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_minicrypto_secp256r1);
+
+    /* points that are not on the curve are rejected */
+    ptls_key_exchange_context_t *ctx;
+    ptls_iovec_t pubkey = {NULL}, secret = {NULL};
+    uint8_t offcurve[SECP256R1_PUBLIC_KEY_SIZE];
+    int ret;
+
+    ret = ptls_minicrypto_secp256r1.create(&ptls_minicrypto_secp256r1, &ctx);
+    ok(ret == 0);
+    memcpy(offcurve, ctx->pubkey.base, sizeof(offcurve));
+    offcurve[sizeof(offcurve) - 1] ^= 1;
+    ret = ptls_minicrypto_secp256r1.exchange(&ptls_minicrypto_secp256r1, &pubkey, &secret,
+                                             ptls_iovec_init(offcurve, sizeof(offcurve)));
+    ok(ret != 0);
+    ok(pubkey.base == NULL);
+    ok(secret.base == NULL);
+    ret = ctx->on_exchange(&ctx, 1, &secret, ptls_iovec_init(offcurve, sizeof(offcurve)));
+    ok(ret != 0);
+    ok(ctx == NULL);
+    ok(secret.base == NULL);
 }
 
 static void test_x25519_key_exchange(void)

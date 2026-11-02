@@ -141,9 +141,7 @@ void quicly_request_stop(quicly_stream_t *stream, quicly_error_t err)
 void quicly_reset_stream(quicly_stream_t *stream, quicly_error_t err)
 {
     /* dispose sendbuf state */
-    quicly_sendstate_reset(&stream->sendstate);
-
-    stream->_send_aux.reset_stream.sender_state = QUICLY_SENDER_STATE_SEND;
+    quicly_sendstate_reset(&stream->sendstate, QUICLY_ERROR_GET_ERROR_CODE(err), 0);
 
     /* inline expansion of resched_stream_data() */
     /* TODO: consider streams_blocked? */
@@ -464,10 +462,17 @@ quicly_error_t quicly_close(quicly_conn_t *conn, quicly_error_t err, const char 
     return 0;
 }
 
+int quicly_get_alt_egress(quicly_conn_t *conn)
+{
+    return 0;
+}
+
 int64_t quicly_get_first_timeout(quicly_conn_t *conn)
 {
     /* TODO: simulate delay */
-    return conn->super.ctx->now->cb(conn->super.ctx->now) + 1;
+    double now;
+    conn->super.ctx->now->cb(conn->super.ctx->now, &now);
+    return (int64_t)now + 1;
 }
 
 void quicly_free(quicly_conn_t *conn)

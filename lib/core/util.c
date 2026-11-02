@@ -226,6 +226,11 @@ static h2o_iovec_t build_redis_value(h2o_iovec_t session_data)
 static void redis_resumption_on_get(redisReply *reply, void *_accept_data, const char *errstr)
 {
     struct st_h2o_redis_resumption_accept_data_t *accept_data = _accept_data;
+
+    /* Being called while `get_command` is NULL means that `h2o_redis_command` failed synchronously, i.e., while the handshake is
+     * in progress. As the connection is in the connected state, that happens only when hiredis fails to allocate memory. */
+    if (accept_data->get_command == NULL)
+        h2o_fatal("no memory");
     accept_data->get_command = NULL;
 
     h2o_iovec_t session_data;
@@ -486,12 +491,17 @@ static void on_read_proxy_line(h2o_socket_t *sock, const char *err)
 
     struct sockaddr_storage addr;
     socklen_t addrlen;
-    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size, (void *)&addr, &addrlen);
+    /* PROXY v1 line is at most 107 bytes including CRLF (section 2.1 of the spec) */
+    static const size_t max_line_len = 107;
+    ssize_t r = parse_proxy_line(sock->input->bytes, sock->input->size < max_line_len ? sock->input->size : max_line_len,
+                                 (void *)&addr, &addrlen);
     switch (r) {
     case -1: /* error, just pass the input to the next handler */
         break;
     case -2: /* incomplete */
-        return;
+        if (sock->input->size < max_line_len)
+            return;
+        break; /* CRLF not found within the max length, pass the input to the next handler */
     default:
         h2o_buffer_consume(&sock->input, r);
         if (addrlen != 0)
@@ -787,14 +797,14 @@ h2o_iovec_t h2o_build_destination(h2o_req_t *req, const char *prefix, size_t pre
     return h2o_concat_list(&req->pool, parts, num_parts);
 }
 
-#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT32_LONGEST_STR ".000"
+#define SERVER_TIMING_DURATION_LONGEST_STR "dur=" H2O_INT64_LONGEST_STR ".000"
 
 size_t stringify_duration(char *buf, int64_t usec)
 {
-    int32_t msec = (int32_t)(usec / 1000);
-    usec -= ((int64_t)msec * 1000);
+    int64_t msec = usec / 1000;
+    usec -= msec * 1000;
     char *pos = buf;
-    pos += sprintf(pos, "dur=%" PRId32, msec);
+    pos += sprintf(pos, "dur=%" PRId64, msec);
     if (usec != 0) {
         *pos++ = '.';
         int denom;

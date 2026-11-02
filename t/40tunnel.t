@@ -147,15 +147,17 @@ subtest "connect" => sub {
             $req =~ qr{^([^ ]+) ([^ ]+) HTTP/.*?\r\n\r\n(.*)$}s
                 or die "failed to parse request:::$req";
             my ($meth, $origin, $remainder) = ($1, $2, $3 ? $3 : "");
+            my ($connection_header) = $req =~ /^connection:[ \t]*([^\r\n]*)/mi;
+            $connection_header = '' unless defined $connection_header;
             # send 200 and run as an echo server, or send 403
             if ($meth eq 'CONNECT' and $origin !~ /^fail:/) {
-                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n$3");
+                $conn->syswrite("HTTP/1.1 200 OK\r\n\r\n$remainder");
                 while ($conn->sysread(my $buf, 4096)) {
                     $conn->syswrite($buf)
                         or last;
                 }
             } else {
-                $conn->syswrite("HTTP/1.1 403 Forbidden\r\ncontent-length: 17\r\n\r\naccess forbidden\n");
+                $conn->syswrite("HTTP/1.1 403 Forbidden\r\nx-upstream-connection: $connection_header\r\ncontent-length: 17\r\n\r\naccess forbidden\n");
             }
         }
     }
@@ -194,6 +196,7 @@ subtest "connect" => sub {
                     my $conn = shift;
                     my $resp = $connect_get_resp->($conn, "fail:8080");
                     like $resp, qr{HTTP/[0-9\.]+ 403.*\r\n\r\naccess forbidden\n$}s, "check response";
+                    like $resp, qr{\r\nx-upstream-connection: close\r\n}i, "CONNECT asks the upstream to close";
                 });
             };
             subtest "success" => sub {

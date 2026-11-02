@@ -279,6 +279,16 @@ static ptls_key_exchange_context_t *key_from_pem(const char *pem)
     return ctx;
 }
 
+static int call_verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, const char *server_name,
+                                  int *ossl_x509_err)
+{
+    X509_STORE_CTX *verify_ctx = X509_STORE_CTX_new();
+    assert(verify_ctx != NULL);
+    int ret = verify_cert_chain(verify_ctx, store, cert, chain, 0, server_name, ossl_x509_err);
+    X509_STORE_CTX_free(verify_ctx);
+    return ret;
+}
+
 static void test_cert_verify(void)
 {
     X509 *cert = x509_from_pem(RSA_CERTIFICATE);
@@ -287,19 +297,19 @@ static void test_cert_verify(void)
     int ret, ossl_x509_err;
 
     /* expect fail when no CA is registered */
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
+    ret = call_verify_cert_chain(store, cert, chain, "test.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_UNKNOWN_CA);
 
     /* expect success after registering the CA */
     X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
     ret = X509_LOOKUP_load_file(lookup, "t/assets/test-ca.crt", X509_FILETYPE_PEM);
     ok(ret);
-    ret = verify_cert_chain(store, cert, chain, 0, "test.example.com", &ossl_x509_err);
+    ret = call_verify_cert_chain(store, cert, chain, "test.example.com", &ossl_x509_err);
     ok(ret == 0);
 
 #ifdef X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS
     /* different server_name */
-    ret = verify_cert_chain(store, cert, chain, 0, "test2.example.com", &ossl_x509_err);
+    ret = call_verify_cert_chain(store, cert, chain, "test2.example.com", &ossl_x509_err);
     ok(ret == PTLS_ALERT_BAD_CERTIFICATE);
 #else
     fprintf(stderr, "**** skipping test for hostname validation failure ***\n");
@@ -330,6 +340,59 @@ static void setup_sign_certificate(ptls_openssl_sign_certificate_t *sc)
     ptls_openssl_init_sign_certificate(sc, pkey);
 
     EVP_PKEY_free(pkey);
+}
+
+static STACK_OF(X509) * stored_chain;
+
+static int on_store_chain(ptls_openssl_store_chain_t *self, ptls_t *tls, X509_STORE_CTX *store_ctx)
+{
+    assert(stored_chain == NULL);
+    if (store_ctx != NULL)
+        stored_chain = X509_STORE_CTX_get1_chain(store_ctx);
+    return 0;
+}
+
+static void test_store_chain(void)
+{
+    X509_STORE *store = X509_STORE_new();
+    X509_LOOKUP *lookup = X509_STORE_add_lookup(store, X509_LOOKUP_file());
+    int ret = X509_LOOKUP_load_file(lookup, "t/assets/test-ca.crt", X509_FILETYPE_PEM);
+    ok(ret);
+    ptls_openssl_verify_certificate_t vc;
+    ptls_openssl_store_chain_t store_chain = {on_store_chain};
+    ret = ptls_openssl_init_verify_certificate(&vc, store);
+    ok(ret == 0);
+    vc.store_chain = &store_chain;
+
+    ptls_iovec_t cert;
+    setup_certificate(&cert);
+    ptls_t *tls = ptls_new(ctx, 0);
+    int (*verify_sign)(void *, uint16_t, ptls_iovec_t, ptls_iovec_t) = NULL;
+    void *verify_data = NULL;
+    ret = vc.super.cb(&vc.super, tls, "test.example.com", &verify_sign, &verify_data, &cert, 1);
+    ok(ret == 0);
+
+    /* the stored chain consists of the end-entity certificate and the trust anchor */
+    ok(stored_chain != NULL);
+    if (stored_chain != NULL) {
+        X509 *leaf = x509_from_pem(RSA_CERTIFICATE);
+        ok(sk_X509_num(stored_chain) == 2);
+        ok(X509_cmp(sk_X509_value(stored_chain, 0), leaf) == 0);
+        BIO *bio = BIO_new_file("t/assets/test-ca.crt", "r");
+        X509 *ca = PEM_read_bio_X509(bio, NULL, NULL, NULL);
+        BIO_free(bio);
+        ok(ca != NULL && X509_cmp(sk_X509_value(stored_chain, 1), ca) == 0);
+        X509_free(ca);
+        X509_free(leaf);
+        sk_X509_pop_free(stored_chain, X509_free);
+        stored_chain = NULL;
+    }
+
+    verify_sign(verify_data, 0, ptls_iovec_init(NULL, 0), ptls_iovec_init(NULL, 0)); /* frees verify_data */
+    ptls_free(tls);
+    OPENSSL_free(cert.base);
+    ptls_openssl_dispose_verify_certificate(&vc);
+    X509_STORE_free(store);
 }
 
 static int verify_cert_cb(int ok, X509_STORE_CTX *ctx)
@@ -598,6 +661,7 @@ int main(int argc, char **argv)
     subtest("ecdsa-sign", test_ecdsa_sign);
     subtest("ed25519-sign", test_ed25519_sign);
     subtest("cert-verify", test_cert_verify);
+    subtest("store-chain", test_store_chain);
     subtest("picotls", test_picotls);
 
     ctx = ctx_peer = &openssl_ctx_sha256only;

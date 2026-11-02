@@ -20,11 +20,12 @@
  * IN THE SOFTWARE.
  */
 #include <assert.h>
+#include <math.h>
 #include <stdlib.h>
 #include "picotls.h"
 #include "quicly/sentmap.h"
 
-const quicly_sent_t quicly_sentmap__end_iter = {quicly_sentmap__type_packet, {{UINT64_MAX, INT64_MAX}}};
+const quicly_sent_t quicly_sentmap__end_iter = {quicly_sentmap__type_packet, {{UINT64_MAX, INFINITY}}};
 
 static void next_entry(quicly_sentmap_iter_t *iter)
 {
@@ -92,7 +93,7 @@ void quicly_sentmap_dispose(quicly_sentmap_t *map)
     }
 }
 
-quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, int64_t now, uint8_t ack_epoch)
+quicly_error_t quicly_sentmap_prepare(quicly_sentmap_t *map, uint64_t packet_number, double now, uint8_t ack_epoch)
 {
     assert(map->_pending_packet == NULL);
 

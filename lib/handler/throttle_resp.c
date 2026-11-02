@@ -120,7 +120,8 @@ static void on_setup_ostream(h2o_filter_t *self, h2o_req_t *req, h2o_ostream_t *
         if ((xt_index = h2o_find_header(&req->res.headers, H2O_TOKEN_X_TRAFFIC, -1)) == -1)
             goto Next;
         char *buf = req->res.headers.entries[xt_index].value.base;
-        if (H2O_UNLIKELY((bytes_per_sec = h2o_strtosizefwd(&buf, req->res.headers.entries[xt_index].value.len)) == SIZE_MAX))
+        if (H2O_UNLIKELY((bytes_per_sec = h2o_strtosizefwd(&buf, req->res.headers.entries[xt_index].value.len)) == SIZE_MAX ||
+                         bytes_per_sec == 0))
             goto Next;
         h2o_delete_header(&req->res.headers, xt_index);
     }

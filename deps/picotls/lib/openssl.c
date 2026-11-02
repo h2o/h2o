@@ -404,8 +404,10 @@ Exit:
     if (ret == 0) {
         *_ctx = &ctx->super;
     } else {
-        if (ctx != NULL)
+        if (ctx != NULL) {
+            ctx->privkey = NULL; /* do not free eckey in case of error, as the caller retains the ownership */
             x9_62_free_context(ctx);
+        }
         *_ctx = NULL;
     }
     return ret;
@@ -945,25 +947,11 @@ static int evp_kem_exchange(ptls_key_exchange_algorithm_t *algo, ptls_iovec_t *c
     *ciphertext = ptls_iovec_init(NULL, 0);
     *secret = ptls_iovec_init(NULL, 0);
 
-    if ((evpctx = EVP_PKEY_CTX_new_from_name(NULL, (const char *)algo->data, NULL)) == NULL) {
+    if ((key = EVP_PKEY_new_raw_public_key_ex(NULL, (const char *)algo->data, NULL, peerkey.base, peerkey.len)) == NULL) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
-    if (EVP_PKEY_paramgen_init(evpctx) <= 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if (EVP_PKEY_paramgen(evpctx, &key) <= 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-    if (EVP_PKEY_set1_encoded_public_key(key, peerkey.base, peerkey.len) <= 0) {
-        ret = PTLS_ERROR_LIBRARY;
-        goto Exit;
-    }
-
-    evpctx = EVP_PKEY_CTX_new_from_pkey(NULL, key, NULL);
-    if (evpctx == NULL) {
+    if ((evpctx = EVP_PKEY_CTX_new_from_pkey(NULL, key, NULL)) == NULL) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
     }
@@ -1007,9 +995,9 @@ Exit:
 
 int ptls_openssl_create_key_exchange(ptls_key_exchange_context_t **ctx, EVP_PKEY *pkey)
 {
-    int ret, id;
+    int ret;
 
-    switch (id = EVP_PKEY_id(pkey)) {
+    switch (EVP_PKEY_id(pkey)) {
 
     case EVP_PKEY_EC: {
         /* obtain eckey */
@@ -1110,7 +1098,10 @@ static ptls_async_job_t *async_sign_ctx_new(const ptls_openssl_signature_scheme_
     self->super = (ptls_async_job_t){async_sign_ctx_free, async_sign_ctx_get_fd};
     self->scheme = scheme;
     self->ctx = ctx;
-    self->waitctx = ASYNC_WAIT_CTX_new();
+    if ((self->waitctx = ASYNC_WAIT_CTX_new()) == NULL) {
+        free(self);
+        return NULL;
+    }
     self->job = NULL;
     self->siglen = siglen;
     memset(self->sig, 0, siglen);
@@ -1140,6 +1131,10 @@ static int do_sign_async(ptls_buffer_t *outbuf, ptls_async_job_t **_async)
         break;
     case ASYNC_FINISH:
         async->job = NULL;
+        if (ret != 1) { /* the return value of EVP_DigestSignFinal */
+            ret = PTLS_ERROR_LIBRARY;
+            break;
+        }
         ptls_buffer_pushv(outbuf, async->sig, async->siglen);
         ret = 0;
         break;
@@ -1877,18 +1872,13 @@ Exit:
     return ret;
 }
 
-static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server, const char *server_name,
-                             int *ossl_x509_err)
+static int verify_cert_chain(X509_STORE_CTX *verify_ctx, X509_STORE *store, X509 *cert, STACK_OF(X509) * chain, int is_server,
+                             const char *server_name, int *ossl_x509_err)
 {
-    X509_STORE_CTX *verify_ctx;
     int ret;
     *ossl_x509_err = 0;
 
     /* verify certificate chain */
-    if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
-        ret = PTLS_ERROR_NO_MEMORY;
-        goto Exit;
-    }
     if (X509_STORE_CTX_init(verify_ctx, store, cert, chain) != 1) {
         ret = PTLS_ERROR_LIBRARY;
         goto Exit;
@@ -1948,8 +1938,6 @@ static int verify_cert_chain(X509_STORE *store, X509 *cert, STACK_OF(X509) * cha
     ret = 0;
 
 Exit:
-    if (verify_ctx != NULL)
-        X509_STORE_CTX_free(verify_ctx);
     return ret;
 }
 
@@ -1960,8 +1948,9 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char
     ptls_openssl_verify_certificate_t *self = (ptls_openssl_verify_certificate_t *)_self;
     X509 *cert = NULL;
     STACK_OF(X509) *chain = sk_X509_new_null();
+    X509_STORE_CTX *verify_ctx = NULL;
     size_t i;
-    int ossl_x509_err, ret;
+    int ossl_x509_err, verified = 0, ret;
 
     /* If any certs are given, convert them to OpenSSL representation, then verify the cert chain. If no certs are given, just give
      * the override_callback to see if we want to stay fail open. */
@@ -1976,9 +1965,18 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char
                 ret = PTLS_ALERT_BAD_CERTIFICATE;
                 goto Exit;
             }
-            sk_X509_push(chain, interm);
+            if (sk_X509_push(chain, interm) == 0) {
+                X509_free(interm);
+                ret = PTLS_ERROR_NO_MEMORY;
+                goto Exit;
+            }
         }
-        ret = verify_cert_chain(self->cert_store, cert, chain, ptls_is_server(tls), server_name, &ossl_x509_err);
+        if ((verify_ctx = X509_STORE_CTX_new()) == NULL) {
+            ret = PTLS_ERROR_NO_MEMORY;
+            goto Exit;
+        }
+        ret = verify_cert_chain(verify_ctx, self->cert_store, cert, chain, ptls_is_server(tls), server_name, &ossl_x509_err);
+        verified = ret == 0;
     } else {
         ret = PTLS_ALERT_CERTIFICATE_REQUIRED;
         ossl_x509_err = 0;
@@ -1987,6 +1985,10 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char
     /* When override callback is available, let it override the error. */
     if (self->override_callback != NULL)
         ret = self->override_callback->cb(self->override_callback, tls, ret, ossl_x509_err, cert, chain);
+
+    /* Let the application retain the verified chain. */
+    if (ret == 0 && self->store_chain != NULL)
+        ret = self->store_chain->cb(self->store_chain, tls, verified ? verify_ctx : NULL);
 
     if (ret != 0 || num_certs == 0)
         goto Exit;
@@ -1999,6 +2001,8 @@ static int verify_cert(ptls_verify_certificate_t *_self, ptls_t *tls, const char
     *verifier = verify_sign;
 
 Exit:
+    if (verify_ctx != NULL)
+        X509_STORE_CTX_free(verify_ctx);
     if (chain != NULL)
         sk_X509_pop_free(chain, X509_free);
     if (cert != NULL)
@@ -2408,7 +2412,8 @@ ptls_key_exchange_algorithm_t ptls_openssl_x25519 = {.id = PTLS_GROUP_X25519,
 ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768 = {.id = PTLS_GROUP_X25519MLKEM768,
                                                              .name = PTLS_GROUP_NAME_X25519MLKEM768,
                                                              .create = x25519mlkem768_create,
-                                                             .exchange = x25519mlkem768_exchange};
+                                                             .exchange = x25519mlkem768_exchange,
+                                                             .post_quantum = 1};
 #endif
 #if PTLS_OPENSSL_HAVE_MLKEM
 #define DEFINE_MLKEM_KEYEX(lowcase, upcase)                                                                                        \
@@ -2416,7 +2421,8 @@ ptls_key_exchange_algorithm_t ptls_openssl_x25519mlkem768 = {.id = PTLS_GROUP_X2
                                                             .name = PTLS_GROUP_NAME_##upcase,                                      \
                                                             .create = evp_kem_create,                                              \
                                                             .exchange = evp_kem_exchange,                                          \
-                                                            .data = (intptr_t)PTLS_GROUP_NAME_##upcase}
+                                                            .data = (intptr_t)PTLS_GROUP_NAME_##upcase,                            \
+                                                            .post_quantum = 1}
 DEFINE_MLKEM_KEYEX(x25519mlkem768, X25519MLKEM768);
 DEFINE_MLKEM_KEYEX(secp256r1mlkem768, SECP256R1MLKEM768);
 DEFINE_MLKEM_KEYEX(secp384r1mlkem1024, SECP384R1MLKEM1024);

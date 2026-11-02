@@ -346,6 +346,9 @@ h2o_iovec_t h2o_get_filext(const char *path, size_t len)
 {
     const char *end = path + len, *p = end;
 
+    if (len == 0)
+        return h2o_iovec_init(NULL, 0);
+
     while (--p != path) {
         if (*p == '.') {
             return h2o_iovec_init(p + 1, end - (p + 1));

@@ -31,12 +31,18 @@ To fine tune the behavior of QUIC, the <code>quic</code> attribute should be use
 The <code>quic</code> attribute accepts following parameters.
 </p>
 <dl>
+<dt>alternatives</dt>
+<dd>A sequence of up to 3 mappings, each defining an alternative set of congestion control and loss recovery settings, to be used by a fraction of the connections (e.g., for A/B testing). Each mapping must contain <code>ratio</code>, an integer between 0 (never) and 255 (always) specifying the probability of each connection using the alternative settings, multiplied by 255; the sum of the ratios must not exceed 255, and the remaining connections use the default settings. Each alternative starts as a copy of the default settings (including <code>cc</code> and <code>initcwnd</code> of the <code>listen</code> directive); the following parameters, if specified within the mapping, override them: <code>cc</code>, <code>disengage-jumpstart</code>, <code>ecn</code>, <code>initcwnd</code>, <code>initial-rtt</code>, <code>jumpstart-default</code>, <code>jumpstart-max</code>, <code>normalize-mtu</code>, <code>pacing</code>, <code>respect-app-limited</code>, <code>speculative-pto</code>. Note that <code>cc</code> specified per host (i.e., by the <code>listen</code> directive of each host) is applied only to the connections using the default settings.</dd>
 <dt>amp-limit</dt>
 <dd>Amount of data that can be sent to the client before the client address is validated; see <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-address-validation" target=_blank>section 8.1 of RFC 9000</a>. Default is 3.</dd>
+<dt>disengage-jumpstart</dt>
+<dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether jumpstart should be prepared but then not be used. When set to <code>ON</code>, connections for which jumpstart would have been used are counted as such (i.e., <code>num-jumpstart-applicable</code>), but proceed using slow start. This is useful for A/B testing jumpstart by setting this flag in one of the <code>alternatives</code>. The default setting is <code>OFF</code>.</dd>
 <dt>ecn</dt>
 <dd>A boolean flag (either <code>ON</code> or <code>OFF</code>) indicating whether the server should use ECN signals to detect congestion. The default setting is <code>ON</code>. This flag affects the server's sending behavior. Regardless of this configuration, the server sends back ECN signals it receives using ACK_ECN frames.</dd>
 <dt>handshake-timeout-rtt-multiplier</dt>
 <dd>Handshake timeout in the unit of round-trip time. Default is 400.</dd>
+<dt>initial-rtt</dt>
+<dd>RTT to be assumed before the first RTT sample is obtained, in milliseconds. Default is 66.</dd>
 <dt>jumpstart-default</dt>
 <dd>Jumpstart enhances the slow start phase of congestion control by pacing a large number of packets for an entire round-trip time (RTT), allowing the server to assess the network's capacity sooner. This parameter specifies the number of packets sent during the jumpstart phase. The default value is zero, indicating that jumpstart is disabled for new connections.</dd>
 <dt>jumpstart-max</dt>
@@ -47,6 +53,8 @@ The <code>quic</code> attribute accepts following parameters.
 <dd>Maximum number of client-initated bi-directional streams. This parameter controls the HTTP request concurrency of a HTTP/3 connection. Default is 100.</dd>
 <dt>max-udp-payload-size</dt>
 <dd>See <a href="https://www.rfc-editor.org/rfc/rfc9000.html#name-transport-parameter-definit">Section 18.2 of RFC 9000</a>. Default is 1,472.</dd>
+<dt>normalize-mtu</dt>
+<dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether the growth of the congestion window should be normalized to a reference packet size rather than the maximum UDP payload size of the path. The default setting is <code>ON</code>.</dd>
 <dt>pacing</dt>
 <dd>A boolean flag (either <code>OFF</code> or <code>ON</code>) indicating whether sent packets should be paced. The default setting is <code>OFF</code>.</dd>
 <dt>qpack-encoder-table-capacity</dt>
@@ -59,6 +67,8 @@ The <code>quic</code> attribute accepts following parameters.
 <dd>A boolean flag (<code>OFF</code> or <code>ON</code>) indicating if a Retry packet should be used for validating the client address. Use of Retry packets mitigate denial-of-service attacks at the cost of incurring one additional round-trip for processing the handshake.</dd>
 <dt>sndbuf, rcvbuf</dt>
 <dd>Size of send and receive buffers, in the unit of bytes. Unlike the TCP counterparts that are per-connection, these buffers are associated to the listening port and applies to all the connections bound to that port.</dd>
+<dt>speculative-pto</dt>
+<dd>Number of probe packets to be sent speculatively at the end of a window, being an integer between 0 and 2. Default is 0.</dd>
 </dl>
 <p>
 The example below reuses a previous binding but sets the <code>retry</code> parameter to <code>ON</code>.

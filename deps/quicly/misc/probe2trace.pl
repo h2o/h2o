@@ -59,10 +59,10 @@ struct st_first_octet_t {
 };
 
 struct quicly_rtt_t {
-    uint32_t minimum;
+    float minimum;
     float smoothed;
     float variance;
-    uint32_t latest;
+    float latest;
 };
 
 struct quicly_cc_t {
@@ -118,19 +118,22 @@ for my $probe (@probes) {
                 push @ap, "(int)arg${i}->stream_id";
             }
         } elsif ($type eq 'struct quicly_rtt_t *') {
-            push @fmt, map {qq("$_":\%u)} qw(min-rtt smoothed-rtt latest-rtt);
+            push @fmt, map {qq("$_":) . ($arch eq 'embedded' || $arch eq 'tracer' ? '%g' : '%u')} qw(min-rtt smoothed-rtt latest-rtt);
             if ($arch eq 'linux') {
                 push @ap, map{"((struct quicly_rtt_t *)arg$i)->$_"} qw(minimum smoothed latest);
             } elsif ($arch eq 'darwin') {
                 push @ap, map{"*(uint32_t *)copyin(arg$i + $_, 4)"} qw(0 4 12);
             } else {
-                push @ap, "arg${i}->minimum", "(uint32_t)(arg${i}->smoothed + 0.5)", "arg${i}->latest";
+                push @ap, map {"arg${i}->$_"} qw(minimum smoothed latest);
             }
         } elsif ($type eq 'struct st_quicly_stats_t *') {
             # build an array of [field-names => type-specifiers]
             my @fields;
-            push @fields, ["rtt.minimum" => '%u'], ["rtt.smoothed" => '%u', '(uint32_t)'],
-                          ["rtt.variance" => '%u', '(uint32_t)'];
+            if ($arch eq 'embedded' || $arch eq 'tracer') {
+                push @fields, map {["rtt.$_" => '%g']} qw(minimum smoothed variance);
+            } else {
+                push @fields, map {["rtt.$_" => '%u', '(uint32_t)']} qw(minimum smoothed variance);
+            }
             push @fields, map {["cc.$_" => '%u']} qw(cwnd ssthresh cwnd_initial cwnd_exiting_slow_start cwnd_minimum cwnd_maximum num_loss_episodes);
             push @fields, map {["num_packets.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent ack_received lost lost_time_threshold late_acked received decryption_failed);
             push @fields, map {["num_bytes.$_" => $arch eq 'embedded' ? '%" PRIu64 "' : '%llu']} qw(sent received);

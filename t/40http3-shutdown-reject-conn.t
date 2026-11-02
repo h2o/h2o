@@ -4,6 +4,7 @@ use Digest::MD5 qw(md5_hex);
 use File::Temp qw(tempdir);
 use Net::EmptyPort qw(wait_port);
 use Test::More;
+use Time::HiRes qw(time);
 use t::Util;
 
 plan skip_all => 'mruby support is off'
@@ -51,13 +52,11 @@ open my $client1, '-|', "$client_prog -k -3 100 https://127.0.0.1:$quic_port/ 2>
 sleep 1;
 kill 'TERM', $server->{pid};
 sleep 1;
-my $client2_timespent = time;
 open my $client2, '-|', "$client_prog -k -3 100 https://127.0.0.1:$quic_port/ 2>&1"
     or die "failed to launch $client_prog:$?";
-$client2_timespent = time - $client2_timespent;
-
-like do { local $/; join "", <$client1>}, qr{^HTTP/[0-9\.]+ 200.*morning$}s, "client1 gets a response";
+my $client2_start = time;
 is do { local $/; join "", <$client2>}, "$client_prog: I/O error\n", "client2 fails to connect";
-cmp_ok $client2_timespent, '<', 1, "client2 did not time out";
+cmp_ok time - $client2_start, '<', 3, "client2 did not time out";
+like do { local $/; join "", <$client1>}, qr{^HTTP/[0-9\.]+ 200.*morning$}s, "client1 gets a response";
 
 done_testing;

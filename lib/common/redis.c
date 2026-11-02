@@ -189,7 +189,8 @@ static void handle_reply(h2o_redis_command_t *command, redisReply *reply, const 
     case H2O_REDIS_COMMAND_TYPE_PSUBSCRIBE:
         if (reply != NULL && reply->type == REDIS_REPLY_ARRAY) {
             char *unsub = command->type == H2O_REDIS_COMMAND_TYPE_SUBSCRIBE ? "unsubscribe" : "punsubscribe";
-            if (strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
+            if (reply->elements != 0 && reply->element[0]->type == REDIS_REPLY_STRING &&
+                strncasecmp(reply->element[0]->str, unsub, reply->element[0]->len) == 0) {
                 dispose_command(command);
             } else {
                 /* (p)subscribe commands doesn't get freed until (p)unsubscribe or disconnect */
@@ -243,28 +244,34 @@ static h2o_redis_command_t *create_command(h2o_redis_client_t *client, h2o_redis
     return command;
 }
 
-static void send_command(h2o_redis_client_t *client, h2o_redis_command_t *command, const char *cmd, size_t len)
+/**
+ * returns zero if successful, or -1 if the command has been disposed due to an error
+ */
+static int send_command(h2o_redis_client_t *client, h2o_redis_command_t *command, const char *cmd, size_t len)
 {
     if (cmd == NULL) {
         handle_reply(command, NULL, "Failed to create command");
-        return;
+        return -1;
     }
 
     if (client->state == H2O_REDIS_CONNECTION_STATE_CLOSED) {
         handle_reply(command, NULL, h2o_redis_error_connection);
-        return;
+        return -1;
     }
 
     if (command->type == H2O_REDIS_COMMAND_TYPE_MONITOR) {
         /* monitor command implementation in hiredis asynchronous API is absolutely dangerous, so don't use it! */
         handle_reply(command, NULL, "Unsupported command");
-        return;
+        return -1;
     }
 
     int ret = redisAsyncFormattedCommand(client->_redis, on_command, command, cmd, len);
     if (ret != REDIS_OK) {
         handle_reply(command, NULL, "Failed to send command");
+        return -1;
     }
+
+    return 0;
 }
 
 /*
@@ -287,7 +294,6 @@ static h2o_redis_command_type_t detect_command_type(const char *formatted)
     p = strchr(p, '\n');
     CHECK(p);
     ++p;
-    CHECK(p);
 
 #define MATCH(c, target) strncasecmp(c, target, sizeof(target) - 1) == 0
     if (MATCH(p, "subscribe\r\n"))
@@ -319,7 +325,8 @@ h2o_redis_command_t *h2o_redis_command(h2o_redis_client_t *client, h2o_redis_com
     }
 
     h2o_redis_command_t *command = create_command(client, cb, cb_data, detect_command_type(cmd));
-    send_command(client, command, cmd, len);
+    if (send_command(client, command, cmd, len) != 0)
+        command = NULL;
     free(cmd);
     return command;
 }
@@ -336,7 +343,8 @@ h2o_redis_command_t *h2o_redis_command_argv(h2o_redis_client_t *client, h2o_redi
     }
 
     h2o_redis_command_t *command = create_command(client, cb, cb_data, detect_command_type(sdscmd));
-    send_command(client, command, sdscmd, len);
+    if (send_command(client, command, sdscmd, len) != 0)
+        command = NULL;
     sdsfree(sdscmd);
     return command;
 }

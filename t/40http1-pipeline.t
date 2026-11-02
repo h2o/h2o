@@ -58,6 +58,26 @@ EOT
     like $resp, qr{^HTTP/1.1 405 Method Not Allowed\r\n.*HTTP/1.1 200 OK\r\n.*}s;
 };
 
+subtest "content-length and transfer-encoding" => sub {
+    for my $reverse (0, 1) {
+        for my $keep_alive (0, 1) {
+            subtest "reverse=$reverse, keep-alive=$keep_alive" => sub {
+                my @headers = ("Content-Length: 1000000\r\n", "Transfer-Encoding: chunked\r\n");
+                @headers = reverse @headers if $reverse;
+                push @headers, "Connection: keep-alive\r\n" if $keep_alive;
+                my $resp = send_and_receive($server->{port},
+                    "POST / HTTP/1.1\r\nHost: 127.0.0.1:$server->{port}\r\n" . join('', @headers) .
+                    "\r\n5\r\nabc\r\n\r\n0\r\n\r\n" .
+                    "GET / HTTP/1.1\r\nHost: 127.0.0.1:$server->{port}\r\nConnection: close\r\n\r\n");
+                like $resp, qr{^HTTP/1\.1 405 Method Not Allowed\r\n}, "chunked request is processed";
+                my ($resp_headers) = split /\r\n\r\n/, $resp, 2;
+                like $resp_headers, qr{^connection: close\r?$}mi, "connection is closed";
+                is scalar(() = $resp =~ /HTTP\/1\.1 /g), 1, "pipelined request is not processed";
+            };
+        }
+    }
+};
+
 done_testing;
 
 sub send_and_receive {

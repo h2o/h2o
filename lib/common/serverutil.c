@@ -332,7 +332,12 @@ Exit:
 size_t h2o_numproc(void)
 {
 #if defined(_SC_NPROCESSORS_ONLN)
-    return (size_t)sysconf(_SC_NPROCESSORS_ONLN);
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu <= 0) {
+        h2o_error_printf("[ERROR] failed to obtain number of CPU cores, assuming as one\n");
+        ncpu = 1;
+    }
+    return ncpu;
 #elif defined(CTL_HW) && defined(HW_AVAILCPU)
     int name[] = {CTL_HW, HW_AVAILCPU};
     int ncpu;
