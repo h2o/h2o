@@ -1577,7 +1577,8 @@ static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
  * Sends QUIC DATAGRAM frames. Some of the frames being provided may get dropped.
  * Notes:
- * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled.
+ * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled, but is subject to the
+ *   anti-amplification limit.
  * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
  */
 void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);
