@@ -262,9 +262,13 @@ struct st_ptls_t {
      */
     char *negotiated_protocol;
     /**
-     * selected key-exchange
+     * offered or selected key-exchange, also retained for session tickets
      */
     ptls_key_exchange_algorithm_t *key_share;
+    /**
+     * group used for key exchange in this handshake (zero for PSK-only or imported connections)
+     */
+    uint16_t negotiated_group;
     /**
      * selected cipher-suite
      */
@@ -2959,6 +2963,7 @@ static int client_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             assert(ecdh_secret.base == NULL);
             goto Exit;
         }
+        tls->negotiated_group = tls->key_share->id;
     }
 
     if ((ret = key_schedule_extract(tls->key_schedule, ecdh_secret)) != 0)
@@ -4860,6 +4865,7 @@ static int server_handle_hello(ptls_t *tls, ptls_message_emitter_t *emitter, ptl
             goto Exit;
         }
         tls->key_share = key_share.algorithm;
+        tls->negotiated_group = key_share.algorithm->id;
     }
 
     { /* send ServerHello */
@@ -5723,6 +5729,11 @@ int ptls_handshake_is_complete(ptls_t *tls)
 int ptls_is_psk_handshake(ptls_t *tls)
 {
     return tls->is_psk_handshake;
+}
+
+uint16_t ptls_get_negotiated_group(ptls_t *tls)
+{
+    return tls->negotiated_group;
 }
 
 int ptls_is_ech_handshake(ptls_t *tls, uint8_t *config_id, ptls_hpke_kem_t **kem, ptls_hpke_cipher_suite_t **cipher)
