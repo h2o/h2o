@@ -1705,7 +1705,6 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
                               const h2o_iovec_t *name, h2o_iovec_t value, h2o_header_flags_t flags)
 {
     int64_t dynamic_index;
-    uint32_t hashcode = 0;
     int can_index = 0;
 
     if (static_index >= 0 && is_exact) {
@@ -1721,9 +1720,7 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
     ctx->stats->text_bytes += name->len + value.len;
 
     if (ctx->qpack != NULL) {
-        can_index = ctx->encoder_buf != NULL && !dont_compress && name != &H2O_TOKEN_ETAG->buf;
-        if (can_index)
-            hashcode = hash_field(name, value);
+        can_index = ctx->encoder_buf != NULL && ctx->qpack->table.max_size != 0 && !dont_compress && name != &H2O_TOKEN_ETAG->buf;
         /* try dynamic indexed */
         if ((dynamic_index = lookup_dynamic(ctx->qpack, name, value, ctx->encoder_buf == NULL, &is_exact)) >= 0 && is_exact) {
             /* Referencing an entry close to eviction would prevent it, and everything inserted after it, from being evicted until
@@ -1778,7 +1775,8 @@ static void do_flatten_header(struct st_h2o_qpack_flatten_context_t *ctx, int32_
          * still room) it simply takes the remaining space. The cost model tracks only name-value pairs, so a frequent name always
          * paired with a different value is never promoted (TODO FIX). */
         if (candidate_size <= ctx->qpack->table.max_size && !no_refine(ctx->qpack)) {
-            struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_get(ctx->qpack, hashcode);
+            /* hashed only here, as no other path consults the shadow cache */
+            struct st_h2o_qpack_shadow_slot_t *shadow = shadow_cache_get(ctx->qpack, hash_field(name, value));
             shadow->freq += ctx->qpack->freq_add;
             /* Emitting a literal is the common outcome, so emit it now and read the value's coded size straight off it for scoring,
              * rather than Huffman-coding the value a second time just to measure it. The blocking-ref floor is captured before the
