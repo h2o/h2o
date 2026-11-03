@@ -726,7 +726,7 @@ static void usage(const char *progname)
             "               overrides the TLS/1.3 key exchanges to be used\n"
             " --http3-qpack-encoder-table-capacity <bytes>\n"
             "               sets the QPACK encoder dynamic table capacity for outgoing requests\n"
-            "               (default: 4096; set to 0 to disable dynamic-table use)\n"
+            "               (default: 8192; set to 0 to disable dynamic-table use)\n"
             " --http3-qpack-encoder-refine <0|1>\n"
             "               whether the QPACK encoder refines its dynamic table after it fills\n"
             "               (default: 1)\n"
