@@ -1476,11 +1476,13 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
     }
 
     /* Sections awaiting acknowledgement are bounded to twice the number of concurrent requests, leaving room for the sections that
-     * remain unacknowledged after the requests complete. */
+     * remain unacknowledged after the requests complete. The bound is capped at 200, as the sections are scanned for every Stream
+     * Cancellation, which the peer can send for any stream. When more than 200 requests are issued within a round trip, some of
+     * the field sections are encoded without using the dynamic table. */
+    size_t max_inflight = max_concurrent_requests < 100 ? 2 * max_concurrent_requests : 200;
     h2o_byte_vector_t encoder_buf = {NULL};
-    conn->qpack.enc =
-        h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
-                                 2 * max_concurrent_requests, conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
+    conn->qpack.enc = h2o_qpack_create_encoder(max_table_capacity, conn->qpack.ctx->encoder.table_capacity, blocked_streams,
+                                               max_inflight, conn->qpack.ctx->encoder.refine_after_full, &encoder_buf);
     if (encoder_buf.size != 0)
         h2o_http3_write_unistream(conn->_control_streams.egress.qpack_encoder, encoder_buf.entries, encoder_buf.size);
     free(encoder_buf.entries);
