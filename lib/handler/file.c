@@ -576,6 +576,8 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             }
             needs_comma = 0;
             buf++;
+            if (buf == buf_end)
+                break;
             while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
                 buf++;
                 CHECK_EOF();
