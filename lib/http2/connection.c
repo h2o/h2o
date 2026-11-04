@@ -1380,10 +1380,6 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     return CONNECTION_PREFACE.len;
 }
 
-/* The first frame the client sends after the connection preface MUST be a
- * SETTINGS frame (RFC 9113 3.4). Reject anything else with a connection
- * error of type PROTOCOL_ERROR.
- */
 static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
 {
     h2o_http2_frame_t frame;
@@ -1398,6 +1394,7 @@ static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_
     }
     if ((hret = handle_settings_frame(conn, &frame, err_desc)) != 0)
         return hret;
+
     conn->_read_expect = expect_default;
     return ret;
 }
