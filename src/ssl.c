@@ -338,7 +338,7 @@ static void calculate_quic_tag(uint8_t *tag64, const quicly_context_t *ctx, cons
     if ((ret = quicly_build_session_ticket_auth_data(&buf, ctx)) != 0)
         goto Exit;
     ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_QPACK_MAX_TABLE_CAPACITY);
-    ptls_buffer_push_quicint(&buf, qpack->decoder_table_capacity);
+    ptls_buffer_push_quicint(&buf, qpack->decoder.table_capacity);
     if ((ret = ptls_calc_hash(&ptls_openssl_sha256, full_digest, buf.base, buf.off)) != 0)
         goto Exit;
     ptls_buffer_dispose(&buf);
