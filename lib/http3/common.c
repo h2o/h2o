@@ -299,15 +299,17 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
     /* save received data */
     h2o_http3_update_recvbuf(&stream->recvbuf, off, input, len);
 
-    /* determine bytes that can be handled */
+    /* determine bytes that can be handled; a transfer completed by a reset is handled by `ingress_unistream_on_receive_reset` */
     size_t bytes_available = quicly_recvstate_bytes_available(&stream->quic->recvstate);
     const uint8_t *src = (const uint8_t *)stream->recvbuf->bytes;
-    if (bytes_available == 0 && !quicly_recvstate_transfer_complete(&stream->quic->recvstate))
-        return;
+    int is_eos =
+        quicly_recvstate_transfer_complete(&stream->quic->recvstate) && stream->quic->recvstate.app_error_code == UINT64_MAX;
+    if (bytes_available == 0 && !is_eos)
+        goto Exit; /* a reliable reset might have completed the transfer without delivering new bytes */
     uint64_t bytes_received = stream->quic->recvstate.data_off + bytes_available;
 
     /* handle the bytes */
-    stream->handle_input(conn, stream, &src, src + bytes_available, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    stream->handle_input(conn, stream, &src, src + bytes_available, is_eos);
     if (stream->bytes_received != NULL && *stream->bytes_received < bytes_received)
         *stream->bytes_received = bytes_received;
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
@@ -319,6 +321,9 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
         h2o_buffer_consume(&stream->recvbuf, bytes_consumed);
         quicly_stream_sync_recvbuf(stream->quic, bytes_consumed);
     }
+
+Exit:
+    h2o_quic_notify_reliable_reset(qs);
 }
 
 static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
@@ -326,6 +331,13 @@ static void ingress_unistream_on_receive_reset(quicly_stream_t *qs, quicly_error
     h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
     struct st_h2o_http3_ingress_unistream_t *stream = qs->data;
 
+    /* The transfer is complete, but input that has been received and not consumed is still to be returned; quicly returns the
+     * credit of the bytes not delivered. */
+    size_t bytes_available = quicly_recvstate_bytes_available(&qs->recvstate);
+    if (bytes_available != 0) {
+        h2o_buffer_consume(&stream->recvbuf, bytes_available);
+        quicly_stream_sync_recvbuf(qs, bytes_available);
+    }
     stream->handle_input(conn, stream, NULL, NULL, 1);
 }
 
@@ -1503,6 +1515,27 @@ void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, 
     assert(stream != NULL);
     h2o_buffer_append(&stream->sendbuf, bytes, len);
     H2O_HTTP3_CHECK_SUCCESS(quicly_stream_sync_sendbuf(stream->quic, 1) == 0);
+}
+
+int h2o_http3_reset_stream_reliably(quicly_stream_t *qs, quicly_error_t err, uint64_t reliable_size)
+{
+    /* quicly asserts against resetting a stream that has been reset (e.g., in response to STOP_SENDING) or completed */
+    if (qs->sendstate.app_error_code != UINT64_MAX || quicly_sendstate_transfer_complete(&qs->sendstate))
+        return 0;
+
+    if (reliable_size != 0) {
+        quicly_error_t ret = quicly_set_reset_stream_at(qs, err, reliable_size);
+        if (ret == 0) {
+            if (quicly_stream_sync_sendbuf(qs, 1) != 0)
+                h2o_fatal("no memory");
+            return 1;
+        }
+        /* other errors are memory allocation failures in the range updates, after which the stream cannot be reset otherwise */
+        if (ret != PTLS_ERROR_NOT_AVAILABLE)
+            h2o_fatal("quicly_set_reset_stream_at failed: %" PRId64, (int64_t)ret);
+    }
+    h2o_quic_reset_stream(qs, err);
+    return 0;
 }
 
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn)
