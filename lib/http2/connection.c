@@ -1388,6 +1388,7 @@ static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_
 {
     h2o_http2_frame_t frame;
     ssize_t ret;
+    int hret;
 
     if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, err_desc)) < 0)
         return ret;
@@ -1395,11 +1396,8 @@ static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_
         *err_desc = "expected SETTINGS as the first frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
-    {
-        int hret = handle_settings_frame(conn, &frame, err_desc);
-        if (hret != 0)
-            return hret;
-    }
+    if ((hret = handle_settings_frame(conn, &frame, err_desc)) != 0)
+        return hret;
     conn->_read_expect = expect_default;
     return ret;
 }
