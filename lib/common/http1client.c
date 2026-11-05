@@ -460,8 +460,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
 
         if (http_status == 101) {
-            if (client->_send_own_expect) {
-                /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
+            if (client->super.upgrade_to == NULL) {
+                /* 101 is expected only when trying to establish a tunnel */
                 on_error(client, h2o_httpclient_error_unexpected_101);
                 return;
             }
