@@ -343,6 +343,10 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
             ret = H2O_HTTP2_ERROR_PROTOCOL; // TODO is this alright?
             goto Failed;
         }
+        if (is_end_stream) {
+            ret = H2O_HTTP2_ERROR_PROTOCOL;
+            goto Failed;
+        }
         if (stream->input.status == 100 && stream->send_own_expect) {
             stream->input.status = 0;
             stream->send_own_expect = 0;
