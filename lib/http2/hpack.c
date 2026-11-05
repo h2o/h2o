@@ -646,7 +646,7 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
         *status = 0;
 
     const uint8_t *src_end = src + len;
-    size_t num_headers_decoded = 0;
+    size_t num_headers_decoded = 0, decoded_size = 0;
 
     /* the response MUST contain a :status header as the first element */
     if (status != NULL && src == src_end) {
@@ -674,6 +674,9 @@ int h2o_hpack_parse_response(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb de
             *err_desc = h2o_hpack_err_headers_too_long;
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
+        decoded_size += name->len + value.len;
+        if (decoded_size > H2O_MAX_RESPLEN && *err_desc == NULL)
+            *err_desc = h2o_hpack_err_headers_too_long;
         if (name->base[0] == ':') {
             if (status == NULL) {
                 *err_desc = h2o_hpack_err_invalid_pseudo_header;

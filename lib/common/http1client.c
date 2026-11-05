@@ -419,15 +419,20 @@ static void on_head(h2o_socket_t *sock, const char *err)
     /* continue parsing the responses until we see a final one */
     while (1) {
         /* parse response */
+        size_t inresplen = sock->input->size < H2O_MAX_RESPLEN ? sock->input->size : H2O_MAX_RESPLEN;
         struct phr_header src_headers[MAX_HEADERS];
         num_headers = MAX_HEADERS;
-        rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, src_headers,
+        rlen = phr_parse_response(sock->input->bytes, inresplen, &minor_version, &http_status, &msg, &msg_len, src_headers,
                                   &num_headers, 0);
         switch (rlen) {
         case -1: /* error */
             on_error(client, h2o_httpclient_error_http1_parse_failed);
             return;
         case -2: /* incomplete */
+            if (inresplen == H2O_MAX_RESPLEN) {
+                on_error(client, h2o_httpclient_error_http1_headers_too_long);
+                return;
+            }
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             return;
         }
