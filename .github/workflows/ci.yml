@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-24.04]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -63,7 +63,7 @@ jobs:
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:
     name: OSS Fuzz
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
 
     # see above
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
