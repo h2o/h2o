@@ -146,6 +146,47 @@ static void test_connected(void)
     close(listen_fd);
 }
 
+static void test_dead_pooled_socket(void)
+{
+    char url[64];
+    int listen_fd = open_listener(url, sizeof(url));
+    const char *urls[] = {url};
+    h2o_socketpool_t pool;
+    struct connect_result_t result = {0};
+
+    init_pool(&pool, urls, PTLS_ELEMENTSOF(urls));
+
+    /* connect, and return the socket to the pool */
+    h2o_socketpool_connect(NULL, &pool, &pool.targets.entries[0]->url, test_loop, &getaddr_receiver, h2o_iovec_init(NULL, 0),
+                           on_connect_cb, &result);
+    while (!result.called)
+        run_loop_once();
+    ok(result.sock != NULL);
+    h2o_socketpool_return(&pool, result.sock);
+    ok(pool._shared.count == 1);
+    ok(pool._shared.pooled_count == 1);
+
+    /* close the connection on the server side */
+    int fd = accept(listen_fd, NULL, NULL);
+    assert(fd != -1);
+    close(fd);
+
+    /* connect again; the pooled socket is found to be closed, and a new connection is established */
+    result = (struct connect_result_t){0};
+    h2o_socketpool_connect(NULL, &pool, &pool.targets.entries[0]->url, test_loop, &getaddr_receiver, h2o_iovec_init(NULL, 0),
+                           on_connect_cb, &result);
+    while (!result.called)
+        run_loop_once();
+    ok(result.sock != NULL);
+    ok(pool._shared.count == 1);
+    ok(pool._shared.pooled_count == 0);
+    h2o_socket_close(result.sock);
+    ok(counters_are_zero(&pool));
+
+    h2o_socketpool_dispose(&pool);
+    close(listen_fd);
+}
+
 static void test_cancel_connecting(void)
 {
     char url[64];
@@ -197,6 +238,7 @@ void test_lib__common__socketpool_c(void)
     subtest("refused", test_refused);
     subtest("refused_with_retry", test_refused_with_retry);
     subtest("connected", test_connected);
+    subtest("dead_pooled_socket", test_dead_pooled_socket);
     subtest("cancel_connecting", test_cancel_connecting);
     subtest("cancel_resolving_after_refused", test_cancel_resolving_after_refused);
 }
