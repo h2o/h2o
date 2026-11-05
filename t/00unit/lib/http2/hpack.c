@@ -669,7 +669,8 @@ static void do_test_more_soft_error(const uint8_t *src, size_t len, int is_heade
     result = decode_string(&pool, &soft_errors, &src, src + len, is_header_name, &err_desc);
     ok(result != NULL);
     ok(h2o_memis(result->base, result->len, expected_result.base, expected_result.len));
-    ok(soft_errors == (is_header_name ? H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME : H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE));
+    ok((soft_errors & (H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME | H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE)) ==
+       (is_header_name ? H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME : H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE));
     ok(err_desc == NULL);
 
     h2o_mem_clear_pool(&pool);
@@ -693,6 +694,130 @@ static void test_more_soft_errors(void)
     do_test_more_soft_error((const uint8_t[]){0x03, 'a', 'b', 0x20}, 4, 0, h2o_iovec_init(H2O_STRLIT("ab ")));
 }
 
+static void do_test_pseudo_header_chars(const h2o_token_t *field, h2o_iovec_t decoded, h2o_iovec_t raw, h2o_iovec_t huffman,
+                                        const char *expected_err_desc)
+{
+    for (int use_huffman = 0; use_huffman <= 1; ++use_huffman) {
+        h2o_iovec_t encoded = use_huffman ? huffman : raw;
+        note("%s, %s", field->buf.base, use_huffman ? "huffman" : "raw");
+        assert(((encoded.base[0] & 0x80) != 0) == use_huffman);
+
+        h2o_hpack_header_table_t table = {.hpack_capacity = 4096};
+        h2o_mem_pool_t pool;
+        uint8_t buf[512], *p = buf;
+        h2o_mem_init_pool(&pool);
+
+        /* build a request with the field being tested sent as a literal without indexing, others being GET https:/ */
+        *p++ = 0x87; /* :scheme: https */
+        if (field == H2O_TOKEN_METHOD) {
+            *p++ = 0x02;
+            memcpy(p, encoded.base, encoded.len);
+            p += encoded.len;
+        } else {
+            *p++ = 0x82; /* :method: GET */
+        }
+        if (field == H2O_TOKEN_PATH) {
+            *p++ = 0x04;
+            memcpy(p, encoded.base, encoded.len);
+            p += encoded.len;
+        } else {
+            *p++ = 0x84; /* :path: / */
+        }
+        if (field == H2O_TOKEN_USER_AGENT) {
+            *p++ = 0x0f;
+            *p++ = 0x2b;
+            memcpy(p, encoded.base, encoded.len);
+            p += encoded.len;
+        }
+
+        h2o_iovec_t method = {}, authority = {}, path = {}, protocol = {}, expect = {};
+        const h2o_url_scheme_t *scheme = NULL;
+        h2o_headers_t headers = {};
+        int pseudo_header_exists_map = 0;
+        size_t content_length;
+        const char *err_desc = NULL;
+        int ret =
+            h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &table, &method, &scheme, &authority, &path, &protocol,
+                                    &headers, &pseudo_header_exists_map, &content_length, &expect, NULL, buf, p - buf, &err_desc);
+        if (expected_err_desc == NULL) {
+            ok(ret == 0);
+        } else {
+            ok(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+            ok(err_desc == expected_err_desc);
+        }
+        h2o_iovec_t parsed = field == H2O_TOKEN_METHOD ? method : field == H2O_TOKEN_PATH ? path : headers.entries[0].value;
+        ok(h2o_memis(parsed.base, parsed.len, decoded.base, decoded.len));
+
+        h2o_hpack_dispose_header_table(&table);
+        h2o_mem_clear_pool(&pool);
+    }
+}
+
+static void test_pseudo_header_chars(void)
+{
+#define SUCCESS(field, decoded, raw, huffman)                                                                                      \
+    do_test_pseudo_header_chars(field, h2o_iovec_init(H2O_STRLIT(decoded)), h2o_iovec_init(H2O_STRLIT(raw)),                       \
+                                h2o_iovec_init(H2O_STRLIT(huffman)), NULL)
+#define FAILURE(field, decoded, raw, huffman, err_desc)                                                                            \
+    do_test_pseudo_header_chars(field, h2o_iovec_init(H2O_STRLIT(decoded)), h2o_iovec_init(H2O_STRLIT(raw)),                       \
+                                h2o_iovec_init(H2O_STRLIT(huffman)), err_desc)
+
+    /* the Huffman-encoded forms have been generated from the code table of RFC 7541 Appendix B, independently of the decoder */
+    /* clang-format off */
+    SUCCESS(H2O_TOKEN_METHOD, "GET", "\x03" "GET", "\x83\xc5\x83\x7f");
+    SUCCESS(H2O_TOKEN_METHOD, "M-SEARCH", "\x08" "M-SEARCH", "\x87\xd0\xb6\xec\x10\xed\xbd\x8f");
+    SUCCESS(H2O_TOKEN_METHOD, "!#$%&'*+-.^_`|~09azAZ", "\x15" "!#$%&'*+-.^_`|~09azAZ",
+            "\x98\xfe\x3f\xeb\xff\x2a\xfc\x7f\xaf\x9f\xf6\xb2\xff\xfe\x45\xff\xf7\xfe\x7f\xf4\x0f\x8f\xdc\x3f\xbf");
+    FAILURE(H2O_TOKEN_METHOD, "", "\x00", "\x80", h2o_hpack_err_invalid_pseudo_header);
+    FAILURE(H2O_TOKEN_METHOD, "GET /secret", "\x0b" "GET /secret", "\x88\xc5\x83\x7a\x8c\x20\xa4\xb0\xa9",
+            h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    FAILURE(H2O_TOKEN_METHOD, "G\tET", "\x04" "G\tET", "\x86\xc5\xff\xff\xd5\x83\x7f",
+            h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    FAILURE(H2O_TOKEN_METHOD, "(GET)", "\x05" "(GET)", "\x86\xfe\xb1\x60\xdf\xfd\xff",
+            h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    FAILURE(H2O_TOKEN_METHOD, "G\x80" "T", "\x03" "G\x80" "T", "\x85\xc5\xff\xfc\xdb\xff",
+            h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    SUCCESS(H2O_TOKEN_PATH, "/", "\x01" "/", "\x81\x63");
+    SUCCESS(H2O_TOKEN_PATH, "*", "\x01" "*", "\x81\xf9");
+    SUCCESS(H2O_TOKEN_PATH, "/?a=%20b&c[]=\"{}|^`<>#\x80\xff", "\x18" "/?a=%20b&c[]=\"{}|^`<>#\x80\xff",
+            "\xa1\x63\xfc\x1c\x0a\x88\x11\xfc\x13\xff\x7f\xfc\x83\xf9\xff\xfd\xff\xef\xfc\xff\xf3\xff\xef\xff\xcf\xfb\xff\xaf\xff\xe6"
+            "\xff\xff\xfb\xbf");
+    FAILURE(H2O_TOKEN_PATH, "/a b", "\x04" "/a b", "\x83\x60\x6a\x47", h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    FAILURE(H2O_TOKEN_PATH, "/a\tb", "\x04" "/a\tb", "\x86\x60\x7f\xff\xfd\x51\xff",
+            h2o_hpack_soft_err_found_invalid_char_in_header_value);
+    /* SP and HTAB are allowed in other header fields */
+    SUCCESS(H2O_TOKEN_USER_AGENT, "a b", "\x03" "a b", "\x83\x1a\x91\xff");
+    SUCCESS(H2O_TOKEN_USER_AGENT, "a\tb", "\x03" "a\tb", "\x85\x1f\xff\xff\x54\x7f");
+    /* clang-format on */
+#undef SUCCESS
+#undef FAILURE
+
+    note("soft error is retained by the dynamic table");
+    {
+        h2o_hpack_header_table_t table = {.hpack_capacity = 4096};
+        h2o_mem_pool_t pool;
+        h2o_mem_init_pool(&pool);
+        for (int i = 0; i < 2; ++i) {
+            /* first request adds `:path: /a b` to the dynamic table, the second one refers to it */
+            static const uint8_t first[] = {0x87, 0x82, 0x44, 4, '/', 'a', ' ', 'b'}, second[] = {0x87, 0x82, 0xbe};
+            h2o_iovec_t method = {}, authority = {}, path = {}, protocol = {}, expect = {};
+            const h2o_url_scheme_t *scheme = NULL;
+            h2o_headers_t headers = {};
+            int pseudo_header_exists_map = 0;
+            size_t content_length;
+            const char *err_desc = NULL;
+            int ret = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &table, &method, &scheme, &authority, &path,
+                                              &protocol, &headers, &pseudo_header_exists_map, &content_length, &expect, NULL,
+                                              i == 0 ? first : second, i == 0 ? sizeof(first) : sizeof(second), &err_desc);
+            ok(ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+            ok(err_desc == h2o_hpack_soft_err_found_invalid_char_in_header_value);
+            ok(h2o_memis(path.base, path.len, H2O_STRLIT("/a b")));
+        }
+        h2o_hpack_dispose_header_table(&table);
+        h2o_mem_clear_pool(&pool);
+    }
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -702,4 +827,5 @@ void test_lib__http2__hpack(void)
     subtest("inherit-invalid", test_inherit_invalid);
     subtest("dynamic-table-size-update", test_dynamic_table_size_update);
     subtest("empty-header-name", test_more_soft_errors);
+    subtest("pseudo-header-chars", test_pseudo_header_chars);
 }
