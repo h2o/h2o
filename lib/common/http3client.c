@@ -125,6 +125,13 @@ static quicly_error_t handle_input_expect_data_frame(struct st_h2o_http3client_r
 static void start_request(struct st_h2o_http3client_req_t *req);
 static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream);
 
+/**
+ * Set while `on_send_emit` is calling `proceed_req`. Request body written synchronously during that period is not notified to
+ * quicly using `quicly_stream_sync_sendbuf`, as that would invoke the stream scheduler being run; instead, `on_send_emit` clears
+ * `wrote_all`.
+ */
+static __thread struct st_h2o_http3client_req_t *req_in_send_emit;
+
 static size_t emit_data(struct st_h2o_http3client_req_t *req, h2o_iovec_t payload)
 {
     size_t nbytes;
@@ -653,7 +660,10 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
     memcpy(dst, req->sendbuf->bytes + off, *len);
 
     if (*wrote_all && req->proceed_req.bytes_inflight != SIZE_MAX) {
+        assert(req_in_send_emit == NULL);
+        req_in_send_emit = req;
         call_proceed_req(req, NULL);
+        req_in_send_emit = NULL;
         /* `proceed_req` might have synchronously either appended data by calling `do_write_req`, or raised an error:
          *  * in the case of an error the stream is detached and quicly sends a reset,
          *  * if data has been appended, notify quicly by clearing `*wrote_all`. */
@@ -895,8 +905,12 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
     }
 
     req->proceed_req.bytes_inflight = chunk.len;
-    quicly_stream_sync_sendbuf(req->quic, 1);
-    h2o_quic_schedule_timer(&req->conn->super.super);
+    if (req_in_send_emit != NULL) {
+        assert(req_in_send_emit == req);
+    } else {
+        quicly_stream_sync_sendbuf(req->quic, 1);
+        h2o_quic_schedule_timer(&req->conn->super.super);
+    }
     return 0;
 }
 
