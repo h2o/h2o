@@ -818,6 +818,42 @@ static void test_pseudo_header_chars(void)
     }
 }
 
+static void do_test_response_size_limit(size_t value_len, int expected_ret)
+{
+    h2o_hpack_header_table_t table = {.hpack_capacity = 4096};
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {};
+    const char *err_desc = NULL;
+    int status;
+
+    h2o_mem_init_pool(&pool);
+
+    /* ":status: 200", followed by "x-a" as a literal field */
+    uint8_t *src = h2o_mem_alloc_pool(&pool, uint8_t, value_len + 16), *p = src;
+    *p++ = 0x88;
+    *p++ = 0x00;
+    *p++ = 3;
+    memcpy(p, "x-a", 3);
+    p += 3;
+    *p = 0;
+    p = h2o_hpack_encode_int(p, value_len, 7);
+    memset(p, 'a', value_len);
+    p += value_len;
+
+    int ret = h2o_hpack_parse_response(&pool, h2o_hpack_decode_header, &table, &status, &headers, NULL, src, p - src, &err_desc);
+    ok(ret == expected_ret);
+    ok(err_desc == (expected_ret == 0 ? NULL : h2o_hpack_err_headers_too_long));
+
+    h2o_mem_clear_pool(&pool);
+}
+
+static void test_response_size_limit(void)
+{
+    size_t max_value_len = H2O_MAX_RESPLEN - (sizeof(":status200") - 1) - (sizeof("x-a") - 1);
+    do_test_response_size_limit(max_value_len, 0);
+    do_test_response_size_limit(max_value_len + 1, H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+}
+
 void test_lib__http2__hpack(void)
 {
     subtest("hpack", test_hpack);
@@ -828,4 +864,5 @@ void test_lib__http2__hpack(void)
     subtest("dynamic-table-size-update", test_dynamic_table_size_update);
     subtest("empty-header-name", test_more_soft_errors);
     subtest("pseudo-header-chars", test_pseudo_header_chars);
+    subtest("response-size-limit", test_response_size_limit);
 }

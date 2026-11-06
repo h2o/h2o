@@ -25,6 +25,26 @@ subtest "decoded header count soft limit" => sub {
     like $body, qr{headers too long}, "soft error is reported";
 };
 
+subtest "decoded section size limit" => sub {
+    my $client_prog = bindir() . "/h2o-httpclient";
+    plan skip_all => "$client_prog not found"
+        unless -e $client_prog;
+    for my $proto (qw(2 3)) {
+        subtest "HTTP/$proto" => sub {
+            my $port = $proto == 3 ? $server->{quic_port} : $server->{tls_port};
+            my $get = sub {
+                my $num_headers = shift;
+                my $headers = join " ", map { "-H x-hpack-bomb-$_:@{['a' x 9000]}" } 1..$num_headers;
+                return `$client_prog -k -$proto 100 $headers https://127.0.0.1:$port/ 2>&1`;
+            };
+            like $get->(40), qr{^HTTP/$proto 200\s*$}m, "request within the decoded size limit succeeds";
+            my $resp = $get->(50);
+            like $resp, qr{^HTTP/$proto 400\s*$}m, "request exceeding the decoded size limit fails";
+            like $resp, qr{headers too long}, "soft error is reported";
+        };
+    }
+};
+
 undef $server;
 
 done_testing;

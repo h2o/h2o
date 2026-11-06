@@ -238,6 +238,18 @@ static void test_process_range(void)
         ok(*ranges == 5);
     }
 
+    { /* trailing comma at the end of a buffer that is not NUL-terminated */
+        static const char src[] = "bytes=1-3,";
+        char *buf = h2o_mem_alloc(sizeof(src) - 1);
+        memcpy(buf, src, sizeof(src) - 1);
+        testrange = h2o_iovec_init(buf, sizeof(src) - 1);
+        ranges = process_range(&testpool, &testrange, 100, &ret);
+        ok(ret == 1);
+        ok(*ranges++ == 1);
+        ok(*ranges == 3);
+        free(buf);
+    }
+
     {
         testrange = h2o_iovec_init(H2O_STRLIT("bytes= 1-3"));
         ranges = process_range(&testpool, &testrange, 100, &ret);
