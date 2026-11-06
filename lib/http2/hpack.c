@@ -90,7 +90,8 @@ static char *huffdecode4(char *dst, uint8_t in, uint8_t *state, int *maybe_eos, 
         return NULL;
     if ((entry->flags & NGHTTP2_HUFF_SYM) != 0) {
         *dst++ = entry->sym;
-        *seen_char_types |= (entry->flags & (NGHTTP2_HUFF_INVALID_CHARS | NGHTTP2_HUFF_UPPER_CASE_CHAR));
+        *seen_char_types |= (entry->flags & (NGHTTP2_HUFF_INVALID_CHARS | NGHTTP2_HUFF_UPPER_CASE_CHAR |
+                                             NGHTTP2_HUFF_INVALID_FOR_METHOD | NGHTTP2_HUFF_INVALID_FOR_PATH));
     }
     *state = entry->state;
     *maybe_eos = (entry->flags & NGHTTP2_HUFF_ACCEPTED) != 0;
@@ -150,6 +151,10 @@ size_t h2o_hpack_decode_huffman(char *_dst, unsigned *soft_errors, const uint8_t
     } else {
         if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE) != 0 || !header_value_valid_as_whole(_dst, dst - _dst))
             *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
+        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_METHOD) != 0)
+            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_METHOD;
+        if ((seen_char_types & NGHTTP2_HUFF_INVALID_FOR_PATH) != 0)
+            *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_PATH;
     }
 
     return dst - _dst;
@@ -195,29 +200,35 @@ void h2o_hpack_validate_header_value(unsigned *soft_errors, const char *s, size_
 {
     /* surrounding whitespace RFC 9113 8.2.1 */
     if (!header_value_valid_as_whole(s, len))
-        goto Invalid;
+        *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
 
-    /* all printable chars + horizontal tab (RFC 7230 3.2) */
-    static const char valid_h2_field_value_char[] = {
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /*    0-31 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   32-63 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /*   64-95 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, /*  96-127 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 128-159 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 160-191 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 192-223 */
-        1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 224-255 */
+    /* soft errors caused by each character; header values may contain all printable chars, horizontal tab, and octets >= 0x80
+     * (RFC 7230 3.2), :method is a token (RFC 9110 5.6.2), :path cannot contain whitespace */
+    static const uint8_t char_soft_errors[] = {
+        0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0xc, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, /*   0- 15 */
+        0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, 0x6, /*  16- 31 */
+        0xc, 0x0, 0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x4, 0x0, 0x0, 0x4, 0x0, 0x0, 0x4, /*  32- 47 */
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /*  48- 63 */
+        0x4, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, /*  64- 79 */
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x4, 0x4, 0x0, 0x0, /*  80- 95 */
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, /*  96-111 */
+        0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x4, 0x0, 0x4, 0x0, 0x6, /* 112-127 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 128-143 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 144-159 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 160-175 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 176-191 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 192-207 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 208-223 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 224-239 */
+        0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, 0x4, /* 240-255 */
     };
+    H2O_BUILD_ASSERT(H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE == 0x2 && H2O_HPACK_SOFT_ERROR_BIT_INVALID_METHOD == 0x4 &&
+                     H2O_HPACK_SOFT_ERROR_BIT_INVALID_PATH == 0x8);
 
-    for (; len != 0; ++s, --len) {
-        unsigned char ch = (unsigned char)*s;
-        if (!valid_h2_field_value_char[ch])
-            goto Invalid;
-    }
-    return;
-
-Invalid:
-    *soft_errors |= H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
+    unsigned seen = 0;
+    for (; len != 0; ++s, --len)
+        seen |= char_soft_errors[(unsigned char)*s];
+    *soft_errors |= seen;
 }
 
 static h2o_iovec_t *decode_string(h2o_mem_pool_t *pool, unsigned *soft_errors, const uint8_t **src, const uint8_t *src_end,
@@ -402,7 +413,7 @@ Redo:
 
     /* determine the value (if necessary) */
     if (!value_is_indexed) {
-        soft_errors &= ~H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE;
+        soft_errors &= H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME;
         if ((value = decode_string(pool, &soft_errors, src, src_end, 0, err_desc)) == NULL)
             return H2O_HTTP2_ERROR_COMPRESSION;
     }
@@ -424,14 +435,22 @@ Redo:
 
     *_name = name;
     *_value = *value;
-    if (soft_errors != 0) {
-        *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
-                        ? h2o_hpack_soft_err_found_invalid_char_in_header_name
-                        : h2o_hpack_soft_err_found_invalid_char_in_header_value;
+    return h2o_hpack_return_soft_errors(name, soft_errors, err_desc);
+}
+
+int h2o_hpack_return_soft_errors(const h2o_iovec_t *name, unsigned soft_errors, const char **err_desc)
+{
+    if ((soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0) {
+        *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_name;
         return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
-    } else {
-        return 0;
     }
+    if ((soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE) != 0 ||
+        ((soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_METHOD) != 0 && name == &H2O_TOKEN_METHOD->buf) ||
+        ((soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_PATH) != 0 && name == &H2O_TOKEN_PATH->buf)) {
+        *err_desc = h2o_hpack_soft_err_found_invalid_char_in_header_value;
+        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
+    }
+    return 0;
 }
 
 static uint8_t *encode_status(uint8_t *dst, int status)
@@ -534,7 +553,6 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             *err_desc = h2o_hpack_err_headers_too_long;
         if (name->base[0] == ':') {
             if (pseudo_header_exists_map != NULL) {
-                /* FIXME validate the chars in the value (e.g. reject SP in path) */
                 if (name == &H2O_TOKEN_AUTHORITY->buf) {
                     if (authority->base != NULL) {
                         *err_desc = h2o_hpack_err_invalid_pseudo_header;
@@ -547,6 +565,8 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
                         *err_desc = h2o_hpack_err_invalid_pseudo_header;
                         return H2O_HTTP2_ERROR_PROTOCOL;
                     }
+                    if (value.len == 0 && *err_desc == NULL)
+                        *err_desc = h2o_hpack_err_invalid_pseudo_header;
                     *method = value;
                     *pseudo_header_exists_map |= H2O_HPACK_PARSE_HEADERS_METHOD_EXISTS;
                 } else if (name == &H2O_TOKEN_PROTOCOL->buf) {
