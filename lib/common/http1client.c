@@ -346,7 +346,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
 
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
-            newsz = size;
+            newsz = 0;
             client->_do_keepalive = 0;
             errstr = h2o_httpclient_error_http1_parse_failed;
             break;
