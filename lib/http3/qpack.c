@@ -744,13 +744,7 @@ static int decode_header(h2o_mem_pool_t *pool, void *_ctx, h2o_iovec_t **name, h
     ++ctx->stats->count;
     ctx->stats->text_bytes += (*name)->len + value->len;
 
-    if (soft_errors != 0) {
-        *err_desc = (soft_errors & H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME) != 0
-                        ? h2o_hpack_soft_err_found_invalid_char_in_header_name
-                        : h2o_hpack_soft_err_found_invalid_char_in_header_value;
-        return H2O_HTTP2_ERROR_INVALID_HEADER_CHAR;
-    }
-    return 0;
+    return h2o_hpack_return_soft_errors(*name, soft_errors, err_desc);
 Fail:
     return H2O_HTTP3_ERROR_QPACK_DECOMPRESSION_FAILED;
 }
