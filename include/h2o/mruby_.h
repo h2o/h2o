@@ -228,6 +228,14 @@ int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o
                                      int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_header_t *, void *),
                                      void *cb_data);
 int h2o_mruby_set_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *req);
+/**
+ * Rejects hop-by-hop header fields being supplied by an application, as they are not part of the semantics being exchanged between
+ * h2o and the applications. Returns 0 if the field is not a hop-by-hop header field. `connection: close` is accepted as a
+ * preference of the application; 1 is returned indicating that the header field is to be dropped, and `*is_connection_close` is set
+ * if `is_connection_close` is not NULL. For other hop-by-hop header fields, -1 is returned after setting `mrb->exc`.
+ */
+int h2o_mruby_reject_hop_by_hop_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value,
+                                       int *is_connection_close);
 
 mrb_value h2o_mruby_token_string(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);
 mrb_value h2o_mruby_token_env_key(h2o_mruby_shared_context_t *shared, const h2o_token_t *token);

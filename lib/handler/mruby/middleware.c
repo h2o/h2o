@@ -437,10 +437,14 @@ static int handle_header_env_key(h2o_mruby_shared_context_t *shared_ctx, h2o_iov
 {
     h2o_req_t *req = _req;
     const h2o_token_t *token;
+    int ret;
 
     h2o_iovec_t name = convert_env_key_to_header_name(&req->pool, env_key->base, env_key->len, 1);
     if (name.base == NULL)
         return 0;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, &name, value, NULL)) != 0)
+        return ret > 0 ? 0 : -1;
 
     if ((token = h2o_lookup_token(name.base, name.len)) != NULL) {
         if (token == H2O_TOKEN_CONTENT_LENGTH) {
