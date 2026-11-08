@@ -302,6 +302,33 @@ int main(int argc, char **argv)
     ok(doc->data.mapping.elements[0].value->_refcnt == 1);
     ok(doc->data.mapping.elements[1].value->_refcnt == 1);
 
+    doc = parse(
+        "foo.yaml",
+        "<<: [ { x: 1 }, { y: 2 } ]\n"
+        "z: 3\n"
+    );
+    ok(doc != NULL);
+    ok(doc->type == YOML_TYPE_MAPPING);
+    ok(doc->data.mapping.size == 3);
+    t = get_value(doc, "x");
+    ok(t != NULL);
+    ok(t->type == YOML_TYPE_SCALAR);
+    ok(strcmp(t->data.scalar, "1") == 0);
+    t = get_value(doc, "y");
+    ok(t != NULL);
+    ok(t->type == YOML_TYPE_SCALAR);
+    ok(strcmp(t->data.scalar, "2") == 0);
+    t = get_value(doc, "z");
+    ok(t != NULL);
+    ok(t->type == YOML_TYPE_SCALAR);
+    ok(strcmp(t->data.scalar, "3") == 0);
+
+    doc = parse(
+        "foo.yaml",
+        "<<: [ { x: 1 }, 2 ]\n"
+        "z: 3\n"
+    );
+    ok(doc == NULL);
 
     return done_testing();
 }
