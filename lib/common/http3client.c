@@ -700,9 +700,13 @@ static quicly_error_t on_receive_process_bytes(struct st_h2o_http3client_req_t *
 {
     int is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
     assert(is_eos || *src != src_end);
-    quicly_error_t ret;
+    quicly_error_t ret = 0;
 
     do {
+        /* stop processing (thereby not extending the stream-level window) while the response body buffer is full, unless the
+         * entire stream has been received */
+        if (!is_eos && req->recvbuf.body->size >= req->super.ctx->max_buffer_size)
+            break;
         if ((ret = req->handle_input(req, src, src_end, is_eos ? ERROR_EOS : 0, err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
                 ret = is_eos ? H2O_HTTP3_ERROR_FRAME : 0;
@@ -713,43 +717,8 @@ static quicly_error_t on_receive_process_bytes(struct st_h2o_http3client_req_t *
     return ret;
 }
 
-static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+static void finish_processing_input(struct st_h2o_http3client_req_t *req, size_t bytes_consumed, quicly_error_t err)
 {
-    struct st_h2o_http3client_req_t *req = qs->data;
-    size_t bytes_consumed;
-    quicly_error_t err = 0;
-    const char *err_desc = NULL;
-
-    /* process the input, update stream-level receive buffer */
-    if (req->recvbuf.stream->size == 0 && off == 0) {
-
-        /* fast path; process the input directly, save the remaining bytes */
-        const uint8_t *src = input;
-        err = on_receive_process_bytes(req, &src, src + len, &err_desc);
-        bytes_consumed = src - (const uint8_t *)input;
-        if (bytes_consumed != len)
-            h2o_buffer_append(&req->recvbuf.stream, src, len - bytes_consumed);
-    } else {
-        /* slow path; copy data to partial_frame */
-        size_t size_required = off + len;
-        if (req->recvbuf.stream->size < size_required) {
-            h2o_buffer_reserve(&req->recvbuf.stream, size_required - req->recvbuf.stream->size);
-            req->recvbuf.stream->size = size_required;
-        }
-        memcpy(req->recvbuf.stream->bytes + off, input, len);
-
-        /* just return if no new data is available */
-        size_t bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
-        if (req->recvbuf.prev_bytes_available == bytes_available)
-            return;
-
-        /* process the bytes that have not been processed, update stream-level buffer */
-        const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes;
-        err = on_receive_process_bytes(req, &src, (const uint8_t *)req->recvbuf.stream->bytes + bytes_available, &err_desc);
-        bytes_consumed = src - (const uint8_t *)req->recvbuf.stream->bytes;
-        h2o_buffer_consume(&req->recvbuf.stream, bytes_consumed);
-    }
-
     /* update QUIC stream-level state */
     if (bytes_consumed != 0)
         quicly_stream_sync_recvbuf(req->quic, bytes_consumed);
@@ -776,6 +745,51 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
             /* wait for write_req to be called */
         }
     }
+}
+
+static void process_buffered_input(struct st_h2o_http3client_req_t *req)
+{
+    size_t bytes_available = quicly_recvstate_bytes_available(&req->quic->recvstate);
+    const uint8_t *src = (const uint8_t *)req->recvbuf.stream->bytes;
+    const char *err_desc = NULL;
+
+    quicly_error_t err = on_receive_process_bytes(req, &src, src + bytes_available, &err_desc);
+    size_t bytes_consumed = src - (const uint8_t *)req->recvbuf.stream->bytes;
+    h2o_buffer_consume(&req->recvbuf.stream, bytes_consumed);
+
+    finish_processing_input(req, bytes_consumed, err);
+}
+
+static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
+{
+    struct st_h2o_http3client_req_t *req = qs->data;
+
+    if (req->recvbuf.stream->size == 0 && off == 0) {
+        /* fast path; process the input directly, save the remaining bytes */
+        const uint8_t *src = input;
+        const char *err_desc = NULL;
+        quicly_error_t err = on_receive_process_bytes(req, &src, src + len, &err_desc);
+        size_t bytes_consumed = src - (const uint8_t *)input;
+        if (bytes_consumed != len)
+            h2o_buffer_append(&req->recvbuf.stream, src, len - bytes_consumed);
+        finish_processing_input(req, bytes_consumed, err);
+        return;
+    }
+
+    /* slow path; copy data to partial_frame */
+    size_t size_required = off + len;
+    if (req->recvbuf.stream->size < size_required) {
+        h2o_buffer_reserve(&req->recvbuf.stream, size_required - req->recvbuf.stream->size);
+        req->recvbuf.stream->size = size_required;
+    }
+    memcpy(req->recvbuf.stream->bytes + off, input, len);
+
+    /* just return if neither new data nor EOS is available */
+    if (req->recvbuf.prev_bytes_available == quicly_recvstate_bytes_available(&req->quic->recvstate) &&
+        !quicly_recvstate_transfer_complete(&req->quic->recvstate))
+        return;
+
+    process_buffered_input(req);
 }
 
 static void on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
@@ -873,8 +887,14 @@ static void do_get_conn_properties(h2o_httpclient_t *_client, h2o_httpclient_con
 
 static void do_update_window(h2o_httpclient_t *_client)
 {
-    /* TODO Stop receiving data for the stream when `buf` grows to certain extent. Then, resume when this function is being called.
-     */
+    struct st_h2o_http3client_req_t *req = (void *)_client;
+    h2o_quic_conn_t *conn = &req->conn->super.super;
+
+    /* resume processing the bytes that have been retained while the response body buffer was full */
+    if (req->quic == NULL || quicly_recvstate_bytes_available(&req->quic->recvstate) == 0)
+        return;
+    process_buffered_input(req);
+    h2o_quic_schedule_timer(conn);
 }
 
 int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream)
