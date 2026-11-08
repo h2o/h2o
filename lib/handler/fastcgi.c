@@ -610,6 +610,10 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
                        input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
                 generator->resp.receiving->size = header->contentLength;
             }
+            if (generator->resp.receiving->size >= H2O_MAX_RESPLEN) {
+                h2o_req_log_error(generator->req, MODULE_NAME, "response headers too long");
+                return -1;
+            }
             return 0;
         } else {
             h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");
