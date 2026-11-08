@@ -253,6 +253,11 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 static int handle_early_hints_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
+    int ret;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, name, value, NULL)) != 0)
+        return ret > 0 ? 0 : -1;
+
     h2o_add_header_by_str(&req->pool, &req->res.headers, name->base, name->len, 1, NULL, value.base, value.len);
     return 0;
 }
@@ -1018,6 +1023,22 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
+static int handle_rack_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+    int is_connection_close = 0, ret;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, name, value, &is_connection_close)) != 0) {
+        if (ret < 0)
+            return -1;
+        if (is_connection_close)
+            req->http1_is_persistent = 0;
+        return 0;
+    }
+
+    return h2o_mruby_set_response_header(shared_ctx, name, value, req);
+}
+
 static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
@@ -1028,7 +1049,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_rack_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_set_response_header,
+    if (h2o_mruby_iterate_rack_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), handle_rack_response_header,
                                        generator->req) != 0) {
         return -1;
     }

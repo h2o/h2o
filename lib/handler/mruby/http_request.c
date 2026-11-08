@@ -39,7 +39,6 @@ struct st_h2o_mruby_http_request_context_t {
         h2o_headers_t headers;
         h2o_iovec_t body; /* body.base != NULL indicates that post content exists (and the length MAY be zero) */
         unsigned method_is_head : 1;
-        unsigned has_transfer_encoding : 1;
         unsigned can_keepalive : 1;
     } req;
     struct {
@@ -271,9 +270,10 @@ static void post_response(struct st_h2o_mruby_http_request_context_t *ctx, int s
     /* set headers */
     mrb_value headers_hash = mrb_hash_new_capa(mrb, (int)num_headers);
     for (i = 0; i < num_headers; ++i) {
-        /* skip the headers, we determine the eos! */
+        /* skip content-length (we determine the eos) and hop-by-hop header fields */
         if (h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len, H2O_STRLIT("content-length")) ||
-            h2o_memis(headers_sorted[i].name->base, headers_sorted[i].name->len, H2O_STRLIT("transfer-encoding")))
+            (h2o_iovec_is_token(headers_sorted[i].name) &&
+             H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers_sorted[i].name)->flags.is_hop_by_hop))
             continue;
         /* build and set the hash entry */
         mrb_value k, v;
@@ -503,19 +503,19 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
 static int flatten_request_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_ctx)
 {
     struct st_h2o_mruby_http_request_context_t *ctx = _ctx;
+    int is_connection_close = 0, ret;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, name, value, &is_connection_close)) != 0) {
+        if (ret < 0)
+            return -1;
+        if (is_connection_close)
+            ctx->req.can_keepalive = 0;
+        return 0;
+    }
 
     /* ignore certain headers */
     if (h2o_lcstris(name->base, name->len, H2O_STRLIT("content-length")) || h2o_lcstris(name->base, name->len, H2O_STRLIT("host")))
         return 0;
-
-    if (h2o_lcstris(name->base, name->len, H2O_STRLIT("connection"))) {
-        if (!ctx->req.can_keepalive)
-            return 0;
-    }
-
-    /* mark the existence of transfer-encoding in order to prevent us from adding content-length header */
-    if (h2o_lcstris(name->base, name->len, H2O_STRLIT("transfer-encoding")))
-        ctx->req.has_transfer_encoding = 1;
 
     h2o_add_header_by_str(&ctx->pool, &ctx->req.headers, name->base, name->len, 1, NULL, value.base, value.len);
 
@@ -596,11 +596,9 @@ static mrb_value http_request_method(mrb_state *mrb, mrb_value self)
             }
             // FIXME: how to handle fastpath and who frees this?
             ctx->req.body = h2o_strdup(&ctx->pool, RSTRING_PTR(body), RSTRING_LEN(body));
-            if (!ctx->req.has_transfer_encoding) {
-                char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
-                size_t l = (size_t)sprintf(buf, "%zu", ctx->req.body.len);
-                h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONTENT_LENGTH, NULL, buf, l);
-            }
+            char *buf = h2o_mem_alloc_pool(&ctx->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
+            size_t l = (size_t)sprintf(buf, "%zu", ctx->req.body.len);
+            h2o_add_header(&ctx->pool, &ctx->req.headers, H2O_TOKEN_CONTENT_LENGTH, NULL, buf, l);
         }
     }
 
