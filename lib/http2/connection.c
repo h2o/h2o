@@ -768,6 +768,21 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
     return 0;
 }
 
+static int discard_headers(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
+{
+    /* decode the header block to keep the header table in sync, then discard the result */
+    h2o_mem_pool_t pool;
+    size_t dummy_content_length;
+    int ret;
+
+    h2o_mem_init_pool(&pool);
+    ret = h2o_hpack_parse_request(&pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL, NULL, NULL, NULL,
+                                  NULL, &dummy_content_length, NULL, NULL, src, len, err_desc);
+    h2o_mem_clear_pool(&pool);
+
+    return ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR ? 0 : ret;
+}
+
 static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
 {
     h2o_http2_frame_t frame;
@@ -782,8 +797,9 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
 
-    if (frame.stream_id != conn->_continuation.stream_id || (stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) == NULL ||
-        !(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY)) {
+    if (frame.stream_id != conn->_continuation.stream_id ||
+        ((stream = h2o_http2_conn_get_stream(conn, frame.stream_id)) != NULL &&
+         !(stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS || stream->state == H2O_HTTP2_STREAM_STATE_RECV_BODY))) {
         *err_desc = "unexpected stream id in CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
@@ -795,7 +811,10 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
 
         if ((frame.flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) != 0) {
             conn->_read_expect = expect_default;
-            if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
+            if (stream == NULL) {
+                hret =
+                    discard_headers(conn, (const uint8_t *)conn->_continuation.buf->bytes, conn->_continuation.buf->size, err_desc);
+            } else if (stream->state == H2O_HTTP2_STREAM_STATE_RECV_HEADERS) {
                 hret = handle_incoming_request(conn, stream, (const uint8_t *)conn->_continuation.buf->bytes,
                                                conn->_continuation.buf->size, err_desc);
             } else {
@@ -808,9 +827,9 @@ static ssize_t expect_continuation_of_headers(h2o_http2_conn_t *conn, const uint
             conn->_continuation.buf = NULL;
         }
     } else {
-        /* request is too large (TODO log) */
-        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_REFUSED_STREAM);
-        h2o_http2_stream_reset(conn, stream);
+        /* request is too large (TODO log); the header table cannot be kept in sync, as the header block is not decoded */
+        *err_desc = "too large header block";
+        return H2O_HTTP2_ERROR_ENHANCE_YOUR_CALM;
     }
 
     return ret;
@@ -1053,8 +1072,10 @@ static int handle_headers_frame(h2o_http2_conn_t *conn, h2o_http2_frame_t *frame
     }
     if (frame->stream_id <= conn->pull_stream_ids.max_open) {
         if ((stream = h2o_http2_conn_get_stream(conn, frame->stream_id)) == NULL) {
-            *err_desc = "closed stream id in HEADERS frame";
-            return H2O_HTTP2_ERROR_STREAM_CLOSED;
+            /* the stream has been closed (e.g., reset by us), ignore the header block */
+            if ((frame->flags & H2O_HTTP2_FRAME_FLAG_END_HEADERS) == 0)
+                goto PREPARE_FOR_CONTINUATION;
+            return discard_headers(conn, payload.headers, payload.headers_len, err_desc);
         }
         if (!(stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN_BEFORE_FIRST_FRAME ||
               stream->req_body.state == H2O_HTTP2_REQ_BODY_OPEN)) {
