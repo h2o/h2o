@@ -2109,14 +2109,13 @@ static const h2o_webtransport_stream_callbacks_t wt_noop_callbacks = {wt_noop_on
 static void wt_sched_activate(struct st_h2o_http3_server_conn_t *conn, struct st_h2o_http3_server_wt_stream_t *ws)
 {
 #define SEND_ORDER(link) H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_wt_stream_t, sched_link, (link))->super.send_order
-    h2o_linklist_t *at = &conn->wt.scheduler.active;
+    h2o_linklist_t *at = conn->wt.scheduler.active.prev;
 
-    /* unless the send order is higher than that of the last stream, the stream goes to the tail */
-    if (!h2o_linklist_is_empty(at) && SEND_ORDER(at->prev) < ws->super.send_order) {
-        for (at = conn->wt.scheduler.active.next; SEND_ORDER(at) >= ws->super.send_order; at = at->next)
-            ;
-    }
-    h2o_linklist_insert(at, &ws->sched_link);
+    /* after the last stream of a send order not lower, so that streams of a send order take turns; searched from the tail, as a
+     * stream usually goes there or near it, which a stream moved up past a few others costs only as many steps */
+    while (at != &conn->wt.scheduler.active && SEND_ORDER(at) < ws->super.send_order)
+        at = at->prev;
+    h2o_linklist_insert(at->next, &ws->sched_link);
 #undef SEND_ORDER
 }
 

@@ -643,6 +643,23 @@ static void test_h3_webtransport_send_order(void)
     h2o_webtransport_stream_set_send_order(s[2], 0);
     ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[0], s[1], s[2], s[3]}, 4));
 
+    /* a stream moved up goes behind those of its new send order, ahead of every lower one, and to the head when highest */
+    h2o_webtransport_stream_set_send_order(s[3], 0);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[0], s[1], s[2], s[3]}, 4));
+    h2o_webtransport_stream_set_send_order(s[2], 5);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[2], s[0], s[1], s[3]}, 4));
+    h2o_webtransport_stream_set_send_order(s[3], 3);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[2], s[3], s[0], s[1]}, 4));
+    h2o_webtransport_stream_set_send_order(s[1], 9);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[1], s[2], s[3], s[0]}, 4));
+    /* and one moved down goes behind every stream not lower */
+    h2o_webtransport_stream_set_send_order(s[1], 3);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[2], s[3], s[1], s[0]}, 4));
+    h2o_webtransport_stream_set_send_order(s[2], 0);
+    h2o_webtransport_stream_set_send_order(s[3], 0);
+    h2o_webtransport_stream_set_send_order(s[1], 0);
+    ok(wt_sched_is(f, (h2o_webtransport_stream_t *[]){s[0], s[2], s[3], s[1]}, 4));
+
     /* every stream is delivered */
     wt_steps(f);
     for (size_t i = 0; i != 4; ++i) {
