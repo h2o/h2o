@@ -5654,8 +5654,17 @@ int main(int argc, char **argv)
     /* launch threads that fetch OCSP responses for stapling */
     h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
-    { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
-         purpose) */
+    /* apply HTTP/3 global configuration to the listeners; this has to be done before setting up session resumption, which tags QUIC
+     * tickets with the transport parameters */
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        quicly_context_t *qctx;
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
+    }
+
+    { /* initialize SSL_CTXs for session resumption and ticket-based resumption, including:
+       * * the calculation of the 0-RTT tag, which is used to prevent 0-RTT resumption when parameters change
+       * * the launch of memcached client threads used for session resumption */
         size_t i, j;
         int has_quic = 0;
         H2O_VECTOR(SSL_CTX *) ssl_contexts = {NULL};
@@ -5686,13 +5695,6 @@ int main(int argc, char **argv)
                     ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx, &conf.listeners[i]->quic.qpack);
             }
         }
-    }
-
-    /* apply HTTP/3 global configuraton to the listeners */
-    for (size_t i = 0; i != conf.num_listeners; ++i) {
-        quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
-            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
     /* all setup should be complete by now */
