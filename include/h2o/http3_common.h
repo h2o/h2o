@@ -514,6 +514,13 @@ void h2o_http3_qpack_cancel_stream(h2o_http3_conn_t *conn, quicly_stream_id_t st
  */
 void h2o_http3_send_qpack_header_ack(h2o_http3_conn_t *conn, const void *bytes, size_t len);
 /**
+ * Resets the send side of a stream, retaining the first `reliable_size` bytes by RESET_STREAM_AT if the peer supports it, otherwise
+ * (or if `reliable_size` is zero) by RESET_STREAM. Does nothing if the send side has already been reset (by the application, or by
+ * quicly upon STOP_SENDING) or completed. Returns 1 if RESET_STREAM_AT is used, in which case the bytes below
+ * `qs->sendstate.final_size` (which might exceed `reliable_size`) can still be emitted and shifted.
+ */
+int h2o_http3_reset_stream_reliably(quicly_stream_t *qs, quicly_error_t err, uint64_t reliable_size);
+/**
  * Enqueue GOAWAY frame crafted for graceful shutdown
  */
 void h2o_http3_send_shutdown_goaway_frame(h2o_http3_conn_t *conn);

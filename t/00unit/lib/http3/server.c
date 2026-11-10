@@ -171,6 +171,8 @@ static void test_wt_find_range_after(void)
 
     quicly_recvstate_dispose(&rs);
 }
+#include "h3-fixture.c"
+#include "webtransport.c"
 
 static void test_wt_mirror_reset_after_fin(void)
 {
@@ -213,4 +215,5 @@ void test_lib__http3_server(void)
     subtest("scheduler", test_scheduler);
     subtest("webtransport: walk the received ranges", test_wt_find_range_after);
     subtest("webtransport: reset after a FIN beyond a gap", test_wt_mirror_reset_after_fin);
+    subtest("webtransport: native HTTP/3 backend", test_h3_webtransport);
 }
