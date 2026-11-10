@@ -5662,8 +5662,9 @@ int main(int argc, char **argv)
             h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
-    { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
-         purpose) */
+    { /* initialize SSL_CTXs for session resumption and ticket-based resumption, including:
+       * * the calculation of the 0-RTT tag, which is used to prevent 0-RTT resumption when parameters change
+       * * the launch of memcached client threads used for session resumption */
         size_t i, j;
         int has_quic = 0;
         H2O_VECTOR(SSL_CTX *) ssl_contexts = {NULL};
