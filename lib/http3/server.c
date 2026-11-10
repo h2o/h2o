@@ -2705,6 +2705,8 @@ static void wt_on_send_stop(quicly_stream_t *qs, quicly_error_t err)
     }
 }
 
+static void wt_handle_receive_reset(quicly_stream_t *qs);
+
 static void wt_on_receive(quicly_stream_t *qs, size_t off, const void *src, size_t len)
 {
     struct st_h2o_http3_server_wt_stream_t *ws = qs->data;
@@ -2726,11 +2728,22 @@ static void wt_on_receive(quicly_stream_t *qs, size_t off, const void *src, size
         wt_discard_input(ws);
         break;
     }
+
+    wt_handle_receive_reset(qs);
 }
 
-static void wt_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
+/**
+ * Handles the end of the receive side by a reset, if that is how it has ended. As with request streams, `on_receive_reset` is left
+ * NULL, so that quicly reports every reset through `on_receive`, as it does a FIN, once the bytes below the Reliable Size have been
+ * received. This is also called when a stream is adopted, as the stream might have been reset before.
+ */
+static void wt_handle_receive_reset(quicly_stream_t *qs)
 {
     struct st_h2o_http3_server_wt_stream_t *ws = qs->data;
+
+    if (!(quicly_recvstate_transfer_complete(&qs->recvstate) && qs->recvstate.app_error_code != UINT64_MAX))
+        return;
+    quicly_error_t err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(qs->recvstate.app_error_code);
 
     wt_mirror_reset(ws);
 
@@ -2752,7 +2765,7 @@ static void wt_on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
 }
 
 static const quicly_stream_callbacks_t wt_stream_callbacks = {wt_on_stream_destroy, wt_on_send_shift, wt_on_send_emit,
-                                                              wt_on_send_stop,      wt_on_receive,    wt_on_receive_reset};
+                                                              wt_on_send_stop,      wt_on_receive,    NULL};
 
 /**
  * Checks if a request stream starts with WT_STREAM (the signal value of WebTransport bidirectional streams), adopting the stream
@@ -2807,6 +2820,7 @@ static int handle_wt_signal(struct st_h2o_http3_server_stream_t *stream)
     h2o_buffer_consume(&ws->recv.buf, hdr_len);
     quicly_stream_sync_recvbuf(qs, hdr_len);
     wt_stream_on_header(ws, session_id);
+    wt_handle_receive_reset(qs);
 
     return 1;
 }
@@ -2824,6 +2838,7 @@ static int adopt_unistream(h2o_http3_conn_t *h3, quicly_stream_t *qs, uint64_t t
     h2o_linklist_insert(&conn->wt.pending, &ws->link);
     ++conn->wt.num_pending;
     wt_stream_parse_uni_header(ws);
+    wt_handle_receive_reset(qs);
 
     return 1;
 }
