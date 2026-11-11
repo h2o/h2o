@@ -1424,6 +1424,8 @@ static void run_delayed(h2o_timer_t *timer)
         }
 
     } while (made_progress);
+
+    h2o_quic_schedule_timer(&conn->h3.super);
 }
 
 quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
