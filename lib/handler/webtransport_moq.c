@@ -880,7 +880,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
         return;
     }
     ++ctx->http3.next_cid.master_id;
-    h2o_quic_setup(&backend->super, qc);
+    h2o_quic_setup(&backend->super, qc, NULL);
     session->backend = backend;
     h2o_quic_send(&backend->super);
 }

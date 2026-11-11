@@ -278,6 +278,45 @@ static void test_adjust_stream_frame_layout(void)
 #undef TEST
 }
 
+/**
+ * When a CRYPTO frame is shortened to make room for the length field, the length field must be sized for the shortened length,
+ * and the payload must be the largest that fits in the space.
+ */
+static void test_adjust_crypto_frame_layout(void)
+{
+    /* minimum, both sides of the boundary of 1-byte and 2-byte length fields, and a large frame */
+    static const size_t capacities[] = {2, 64, 65, 1200};
+    static const size_t expected_lens[] = {1, 63, 63, 1198};
+    static uint8_t buf[2 + 1200], expected[1200];
+
+    for (size_t i = 0; i < sizeof(expected); ++i)
+        expected[i] = (uint8_t)(i * 7 + 1);
+
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(capacities); ++i) {
+        size_t capacity = capacities[i];
+        /* CRYPTO frame at offset zero, with payload filling all the space being available */
+        buf[0] = QUICLY_FRAME_TYPE_CRYPTO;
+        buf[1] = 0;
+        memcpy(buf + 2, expected, capacity);
+        uint8_t *dst = buf + 2, *const dst_end = buf + 2 + capacity, *frame_at = buf;
+        size_t len = capacity;
+        int wrote_all = 1;
+        adjust_stream_frame_layout(&dst, dst_end, &len, &wrote_all, &frame_at);
+
+        ok(dst <= dst_end);
+        ok(!wrote_all);
+        ok(frame_at == buf);
+        ok(len == expected_lens[i]);
+        const uint8_t *src = buf + 1; /* skip the frame type */
+        quicly_stream_frame_t frame;
+        ok(quicly_decode_crypto_frame(&src, dst, &frame) == 0);
+        ok(src == dst);
+        ok(frame.offset == 0);
+        ok(frame.data.len == len);
+        ok(memcmp(frame.data.base, expected, len) == 0);
+    }
+}
+
 static void get_now_cb(quicly_now_t *self, double *now)
 {
     *now = quic_now + quic_now_submillisec;
@@ -471,8 +510,8 @@ static void test_transport_parameters(void)
                                           0x07, 0x04, 0x80, 0x10, 0x00, 0x00, 0x04, 0x04, 0x81, 0x00, 0x00, 0x00,
                                           0x01, 0x04, 0x80, 0x00, 0x75, 0x30, 0x08, 0x01, 0x0a, 0x0a, 0x01, 0x0a};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, valid_bytes, valid_bytes + sizeof(valid_bytes)) ==
-       0);
+    ok(quicly_decode_transport_parameter_list(&decoded, 0, NULL, NULL, NULL, NULL, valid_bytes,
+                                              valid_bytes + sizeof(valid_bytes)) == 0);
     ok(decoded.max_stream_data.bidi_local = 0x100000);
     ok(decoded.max_stream_data.bidi_remote = 0x100000);
     ok(decoded.max_stream_data.uni = 0x100000);
@@ -486,7 +525,7 @@ static void test_transport_parameters(void)
 
     static const uint8_t dup_bytes[] = {0x05, 0x04, 0x80, 0x10, 0x00, 0x00, 0x05, 0x04, 0x80, 0x10, 0x00, 0x00};
     memset(&decoded, 0x55, sizeof(decoded));
-    ok(quicly_decode_transport_parameter_list(&decoded, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes)) ==
+    ok(quicly_decode_transport_parameter_list(&decoded, 0, NULL, NULL, NULL, NULL, dup_bytes, dup_bytes + sizeof(dup_bytes)) ==
        QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER);
 }
 
@@ -2962,6 +3001,152 @@ static void test_fin_below_received(void)
 }
 
 /**
+ * Returns if the connection-level ingress credit charged is `expected`, and is what has been returned plus what each stream still
+ * holds in memory.
+ */
+static int ingress_credit_is_correct(quicly_conn_t *conn, uint64_t expected)
+{
+    uint64_t held = 0;
+    quicly_stream_t *stream;
+
+    kh_foreach_value(conn->streams, stream, {
+        if (stream->stream_id >= 0)
+            held += quicly_recvstate_bytes_allocated(&stream->recvstate) - stream->recvstate.data_off;
+    });
+
+    return conn->ingress.max_data.bytes_consumed == expected &&
+           conn->ingress.max_data.bytes_consumed == conn->ingress.max_data.bytes_shifted + held;
+}
+
+#define INGRESS_CREDIT_NUM_EVENTS 16
+#define INGRESS_CREDIT_MAX_EVENTS 5
+
+static uint8_t *encode_stream_frame(uint8_t *dst, quicly_stream_id_t stream_id, uint64_t off, const char *data, size_t len,
+                                    int is_fin)
+{
+    *dst++ = QUICLY_FRAME_TYPE_STREAM_BASE | QUICLY_FRAME_TYPE_STREAM_BIT_OFF | QUICLY_FRAME_TYPE_STREAM_BIT_LEN |
+             (is_fin ? QUICLY_FRAME_TYPE_STREAM_BIT_FIN : 0);
+    dst = quicly_encodev(dst, stream_id);
+    dst = quicly_encodev(dst, off);
+    dst = quicly_encodev(dst, len);
+    memcpy(dst, data, len);
+    return dst + len;
+}
+
+/**
+ * Applies one of the events enumerated by `test_ingress_credit_exhaustive` to a stream of 3 bytes. Returns if successful.
+ * `credit_used` is updated to the connection-level credit that the stream uses as defined by RFC 9000 Section 4.5; i.e., the final
+ * size if known, otherwise the largest offset received.
+ */
+static int apply_ingress_credit_event(quicly_conn_t *conn, quicly_stream_id_t stream_id, size_t event, uint64_t *credit_used)
+{
+    uint8_t frame[32], *dst = frame;
+    uint64_t used;
+
+    switch (event) {
+    case 0: /* RESET_STREAM */
+    case 1:
+    case 2:
+    case 3: /* RESET_STREAM_AT of Reliable Size 1 to 3 */
+        dst = quicly_encode_reset_stream_frame(dst, stream_id, 11, 3, event);
+        used = 3;
+        break;
+    case 4:
+    case 5: {
+        /* the application consumes one byte, or all the bytes available */
+        quicly_stream_t *stream;
+        size_t avail;
+        if ((stream = quicly_get_stream(conn, stream_id)) != NULL && (avail = quicly_streambuf_ingress_get(stream).len) != 0)
+            quicly_streambuf_ingress_shift(stream, event == 4 ? 1 : avail);
+        return 1;
+    }
+    default: {
+        /* STREAM frames of each range, with and without FIN */
+        static const struct {
+            uint8_t off, end, is_fin;
+        } streams[] = {{0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 3}, {2, 3}, {0, 3, 1}, {1, 3, 1}, {2, 3, 1}, {3, 3, 1}};
+        PTLS_BUILD_ASSERT(6 + PTLS_ELEMENTSOF(streams) == INGRESS_CREDIT_NUM_EVENTS);
+        assert(event - 6 < PTLS_ELEMENTSOF(streams));
+        uint8_t off = streams[event - 6].off, end = streams[event - 6].end;
+        dst = encode_stream_frame(dst, stream_id, off, &"xyz"[off], end - off, streams[event - 6].is_fin);
+        used = end;
+    } break;
+    }
+
+    if (*credit_used < used)
+        *credit_used = used;
+    return inject_frames(conn, frame, dst - frame) == 0;
+}
+
+/**
+ * Applies every sequence of up to INGRESS_CREDIT_MAX_EVENTS events to a unidirectional stream of 3 bytes, the events being the
+ * STREAM frames of each range with and without FIN, the FIN-only STREAM frame, RESET_STREAM, RESET_STREAM_AT of each non-zero
+ * Reliable Size, and the application consuming one or all the bytes available. The stream being unidirectional, quicly destroys it
+ * once all the bytes up to the end of the stream (or to the Reliable Size) are received; if that has not happened after the events,
+ * a STREAM frame carrying all the bytes and the FIN is applied to make it happen. After each event, and after the stream is
+ * destroyed, the connection-level credit charged is checked against the value defined by RFC 9000 Section 4.5, and against what has
+ * been returned plus what the streams still hold. Streams being independent of each other, this covers the credit accounting of any
+ * mix of streams up to that length, without relying on chance.
+ */
+static void test_ingress_credit_exhaustive(void)
+{
+    quicly_transport_parameters_t orig = quic_ctx.transport_params;
+    quicly_stream_callbacks_t callbacks = stream_callbacks;
+    quicly_conn_t *client, *server;
+    quicly_stream_id_t stream_id = 2; /* client-initiated unidirectional */
+    uint64_t num_sequences = 0, credit_used_by_previous = 0;
+    int failed = 0;
+
+    callbacks.on_destroy = quicly_streambuf_destroy; /* the default one leaks the buffer, which matters with this many streams */
+
+    /* nothing is sent by the server, hence the limits are set high enough to cover all the sequences */
+    quic_ctx.transport_params.reset_stream_at = 1;
+    quic_ctx.transport_params.max_streams_uni = 1 << 24;
+    quic_ctx.transport_params.max_data = 1 << 30;
+    test_setup_connected_peers(&client, &server);
+
+    for (size_t len = 1; len <= INGRESS_CREDIT_MAX_EVENTS; ++len) {
+        uint64_t count = 1;
+        for (size_t i = 0; i < len; ++i)
+            count *= INGRESS_CREDIT_NUM_EVENTS;
+        for (uint64_t seq = 0; seq < count; ++seq, stream_id += 4, ++num_sequences) {
+            quicly_stream_t *stream;
+            uint64_t credit_used = 0;
+            if (quicly_get_or_open_stream(server, stream_id, &stream) != 0 || stream == NULL)
+                goto Fail;
+            stream->callbacks = &callbacks;
+            for (uint64_t i = 0, events = seq; i < len; ++i, events /= INGRESS_CREDIT_NUM_EVENTS) {
+                if (!apply_ingress_credit_event(server, stream_id, events % INGRESS_CREDIT_NUM_EVENTS, &credit_used) ||
+                    !ingress_credit_is_correct(server, credit_used_by_previous + credit_used))
+                    goto Fail;
+            }
+            if (quicly_get_stream(server, stream_id) != NULL) {
+                if (!apply_ingress_credit_event(server, stream_id, 12 /* STREAM(off=0, len=3, FIN) */, &credit_used))
+                    goto Fail;
+                if (quicly_get_stream(server, stream_id) != NULL ||
+                    !ingress_credit_is_correct(server, credit_used_by_previous + credit_used))
+                    goto Fail;
+            }
+            credit_used_by_previous += credit_used;
+            continue;
+        Fail:
+            /* stop here, as the connection might have been left in a state that taints the subsequent sequences */
+            note("failed at length %zu, sequence %" PRIu64, len, seq);
+            failed = 1;
+            goto Exit;
+        }
+    }
+
+Exit:
+    ok(!failed);
+    note("%" PRIu64 " sequences", num_sequences);
+
+    quicly_free(client);
+    quicly_free(server);
+    quic_ctx.transport_params = orig;
+}
+
+/**
  * A reset that completes the transfer by itself, all bytes below its Reliable Size having been received, ends the stream through
  * `on_receive` if the Reliable Size is non-zero, or if `on_receive_reset` is NULL; otherwise through `on_receive_reset`.
  */
@@ -3252,6 +3437,651 @@ static void test_stats_foreach(void)
 #undef CHECK
 }
 
+static struct {
+    quicly_conn_t *conn;
+    quicly_error_t err;
+    uint64_t frame_type;
+} test_qmux_closed_by_remote = {};
+
+static void test_qmux_record_closed_by_remote(quicly_closed_t *_self, quicly_conn_t *conn)
+{
+    uint64_t frame_type;
+    int is_remote;
+    quicly_error_t err = quicly_get_close_reason(conn, &frame_type, NULL, &is_remote);
+
+    if (!is_remote)
+        return;
+    assert(test_qmux_closed_by_remote.conn == NULL);
+    test_qmux_closed_by_remote.conn = conn;
+    test_qmux_closed_by_remote.err = err;
+    test_qmux_closed_by_remote.frame_type = frame_type;
+}
+
+static int test_qmux_writable(quicly_qmux_writable_t *_self, quicly_conn_t *conn)
+{
+    return 1;
+}
+
+static void qmux_transmit(quicly_conn_t *src, quicly_conn_t *dest)
+{
+    char buf[16384];
+    size_t len = sizeof(buf);
+
+    quicly_error_t ret = quicly_qmux_send(src, buf, &len);
+    ok(ret == 0);
+
+    if (len > 0) {
+        size_t consumed = len;
+        ret = quicly_qmux_receive(dest, buf, &consumed);
+        ok(ret == 0);
+        ok(len == consumed);
+    }
+}
+
+/**
+ * Feeds `frames` to `conn` as one QMux record, and returns the error code of the CONNECTION_CLOSE frame that `conn` sends in
+ * response, or UINT64_MAX if `conn` did not start closing.
+ */
+static uint64_t qmux_inject_and_get_close_error(quicly_conn_t *conn, const void *frames, size_t frames_len)
+{
+    uint8_t buf[16384], *p = quicly_encodev(buf, frames_len);
+    memcpy(p, frames, frames_len);
+    size_t len = p + frames_len - buf;
+    quicly_error_t ret = quicly_qmux_receive(conn, buf, &len);
+    ok(ret == 0);
+    if (quicly_get_state(conn) != QUICLY_STATE_CLOSING)
+        return UINT64_MAX;
+
+    len = sizeof(buf);
+    ret = quicly_qmux_send(conn, buf, &len);
+    ok(ret == 0);
+    const uint8_t *src = buf, *end = buf + len;
+    uint64_t reclen = ptls_decode_quicint(&src, end);
+    ok(reclen == end - src);
+    uint64_t frame_type = ptls_decode_quicint(&src, end);
+    ok(frame_type == QUICLY_FRAME_TYPE_TRANSPORT_CLOSE);
+    return ptls_decode_quicint(&src, end);
+}
+
+static void test_qmux_simple(void)
+{
+    static char message16k[16384];
+
+    if (message16k[0] == '\0') {
+        for (size_t i = 0; i < sizeof(message16k); i += 16)
+            memcpy(message16k + i, "helloworldhello\n", 16);
+    }
+
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_stream_t *cs1 = NULL, *cs2 = NULL, *ss1, *ss2;
+    quicly_streambuf_t *ss1buf, *ss2buf;
+    quicly_error_t ret;
+
+    qmux_transmit(sc, cc);
+
+    ret = quicly_open_stream(cc, &cs1, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs1, "hello", 5);
+    ok(ret == 0);
+    ret = quicly_open_stream(cc, &cs2, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs2, message16k, sizeof(message16k));
+    ok(ret == 0);
+
+    qmux_transmit(cc, sc);
+
+    ss1 = quicly_get_stream(sc, cs1->stream_id);
+    ok(ss1 != NULL);
+    ss1buf = ss1->data;
+    ok(ss1buf->ingress.off == 5);
+    ok(memcmp(ss1buf->ingress.base, "hello", 5) == 0);
+
+    ss2 = quicly_get_stream(sc, cs2->stream_id);
+    ok(ss2 != NULL);
+    ss2buf = ss2->data;
+    ok(ss2buf->ingress.off >= sizeof(message16k) - 400);
+    ok(ss2buf->ingress.off < sizeof(message16k));
+    ok(memcmp(ss2buf->ingress.base, message16k, ss2buf->ingress.off) == 0);
+
+    qmux_transmit(cc, sc);
+
+    ok(ss2buf->ingress.off == sizeof(message16k));
+    ok(memcmp(ss2buf->ingress.base, message16k, ss2buf->ingress.off) == 0);
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_notp(void)
+{
+    static const uint8_t input[] = {1, 0x14 /* 1st frame = DATA_BLOCKED */};
+
+    quicly_conn_t *conn = quicly_qmux_new(&quic_ctx, 1, NULL);
+    size_t len = sizeof(input);
+    quicly_error_t ret = quicly_qmux_receive(conn, input, &len);
+    ok(ret == 0);
+    ok(quicly_get_state(conn) == QUICLY_STATE_CLOSING);
+
+    uint8_t buf[16384];
+    len = sizeof(buf);
+    ret = quicly_qmux_send(conn, buf, &len);
+
+    const uint8_t *src = buf, *end = src + len;
+    uint64_t reclen = ptls_decode_quicint(&src, end);
+    ok(reclen == end - src);
+    uint64_t tp_frame_type = ptls_decode_quicint(&src, end);
+    ok(tp_frame_type == QUICLY_FRAME_TYPE_QX_TRANSPORT_PARAMETERS);
+    uint64_t tp_frame_len = ptls_decode_quicint(&src, end);
+    ok(src + tp_frame_len < end);
+    src += tp_frame_len;
+    uint64_t close_frame_type = ptls_decode_quicint(&src, end);
+    ok(close_frame_type == QUICLY_FRAME_TYPE_TRANSPORT_CLOSE);
+    uint64_t close_error_code = ptls_decode_quicint(&src, end);
+    /* draft-ietf-quic-qmux-02 Section 4.2 */
+    ok(close_error_code == QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION));
+    uint64_t close_frame = ptls_decode_quicint(&src, end);
+    ok(close_frame == QUICLY_FRAME_TYPE_DATA_BLOCKED);
+
+    ok(quicly_get_first_timeout(conn) <= quic_now);
+    len = sizeof(buf);
+    ret = quicly_qmux_send(conn, buf, &len);
+    ok(ret == QUICLY_ERROR_FREE_CONNECTION);
+
+    quicly_free(conn);
+}
+
+static void test_qmux_ping(void)
+{
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    uint8_t ping_record[] = {9, 0xf4, 0x8c, 0x67, 0x52, 0x9e, 0xf8, 0xc7, 0xbd, 11 /* seq = 11 */};
+    size_t len = sizeof(ping_record);
+    quicly_error_t ret = quicly_qmux_receive(sc, ping_record, &len);
+    ok(ret == 0);
+    ok(quicly_get_first_timeout(sc) <= quic_now);
+
+    uint8_t buf[16384];
+    len = sizeof(buf);
+    ret = quicly_qmux_send(sc, buf, &len);
+    ok(ret == 0);
+    ok(len == 2 + 8 + 1);
+    ok(memcmp(buf, "\x40\x09\xf4\x8c\x67\x52\x9e\xf8\xc7\xbe\x0b", 2 + 8 + 1) == 0);
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_multi_record(void)
+{
+    static uint8_t data[40000];
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_stream_t *cs, *ss;
+    quicly_error_t ret;
+
+    for (size_t i = 0; i < sizeof(data); ++i)
+        data[i] = (uint8_t)i;
+
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    /* send a stream that requires multiple records, offering a buffer larger than one record */
+    ret = quicly_open_stream(cc, &cs, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs, data, sizeof(data));
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_shutdown(cs);
+    ok(ret == 0);
+    for (size_t i = 0; i < 3; ++i) {
+        static uint8_t buf[65536];
+        size_t len = sizeof(buf);
+        ret = quicly_qmux_send(cc, buf, &len);
+        ok(ret == 0);
+        ok(0 < len && len <= 16384);
+        size_t consumed = len;
+        ret = quicly_qmux_receive(sc, buf, &consumed);
+        ok(ret == 0);
+        ok(consumed == len);
+    }
+
+    ss = quicly_get_stream(sc, cs->stream_id);
+    ok(ss != NULL);
+    quicly_streambuf_t *ssbuf = ss->data;
+    ok(ssbuf->ingress.off == sizeof(data));
+    ok(memcmp(ssbuf->ingress.base, data, sizeof(data)) == 0);
+    ok(quicly_recvstate_transfer_complete(&ss->recvstate));
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_reset_stream_at(void)
+{
+    static const char data[100] = "hello";
+    quicly_conn_t *cc, *sc;
+    quicly_stream_t *cs, *ss;
+    quicly_error_t ret;
+
+    uint8_t orig_reset_stream_at = quic_ctx.transport_params.reset_stream_at;
+    quic_ctx.transport_params.reset_stream_at = 1;
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    /* RESET_STREAM_AT is sent in the same call as the STREAM frame carrying the data below the reliable size */
+    ret = quicly_open_stream(cc, &cs, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs, data, sizeof(data));
+    ok(ret == 0);
+    ret = quicly_set_reset_stream_at(cs, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7), 50);
+    ok(ret == 0);
+    qmux_transmit(cc, sc);
+    quicly_stats_t stats;
+    ret = quicly_get_stats(cc, &stats);
+    ok(ret == 0);
+    ok(stats.num_frames_sent.reset_stream_at == 1);
+
+    ss = quicly_get_stream(sc, cs->stream_id);
+    ok(ss != NULL);
+    test_streambuf_t *ssbuf = ss->data;
+    ok(ssbuf->super.ingress.off == 50);
+    ok(memcmp(ssbuf->super.ingress.base, data, 50) == 0);
+    ok(ssbuf->error_received.reset_on_receive == QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(7));
+
+    quicly_free(cc);
+    quicly_free(sc);
+    quic_ctx.transport_params.reset_stream_at = orig_reset_stream_at;
+}
+
+static void do_test_qmux_open_before_tp(int uni)
+{
+    /* the peer permits only the type of the stream being opened before its transport parameters are received */
+    quicly_context_t client_ctx = quic_ctx;
+    client_ctx.transport_params.max_streams_uni = uni ? 3 : 0;
+    client_ctx.transport_params.max_streams_bidi = uni ? 0 : 3;
+    quicly_conn_t *cc = quicly_qmux_new(&client_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_stream_t *stream;
+    quicly_error_t ret;
+
+    ret = quicly_open_stream(sc, &stream, uni);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(stream, "hello", 5);
+    ok(ret == 0);
+
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    qmux_transmit(sc, cc);
+
+    quicly_stream_t *peer_stream = quicly_get_stream(cc, stream->stream_id);
+    ok(peer_stream != NULL && ((quicly_streambuf_t *)peer_stream->data)->ingress.off == 5);
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_open_before_tp(void)
+{
+    subtest("uni", do_test_qmux_open_before_tp, 1);
+    subtest("bidi", do_test_qmux_open_before_tp, 0);
+}
+
+static void test_qmux_stream_order(void)
+{
+    /* STREAM frames of stream 0 carrying 5 bytes, at offsets 0 and 5, with LEN and OFF bits set */
+    static const uint8_t first[] = {0x0e, 0, 0, 5, 'h', 'e', 'l', 'l', 'o'}, second[] = {0x0e, 0, 5, 5, 'w', 'o', 'r', 'l', 'd'},
+                         gap[] = {0x0e, 0, 10, 5, 'w', 'o', 'r', 'l', 'd'};
+    quicly_conn_t *cc, *sc;
+
+    /* contiguous */
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    ok(qmux_inject_and_get_close_error(sc, first, sizeof(first)) == UINT64_MAX);
+    ok(qmux_inject_and_get_close_error(sc, second, sizeof(second)) == UINT64_MAX);
+    quicly_free(cc);
+    quicly_free(sc);
+
+    /* repeating bytes already received */
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    ok(qmux_inject_and_get_close_error(sc, first, sizeof(first)) == UINT64_MAX);
+    ok(qmux_inject_and_get_close_error(sc, first, sizeof(first)) ==
+       QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION));
+    quicly_free(cc);
+    quicly_free(sc);
+
+    /* leaving a gap */
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    ok(qmux_inject_and_get_close_error(sc, first, sizeof(first)) == UINT64_MAX);
+    ok(qmux_inject_and_get_close_error(sc, gap, sizeof(gap)) ==
+       QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION));
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_prohibited_frames(void)
+{
+#define FRAME_ENCODING QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_FRAME_ENCODING)
+#define PROTOCOL_VIOLATION QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION)
+    static const struct {
+        uint8_t bytes[9];
+        size_t len;
+        uint64_t expected_error;
+    } cases[] = {
+        {{QUICLY_FRAME_TYPE_PING}, 1, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_ACK, 0, 0, 0, 0}, 5, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_CRYPTO, 0, 1, 0}, 4, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_NEW_TOKEN, 1, 0}, 3, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_RETIRE_CONNECTION_ID, 0}, 2, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_PATH_CHALLENGE, 0, 0, 0, 0, 0, 0, 0, 0}, 9, FRAME_ENCODING},
+        {{QUICLY_FRAME_TYPE_HANDSHAKE_DONE}, 1, FRAME_ENCODING},
+        /* extension frame not defined for QMux */
+        {{QUICLY_FRAME_TYPE_IMMEDIATE_ACK}, 1, FRAME_ENCODING},
+        /* QX_TRANSPORT_PARAMETERS other than as the first frame, carrying an empty list */
+        {{0xff, 0x51, 0x53, 0x30, 0x0d, 0x0a, 0x0d, 0x0a, 0}, 9, PROTOCOL_VIOLATION},
+    };
+#undef FRAME_ENCODING
+#undef PROTOCOL_VIOLATION
+
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(cases); ++i) {
+        quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+        qmux_transmit(sc, cc);
+        qmux_transmit(cc, sc);
+        ok(qmux_inject_and_get_close_error(sc, cases[i].bytes, cases[i].len) == cases[i].expected_error);
+        quicly_free(cc);
+        quicly_free(sc);
+    }
+}
+
+static void test_qmux_discard_after_close(void)
+{
+    /* record carrying a STREAM frame of stream 0 */
+    static const uint8_t stream_record[] = {8, 0x0a, 0, 5, 'h', 'e', 'l', 'l', 'o'};
+    quicly_conn_t *cc, *sc;
+    quicly_error_t ret;
+    size_t len;
+
+    /* data received after the local endpoint initiates the close */
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    ret = quicly_close(sc, QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0), "");
+    ok(ret == 0);
+    len = sizeof(stream_record);
+    ret = quicly_qmux_receive(sc, stream_record, &len);
+    ok(ret == 0);
+    ok(len == sizeof(stream_record));
+    ok(quicly_get_stream(sc, 0) == NULL);
+    quicly_free(cc);
+    quicly_free(sc);
+
+    /* data received in the same input as, but after, CONNECTION_CLOSE */
+    memset(&test_qmux_closed_by_remote, 0, sizeof(test_qmux_closed_by_remote));
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    uint8_t input[5 + sizeof(stream_record)] = {4, QUICLY_FRAME_TYPE_TRANSPORT_CLOSE, 0 /* error code */, 0 /* frame type */,
+                                                0 /* reason phrase length */};
+    memcpy(input + 5, stream_record, sizeof(stream_record));
+    len = sizeof(input);
+    ret = quicly_qmux_receive(sc, input, &len);
+    ok(ret == QUICLY_ERROR_IS_CLOSING);
+    ok(len == sizeof(input));
+    ok(quicly_get_state(sc) == QUICLY_STATE_DRAINING);
+    ok(quicly_get_stream(sc, 0) == NULL);
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_pong_once(void)
+{
+    static const uint8_t data[900];
+    uint64_t orig_max_data = quic_ctx.transport_params.max_data;
+    quicly_conn_t *cc, *sc;
+    quicly_stream_t *cs, *ss;
+    quicly_stats_t stats;
+    quicly_error_t ret;
+
+    /* use a small connection-level window so that consuming stream data triggers the emission of MAX_DATA */
+    quic_ctx.transport_params.max_data = 1000;
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    /* receive QX_PING, send QX_PONG (which is not delivered to `cc`, as quicly does not send QX_PING) */
+    uint8_t ping_record[] = {9, 0xf4, 0x8c, 0x67, 0x52, 0x9e, 0xf8, 0xc7, 0xbd, 11 /* seq = 11 */};
+    size_t len = sizeof(ping_record);
+    ret = quicly_qmux_receive(sc, ping_record, &len);
+    ok(ret == 0);
+    uint8_t buf[16384];
+    len = sizeof(buf);
+    ret = quicly_qmux_send(sc, buf, &len);
+    ok(ret == 0);
+    ret = quicly_get_stats(sc, &stats);
+    ok(ret == 0);
+    ok(stats.num_frames_sent.qx_pong == 1);
+
+    /* send MAX_DATA, which should not be accompanied by another QX_PONG */
+    ret = quicly_open_stream(cc, &cs, 0);
+    ok(ret == 0);
+    ret = quicly_streambuf_egress_write(cs, data, sizeof(data));
+    ok(ret == 0);
+    qmux_transmit(cc, sc);
+    ss = quicly_get_stream(sc, cs->stream_id);
+    ok(ss != NULL);
+    quicly_streambuf_ingress_shift(ss, quicly_streambuf_ingress_get(ss).len);
+    len = sizeof(buf);
+    ret = quicly_qmux_send(sc, buf, &len);
+    ok(ret == 0);
+    ret = quicly_get_stats(sc, &stats);
+    ok(ret == 0);
+    ok(stats.num_frames_sent.max_data == 1);
+    ok(stats.num_frames_sent.qx_pong == 1);
+
+    quicly_free(cc);
+    quicly_free(sc);
+    quic_ctx.transport_params.max_data = orig_max_data;
+}
+
+static void test_qmux_idle_timeout_on_receive(void)
+{
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_error_t ret;
+
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+    int64_t idle_at = quicly_get_first_timeout(sc);
+    ok(quic_now < idle_at && idle_at < INT64_MAX);
+
+    /* partial record does not reset the idle timer */
+    quic_now += 10;
+    uint8_t record[] = {2, QUICLY_FRAME_TYPE_PADDING, QUICLY_FRAME_TYPE_PADDING};
+    size_t len = 2;
+    ret = quicly_qmux_receive(sc, record, &len);
+    ok(ret == 0);
+    ok(len == 0);
+    ok(quicly_get_first_timeout(sc) == idle_at);
+
+    /* complete record does */
+    len = sizeof(record);
+    ret = quicly_qmux_receive(sc, record, &len);
+    ok(ret == 0);
+    ok(len == sizeof(record));
+    ok(quicly_get_first_timeout(sc) == idle_at + 10);
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux_max_record_size_tp(void)
+{
+    /* max_record_size (0x0571c59429cd0845) of 1000, which is below the default */
+    static const uint8_t small[] = {0xc5, 0x71, 0xc5, 0x94, 0x29, 0xcd, 0x08, 0x45, 0x02, 0x43, 0xe8};
+    quicly_transport_parameters_t params;
+
+    ok(quicly_decode_transport_parameter_list(&params, 0, NULL, NULL, NULL, NULL, small, small + sizeof(small)) == 0);
+    ok(quicly_decode_transport_parameter_list(&params, 1, NULL, NULL, NULL, NULL, small, small + sizeof(small)) ==
+       QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER);
+}
+
+static void test_qmux_min_ack_delay_tp(void)
+{
+    /* min_ack_delay (0xff04de1b) of 1000 */
+    static const uint8_t tp[] = {0xc0, 0x00, 0x00, 0x00, 0xff, 0x04, 0xde, 0x1b, 0x02, 0x43, 0xe8};
+    quicly_transport_parameters_t params;
+
+    ok(quicly_decode_transport_parameter_list(&params, 0, NULL, NULL, NULL, NULL, tp, tp + sizeof(tp)) == 0);
+    ok(params.min_ack_delay_usec == 1000);
+    ok(quicly_decode_transport_parameter_list(&params, 1, NULL, NULL, NULL, NULL, tp, tp + sizeof(tp)) == 0);
+    ok(params.min_ack_delay_usec == UINT64_MAX);
+}
+
+static void test_qmux_preferred_address_tp(void)
+{
+    /* preferred_address (13), which quicly ignores on QUIC v1 */
+    static const uint8_t tp[] = {0x0d, 0x01, 0x00};
+    quicly_transport_parameters_t params;
+
+    ok(quicly_decode_transport_parameter_list(&params, 0, NULL, NULL, NULL, NULL, tp, tp + sizeof(tp)) == 0);
+    ok(quicly_decode_transport_parameter_list(&params, 1, NULL, NULL, NULL, NULL, tp, tp + sizeof(tp)) ==
+       QUICLY_TRANSPORT_ERROR_TRANSPORT_PARAMETER);
+}
+
+static struct {
+    size_t count;
+    uint8_t last[16];
+    size_t last_len;
+} test_qmux_datagrams_received;
+
+static void test_qmux_on_datagram(quicly_receive_datagram_frame_t *self, quicly_conn_t *conn, ptls_iovec_t payload)
+{
+    ++test_qmux_datagrams_received.count;
+    test_qmux_datagrams_received.last_len =
+        payload.len < sizeof(test_qmux_datagrams_received.last) ? payload.len : sizeof(test_qmux_datagrams_received.last);
+    memcpy(test_qmux_datagrams_received.last, payload.base, test_qmux_datagrams_received.last_len);
+}
+
+static void test_qmux_datagram(void)
+{
+    static uint8_t too_large[16382];
+    quicly_receive_datagram_frame_t on_datagram = {test_qmux_on_datagram};
+    quicly_context_t orig_ctx = quic_ctx;
+    quicly_conn_t *cc, *sc;
+
+    quic_ctx.receive_datagram_frame = &on_datagram;
+    quic_ctx.transport_params.max_datagram_frame_size = 65535;
+    memset(&test_qmux_datagrams_received, 0, sizeof(test_qmux_datagrams_received));
+
+    cc = quicly_qmux_new(&quic_ctx, 1, NULL);
+    sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    /* a datagram that does not fit into a QMux record is dropped, while the one that follows is sent */
+    ptls_iovec_t datagrams[] = {ptls_iovec_init(too_large, sizeof(too_large)), ptls_iovec_init("hello", 5)};
+    quicly_send_datagram_frames(cc, datagrams, PTLS_ELEMENTSOF(datagrams));
+    ok(quicly_get_first_timeout(cc) <= quic_now);
+    qmux_transmit(cc, sc);
+    ok(test_qmux_datagrams_received.count == 1);
+    ok(test_qmux_datagrams_received.last_len == 5);
+    ok(memcmp(test_qmux_datagrams_received.last, "hello", 5) == 0);
+
+    /* the queue is cleared once sent */
+    ok(quicly_get_first_timeout(cc) > quic_now);
+    qmux_transmit(cc, sc);
+    ok(test_qmux_datagrams_received.count == 1);
+
+    quicly_free(cc);
+    quicly_free(sc);
+    quic_ctx = orig_ctx;
+}
+
+static void test_qmux_unkown_frame(void)
+{
+    memset(&test_qmux_closed_by_remote, 0, sizeof(test_qmux_closed_by_remote));
+
+    quicly_conn_t *cc = quicly_qmux_new(&quic_ctx, 1, NULL), *sc = quicly_qmux_new(&quic_ctx, 0, NULL);
+    quicly_error_t ret;
+
+    /* exchange transport parameters */
+    qmux_transmit(sc, cc);
+    qmux_transmit(cc, sc);
+
+    /* inject invalid frame */
+    uint8_t record[] = {0x01, 0x3f};
+    size_t recsize = sizeof(record);
+    ret = quicly_qmux_receive(cc, record, &recsize);
+    ok(ret == 0);
+    ok(quicly_get_state(cc) == QUICLY_STATE_CLOSING);
+
+    { /* error is transmit */
+        uint8_t buf[16384];
+        size_t len = sizeof(buf);
+        quicly_error_t ret = quicly_qmux_send(cc, buf, &len);
+        ok(ret == 0);
+        ok(len > 0);
+        ret = quicly_qmux_receive(sc, buf, &len);
+        ok(ret == QUICLY_ERROR_IS_CLOSING);
+        ok(quicly_get_state(sc) == QUICLY_STATE_DRAINING);
+        ok(test_qmux_closed_by_remote.conn == sc);
+        ok(test_qmux_closed_by_remote.err == QUICLY_TRANSPORT_ERROR_FRAME_ENCODING);
+        ok(test_qmux_closed_by_remote.frame_type == 0x3f);
+    }
+
+    { /* initiator closes itself */
+        ok(quicly_get_first_timeout(cc) <= quic_now);
+        uint8_t buf[16384];
+        size_t len = sizeof(buf);
+        ret = quicly_qmux_send(cc, buf, &len);
+        ok(ret == QUICLY_ERROR_FREE_CONNECTION);
+    }
+
+    quicly_free(cc);
+    quicly_free(sc);
+}
+
+static void test_qmux(void)
+{
+    quicly_closed_t closed = {.cb = test_qmux_record_closed_by_remote};
+    quicly_qmux_writable_t qmux_writable = {.cb = test_qmux_writable};
+
+    quicly_context_t orig_ctx = quic_ctx;
+    quic_ctx.closed = &closed;
+    quic_ctx.qmux_writable = &qmux_writable;
+
+    subtest("simple", test_qmux_simple);
+    subtest("no-tp", test_qmux_notp);
+    subtest("unknown-frame", test_qmux_unkown_frame);
+    subtest("ping", test_qmux_ping);
+    subtest("multi-record", test_qmux_multi_record);
+    subtest("reset-stream-at", test_qmux_reset_stream_at);
+    subtest("open-before-tp", test_qmux_open_before_tp);
+    subtest("stream-order", test_qmux_stream_order);
+    subtest("prohibited-frames", test_qmux_prohibited_frames);
+    subtest("discard-after-close", test_qmux_discard_after_close);
+    subtest("pong-once", test_qmux_pong_once);
+    subtest("idle-timeout-on-receive", test_qmux_idle_timeout_on_receive);
+    subtest("max-record-size-tp", test_qmux_max_record_size_tp);
+    subtest("min-ack-delay-tp", test_qmux_min_ack_delay_tp);
+    subtest("preferred-address-tp", test_qmux_preferred_address_tp);
+    subtest("datagram", test_qmux_datagram);
+
+    quic_ctx = orig_ctx;
+}
+
 int main(int argc, char **argv)
 {
     static ptls_iovec_t cert;
@@ -3315,6 +4145,7 @@ int main(int argc, char **argv)
     subtest("sentmap", test_sentmap);
     subtest("loss", test_loss);
     subtest("adjust-stream-frame-layout", test_adjust_stream_frame_layout);
+    subtest("adjust-crypto-frame-layout", test_adjust_crypto_frame_layout);
     subtest("test-vector", test_vector);
     subtest("test-retry-aead", test_retry_aead);
     subtest("transport-parameters", test_transport_parameters);
@@ -3358,6 +4189,7 @@ int main(int argc, char **argv)
     subtest("reset-stream-at-gap-above", test_reset_stream_at_gap_above);
     subtest("reset-stream-at-after-fin", test_reset_stream_at_after_fin);
     subtest("fin-below-received", test_fin_below_received);
+    subtest("ingress-credit-exhaustive", test_ingress_credit_exhaustive);
     subtest("reset-stream-at-completing", test_reset_completing_transfer, 3, 1, 0);
     subtest("reset-stream-at-zero-completing", test_reset_completing_transfer, 0, 1, 0);
     subtest("reset-stream-completing", test_reset_completing_transfer, 0, 0, 0);
@@ -3377,6 +4209,8 @@ int main(int argc, char **argv)
     subtest("migration-during-handshake", test_migration_during_handshake);
 
     subtest("stats-foreach", test_stats_foreach);
+
+    subtest("qmux", test_qmux);
 
     return done_testing();
 }
