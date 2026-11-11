@@ -234,6 +234,7 @@ extern "C" {
 #define PTLS_ALERT_CLOSE_NOTIFY 0
 #define PTLS_ALERT_UNEXPECTED_MESSAGE 10
 #define PTLS_ALERT_BAD_RECORD_MAC 20
+#define PTLS_ALERT_RECORD_OVERFLOW 22
 #define PTLS_ALERT_HANDSHAKE_FAILURE 40
 #define PTLS_ALERT_BAD_CERTIFICATE 42
 #define PTLS_ALERT_UNSUPPORTED_CERTIFICATE 43
@@ -1152,7 +1153,9 @@ typedef struct st_ptls_handshake_properties_t {
                  */
                 ptls_iovec_t configs;
                 /**
-                 * slot to save the config obtained from server on mismatch; user must free the returned blob by calling `free`
+                 * slot to save the config obtained from server on mismatch; user must free the returned blob by calling `free`. The
+                 * slot is set only when the handshake completes with ECH being rejected; i.e., when `ptls_handshake` returns
+                 * PTLS_ALERT_ECH_REQUIRED.
                  */
                 ptls_iovec_t *retry_configs;
             } ech;
@@ -1688,6 +1691,8 @@ int ptls_build_tls12_export_params(ptls_context_t *ctx, ptls_buffer_t *output, i
                                    uint64_t next_send_record_iv, const char *server_name, ptls_iovec_t negotiated_protocol);
 /**
  * store the parameters of a post-handshake TLS connection so that it can be reconstructed later
+ * @return zero on success, or PTLS_ERROR_IN_PROGRESS if a KeyUpdate is pending, in which case the application should call
+ * `ptls_send` (with zero-length input, if there is nothing else to send) before calling the function again
  */
 int ptls_export(ptls_t *tls, ptls_buffer_t *output);
 /**

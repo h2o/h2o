@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   linux:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-24.04]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -48,8 +48,8 @@ jobs:
     name: "${{ matrix.name }}"
     runs-on: [macos-latest]
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
-    # by the push to the branch.
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # by the push to the branch. Also skippable by setting the CI_SKIP_MACOS repository variable.
+    if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) && !vars.CI_SKIP_MACOS
 
     strategy:
       fail-fast: false
