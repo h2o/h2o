@@ -1144,6 +1144,9 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
 static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 {
+#if H2O_USE_LIBUV
+    h2o_fatal("webtransport.moq: no support for libuv");
+#else
     struct st_wtmoq_thread_ctx_t *tctx = h2o_mem_alloc(sizeof(*tctx));
 
     tctx->ctx = ctx;
@@ -1191,6 +1194,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
                           on_backend_update, 0, NULL);
 
     h2o_context_set_handler_context(ctx, _handler, tctx);
+#endif
 }
 
 static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
