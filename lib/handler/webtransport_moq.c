@@ -49,14 +49,21 @@
  */
 static const char *supported_protocols[] = {"moqt-20", "moqt-21", "moqt-22", NULL};
 
-struct st_wtmoq_handler_t {
-    h2o_handler_t super;
+/**
+ * the relay to which the sessions are forwarded
+ */
+struct st_wtmoq_relay_t {
     char *host; /* NUL-terminated */
     h2o_iovec_t port;
     /**
      * for testing; connects to the relay using QMux over cleartext TCP, instead of QUIC
      */
     unsigned qmux_cleartext : 1;
+};
+
+struct st_wtmoq_handler_t {
+    h2o_handler_t super;
+    struct st_wtmoq_relay_t relay;
 };
 
 /**
@@ -138,21 +145,61 @@ struct st_wtmoq_pair_t {
      * the session, or NULL once the session has ended
      */
     struct st_wtmoq_session_t *session;
+    /**
+     * that of the session, retained for mapping the error codes after the session has ended
+     */
+    const struct st_wtmoq_frontend_t *frontend_cb;
     h2o_linklist_t link;
     struct st_wtmoq_half_t frontend, backend;
 };
 
+/**
+ * What depends on how the client reaches us. The splicing of the streams and datagrams does not; the frontend wraps it in
+ * WebTransport (see `wt_frontend`).
+ */
+struct st_wtmoq_frontend_t {
+    /**
+     * writes the header to be sent before the bytes of the relay, on a stream opened toward the client; returns its length
+     */
+    size_t (*encode_stream_header)(struct st_wtmoq_session_t *session, uint8_t *dst, int unidirectional);
+    /**
+     * map the application error codes received from the client to those sent to the relay, and vice versa
+     */
+    uint64_t (*error_from_client)(uint64_t code);
+    uint64_t (*error_to_client)(uint64_t code);
+    /**
+     * called once the connection to the relay has been established
+     */
+    void (*on_established)(struct st_wtmoq_session_t *session);
+    /**
+     * called when the connection to the relay could not be established
+     */
+    void (*on_connect_failed)(struct st_wtmoq_session_t *session, const char *errstr);
+    /**
+     * ends the session, as the relay has closed the connection with `code` and `reason`
+     */
+    void (*close)(struct st_wtmoq_session_t *session, uint64_t code, const char *reason);
+    /**
+     * sends a datagram received from the relay to the client
+     */
+    void (*send_datagram)(struct st_wtmoq_session_t *session, ptls_iovec_t payload);
+};
+
 struct st_wtmoq_session_t {
     h2o_generator_t super;
+    const struct st_wtmoq_frontend_t *frontend_cb;
+    /**
+     * the extended CONNECT request (only for WebTransport)
+     */
     h2o_req_t *req;
-    struct st_wtmoq_handler_t *handler;
+    const struct st_wtmoq_relay_t *relay;
     struct st_wtmoq_thread_ctx_t *tctx;
     /**
      * the stream ID of the extended CONNECT request
      */
     uint64_t session_id;
     /**
-     * the QUIC connection with the client, as returned by `h2o_req_t::open_extended_http3`
+     * the QUIC connection with the client (for WebTransport, as returned by `h2o_req_t::open_extended_http3`)
      */
     quicly_conn_t *frontend;
     /**
@@ -220,13 +267,11 @@ static uint32_t error_from_http3(uint64_t h3code)
  */
 static quicly_error_t convert_error(struct st_wtmoq_half_t *from, quicly_error_t err)
 {
+    const struct st_wtmoq_frontend_t *frontend_cb = from->pair->frontend_cb;
     uint64_t code = QUICLY_ERROR_IS_QUIC_APPLICATION(err) ? QUICLY_ERROR_GET_ERROR_CODE(err) : 0;
 
-    if (from->is_frontend) {
-        return QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(error_from_http3(code));
-    } else {
-        return QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(error_to_http3(code <= UINT32_MAX ? (uint32_t)code : 0));
-    }
+    return QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(from->is_frontend ? frontend_cb->error_from_client(code)
+                                                                      : frontend_cb->error_to_client(code));
 }
 
 /* pairs */
@@ -250,7 +295,7 @@ static struct st_wtmoq_pair_t *create_pair(struct st_wtmoq_session_t *session)
 {
     struct st_wtmoq_pair_t *pair = h2o_mem_alloc(sizeof(*pair));
 
-    *pair = (struct st_wtmoq_pair_t){.session = session};
+    *pair = (struct st_wtmoq_pair_t){.session = session, .frontend_cb = session->frontend_cb};
     pair->frontend = (struct st_wtmoq_half_t){.pair = pair, .is_frontend = 1};
     pair->backend = (struct st_wtmoq_half_t){.pair = pair};
     h2o_buffer_init(&pair->frontend.recvbuf, &h2o_socket_buffer_prototype);
@@ -542,11 +587,9 @@ static int open_frontend_stream(struct st_wtmoq_pair_t *pair, int unidirectional
         return -1;
     bind_half(&pair->frontend, qs);
 
-    /* the WebTransport header, sent before the bytes of the peer */
-    uint8_t *p = pair->frontend.header;
-    p = quicly_encodev(p, unidirectional ? WT_STREAM_TYPE_UNI : WT_SIGNAL_BIDI);
-    p = quicly_encodev(p, pair->session->session_id);
-    pair->frontend.header_len = p - pair->frontend.header;
+    /* the header, sent before the bytes of the peer */
+    pair->frontend.header_len =
+        (uint8_t)pair->session->frontend_cb->encode_stream_header(pair->session, pair->frontend.header, unidirectional);
     sync_send(&pair->frontend);
 
     return 0;
@@ -626,7 +669,7 @@ static quicly_error_t on_backend_stream_open(quicly_stream_open_t *self, quicly_
  */
 static void terminate_session_streams(struct st_wtmoq_session_t *session)
 {
-    quicly_error_t err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(error_to_http3(0));
+    quicly_error_t err = QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(session->frontend_cb->error_to_client(0));
 
     session->terminated = 1;
     for (h2o_linklist_t *l = session->pairs.next; l != &session->pairs;) {
@@ -799,10 +842,14 @@ static void close_backend(struct st_wtmoq_session_t *session, uint64_t code, con
 
 static void establish_session(struct st_wtmoq_session_t *session)
 {
-    h2o_req_t *req = session->req;
-
     h2o_timer_unlink(&session->connect_timeout);
     session->established = 1;
+    session->frontend_cb->on_established(session);
+}
+
+static void wt_on_established(struct st_wtmoq_session_t *session)
+{
+    h2o_req_t *req = session->req;
 
     /* send the 2xx */
     req->res.status = 200;
@@ -823,7 +870,17 @@ static void fail_session(struct st_wtmoq_session_t *session, const char *errstr)
 {
     h2o_timer_unlink(&session->connect_timeout);
     close_backend(session, 0, "");
+    session->frontend_cb->on_connect_failed(session, errstr);
+}
+
+static void wt_on_connect_failed(struct st_wtmoq_session_t *session, const char *errstr)
+{
     h2o_send_error_502(session->req, "Bad Gateway", errstr, 0);
+}
+
+static void wt_close(struct st_wtmoq_session_t *session, uint64_t code, const char *reason)
+{
+    send_session_close(session, code <= UINT32_MAX ? (uint32_t)code : 0, reason, strlen(reason));
 }
 
 static void on_backend_destroy(h2o_quic_conn_t *_backend)
@@ -838,17 +895,17 @@ static void on_backend_destroy(h2o_quic_conn_t *_backend)
             fail_session(session, "backend connection failed");
         } else {
             /* the relay has closed the connection; close the session with the application error code */
-            uint32_t code = 0;
+            uint64_t code = 0;
             const char *reason = "";
             if (quicly_get_state(backend->super.quic) >= QUICLY_STATE_CLOSING) {
                 quicly_error_t err = quicly_get_close_reason(backend->super.quic, NULL, &reason, NULL);
-                if (QUICLY_ERROR_IS_QUIC_APPLICATION(err) && QUICLY_ERROR_GET_ERROR_CODE(err) <= UINT32_MAX)
-                    code = (uint32_t)QUICLY_ERROR_GET_ERROR_CODE(err);
+                if (QUICLY_ERROR_IS_QUIC_APPLICATION(err))
+                    code = QUICLY_ERROR_GET_ERROR_CODE(err);
                 if (reason == NULL)
                     reason = "";
             }
             terminate_session_streams(session);
-            send_session_close(session, code, reason, strlen(reason));
+            session->frontend_cb->close(session, code, reason);
         }
     }
 
@@ -918,7 +975,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
     struct addrinfo *selected = h2o_hostinfo_select_one(res);
 
-    if (session->handler->qmux_cleartext) {
+    if (session->relay->qmux_cleartext) {
         if ((session->connect_sock =
                  h2o_socket_connect(ctx->loop, selected->ai_addr, selected->ai_addrlen, on_qmux_connect, &errstr)) == NULL) {
             fail_session(session, errstr);
@@ -929,7 +986,7 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
     }
 
     struct st_wtmoq_backend_t *backend = create_backend(session);
-    if (quicly_connect(&qc, &session->tctx->quic, session->handler->host, selected->ai_addr, NULL, &ctx->http3.next_cid,
+    if (quicly_connect(&qc, &session->tctx->quic, session->relay->host, selected->ai_addr, NULL, &ctx->http3.next_cid,
                        ptls_iovec_init(NULL, 0), &backend->handshake_properties, NULL, NULL) != 0) {
         free(backend);
         fail_session(session, "failed to connect to backend");
@@ -1001,8 +1058,15 @@ static void on_backend_datagram(quicly_receive_datagram_frame_t *self, quicly_co
     struct st_wtmoq_backend_t *backend = *quicly_get_data(quic);
     struct st_wtmoq_session_t *session = backend->session;
 
+    if (session == NULL || !session->established || session->terminated)
+        return;
+    session->frontend_cb->send_datagram(session, payload);
+}
+
+static void wt_send_datagram(struct st_wtmoq_session_t *session, ptls_iovec_t payload)
+{
     /* `forward_datagram.read_` is set by the HTTP/3 layer once the 2xx has been sent, if the client accepts HTTP datagrams */
-    if (session == NULL || !session->established || session->terminated || session->req->forward_datagram.read_ == NULL)
+    if (session->req->forward_datagram.read_ == NULL)
         return;
     /* the HTTP/3 layer prepends the Quarter Stream ID (RFC 9297) */
     if (!datagram_is_acceptable(session->frontend, quicly_encodev_capacity(session->session_id / 4) + payload.len))
@@ -1084,6 +1148,54 @@ static const char *select_protocol(h2o_req_t *req)
     return NULL;
 }
 
+static size_t wt_encode_stream_header(struct st_wtmoq_session_t *session, uint8_t *dst, int unidirectional)
+{
+    uint8_t *p = dst;
+    p = quicly_encodev(p, unidirectional ? WT_STREAM_TYPE_UNI : WT_SIGNAL_BIDI);
+    p = quicly_encodev(p, session->session_id);
+    return p - dst;
+}
+
+static uint64_t wt_error_from_client(uint64_t code)
+{
+    return error_from_http3(code);
+}
+
+static uint64_t wt_error_to_client(uint64_t code)
+{
+    return error_to_http3(code <= UINT32_MAX ? (uint32_t)code : 0);
+}
+
+static const struct st_wtmoq_frontend_t wt_frontend = {
+    wt_encode_stream_header, wt_error_from_client, wt_error_to_client, wt_on_established, wt_on_connect_failed, wt_close,
+    wt_send_datagram};
+
+/**
+ * initializes the fields of the session that do not depend on the frontend
+ */
+static void init_session(struct st_wtmoq_session_t *session)
+{
+    h2o_linklist_init_anchor(&session->pairs);
+    h2o_buffer_init(&session->capsules, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&session->resp.pending, &h2o_socket_buffer_prototype);
+    h2o_buffer_init(&session->resp.inflight, &h2o_socket_buffer_prototype);
+    h2o_timer_init(&session->connect_timeout, on_connect_timeout);
+}
+
+/**
+ * starts connecting to the relay
+ */
+static void connect_backend(struct st_wtmoq_session_t *session, h2o_context_t *ctx)
+{
+    const struct st_wtmoq_relay_t *relay = session->relay;
+
+    h2o_timer_link(ctx->loop, CONNECT_TIMEOUT, &session->connect_timeout);
+    session->getaddr_req = h2o_hostinfo_getaddr(
+        &ctx->receivers.hostinfo_getaddr, h2o_iovec_init(relay->host, strlen(relay->host)), relay->port, AF_UNSPEC,
+        relay->qmux_cleartext ? SOCK_STREAM : SOCK_DGRAM, relay->qmux_cleartext ? IPPROTO_TCP : IPPROTO_UDP,
+        AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, session);
+}
+
 static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 {
     struct st_wtmoq_handler_t *handler = (void *)_handler;
@@ -1106,17 +1218,14 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     struct st_wtmoq_session_t *session = h2o_mem_alloc_shared(&req->pool, sizeof(*session), on_session_dispose);
     *session = (struct st_wtmoq_session_t){
         .super = {.proceed = on_generator_proceed, .stop = on_generator_stop},
+        .frontend_cb = &wt_frontend,
         .req = req,
-        .handler = handler,
+        .relay = &handler->relay,
         .tctx = h2o_context_get_handler_context(req->conn->ctx, &handler->super),
         .session_id = req->conn->callbacks->get_req_id(req),
         .protocol = protocol,
     };
-    h2o_linklist_init_anchor(&session->pairs);
-    h2o_buffer_init(&session->capsules, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&session->resp.pending, &h2o_socket_buffer_prototype);
-    h2o_buffer_init(&session->resp.inflight, &h2o_socket_buffer_prototype);
-    h2o_timer_init(&session->connect_timeout, on_connect_timeout);
+    init_session(session);
 
     /* capsules are not read until the session is established; datagrams are not received until the 2xx is sent */
     req->write_req.cb = on_write_req;
@@ -1131,18 +1240,13 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     }
     session->frontend = frontend->quic;
 
-    /* connect to the backend */
-    h2o_timer_link(req->conn->ctx->loop, CONNECT_TIMEOUT, &session->connect_timeout);
-    session->getaddr_req = h2o_hostinfo_getaddr(
-        &req->conn->ctx->receivers.hostinfo_getaddr, h2o_iovec_init(handler->host, strlen(handler->host)), handler->port, AF_UNSPEC,
-        handler->qmux_cleartext ? SOCK_STREAM : SOCK_DGRAM, handler->qmux_cleartext ? IPPROTO_TCP : IPPROTO_UDP,
-        AI_ADDRCONFIG | AI_NUMERICSERV, on_getaddr, session);
+    connect_backend(session, req->conn->ctx);
     return 0;
 }
 
 /* per-thread context */
 
-static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
+static struct st_wtmoq_thread_ctx_t *create_thread_ctx(h2o_context_t *ctx)
 {
 #if H2O_USE_LIBUV
     h2o_fatal("webtransport.moq: no support for libuv");
@@ -1193,24 +1297,40 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     h2o_quic_init_context(&tctx->quic_ctx, ctx->loop, socks[0], socks[1], &tctx->quic, &ctx->http3.next_cid, NULL,
                           on_backend_update, 0, NULL);
 
-    h2o_context_set_handler_context(ctx, _handler, tctx);
+    return tctx;
 #endif
 }
 
-static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
+static void destroy_thread_ctx(struct st_wtmoq_thread_ctx_t *tctx)
 {
-    struct st_wtmoq_thread_ctx_t *tctx = h2o_context_get_handler_context(ctx, _handler);
-
     h2o_quic_dispose_context(&tctx->quic_ctx);
     quicly_free_default_cid_encryptor(tctx->quic.cid_encryptor);
     free(tctx);
 }
 
+static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
+{
+    h2o_context_set_handler_context(ctx, _handler, create_thread_ctx(ctx));
+}
+
+static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
+{
+    destroy_thread_ctx(h2o_context_get_handler_context(ctx, _handler));
+}
+
+static void init_relay(struct st_wtmoq_relay_t *relay, h2o_iovec_t host, uint16_t port, int qmux_cleartext)
+{
+    relay->host = h2o_strdup(NULL, host.base, host.len).base;
+    relay->port.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
+    relay->port.len = sprintf(relay->port.base, "%" PRIu16, port);
+    relay->qmux_cleartext = qmux_cleartext;
+}
+
 static void on_handler_dispose(h2o_handler_t *_handler)
 {
     struct st_wtmoq_handler_t *handler = (void *)_handler;
-    free(handler->host);
-    free(handler->port.base);
+    free(handler->relay.host);
+    free(handler->relay.port.base);
 }
 
 void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext)
@@ -1222,8 +1342,5 @@ void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, u
     handler->super.dispose = on_handler_dispose;
     handler->super.on_req = on_req;
     handler->super.supports_request_streaming = 1;
-    handler->host = h2o_strdup(NULL, host.base, host.len).base;
-    handler->port.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
-    handler->port.len = sprintf(handler->port.base, "%" PRIu16, port);
-    handler->qmux_cleartext = qmux_cleartext;
+    init_relay(&handler->relay, host, port, qmux_cleartext);
 }
