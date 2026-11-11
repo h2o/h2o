@@ -2483,8 +2483,9 @@ static quicly_error_t apply_stream_frame(quicly_stream_t *stream, quicly_stream_
         uint64_t max_stream_data = frame->offset + frame->data.len;
         if ((int64_t)max_stream_data > stream->_send_aux.max_stream_data_sender.committed)
             return QUICLY_TRANSPORT_ERROR_FLOW_CONTROL;
-        if (stream->recvstate.app_error_code == UINT64_MAX && stream->recvstate.received.last->end < max_stream_data) {
-            uint64_t newly_received = max_stream_data - stream->recvstate.received.last->end;
+        uint64_t charged = quicly_recvstate_bytes_allocated(&stream->recvstate);
+        if (stream->recvstate.app_error_code == UINT64_MAX && charged < max_stream_data) {
+            uint64_t newly_received = max_stream_data - charged;
             if (stream->conn->ingress.max_data.bytes_consumed + newly_received >
                 stream->conn->ingress.max_data.sender.committed)
                 return QUICLY_TRANSPORT_ERROR_FLOW_CONTROL;
@@ -4575,9 +4576,12 @@ static inline void adjust_stream_frame_layout(uint8_t **dst, uint8_t *const dst_
     size_t space_left = (dst_end - *dst) - *len, len_of_len = quicly_encodev_capacity(*len);
 
     if (**frame_at == QUICLY_FRAME_TYPE_CRYPTO) {
-        /* CRYPTO frame: adjust payload length to make space for the length field, if necessary. */
+        /* CRYPTO frame: adjust payload length to make space for the length field, if necessary. The payload is shortened to the
+         * largest length that fits in the space along with its length field. */
         if (space_left < len_of_len) {
-            *len = dst_end - *dst - len_of_len;
+            size_t space = dst_end - *dst;
+            *len = space - quicly_encodev_capacity(space - 1);
+            len_of_len = quicly_encodev_capacity(*len);
             *wrote_all = 0;
         }
     } else {
@@ -4687,8 +4691,7 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
     }
 
     /* Write payload, adjusting len to actual size. Note that `on_send_emit` might fail (e.g., when underlying pread(2) fails), in
-     * which case the application will either close the connection immediately or reset the stream. If that happens, we return
-     * immediately without updating state. */
+     * which case the application resets the stream. If that happens, we return immediately without updating state. */
     assert(len != 0);
     size_t emit_off = (size_t)(off - stream->sendstate.acked.ranges[0].end);
     QUICLY_PROBE(STREAM_ON_SEND_EMIT, stream->conn, stream->conn->stash.now, stream, emit_off, len);
@@ -4698,9 +4701,7 @@ quicly_error_t quicly_send_stream(quicly_stream_t *stream, quicly_send_context_t
         PTLS_LOG_ELEMENT_NUMBER(capacity, len);
     });
     stream->callbacks->on_send_emit(stream, emit_off, dst, &len, &wrote_all);
-    if (stream->conn->super.state >= QUICLY_STATE_CLOSING) {
-        return QUICLY_ERROR_IS_CLOSING;
-    } else if (quicly_sendstate_eos_type(&stream->sendstate) == QUICLY_SENDSTATE_EOS_TYPE_RESET) {
+    if (quicly_sendstate_eos_type(&stream->sendstate) == QUICLY_SENDSTATE_EOS_TYPE_RESET) {
         /* the application may reset the stream from within the callback; if it did, the partially built STREAM frame is dropped. */
         sent->acked = on_ack_noop;
         return 0;
@@ -5685,7 +5686,8 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
     /* Handle handshake timeouts opportunistically: this deadline is not included in quicly_get_first_timeout, so we rely on
      * PTO or other events to reach this check. */
     if ((conn->initial != NULL || conn->handshake != NULL) &&
-        conn->created_at + (double)conn->super.ctx->handshake_timeout_rtt_multiplier * conn->egress.loss.rtt.smoothed <=
+        conn->created_at + (double)conn->super.ctx->handshake_timeout_rtt_multiplier *
+                               (conn->egress.loss.rtt.smoothed >= 1 ? conn->egress.loss.rtt.smoothed : 1) <=
             conn->stash.now) {
         QUICLY_PROBE(HANDSHAKE_TIMEOUT, conn, conn->stash.now, conn->stash.now - conn->created_at,
                      (uint32_t)conn->egress.loss.rtt.smoothed);
@@ -5703,7 +5705,8 @@ static quicly_error_t do_send(quicly_conn_t *conn, quicly_send_context_t *s)
         conn->super.stats.num_initial_handshake_exceeded++;
         goto CloseNow;
     }
-    if (conn->egress.loss.alarm_at <= conn->stash.now) {
+    /* loss recovery runs only on the primary path, as the packets being sent in response are sent only on that path */
+    if (s->path_index == 0 && conn->egress.loss.alarm_at <= conn->stash.now) {
         if ((ret = quicly_loss_on_alarm(&conn->egress.loss, conn->stash.now, conn->super.remote.transport_params.max_ack_delay,
                                         conn->initial == NULL && conn->handshake == NULL, &min_packets_to_send, &restrict_sending,
                                         on_loss_detected_by_alarm)) != 0)
@@ -6024,14 +6027,12 @@ static quicly_error_t do_send_closed(quicly_conn_t *conn, quicly_send_context_t 
     if ((ret = init_acks_iter(conn, &iter)) != 0)
         goto Exit;
 
-    /* check if the connection can be closed now (after 3 pto) */
-    if (conn->super.state == QUICLY_STATE_DRAINING ||
-        conn->super.stats.num_frames_sent.transport_close + conn->super.stats.num_frames_sent.application_close != 0) {
-        if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX) {
-            assert(quicly_num_streams(conn) == 0);
-            ret = QUICLY_ERROR_FREE_CONNECTION;
-            goto Exit;
-        }
+    /* check if the connection can be closed now (after 3 pto); if that happens before sending CONNECTION_CLOSE, the frame is not
+     * sent, as if it were lost */
+    if (quicly_sentmap_get(&iter)->packet_number == UINT64_MAX) {
+        destroy_all_streams(conn, 0, 0);
+        ret = QUICLY_ERROR_FREE_CONNECTION;
+        goto Exit;
     }
 
     if (conn->super.state == QUICLY_STATE_CLOSING && conn->egress.send_ack_at <= conn->stash.now) {
@@ -6044,6 +6045,9 @@ static quicly_error_t do_send_closed(quicly_conn_t *conn, quicly_send_context_t 
             if ((ret = send_connection_close(conn, epoch, s)) != 0)
                 goto Exit;
         }
+        /* datagrams sent by the client that carry Initial packets are padded to full size (RFC 9000 Section 14.1) */
+        if (quicly_is_client(conn) && (s->payload_buf.datagram[0] & QUICLY_PACKET_TYPE_BITMASK) == QUICLY_PACKET_TYPE_INITIAL)
+            s->target.full_size = 1;
         if ((ret = commit_send_packet(conn, s, 0)) != 0)
             goto Exit;
     }
@@ -6408,6 +6412,8 @@ static quicly_error_t handle_stream_frame(quicly_conn_t *conn, struct st_quicly_
     if ((ret = quicly_decode_stream_frame(state->frame_type, &state->src, state->end, &frame)) != 0)
         return ret;
     QUICLY_PROBE(QUICTRACE_RECV_STREAM, conn, conn->stash.now, frame.stream_id, frame.offset, frame.data.len, (int)frame.is_fin);
+    if (!quicly_stream_has_receive_side(quicly_is_client(conn), frame.stream_id))
+        return QUICLY_TRANSPORT_ERROR_STREAM_STATE;
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
     return apply_stream_frame(stream, &frame);
@@ -6442,6 +6448,8 @@ static quicly_error_t handle_reset_stream_frame(quicly_conn_t *conn, struct st_q
         break;
     }
 
+    if (!quicly_stream_has_receive_side(quicly_is_client(conn), frame.stream_id))
+        return QUICLY_TRANSPORT_ERROR_STREAM_STATE;
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
@@ -6941,6 +6949,8 @@ static quicly_error_t handle_stop_sending_frame(quicly_conn_t *conn, struct st_q
         PTLS_LOG_ELEMENT_NUMBER(error_code, frame.app_error_code);
     });
 
+    if (!quicly_stream_has_send_side(quicly_is_client(conn), frame.stream_id))
+        return QUICLY_TRANSPORT_ERROR_STREAM_STATE;
     if ((ret = quicly_get_or_open_stream(conn, frame.stream_id, &stream)) != 0 || stream == NULL)
         return ret;
 
@@ -7315,6 +7325,8 @@ static quicly_error_t handle_datagram_frame(quicly_conn_t *conn, struct st_quicl
 
     /* handle the frame. Applications might call quicly_close or other functions that modify the connection state. */
     conn->super.ctx->receive_datagram_frame->cb(conn->super.ctx->receive_datagram_frame, conn, frame.payload);
+    if (conn->super.state >= QUICLY_STATE_CLOSING)
+        return QUICLY_ERROR_IS_CLOSING;
 
     return 0;
 }

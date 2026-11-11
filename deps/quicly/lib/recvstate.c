@@ -102,7 +102,7 @@ quicly_error_t quicly_recvstate_reset(quicly_recvstate_t *state, uint64_t final_
             return QUICLY_TRANSPORT_ERROR_FINAL_SIZE;
         /* The sender has consumed flow control credit up to the final size; report the part of it that will never be received,
          * the rest having been accounted for as it arrived. This is done once, no byte of the stream being charged thereafter. */
-        *bytes_missing = final_size - state->received.last->end;
+        *bytes_missing = final_size - quicly_recvstate_bytes_allocated(state);
     } else {
         /* the application error code cannot change between the resets received for one stream (section 5.2 of
          * draft-ietf-quic-reliable-stream-reset) */

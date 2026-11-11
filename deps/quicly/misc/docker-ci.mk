@@ -4,6 +4,7 @@ CI_MK=$(SRC_DIR)/misc/docker-ci.mk
 CMAKE_ARGS=
 CHECK_ENVS=
 DOCKER_RUN_OPTS=--privileged \
+	--rm \
 	-v `pwd`:$(SRC_DIR) \
 	-it
 
