@@ -2484,6 +2484,16 @@ void h2o_self_trace_register(h2o_pathconf_t *conf);
  */
 void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 
+/* lib/handler/webtransport_moq.c */
+/**
+ * registers the handler forwarding MoQ sessions received over WebTransport to a MoQ relay over native QUIC (`host`:`port`)
+ */
+void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port);
+/**
+ * registers the configurator of the webtransport.moq directive
+ */
+void h2o_webtransport_moq_register_configurator(h2o_globalconf_t *conf);
+
 /* lib/handler/h2olog.c */
 
 /**

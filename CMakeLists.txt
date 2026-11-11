@@ -447,6 +447,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/reproxy.c
     lib/handler/throttle_resp.c
     lib/handler/self_trace.c
+    lib/handler/webtransport_moq.c
     lib/handler/server_timing.c
     lib/handler/status.c
     lib/handler/status/events.c
@@ -469,6 +470,7 @@ SET(LIB_SOURCE_FILES
     lib/handler/configurator/reproxy.c
     lib/handler/configurator/throttle_resp.c
     lib/handler/configurator/self_trace.c
+    lib/handler/configurator/webtransport_moq.c
     lib/handler/configurator/server_timing.c
     lib/handler/configurator/status.c
 
