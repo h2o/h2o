@@ -2,7 +2,9 @@ name: CIFuzz
 on: [pull_request]
 jobs:
   Fuzzing:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # skippable by setting the CI_SKIP_OSSFUZZ repository variable
+    if: ${{ !vars.CI_SKIP_OSSFUZZ }}
     steps:
     - name: Build Fuzzers
       id: build
