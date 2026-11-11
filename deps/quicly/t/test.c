@@ -3381,6 +3381,65 @@ static void test_migration_during_handshake(void)
     subtest("migrate-before-3nd", do_test_migration_during_handshake, 1);
 }
 
+/**
+ * When a PATH_CHALLENGE is to be sent on a backup path at the moment the loss timer fires, the timer is handled when sending
+ * packets on the primary path, rather than being consumed while sending the probe on the backup path.
+ */
+static void test_pto_with_backup_path_probe(void)
+{
+    quicly_conn_t *client, *server;
+    struct sockaddr_in newaddr = {.sin_family = AF_INET, .sin_addr.s_addr = htonl(0x7f000002), .sin_port = htons(12345)};
+    quicly_address_t destaddr, srcaddr;
+    struct iovec datagrams[8];
+    uint8_t buf[PTLS_ELEMENTSOF(datagrams) * quic_ctx.transport_params.max_udp_payload_size];
+    quicly_decoded_packet_t decoded[PTLS_ELEMENTSOF(datagrams) * 4];
+    size_t num_datagrams, num_decoded;
+    quicly_stream_t *stream;
+
+    test_setup_connected_peers(&client, &server);
+
+    /* server sends stream data that gets lost, arming the loss timer */
+    ok(quicly_open_stream(server, &stream, 0) == 0);
+    ok(quicly_streambuf_egress_write(stream, "a", 1) == 0);
+    num_datagrams = PTLS_ELEMENTSOF(datagrams);
+    ok(quicly_send(server, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf)) == 0);
+    ok(num_datagrams == 1);
+    ok(server->egress.loss.alarm_at != INT64_MAX);
+
+    /* when the loss timer fires, a packet from a new client address arrives, scheduling a PATH_CHALLENGE on a backup path */
+    quic_now = server->egress.loss.alarm_at;
+    ok(quicly_open_stream(client, &stream, 0) == 0);
+    ok(quicly_streambuf_egress_write(stream, "a", 1) == 0);
+    num_datagrams = PTLS_ELEMENTSOF(datagrams);
+    ok(quicly_send(client, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf)) == 0);
+    ok(num_datagrams == 1);
+    num_decoded = decode_packets(decoded, datagrams, num_datagrams);
+    for (size_t i = 0; i != num_decoded; ++i)
+        ok(quicly_receive(server, NULL, (void *)&newaddr, decoded + i) == 0);
+    ok(server->paths[1] != NULL);
+    ok(server->egress.loss.alarm_at <= quic_now);
+    int8_t pto_count = server->egress.loss.pto_count;
+
+    /* server sends a PATH_CHALLENGE on the backup path, without consuming the loss timer */
+    num_datagrams = PTLS_ELEMENTSOF(datagrams);
+    ok(quicly_send(server, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf)) == 0);
+    ok(num_datagrams == 1);
+    ok(compare_socket_address(&destaddr.sa, (void *)&newaddr) == 0);
+    ok(server->egress.loss.pto_count == pto_count);
+    ok(server->egress.loss.alarm_at <= quic_now);
+
+    /* then, sends the PTO probe on the primary path */
+    num_datagrams = PTLS_ELEMENTSOF(datagrams);
+    ok(quicly_send(server, &destaddr, &srcaddr, datagrams, &num_datagrams, buf, sizeof(buf)) == 0);
+    ok(num_datagrams != 0);
+    ok(compare_socket_address(&destaddr.sa, &fake_address.sa) == 0);
+    ok(server->egress.loss.pto_count != pto_count);
+    ok(quic_now < server->egress.loss.alarm_at);
+
+    quicly_free(client);
+    quicly_free(server);
+}
+
 static size_t test_stats_foreach_next_off;
 
 static void test_stats_foreach_field(size_t off, size_t size)
@@ -4207,6 +4266,7 @@ int main(int argc, char **argv)
     subtest("lower-receive-window", test_lower_receive_window);
     subtest("state-exhaustion", test_state_exhaustion);
     subtest("migration-during-handshake", test_migration_during_handshake);
+    subtest("pto-with-backup-path-probe", test_pto_with_backup_path_probe);
 
     subtest("stats-foreach", test_stats_foreach);
 
