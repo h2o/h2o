@@ -449,9 +449,11 @@ hosts:
           proc {|env|
             q = env['QUERY_STRING']
             headers = q.empty? ? nil : { 'Connection' => q }
-            resp = http_request("http://$upstream_hostport/echo-remote-port", { :headers => headers }).join
-            resp[1]['upstream-connection'] = resp[1]['connection'] || 'keep-alive'
-            resp
+            begin
+              http_request("http://$upstream_hostport/echo-remote-port", { :headers => headers }).join
+            rescue => e
+              [500, {}, [e.message]]
+            end
           }
 EOT
     };
@@ -463,25 +465,23 @@ EOT
             my ($headers, $body);
 
             ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
-            like $headers, qr{^upstream-connection: keep-alive}im;
+            like $headers, qr{^HTTP/1\.1 200 }s;
             my $remote_port = $body;
 
             ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
-            like $headers, qr{^upstream-connection: close}im;
-            is $body, $remote_port
+            like $headers, qr{^HTTP/1\.1 200 }s;
+            is $body, $remote_port, "connection is reused";
+
+            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
+            like $headers, qr{^HTTP/1\.1 200 }s;
+            isnt $body, $remote_port, "connection is closed after sending connection: close";
         };
 
         subtest "keep-alive" => sub {
             my $server = $spawner->(keepalive => 1);
-            my ($headers, $body);
-
-            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
-            like $headers, qr{^upstream-connection: keep-alive}im;
-            my $remote_port = $body;
-
-            ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
-            like $headers, qr{^upstream-connection: close}im;
-            is $body, $remote_port
+            my ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
+            like $headers, qr{^HTTP/1\.1 500 }s;
+            is $body, "hop-by-hop header field cannot be used: connection";
         };
 
         subtest "close" => sub {
@@ -489,11 +489,11 @@ EOT
             my ($headers, $body);
 
             ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
-            like $headers, qr{^upstream-connection: close}im;
+            like $headers, qr{^HTTP/1\.1 200 }s;
             my $remote_port = $body;
 
             ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
-            like $headers, qr{^upstream-connection: close}im;
+            like $headers, qr{^HTTP/1\.1 200 }s;
             isnt $body, $remote_port
         };
     };
@@ -502,12 +502,12 @@ EOT
         my $server = $spawner->(keepalive => 0);
         my ($headers, $body);
 
-        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?keep-alive");
-        like $headers, qr{^upstream-connection: close}im;
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
+        like $headers, qr{^HTTP/1\.1 200 }s;
         my $remote_port = $body;
 
-        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/?close");
-        like $headers, qr{^upstream-connection: close}im;
+        ($headers, $body) = run_prog("$curl http://127.0.0.1:$server->{port}/");
+        like $headers, qr{^HTTP/1\.1 200 }s;
         isnt $body, $remote_port
     };
 };

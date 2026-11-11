@@ -253,6 +253,11 @@ static h2o_iovec_t convert_header_name_to_env(h2o_mem_pool_t *pool, const char *
 static int handle_early_hints_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
 {
     h2o_req_t *req = _req;
+    int ret;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, name, value, NULL)) != 0)
+        return ret > 0 ? 0 : -1;
+
     h2o_add_header_by_str(&req->pool, &req->res.headers, name->base, name->len, 1, NULL, value.base, value.len);
     return 0;
 }
@@ -695,19 +700,52 @@ static mrb_value build_path_info(mrb_state *mrb, h2o_req_t *req, size_t confpath
     return h2o_mruby_new_str(mrb, req->path.base + path_info_start, path_info_end - path_info_start);
 }
 
+int h2o_mruby_reject_hop_by_hop_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value,
+                                       int *is_connection_close)
+{
+    mrb_state *mrb = shared_ctx->mrb;
+    const h2o_token_t *token;
+
+    if (h2o_iovec_is_token(name)) {
+        token = H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, name);
+    } else {
+        char lc_name[32];
+        if (name->len >= sizeof(lc_name)) /* longer than the names of any hop-by-hop header field */
+            return 0;
+        memcpy(lc_name, name->base, name->len);
+        h2o_strtolower(lc_name, name->len);
+        if ((token = h2o_lookup_token(lc_name, name->len)) == NULL)
+            return 0;
+    }
+    if (!token->flags.is_hop_by_hop)
+        return 0;
+
+    if (token == H2O_TOKEN_CONNECTION && h2o_lcstris(value.base, value.len, H2O_STRLIT("close"))) {
+        if (is_connection_close != NULL)
+            *is_connection_close = 1;
+        return 1;
+    }
+
+    mrb_value msg = mrb_str_new_lit(mrb, "hop-by-hop header field cannot be used: ");
+    mrb_str_cat(mrb, msg, token->buf.base, token->buf.len);
+    mrb->exc = mrb_obj_ptr(mrb_exc_new_str(mrb, E_ARGUMENT_ERROR, msg));
+    return -1;
+}
+
 int h2o_mruby_iterate_native_headers(h2o_mruby_shared_context_t *shared_ctx, h2o_mem_pool_t *pool, h2o_headers_t *headers,
                                      int (*cb)(h2o_mruby_shared_context_t *, h2o_mem_pool_t *, h2o_header_t *, void *),
                                      void *cb_data)
 {
-    if (headers->size == 0)
-        return 0;
     h2o_header_t **sorted = alloca(sizeof(*sorted) * headers->size);
     size_t i, num_sorted = 0;
     for (i = 0; i != headers->size; ++i) {
-        if (headers->entries[i].name == &H2O_TOKEN_TRANSFER_ENCODING->buf)
+        if (h2o_iovec_is_token(headers->entries[i].name) &&
+            H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers->entries[i].name)->flags.is_hop_by_hop)
             continue;
         sorted[num_sorted++] = headers->entries + i;
     }
+    if (num_sorted == 0)
+        return 0;
     qsort(sorted, num_sorted, sizeof(*sorted), build_env_sort_header_cb);
     h2o_iovec_t *values = alloca(sizeof(*values) * (num_sorted * 2 - 1));
     for (i = 0; i != num_sorted; ++i) {
@@ -985,6 +1023,22 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     return 0;
 }
 
+static int handle_rack_response_header(h2o_mruby_shared_context_t *shared_ctx, h2o_iovec_t *name, h2o_iovec_t value, void *_req)
+{
+    h2o_req_t *req = _req;
+    int is_connection_close = 0, ret;
+
+    if ((ret = h2o_mruby_reject_hop_by_hop_header(shared_ctx, name, value, &is_connection_close)) != 0) {
+        if (ret < 0)
+            return -1;
+        if (is_connection_close)
+            req->http1_is_persistent = 0;
+        return 0;
+    }
+
+    return h2o_mruby_set_response_header(shared_ctx, name, value, req);
+}
+
 static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_value resp, int *is_delegate)
 {
     mrb_state *mrb = generator->ctx->shared->mrb;
@@ -995,7 +1049,7 @@ static int send_response(h2o_mruby_generator_t *generator, mrb_int status, mrb_v
     generator->req->res.status = (int)status;
 
     /* set headers */
-    if (h2o_mruby_iterate_rack_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), h2o_mruby_set_response_header,
+    if (h2o_mruby_iterate_rack_headers(generator->ctx->shared, mrb_ary_entry(resp, 1), handle_rack_response_header,
                                        generator->req) != 0) {
         return -1;
     }
