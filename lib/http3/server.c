@@ -635,16 +635,20 @@ static ptls_t *get_ptls(h2o_conn_t *_conn)
     return quicly_get_tls(conn->h3.super.quic);
 }
 
-static const char *get_ssl_server_name(h2o_conn_t *conn)
+static const char *get_ssl_server_name(h2o_conn_t *_conn)
 {
-    ptls_t *ptls = get_ptls(conn);
-    return ptls_get_server_name(ptls);
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_get_ssl_server_name(conn->h3.super.streams_sock);
+    return ptls_get_server_name(quicly_get_tls(conn->h3.super.quic));
 }
 
-static ptls_log_conn_state_t *log_state(h2o_conn_t *conn)
+static ptls_log_conn_state_t *log_state(h2o_conn_t *_conn)
 {
-    ptls_t *ptls = get_ptls(conn);
-    return ptls_get_log_state(ptls);
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_state(conn->h3.super.streams_sock);
+    return ptls_get_log_state(quicly_get_tls(conn->h3.super.quic));
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
