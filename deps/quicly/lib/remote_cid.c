@@ -80,7 +80,6 @@ static quicly_error_t do_register(quicly_remote_cid_set_t *set, uint64_t sequenc
                 return QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION;
         } else if (set->cids[i].sequence == sequence) {
             assert(!was_stored);
-            set->cids[i].sequence = sequence;
             quicly_set_cid(&set->cids[i].cid, ptls_iovec_init(cid, cid_len));
             memcpy(set->cids[i].stateless_reset_token, srt, QUICLY_STATELESS_RESET_TOKEN_LEN);
             set->cids[i].state = QUICLY_REMOTE_CID_AVAILABLE;
@@ -162,6 +161,6 @@ void quicly_remote_cid_shift_retired(quicly_remote_cid_set_t *set, size_t count)
     assert(count <= set->retired.count);
 
     set->retired.count -= count;
-    for (size_t i = 0; i < count; ++i)
+    for (size_t i = 0; i < set->retired.count; ++i)
         set->retired.cids[i] = set->retired.cids[i + count];
 }

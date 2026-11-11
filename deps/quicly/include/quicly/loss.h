@@ -27,6 +27,8 @@ extern "C" {
 #endif
 
 #include <assert.h>
+#include <float.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdint.h>
 #include "quicly/constants.h"
@@ -70,7 +72,7 @@ typedef struct quicly_loss_conf_t {
     }
 
 /**
- * Holds RTT variables. We use this structure differently from the specification:
+ * Holds RTT variables in the unit of milliseconds. We use this structure differently from the specification:
  * * if the first sample has been obtained should be checked by doing: `latest != 0`
  * * smoothed and variance are available even before the first RTT sample is obtained
  */
@@ -78,24 +80,43 @@ typedef struct quicly_rtt_t {
     /**
      * Minimum RTT value, measured over the entire connection.
      */
-    uint32_t minimum;
+    float minimum;
     /**
-     * Current smoothed RTT value.
+     * Current smoothed RTT value. The type has been changed to float because the EWMA advances by (latest - smoothed) / 8 per
+     * sample. If it is int, latest would be ignored unless latest - smoothed > 7.
      */
-    uint32_t smoothed;
+    float smoothed;
     /**
-     * Current estimate of RTT variance.
+     * Current estimate of RTT variance, also in float.
      */
-    uint32_t variance;
+    float variance;
     /**
      * Value of the latest RTT sample.
      */
-    uint32_t latest;
+    float latest;
+    /**
+     * Tracks the minimum RTT observed during the most recent RTT-sized window. Four slots let the window advance without
+     * discarding all recent samples at once. Maintained for every RTT sample and reset along with the other RTT estimates.
+     */
+    struct {
+        /**
+         * End of the newest slot, or zero before the first sample is obtained.
+         */
+        int64_t newest_sample_until;
+        /**
+         * Per-slot minima, newest first. FLT_MAX denotes a slot for which no sample was obtained.
+         */
+        float samples[4];
+    } floor;
 } quicly_rtt_t;
 
-static void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, uint32_t initial_rtt);
-static void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t ack_delay);
-static uint32_t quicly_rtt_get_pto(quicly_rtt_t *rtt, uint32_t max_ack_delay, uint32_t min_pto);
+static void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, float initial_rtt);
+static void quicly_rtt_update(quicly_rtt_t *rtt, float latest_rtt, float ack_delay, int64_t now);
+static double quicly_rtt_get_pto(quicly_rtt_t *rtt, uint32_t max_ack_delay, uint32_t min_pto);
+/**
+ * Returns the recent RTT floor, or the initial RTT estimate held in smoothed before the first sample is obtained.
+ */
+static float quicly_rtt_get_floor(const quicly_rtt_t *rtt);
 
 typedef struct quicly_loss_thresholds_t {
     /**
@@ -125,6 +146,10 @@ typedef struct quicly_loss_t {
      * Controls loss thresholds.
      */
     quicly_loss_thresholds_t thresholds;
+    /**
+     * Minimum packet number of a late-acked packet that can relax reordering tolerance.
+     */
+    uint64_t min_pn_to_relax_reorder_tolerance;
     /**
      * The number of consecutive PTOs (PTOs that have fired without receiving an ack).
      */
@@ -170,17 +195,21 @@ typedef enum quicly_loss_ack_received_kind_t {
     QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK,
 } quicly_loss_ack_received_kind_t;
 
-static void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, uint32_t initial_rtt, const uint16_t *max_ack_delay,
+static void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, float initial_rtt, const uint16_t *max_ack_delay,
                              const uint8_t *ack_delay_exponent);
 static void quicly_loss_dispose(quicly_loss_t *r);
-static void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last_retransmittable_sent_at, int has_outstanding,
+/**
+ * Updates the alarm. When `use_loss_time` is false, `loss_time` is not used for scheduling the alarm.
+ */
+static void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, double last_retransmittable_sent_at, int has_outstanding,
                                      int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
-                                     int is_after_send);
+                                     int is_after_send, int use_loss_time);
 /**
  * called when an ACK is received
  */
-static void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly_acked, size_t epoch, int64_t now, int64_t sent_at,
-                                        uint64_t ack_delay_encoded, quicly_loss_ack_received_kind_t kind);
+static void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly_acked, uint64_t largest_late_acked,
+                                        uint64_t next_pn, size_t epoch, double now, double sent_at, uint64_t ack_delay_encoded,
+                                        quicly_loss_ack_received_kind_t kind);
 /* This function updates the loss detection timer and indicates to the caller how many packets should be sent.
  * After calling this function, app should:
  *  * send min_packets_to_send number of packets immediately. min_packets_to_send should never be 0.
@@ -204,25 +233,28 @@ quicly_error_t quicly_loss_init_sentmap_iter(quicly_loss_t *loss, quicly_sentmap
  * Returns the timeout for sentmap entries. This timeout is also used as the duration of CLOSING / DRAINING state, and therefore be
  * longer than 3PTO. At the moment, the value is 4PTO.
  */
-static int64_t quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint32_t max_ack_delay);
+static double quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint32_t max_ack_delay);
 
 /* inline definitions */
 
-inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, uint32_t initial_rtt)
+inline void quicly_rtt_init(quicly_rtt_t *rtt, const quicly_loss_conf_t *conf, float initial_rtt)
 {
     (void)conf;
-    rtt->minimum = UINT32_MAX;
+    rtt->minimum = FLT_MAX;
     rtt->latest = 0;
     rtt->smoothed = initial_rtt;
-    rtt->variance = initial_rtt / 2;
+    rtt->variance = initial_rtt / 2.f;
+    rtt->floor.newest_sample_until = 0;
+    for (size_t i = 0; i < PTLS_ELEMENTSOF(rtt->floor.samples); ++i)
+        rtt->floor.samples[i] = FLT_MAX;
 }
 
-inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t ack_delay)
+inline void quicly_rtt_update(quicly_rtt_t *rtt, float latest_rtt, float ack_delay, int64_t now)
 {
     int is_first_sample = rtt->latest == 0;
 
-    assert(latest_rtt != UINT32_MAX);
-    rtt->latest = latest_rtt != 0 ? latest_rtt : 1; /* Force minimum RTT sample to 1ms */
+    assert(latest_rtt >= 0);
+    rtt->latest = latest_rtt >= 0.001f ? latest_rtt : 0.001f; /* Force minimum RTT sample to 1us */
 
     /* update min_rtt */
     if (rtt->latest < rtt->minimum)
@@ -235,27 +267,63 @@ inline void quicly_rtt_update(quicly_rtt_t *rtt, uint32_t latest_rtt, uint32_t a
     /* update smoothed_rtt and rttvar */
     if (is_first_sample) {
         rtt->smoothed = rtt->latest;
-        rtt->variance = rtt->latest / 2;
+        rtt->variance = rtt->latest / 2.f;
     } else {
-        uint32_t absdiff = rtt->smoothed >= rtt->latest ? rtt->smoothed - rtt->latest : rtt->latest - rtt->smoothed;
-        rtt->variance = (rtt->variance * 3 + absdiff) / 4;
-        rtt->smoothed = (rtt->smoothed * 7 + rtt->latest) / 8;
+        float latest = rtt->latest;
+        float absdiff = rtt->smoothed >= latest ? rtt->smoothed - latest : latest - rtt->smoothed;
+        rtt->variance = rtt->variance * 0.75f + absdiff * 0.25f;
+        rtt->smoothed = rtt->smoothed * 0.875f + latest * 0.125f;
     }
     assert(rtt->smoothed != 0);
+
+    /* Update the floor estimate. A sub-four-millisecond minimum RTT would otherwise produce a zero-length slot. Use one-millisecond
+     * slots to keep the tracker operational, though its four-slot window is then longer than one minimum RTT. */
+    int64_t sample_duration = rtt->minimum / PTLS_ELEMENTSOF(rtt->floor.samples);
+    if (sample_duration == 0)
+        sample_duration = 1;
+    if (is_first_sample) {
+        rtt->floor.newest_sample_until = now + sample_duration;
+        rtt->floor.samples[0] = rtt->latest;
+        return;
+    }
+    if (now < rtt->floor.newest_sample_until) {
+        if (rtt->floor.samples[0] > rtt->latest)
+            rtt->floor.samples[0] = rtt->latest;
+        return;
+    }
+    size_t distance = (now - rtt->floor.newest_sample_until) / sample_duration + 1;
+    for (size_t dst = PTLS_ELEMENTSOF(rtt->floor.samples) - 1; dst != 0; --dst)
+        rtt->floor.samples[dst] = dst >= distance ? rtt->floor.samples[dst - distance] : FLT_MAX;
+    rtt->floor.samples[0] = rtt->latest;
+    rtt->floor.newest_sample_until += sample_duration * distance;
+    assert(rtt->floor.newest_sample_until - sample_duration <= now && now < rtt->floor.newest_sample_until);
 }
 
-inline uint32_t quicly_rtt_get_pto(quicly_rtt_t *rtt, uint32_t max_ack_delay, uint32_t min_pto)
+inline double quicly_rtt_get_pto(quicly_rtt_t *rtt, uint32_t max_ack_delay, uint32_t min_pto)
 {
-    return rtt->smoothed + (rtt->variance != 0 ? rtt->variance * 4 : min_pto) + max_ack_delay;
+    return (double)rtt->smoothed + (rtt->variance * 4 >= min_pto ? rtt->variance * 4 : min_pto) + max_ack_delay;
 }
 
-inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, uint32_t initial_rtt, const uint16_t *max_ack_delay,
+inline float quicly_rtt_get_floor(const quicly_rtt_t *rtt)
+{
+    float value;
+    if ((value = rtt->floor.samples[0]) == FLT_MAX)
+        return rtt->smoothed;
+
+    for (size_t i = 1; i < PTLS_ELEMENTSOF(rtt->floor.samples); ++i)
+        if (value > rtt->floor.samples[i])
+            value = rtt->floor.samples[i];
+    return value;
+}
+
+inline void quicly_loss_init(quicly_loss_t *r, const quicly_loss_conf_t *conf, float initial_rtt, const uint16_t *max_ack_delay,
                              const uint8_t *ack_delay_exponent)
 {
     *r = (quicly_loss_t){.conf = conf,
                          .max_ack_delay = max_ack_delay,
                          .ack_delay_exponent = ack_delay_exponent,
                          .thresholds = {.use_packet_based = 1, .time_based_percentile = 1024 / 8 /* start from 1/8 RTT */},
+                         .min_pn_to_relax_reorder_tolerance = 0,
                          .pto_count = 0,
                          .time_of_last_packet_sent = 0,
                          .largest_acked_packet_plus1 = {.per_epoch = {0}, .all_ = 0},
@@ -271,9 +339,9 @@ inline void quicly_loss_dispose(quicly_loss_t *r)
     quicly_sentmap_dispose(&r->sentmap);
 }
 
-inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last_retransmittable_sent_at, int has_outstanding,
+inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, double last_retransmittable_sent_at, int has_outstanding,
                                      int can_send_stream_data, int handshake_is_in_progress, uint64_t total_bytes_sent,
-                                     int is_after_send)
+                                     int is_after_send, int use_loss_time)
 {
     if (!has_outstanding) {
         /* Do not set alarm if there's no data outstanding */
@@ -281,7 +349,7 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
         r->loss_time = INT64_MAX;
         return;
     }
-    assert(last_retransmittable_sent_at != INT64_MAX);
+    assert(last_retransmittable_sent_at != INFINITY);
 
 #define SET_ALARM(t)                                                                                                               \
     do {                                                                                                                           \
@@ -295,13 +363,13 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
     } while (0)
 
     /* time-threshold loss detection */
-    if (r->loss_time != INT64_MAX) {
+    if (r->loss_time != INT64_MAX && use_loss_time) {
         SET_ALARM(r->loss_time);
         return;
     }
 
     /* PTO alarm */
-    int64_t alarm_duration;
+    double alarm_duration;
     assert(r->pto_count < 63);
     /* Probes are sent with a modified backoff to minimize latency of recovery. For instance, with num_speculative_ptos set to
      * 2, the backoff pattern is as follows:
@@ -327,26 +395,38 @@ inline void quicly_loss_update_alarm(quicly_loss_t *r, int64_t now, int64_t last
         /* Speculative probes sent under an RTT do not need to account for ack delay, since there is no expectation
          * of an ack being received before the probe is sent. */
         alarm_duration = quicly_rtt_get_pto(&r->rtt, 0, r->conf->min_pto);
-        alarm_duration >>= -r->pto_count;
+        alarm_duration = ldexp(alarm_duration, r->pto_count);
         if (alarm_duration < r->conf->min_pto)
             alarm_duration = r->conf->min_pto;
     } else {
-        /* Ordinary PTO. The bitshift below is fine; it would take more than a millenium to overflow either alarm_duration or
-         * pto_count, even when the timer granularity is nanosecond */
+        /* Ordinary PTO. */
         alarm_duration = quicly_rtt_get_pto(&r->rtt, handshake_is_in_progress ? 0 : *r->max_ack_delay, r->conf->min_pto);
-        alarm_duration <<= r->pto_count;
+        alarm_duration = ldexp(alarm_duration, r->pto_count);
     }
-    SET_ALARM(last_retransmittable_sent_at + alarm_duration);
+    SET_ALARM(ceil(last_retransmittable_sent_at + alarm_duration));
 
 #undef SET_ALARM
 }
 
-inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly_acked, size_t epoch, int64_t now, int64_t sent_at,
-                                        uint64_t ack_delay_encoded, quicly_loss_ack_received_kind_t kind)
+inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly_acked, uint64_t largest_late_acked,
+                                        uint64_t next_pn, size_t epoch, double now, double sent_at, uint64_t ack_delay_encoded,
+                                        quicly_loss_ack_received_kind_t kind)
 {
     /* Reset PTO count if anything is newly acked, and if sender is not speculatively probing at a tail */
     if (largest_newly_acked != UINT64_MAX && r->pto_count > 0)
         r->pto_count = 0;
+
+    /* Adjust loss detection thresholds when receiving a late ACK above the current relaxation threshold. */
+    if (kind == QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK && largest_late_acked != UINT64_MAX &&
+        r->min_pn_to_relax_reorder_tolerance <= largest_late_acked) {
+        if (r->thresholds.use_packet_based) {
+            r->thresholds.use_packet_based = 0;
+        } else {
+            if ((r->thresholds.time_based_percentile *= 2) > 1024)
+                r->thresholds.time_based_percentile = 1024;
+        }
+        r->min_pn_to_relax_reorder_tolerance = next_pn;
+    }
 
     /* If largest newly acked is not larger than before, skip RTT sample */
     if (largest_newly_acked == UINT64_MAX || r->largest_acked_packet_plus1.per_epoch[epoch] > largest_newly_acked)
@@ -361,23 +441,11 @@ inline void quicly_loss_on_ack_received(quicly_loss_t *r, uint64_t largest_newly
         return;
 
     /* Decode ack delay */
-    uint64_t ack_delay_microsecs = ack_delay_encoded << *r->ack_delay_exponent;
-    uint32_t ack_delay_millisecs = (uint32_t)((ack_delay_microsecs * 2 + 1000) / 2000);
+    float ack_delay_millisecs = (double)ack_delay_encoded * (UINT64_C(1) << *r->ack_delay_exponent) / 1000;
     /* use min(ack_delay, max_ack_delay) as the ack delay */
     if (ack_delay_millisecs > *r->max_ack_delay)
         ack_delay_millisecs = *r->max_ack_delay;
-    quicly_rtt_update(&r->rtt, (uint32_t)(now - sent_at), ack_delay_millisecs);
-
-    /* Adjust loss detection thresholds when receiving a late ack. The strategy is, for each ACK carrying a late ack, first disable
-     * packet-based detection, then double the time-based threshold until it reaches 1 RTT. */
-    if (kind == QUICLY_LOSS_ACK_RECEIVED_KIND_ACK_ELICITING_LATE_ACK) {
-        if (r->thresholds.use_packet_based) {
-            r->thresholds.use_packet_based = 0;
-        } else {
-            if ((r->thresholds.time_based_percentile *= 2) > 1024)
-                r->thresholds.time_based_percentile = 1024;
-        }
-    }
+    quicly_rtt_update(&r->rtt, now - sent_at, ack_delay_millisecs, now);
 }
 
 inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32_t max_ack_delay, int is_1rtt_only,
@@ -386,7 +454,7 @@ inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32
 {
     r->alarm_at = INT64_MAX;
     *min_packets_to_send = 1;
-    if (r->loss_time != INT64_MAX) {
+    if (r->loss_time <= now) {
         /* Time threshold loss detection. Send at least 1 packet, but no restrictions on sending otherwise. */
         *restrict_sending = 0;
         return quicly_loss_detect_loss(r, now, max_ack_delay, is_1rtt_only, on_loss_detected);
@@ -400,7 +468,7 @@ inline quicly_error_t quicly_loss_on_alarm(quicly_loss_t *r, int64_t now, uint32
     return 0;
 }
 
-inline int64_t quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint32_t max_ack_delay)
+inline double quicly_loss_get_sentmap_expiration_time(quicly_loss_t *loss, uint32_t max_ack_delay)
 {
     return quicly_rtt_get_pto(&loss->rtt, max_ack_delay, loss->conf->min_pto) * 4;
 }

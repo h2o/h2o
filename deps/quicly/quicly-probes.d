@@ -38,9 +38,9 @@
  * generated.
  */
 provider quicly {
-    probe connect(struct st_quicly_conn_t *conn, int64_t at, uint32_t version);
+    probe connect(struct st_quicly_conn_t *conn, int64_t at, uint32_t version, size_t alt_egress);
     probe accept(struct st_quicly_conn_t *conn, int64_t at, const char *dcid,
-                 struct st_quicly_address_token_plaintext_t *address_token);
+                 struct st_quicly_address_token_plaintext_t *address_token, size_t alt_egress);
     probe free(struct st_quicly_conn_t *conn, int64_t at);
     probe send(struct st_quicly_conn_t *conn, int64_t at, int state, const char *dcid);
     probe receive(struct st_quicly_conn_t *conn, int64_t at, const char *dcid, const void *bytes, size_t bytes_len,
@@ -69,6 +69,7 @@ provider quicly {
     probe packet_acked(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, int is_late_ack);
     probe packet_lost(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, uint8_t packet_type);
     probe packet_decryption_failed(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn);
+    probe packet_received_duplicate(struct st_quicly_conn_t *conn, int64_t at, uint64_t pn, uint8_t packet_type);
 
     probe pto(struct st_quicly_conn_t *conn, int64_t at, size_t inflight, uint32_t cwnd, int8_t pto_count);
     probe cc_ack_received(struct st_quicly_conn_t *conn, int64_t at, uint64_t largest_acked, size_t bytes_acked, uint32_t cwnd,
@@ -98,6 +99,11 @@ provider quicly {
 
     probe reset_stream_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code, uint64_t final_size);
     probe reset_stream_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code, uint64_t final_size);
+
+    probe reset_stream_at_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code,
+                               uint64_t final_size, uint64_t reliable_size);
+    probe reset_stream_at_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code,
+                                  uint64_t final_size, uint64_t reliable_size);
 
     probe stop_sending_send(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code);
     probe stop_sending_receive(struct st_quicly_conn_t *conn, int64_t at, int64_t stream_id, int64_t error_code);
@@ -173,5 +179,5 @@ provider quicly {
 
     probe debug_message(struct st_quicly_conn_t *conn, const char *function, int line, const char *message);
 
-    probe conn_stats(struct st_quicly_conn_t *conn, int64_t at, struct st_quicly_stats_t *stats, size_t size);
+    probe conn_stats(struct st_quicly_conn_t *conn, int64_t at, size_t alt_egress, struct st_quicly_stats_t *stats, size_t size);
 };

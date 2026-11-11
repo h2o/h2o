@@ -107,6 +107,7 @@ inline int quicly_cid_is_equal(const quicly_cid_t *cid, ptls_iovec_t vec)
 
 inline void quicly_set_cid(quicly_cid_t *dest, ptls_iovec_t src)
 {
+    assert(src.len <= sizeof(dest->cid));
     memcpy(dest->cid, src.base, src.len);
     dest->len = src.len;
 }

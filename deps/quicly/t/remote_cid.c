@@ -67,6 +67,25 @@ static uint8_t srts[][QUICLY_STATELESS_RESET_TOKEN_LEN] = {
 };
 /* clang-format on */
 
+static void test_shift_retired(void)
+{
+    quicly_remote_cid_set_t set = {};
+
+    set.retired.count = 5;
+    set.retired.cids[0] = 10;
+    set.retired.cids[1] = 11;
+    set.retired.cids[2] = 12;
+    set.retired.cids[3] = 13;
+    set.retired.cids[4] = 14;
+
+    quicly_remote_cid_shift_retired(&set, 2);
+
+    ok(set.retired.count == 3);
+    ok(set.retired.cids[0] == 12);
+    ok(set.retired.cids[1] == 13);
+    ok(set.retired.cids[2] == 14);
+}
+
 void test_received_cid(void)
 {
     quicly_remote_cid_set_t set;
@@ -98,6 +117,8 @@ void test_received_cid(void)
         for (size_t i = 0; i < PTLS_ELEMENTSOF(expected); ++i)                                                                     \
             ok(set.retired.cids[i] == expected[i]);                                                                                \
     } while (0)
+
+    subtest("shift-retired", test_shift_retired);
 
     quicly_remote_cid_init_set(&set, NULL, quic_ctx.tls->random_bytes);
 

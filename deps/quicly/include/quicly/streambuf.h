@@ -40,7 +40,7 @@ typedef struct st_quicly_sendbuf_vec_t quicly_sendbuf_vec_t;
  * @param dst the destination
  * @param off offset within the iovec from where serialization should happen
  * @param len number of bytes to serialize
- * @return 0 if successful, otherwise an error code
+ * @return 0 if successful, otherwise an application error code, which is used for resetting the stream
  */
 typedef quicly_error_t (*quicly_sendbuf_flatten_vec_cb)(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len);
 /**
@@ -128,6 +128,10 @@ void quicly_streambuf_egress_emit(quicly_stream_t *stream, size_t off, void *dst
 static int quicly_streambuf_egress_write(quicly_stream_t *stream, const void *src, size_t len);
 static int quicly_streambuf_egress_write_vec(quicly_stream_t *stream, quicly_sendbuf_vec_t *vec);
 int quicly_streambuf_egress_shutdown(quicly_stream_t *stream);
+/**
+ * Resets the stream while making sure that all bytes up to `reliable_size` are received.
+ */
+quicly_error_t quicly_streambuf_egress_reset(quicly_stream_t *stream, quicly_error_t err, uint64_t reliable_size);
 static void quicly_streambuf_ingress_shift(quicly_stream_t *stream, size_t delta);
 static ptls_iovec_t quicly_streambuf_ingress_get(quicly_stream_t *stream);
 /**
