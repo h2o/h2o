@@ -217,7 +217,7 @@ static void entity_read_do_send_error(struct st_h2o_http1_conn_t *conn, int stat
         h2o_send_error_generic(&conn->req, status, reason, body, H2O_SEND_ERROR_HTTP1_CLOSE_CONNECTION);
     } else {
         conn->req.http1_is_persistent = 0;
-        if (conn->_ostr_final.state == OSTREAM_STATE_DONE)
+        if (conn->req.is_tunnel_req || conn->_ostr_final.state == OSTREAM_STATE_DONE)
             cleanup_connection(conn);
     }
 }
@@ -364,8 +364,9 @@ static int create_entity_reader(struct st_h2o_http1_conn_t *conn, const struct p
 
 static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, const struct phr_header *src, size_t len,
                                 h2o_iovec_t *connection, h2o_iovec_t *host, h2o_iovec_t *upgrade, ssize_t *expect_header_index,
-                                ssize_t *entity_header_index)
+                                ssize_t *entity_header_index, int *force_close)
 {
+    int has_content_length = 0, has_transfer_encoding = 0;
     *entity_header_index = -1;
     *expect_header_index = -1;
 
@@ -391,9 +392,11 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
                         host->base = (char *)src[i].value;
                         host->len = src[i].value_len;
                     } else if (name_token == H2O_TOKEN_CONTENT_LENGTH) {
+                        has_content_length = 1;
                         if (*entity_header_index == -1)
                             *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_TRANSFER_ENCODING) {
+                        has_transfer_encoding = 1;
                         *entity_header_index = i;
                     } else if (name_token == H2O_TOKEN_EXPECT) {
                         *expect_header_index = i;
@@ -414,6 +417,9 @@ static const char *init_headers(h2o_mem_pool_t *pool, h2o_headers_t *headers, co
         }
     }
 
+    /* RFC 9112 section 6.1 requires closing the connection after responding to a request containing both headers. */
+    *force_close = has_content_length && has_transfer_encoding;
+
     return NULL;
 }
 
@@ -432,6 +438,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 {
     h2o_iovec_t connection = {NULL, 0}, host = {NULL, 0}, upgrade = {NULL, 0};
     enum { METHOD_NORMAL, METHOD_CONNECT, METHOD_CONNECT_UDP } method_type;
+    int force_close;
     const char *ret;
 
     conn->req.input.scheme = conn->sock->ssl != NULL ? &H2O_URL_SCHEME_HTTPS : &H2O_URL_SCHEME_HTTP;
@@ -451,7 +458,7 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
 
     /* init headers */
     if ((ret = init_headers(&conn->req.pool, &conn->req.headers, headers, num_headers, &connection, &host, &upgrade,
-                            expect_header_index, entity_header_index)) != NULL)
+                            expect_header_index, entity_header_index, &force_close)) != NULL)
         return ret;
 
     /* copy the values to pool, since the buffer pointed by the headers may get realloced */
@@ -525,8 +532,8 @@ static const char *fixup_request(struct st_h2o_http1_conn_t *conn, struct phr_he
                 /* defaults to keep-alive if >= HTTP/1.1 */
                 conn->req.http1_is_persistent = 1;
             }
-            /* disable keep-alive if shutdown is requested */
-            if (conn->req.http1_is_persistent && conn->super.ctx->shutdown_requested)
+            /* disable keep-alive if required by request framing or if shutdown is requested */
+            if (force_close || conn->super.ctx->shutdown_requested)
                 conn->req.http1_is_persistent = 0;
         }
     }
@@ -605,7 +612,10 @@ static int write_req_first(void *_req, int is_end_stream)
         conn->req.write_req.cb = NULL; /* will be set to something before `proceed_req` is being invoked */
         conn->req.proceed_req = proceed_request;
         h2o_process_request(&conn->req);
-        return 0;
+        if (conn->req.dispatched)
+            return 0;
+        /* handlers declined request streaming, receive the entire request body */
+        conn->req.proceed_req = NULL;
     }
 
     conn->req.write_req.cb = write_req_non_streaming;
@@ -841,6 +851,11 @@ static void on_send_next(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
 
+    if (err == h2o_socket_error_write_progress) {
+        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+        return;
+    }
+
     if (err != NULL)
         close_connection(conn, 1);
     else
@@ -862,6 +877,11 @@ static void on_send_complete_post_trailers(h2o_socket_t *sock, const char *err)
 static void on_send_complete(h2o_socket_t *sock, const char *err)
 {
     struct st_h2o_http1_conn_t *conn = sock->data;
+
+    if (err == h2o_socket_error_write_progress) {
+        set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
+        return;
+    }
 
     if (err == NULL) {
         if (conn->req._ostr_top != &conn->_ostr_final.super) {
@@ -1100,7 +1120,8 @@ void finalostream_send(h2o_ostream_t *_self, h2o_req_t *_req, h2o_sendvec_t *inb
     if (bufcnt != 0)
         set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
 
-    h2o_socket_sendvec(conn->sock, bufs, bufcnt, h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
+    h2o_socket_sendvec(conn->sock, bufs, bufcnt, H2O_SOCKET_SENDVEC_FLAG_REPORT_PROGRESS,
+                       h2o_send_state_is_in_progress(send_state) ? on_send_next : on_send_complete);
 }
 
 static void on_send_informational_complete(h2o_socket_t *sock, const char *err);
@@ -1207,18 +1228,6 @@ static uint64_t get_req_id(h2o_req_t *req)
     return conn->_req_index;
 }
 
-static h2o_socket_t *steal_socket(h2o_conn_t *_conn)
-{
-    struct st_h2o_http1_conn_t *conn = (void *)_conn;
-    h2o_socket_t *sock = conn->sock;
-
-    if (sock->ssl != NULL)
-        return NULL;
-
-    close_connection(conn, 0);
-    return sock;
-}
-
 #define DEFINE_LOGGER(name)                                                                                                        \
     static h2o_iovec_t log_##name(h2o_req_t *req)                                                                                  \
     {                                                                                                                              \
@@ -1272,7 +1281,6 @@ static const h2o_conn_callbacks_t h1_callbacks = {
     .request_shutdown = initiate_graceful_shutdown,
     .can_zerocopy = can_zerocopy,
     .get_req_id = get_req_id,
-    .steal_socket = steal_socket,
     .log_ = {{
         .transport =
             {
@@ -1322,6 +1330,8 @@ void h2o_http1_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval 
         PTLS_LOG_ELEMENT_PTR(sock, conn->sock);
         PTLS_LOG_ELEMENT_SAFESTR(uuid, h2o_conn_get_uuid(&conn->super));
     });
+    if (sock->ssl != NULL)
+        h2o_probe_log_tls_properties(&conn->super);
 
     init_request(conn);
     reqread_start(conn);

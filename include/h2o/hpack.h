@@ -26,7 +26,14 @@
 #include <stdint.h>
 #include "h2o/header.h"
 #include "h2o/url.h"
-#include "h2o/cache_digests.h"
+
+#ifndef H2O_HPACK_MAX_HEADERS_HARD_LIMIT
+/**
+ * When the number of fields within a field section exceeds this value, the HPACK decoder raises a hard error that leads to closing
+ * the connection. H2O_MAX_HEADERS is the soft limit.
+ */
+#define H2O_HPACK_MAX_HEADERS_HARD_LIMIT 1000
+#endif
 
 #define H2O_HPACK_ENCODE_INT_MAX_LENGTH 10 /* first byte + 9 bytes (7*9==63 bits to hold positive numbers of int64_t) */
 
@@ -37,9 +44,18 @@ extern const char h2o_hpack_err_unexpected_connection_specific_header[];
 extern const char h2o_hpack_err_invalid_content_length_header[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_name[];
 extern const char h2o_hpack_soft_err_found_invalid_char_in_header_value[];
+extern const char h2o_hpack_err_headers_too_long[]; /* can either be a hard error or a soft error */
 
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME 0x1
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE 0x2
+/**
+ * the value contains characters not allowed in :method; this is a soft error only if the header field is :method
+ */
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_METHOD 0x4
+/**
+ * the value contains characters not allowed in :path; this is a soft error only if the header field is :path
+ */
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_PATH 0x8
 
 /**
  * encodes an integer (maximum size of the output excluding the first octet is H2O_HTTP2_ENCODE_INT_MAX_LENGTH bytes)
@@ -86,13 +102,16 @@ typedef int (*h2o_hpack_decode_header_cb)(h2o_mem_pool_t *pool, void *ctx, h2o_i
 int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o_iovec_t **name, h2o_iovec_t *_value,
                             const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
 /**
+ * Returns the value to be returned by `h2o_hpack_decode_header_cb` for a header field that has been decoded with given soft errors.
+ */
+int h2o_hpack_return_soft_errors(const h2o_iovec_t *name, unsigned soft_errors, const char **err_desc);
+/**
  * Request parser that uses given callback as the decoder.
  */
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
                             h2o_headers_t *headers, int *pseudo_header_exists_map, size_t *content_length, h2o_iovec_t *expect,
-                            h2o_cache_digests_t **digests, h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len,
-                            const char **err_desc);
+                            h2o_iovec_t *datagram_flow_id, const uint8_t *src, size_t len, const char **err_desc);
 /**
  * Response parser that uses given callback as the decoder.
  */

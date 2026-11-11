@@ -48,7 +48,7 @@ hosts:
       "/":
         proxy.connect:     # classic CONNECT incl. CONNECT-UDP
           - "+*"
-      "/rfc9298":
+      "/.well-known/masque/udp":
         proxy.connect-udp: # RFC9298
           - "+*"
 proxy.timeout.io: 30000
@@ -134,7 +134,7 @@ subtest "udp-rfc9298" => sub {
             my ($name, $args_url_prefix, $status_expected) = @$_;
             plan skip_all => "proxy cannot forward connect-udp over H3"
                 if $path_prefix ne '' && $args_url_prefix =~ /^-3 /;
-            my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+            my $cmd = "$client_prog --upgrade connect-udp -k $args_url_prefix/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
             doit($name, $cmd, $status_expected, sub {
                 my $payload = shift;
                 "\0" . chr(1 + length $payload) . "\0" . $payload; # only supports payload up to 63 bytes
@@ -152,7 +152,7 @@ subtest "udp-rfc9298" => sub {
         }
     };
     subtest "h3-proxy-rejection" => sub {
-        my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -m CONNECT https://127.0.0.1:@{[$proxy_server->{quic_port}]}/h1/rfc9298/127.0.0.1/@{[$udp_server->{port}]}/";
+        my $cmd = "$client_prog --upgrade connect-udp -k -3 100 -m CONNECT https://127.0.0.1:@{[$proxy_server->{quic_port}]}/h1/.well-known/masque/udp/127.0.0.1/@{[$udp_server->{port}]}/";
         open my $fh, "|-", "$cmd > $tempdir/out 2>&1"
             or die "spawn error ($?) for command: $cmd";
         sleep 0.5;
@@ -169,7 +169,7 @@ subtest "udp-rfc9298" => sub {
         # just test h1 and call it a day
         plan skip_all => "nc not found"
             unless prog_exists("nc");
-        my $resp = `echo "GET /rfc9298/host/invalid-port/ HTTP/1.1\r\nConnection: upgrade\r\nUpgrade: connect-udp\r\n\r\n" | nc 127.0.0.1 $tunnel_server->{port} 2>&1`;
+        my $resp = `echo "GET /.well-known/masque/udp/host/invalid-port/ HTTP/1.1\r\nConnection: upgrade\r\nUpgrade: connect-udp\r\n\r\n" | nc 127.0.0.1 $tunnel_server->{port} 2>&1`;
         like $resp, qr{HTTP/1\.1 400 .*\r\nproxy-status: h2o; error=http_request_error; details="invalid URI"}s;
     };
 };

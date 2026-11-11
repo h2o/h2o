@@ -219,11 +219,20 @@ typedef struct st_ptls_openssl_raw_pubkey_verify_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, openssl_override_verify_certificate, ptls_t *tls, int ret, int ossl_ret, X509 *cert,
                    STACK_OF(X509) * chain);
+/**
+ * This optional callback is invoked when the verification succeeds (including the case where the result has been overridden by
+ * `ptls_openssl_override_verify_certificate_t`), so that the application can retain the verified certificate chain. `ctx` is the
+ * context used for verifying the chain if the verification by OpenSSL succeeded, or NULL if the success is due to the override.
+ * `X509_STORE_CTX_get0_chain(ctx)` returns the verified chain, starting with the end-entity certificate and ending with the trust
+ * anchor. The callback can return non-zero to abort the handshake.
+ */
+PTLS_CALLBACK_TYPE(int, openssl_store_chain, ptls_t *tls, X509_STORE_CTX *ctx);
 
 typedef struct st_ptls_openssl_verify_certificate_t {
     ptls_verify_certificate_t super;
     X509_STORE *cert_store;
     ptls_openssl_override_verify_certificate_t *override_callback;
+    ptls_openssl_store_chain_t *store_chain;
 } ptls_openssl_verify_certificate_t;
 
 int ptls_openssl_init_verify_certificate(ptls_openssl_verify_certificate_t *self, X509_STORE *store);

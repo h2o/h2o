@@ -132,6 +132,7 @@ extern "C" {
 #define PTLS_MAX_SECRET_SIZE 32
 #define PTLS_MAX_IV_SIZE 32
 #define PTLS_MAX_DIGEST_SIZE 64
+#define PTLS_MAX_SIGNATURE_ALGORITHMS 64
 
 /* versions */
 #define PTLS_PROTOCOL_VERSION_TLS12 0x0303
@@ -386,6 +387,11 @@ typedef const struct st_ptls_key_exchange_algorithm_t {
      * ID defined by the TLS specification
      */
     uint16_t id;
+    /**
+     * if the key exchange is (or includes) a post-quantum algorithm; when both endpoints support such a group but the client sent
+     * a classical key share, the server sends HelloRetryRequest to upgrade
+     */
+    unsigned post_quantum : 1;
     /**
      * Creates a context for asynchronous key exchange. The function is called when ClientHello is generated. The on_exchange
      * callback of the created context is called when the client receives ServerHello.
@@ -778,7 +784,7 @@ typedef struct st_ptls_async_job_t {
     /**
      * optional callback returning a file descriptor that becomes readable when the job is complete
      */
-    int (*get_fd)(struct st_ptls_async_job_t *self);
+    intptr_t (*get_fd)(struct st_ptls_async_job_t *self);
     /**
      * optional callback for setting a completion callback
      */
@@ -816,9 +822,26 @@ typedef struct st_ptls_verify_certificate_t {
  */
 PTLS_CALLBACK_TYPE(int, encrypt_ticket, ptls_t *tls, int is_encrypt, ptls_buffer_t *dst, ptls_iovec_t src);
 /**
+ * properties of a session ticket being saved
+ */
+typedef struct st_ptls_save_ticket_properties_t {
+    /**
+     * lifetime of the ticket in seconds
+     */
+    uint32_t lifetime;
+    /**
+     * if set, the ticket contains an early_data extension
+     */
+    unsigned early_data : 1;
+    /**
+     * maximum amount of early data indicated by the server; valid only when `early_data` is set
+     */
+    uint32_t max_early_data_size;
+} ptls_save_ticket_properties_t;
+/**
  * saves a ticket (client-only)
  */
-PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input);
+PTLS_CALLBACK_TYPE(int, save_ticket, ptls_t *tls, ptls_iovec_t input, const ptls_save_ticket_properties_t *properties);
 /**
  * event logging (incl. secret logging)
  */
@@ -1110,7 +1133,7 @@ typedef struct st_ptls_handshake_properties_t {
             size_t *max_early_data_size;
             /**
              * If early-data has been accepted by peer, or if the state is still unknown. The state changes anytime after handshake
-             * keys become available. Applications can peek the tri-state variable every time it calls `ptls_hanshake` or
+             * keys become available. Applications can peek the tri-state variable every time it calls `ptls_handshake` or
              * `ptls_handle_message` to determine the result at the earliest moment. This is an output parameter.
              */
             ptls_early_data_acceptance_t early_data_acceptance;
@@ -1123,8 +1146,9 @@ typedef struct st_ptls_handshake_properties_t {
              */
             struct {
                 /**
-                 * Config offered by server e.g., by HTTPS RR. If config.base is non-NULL but config.len is zero, a grease ECH will
-                 * be sent, assuming that X25519-SHA256 KEM and SHA256-AES-128-GCM HPKE cipher is available.
+                 * An ECH config offered by server e.g., by HTTPS RR. If config.len is zero and .base is non-NULL, a grease ECH will
+                 * be sent, assuming that X25519-SHA256 KEM and SHA256-AES-128-GCM HPKE cipher is available. If .base is also NULL,
+                 * ECH will not be used at all, even if the context provided the ECH ciphers.
                  */
                 ptls_iovec_t configs;
                 /**
@@ -1464,6 +1488,9 @@ typedef struct st_ptls_log_getsni_t {
             break;                                                                                                                 \
         PTLS_LOG__DO_LOG(picotls, name, conn_state, ptls_log_getsni_ptls(_tls), 1, {                                               \
             PTLS_LOG_ELEMENT_PTR(tls, _tls);                                                                                       \
+            if (conn_state->conn_id != 0) {                                                                                        \
+                PTLS_LOG_ELEMENT_NUMBER(conn_id, conn_state->conn_id);                                                             \
+            }                                                                                                                      \
             do {                                                                                                                   \
                 block                                                                                                              \
             } while (0);                                                                                                           \
@@ -1481,37 +1508,46 @@ typedef struct st_ptls_log_getsni_t {
     ptls_log__do_push_element_unsafestr(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value), (value_len))
 #define PTLS_LOG_ELEMENT_HEXDUMP(name, value, value_len)                                                                           \
     ptls_log__do_push_element_hexdump(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value), (value_len))
-#define PTLS_LOG_ELEMENT_PTR(name, value) PTLS_LOG_ELEMENT_UNSIGNED(name, (uint64_t)(value))
-#define PTLS_LOG_ELEMENT_SIGNED(name, value)                                                                                       \
+#define PTLS_LOG_ELEMENT_PTR(name, value) PTLS_LOG_ELEMENT_NUMBER(name, (uint64_t)(value))
+/**
+ * Emits a number, choosing the representation (floating-point, signed, or unsigned) from the type of `value`.
+ */
+#define PTLS_LOG__DO_ELEMENT_NUMBER(lit, value)                                                                                    \
     do {                                                                                                                           \
-        if (sizeof(value) <= sizeof(int32_t)) {                                                                                    \
-            ptls_log__do_push_element_signed32(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value));                              \
-        } else {                                                                                                                   \
-            ptls_log__do_push_element_signed64(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value));                              \
-        }                                                                                                                          \
-    } while (0)
-#define PTLS_LOG__DO_ELEMENT_UNSIGNED(lit, value)                                                                                  \
-    do {                                                                                                                           \
-        if (sizeof(value) <= sizeof(uint32_t)) {                                                                                   \
-            ptls_log__do_push_element_unsigned32(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
+        if (PTLS_IS_FLOAT(value)) {                                                                                                \
+            ptls_log__do_push_element_double(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                              \
+        } else if ((0 ? (value) : 1) - 2 < 1) {                                                                                    \
+            /* value is either a signed type or a small unsigned that can be safely promoted to `int` */                           \
+            if (sizeof(value) <= sizeof(int)) {                                                                                    \
+                ptls_log__do_push_element_signed(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
+            } else {                                                                                                               \
+                ptls_log__do_push_element_signed64(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                        \
+            }                                                                                                                      \
+        } else if (sizeof(value) <= sizeof(unsigned)) {                                                                            \
+            ptls_log__do_push_element_unsigned(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                            \
         } else {                                                                                                                   \
             ptls_log__do_push_element_unsigned64(PTLS_LOG__ELEMENT_PREFIX(lit), (value));                                          \
         }                                                                                                                          \
     } while (0)
-#define PTLS_LOG_ELEMENT_UNSIGNED(name, value) PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name), (value))
+#define PTLS_LOG_ELEMENT_NUMBER(name, value) PTLS_LOG__DO_ELEMENT_NUMBER(PTLS_TO_STR(name), (value))
 #define PTLS_LOG_ELEMENT_BOOL(name, value) ptls_log__do_push_element_bool(PTLS_LOG__ELEMENT_PREFIX(PTLS_TO_STR(name)), (value))
 #define PTLS_LOG_APPDATA_ELEMENT_UNSAFESTR(name, value, value_len)                                                                 \
     do {                                                                                                                           \
         if (ptlslog_include_appdata)                                                                                               \
             PTLS_LOG_ELEMENT_UNSAFESTR(name, value, value_len);                                                                    \
-        PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                        \
+        PTLS_LOG__DO_ELEMENT_NUMBER(PTLS_TO_STR(name) "_len", value_len);                                                          \
     } while (0)
 #define PTLS_LOG_APPDATA_ELEMENT_HEXDUMP(name, value, value_len)                                                                   \
     do {                                                                                                                           \
         if (ptlslog_include_appdata)                                                                                               \
             PTLS_LOG_ELEMENT_HEXDUMP(name, value, value_len);                                                                      \
-        PTLS_LOG__DO_ELEMENT_UNSIGNED(PTLS_TO_STR(name) "_len", value_len);                                                        \
+        PTLS_LOG__DO_ELEMENT_NUMBER(PTLS_TO_STR(name) "_len", value_len);                                                          \
     } while (0)
+
+/**
+ * Evaluates to non-zero if the type of `v` is a floating-point type. `v` is not evaluated.
+ */
+#define PTLS_IS_FLOAT(v) ((0 ? (v) : 1) / 2 != 0)
 
 /**
  * retains a list of connections that are bound to the object
@@ -1548,6 +1584,10 @@ typedef struct st_ptls_log_conn_state_t {
      * represents the peer address using ipv6; ipv4 addresses are stored using the mapped form (::ffff:192.0.2.1)
      */
     uint8_t address[16];
+    /**
+     * application-supplied identifier; emitted as `conn_id` if set to a non-zero value
+     */
+    uint64_t conn_id;
     struct st_ptls_log_state_t state;
 } ptls_log_conn_state_t;
 
@@ -1575,9 +1615,10 @@ extern struct st_ptls_log_t {
 } ptls_log;
 
 /**
- * initializes a ptls_log_conn_state_t
+ * initializes a ptls_log_conn_state_t. `conn_id` and `peeraddr` (of type struct sockaddr) are optional; pass 0 and NULL
+ * respectively when unavailable.
  */
-void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t));
+void ptls_log_init_conn_state(ptls_log_conn_state_t *state, void (*random_bytes)(void *, size_t), uint64_t conn_id, void *peeraddr);
 /**
  * forces recalculation of the log state (should be called when SNI is determined)
  */
@@ -1610,10 +1651,11 @@ void ptls_log__recalc_conn(int caller_locked, struct st_ptls_log_conn_state_t *c
 void ptls_log__do_push_element_safestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_unsafestr(const char *prefix, size_t prefix_len, const char *s, size_t l);
 void ptls_log__do_push_element_hexdump(const char *prefix, size_t prefix_len, const void *s, size_t l);
-void ptls_log__do_push_element_signed32(const char *prefix, size_t prefix_len, int32_t v);
+void ptls_log__do_push_element_signed(const char *prefix, size_t prefix_len, int v);
 void ptls_log__do_push_element_signed64(const char *prefix, size_t prefix_len, int64_t v);
-void ptls_log__do_push_element_unsigned32(const char *prefix, size_t prefix_len, uint32_t v);
+void ptls_log__do_push_element_unsigned(const char *prefix, size_t prefix_len, unsigned v);
 void ptls_log__do_push_element_unsigned64(const char *prefix, size_t prefix_len, uint64_t v);
+void ptls_log__do_push_element_double(const char *prefix, size_t prefix_len, double v);
 void ptls_log__do_push_element_bool(const char *prefix, size_t prefix_len, int v);
 void ptls_log__do_push_appdata_element_unsafestr(int includes_appdata, const char *prefix, size_t prefix_len, const char *s,
                                                  size_t l);
@@ -1625,14 +1667,17 @@ int ptls_log__do_write_end(struct st_ptls_log_point_t *point, struct st_ptls_log
 
 /**
  * create a client object to handle new TLS connection
+ * NULL indicates allocation failure.
  */
 ptls_t *ptls_client_new(ptls_context_t *ctx);
 /**
  * create a server object to handle new TLS connection
+ * NULL indicates allocation failure.
  */
 ptls_t *ptls_server_new(ptls_context_t *ctx);
 /**
  * creates an object handle new TLS connection
+ * NULL indicates allocation failure.
  */
 static ptls_t *ptls_new(ptls_context_t *ctx, int is_server);
 /**
@@ -1717,6 +1762,13 @@ int ptls_handshake_is_complete(ptls_t *tls);
  */
 int ptls_is_psk_handshake(ptls_t *tls);
 /**
+ * Returns the TLS NamedGroup used for key exchange in this handshake, once the key exchange has succeeded.
+ * Returns zero before key exchange, for PSK-only handshakes, or when the group is unavailable (imported connections).
+ * A ClientHello offer, an HRR request, or a group cached in a session ticket is not a negotiated result.
+ * The value can be available before handshake completion; applications must still check the handshake result for errors.
+ */
+uint16_t ptls_get_negotiated_group(ptls_t *tls);
+/**
  * return if a ECH handshake was performed, as well as optionally the kem and cipher-suite being used
  * FIXME: this function always return false when the TLS session is exported and imported
  */
@@ -1745,7 +1797,9 @@ int ptls_handshake(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_
  */
 int ptls_receive(ptls_t *tls, ptls_buffer_t *plaintextbuf, const void *input, size_t *len);
 /**
- * encrypts given buffer into multiple TLS records
+ * encrypts given buffer into multiple TLS records. During a TLS 1.3 handshake, this function can be used to send early data until
+ * the client starts processing the server's handshake messages; after that, it returns PTLS_ERROR_IN_PROGRESS until application
+ * traffic keys are available.
  */
 int ptls_send(ptls_t *tls, ptls_buffer_t *sendbuf, const void *input, size_t inlen);
 /**

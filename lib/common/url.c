@@ -224,14 +224,18 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
 
     /* parse port */
     if (token_start != end && *token_start == ':') {
-        uint32_t p = 0;
+        uint32_t p = 65535; /* remains 65535 (i.e., omitted) if the port is empty (RFC 9110 section 4.2.3) */
         for (++token_start; token_start != end; ++token_start) {
             if ('0' <= *token_start && *token_start <= '9') {
+                if (p == 65535)
+                    p = 0;
                 p = p * 10 + *token_start - '0';
                 if (p >= 65535)
                     return NULL;
             } else if (*token_start == '/' || *token_start == '?') {
                 break;
+            } else {
+                return NULL;
             }
         }
         *port = (uint16_t)p;
@@ -411,18 +415,22 @@ void h2o_url_copy(h2o_mem_pool_t *pool, h2o_url_t *dest, const h2o_url_t *src)
 const char *h2o_url_host_to_sun(h2o_iovec_t host, struct sockaddr_un *sa)
 {
 #define PREFIX "unix:"
+#define PREFIX_LEN (sizeof(PREFIX) - 1)
 
-    if (host.len < sizeof(PREFIX) - 1 || memcmp(host.base, PREFIX, sizeof(PREFIX) - 1) != 0)
+    if (host.len < PREFIX_LEN || memcmp(host.base, PREFIX, PREFIX_LEN) != 0)
         return h2o_url_host_to_sun_err_is_not_unix_socket;
 
-    if (host.len - sizeof(PREFIX) - 1 >= sizeof(sa->sun_path))
+    if (host.len == PREFIX_LEN)
+        return "unix-domain socket path is empty";
+    if (host.len - PREFIX_LEN >= sizeof(sa->sun_path))
         return "unix-domain socket path is too long";
 
     memset(sa, 0, sizeof(*sa));
     sa->sun_family = AF_UNIX;
-    memcpy(sa->sun_path, host.base + sizeof(PREFIX) - 1, host.len - (sizeof(PREFIX) - 1));
+    memcpy(sa->sun_path, host.base + PREFIX_LEN, host.len - PREFIX_LEN);
     return NULL;
 
+#undef PREFIX_LEN
 #undef PREFIX
 }
 

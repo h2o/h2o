@@ -42,19 +42,22 @@ static void test_acl(void)
     ok(entries[0].addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
     ok(entries[0].addr.v4 == 0x7f000001);
     ok(entries[0].addr_mask == 32);
-    ok(entries[0].port == 25);
+    ok(entries[0].port_min == 25);
+    ok(entries[0].port_max == 25);
 
     ok(h2o_connect_parse_acl(entries + 1, "-127.0.0.0/24") == NULL);
     ok(!entries[1].allow_);
     ok(entries[1].addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
     ok(entries[1].addr.v4 == 0x7f000000);
     ok(entries[1].addr_mask == 24);
-    ok(entries[1].port == 0);
+    ok(entries[1].port_min == 0);
+    ok(entries[1].port_max == 65535);
 
     ok(h2o_connect_parse_acl(entries + 2, "-*:25") == NULL);
     ok(!entries[2].allow_);
     ok(entries[2].addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
-    ok(entries[2].port == 25);
+    ok(entries[2].port_min == 25);
+    ok(entries[2].port_max == 25);
 
     ok(h2o_connect_parse_acl(entries + 3, "-[2001:db8::]/33") == NULL);
     ok(!entries[3].allow_);
@@ -66,12 +69,14 @@ static void test_acl(void)
               "\0\0\0\0",
               16) == 0);
     ok(entries[3].addr_mask == 33);
-    ok(entries[3].port == 0);
+    ok(entries[3].port_min == 0);
+    ok(entries[3].port_max == 65535);
 
     ok(h2o_connect_parse_acl(entries + 4, "+*") == NULL);
     ok(entries[4].allow_);
     ok(entries[4].addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
-    ok(entries[4].port == 0);
+    ok(entries[4].port_min == 0);
+    ok(entries[4].port_max == 65535);
 
     struct sockaddr_in sin;
     sin.sin_family = AF_INET;
@@ -98,6 +103,148 @@ static void test_acl(void)
     ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
     sin6.sin6_addr.s6_addr[4] |= 0x80;
     ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin6));
+}
+
+static void test_acl_port_range(void)
+{
+    h2o_connect_acl_entry_t entry;
+
+    /* parsing: wildcard with port range */
+    ok(h2o_connect_parse_acl(&entry, "-*:80-443") == NULL);
+    ok(!entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
+    ok(entry.port_min == 80);
+    ok(entry.port_max == 443);
+
+    /* parsing: IPv4 CIDR with port range (format: address/mask:port-range) */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:1-1023") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 1);
+    ok(entry.port_max == 1023);
+
+    /* parsing: IPv4 CIDR with single port after mask */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 443);
+    ok(entry.port_max == 443);
+
+    /* parsing: IPv6 with port range */
+    ok(h2o_connect_parse_acl(&entry, "-[::1]:100-200") == NULL);
+    ok(!entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V6);
+    ok(entry.port_min == 100);
+    ok(entry.port_max == 200);
+
+    /* parsing: single port still works (port_min == port_max) */
+    ok(h2o_connect_parse_acl(&entry, "+*:443") == NULL);
+    ok(entry.port_min == 443);
+    ok(entry.port_max == 443);
+
+    /* parsing: no port still works (0-65535 = any) */
+    ok(h2o_connect_parse_acl(&entry, "+*") == NULL);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 65535);
+
+    /* parsing: port 0 is a first-class endpoint, both as a range and as a single port */
+    ok(h2o_connect_parse_acl(&entry, "+*:0-100") == NULL);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 100);
+    ok(h2o_connect_parse_acl(&entry, "+*:0-0") == NULL);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 0);
+
+    /* error: port range end < start */
+    ok(h2o_connect_parse_acl(&entry, "-*:443-80") != NULL);
+
+    /* error: port range with missing end (just a dash) */
+    ok(h2o_connect_parse_acl(&entry, "-*:80-") != NULL);
+
+    /* lookup tests with port range ACL: deny ports 1-1023, allow everything else */
+    h2o_connect_acl_entry_t entries[2];
+    ok(h2o_connect_parse_acl(&entries[0], "-*:1-1023") == NULL);
+    ok(h2o_connect_parse_acl(&entries[1], "+*") == NULL);
+
+    struct sockaddr_in sin;
+    sin.sin_family = AF_INET;
+    sin.sin_addr.s_addr = htonl(0x01020304);
+
+    /* port 80: in range, should be denied */
+    sin.sin_port = htons(80);
+    ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 1: lower boundary, should be denied */
+    sin.sin_port = htons(1);
+    ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 1023: upper boundary, should be denied */
+    sin.sin_port = htons(1023);
+    ok(!h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 1024: just outside range, should be allowed */
+    sin.sin_port = htons(1024);
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 8080: well outside range, should be allowed */
+    sin.sin_port = htons(8080);
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+
+    /* port 0: below the denied range, matched by the any-port allow entry */
+    sin.sin_port = htons(0);
+    ok(h2o_connect_lookup_acl(entries, PTLS_ELEMENTSOF(entries), (void *)&sin));
+}
+
+static void test_acl_legacy_format(void)
+{
+    h2o_connect_acl_entry_t entry;
+
+    /* `:*` means any port, same as omitting the port */
+    ok(h2o_connect_parse_acl(&entry, "+127.0.0.1:*") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr.v4 == 0x7f000001);
+    ok(entry.addr_mask == 32);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 65535);
+
+    /* `:*` on the wildcard address */
+    ok(h2o_connect_parse_acl(&entry, "+*:*") == NULL);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_ANY);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 65535);
+
+    /* legacy order: netmask after the port (address:port/mask) */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:443/8") == NULL);
+    ok(entry.allow_);
+    ok(entry.addr_family == H2O_CONNECT_ACL_ADDRESS_V4);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 443);
+    ok(entry.port_max == 443);
+
+    /* legacy order with a port range (address:port-port/mask) */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:80-443/8") == NULL);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 80);
+    ok(entry.port_max == 443);
+
+    /* legacy order with any-port wildcard followed by a netmask */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0:*/8") == NULL);
+    ok(entry.addr_mask == 8);
+    ok(entry.port_min == 0);
+    ok(entry.port_max == 65535);
+
+    /* new and legacy orders yield the same result */
+    h2o_connect_acl_entry_t entry2;
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443") == NULL);
+    ok(h2o_connect_parse_acl(&entry2, "+10.0.0.0:443/8") == NULL);
+    ok(entry.addr.v4 == entry2.addr.v4 && entry.addr_mask == entry2.addr_mask && entry.port_min == entry2.port_min &&
+       entry.port_max == entry2.port_max);
+
+    /* error: netmask given on both sides of the port */
+    ok(h2o_connect_parse_acl(&entry, "+10.0.0.0/8:443/16") != NULL);
 }
 
 static void test_masque_decode_hostport(void)
@@ -264,4 +411,6 @@ void test_lib__handler__connect_c()
     subtest("acl", test_acl);
     subtest("masque_decode_hostport", test_masque_decode_hostport);
     subtest("get_next_server_address_for_connect", test_get_next_server_address_for_connect);
+    subtest("acl_port_range", test_acl_port_range);
+    subtest("acl_legacy_format", test_acl_legacy_format);
 }

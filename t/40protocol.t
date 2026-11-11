@@ -69,7 +69,7 @@ EOT
         plan skip_all => 'ab not found'
             unless prog_exists('ab');
         ok(system("ab -c 10 -n 10000 -k http://127.0.0.1:$port/index.txt") == 0);
-        ok(system("ab -f tls1 -c 10 -n 10000 -k https://127.0.0.1:$tls_port/index.txt") == 0);
+        ok(system("ab -f TLS1.2 -c 10 -n 10000 -k https://127.0.0.1:$tls_port/index.txt") == 0);
     };
 }
 

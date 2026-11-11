@@ -34,7 +34,7 @@ hosts:
         proxy.reverse.url: http://127.0.0.1:$upstream_port
 EOT
 
-my $out = `$progpath -3 100 -H sArCaSmCaSe:Enabled http://127.0.0.1:$quic_port/echo-headers`;
+my $out = `$progpath -k -3 100 -H sArCaSmCaSe:Enabled http://127.0.0.1:$quic_port/echo-headers`;
 
 like($out, qr/^sarcasmcase: *Enabled$/m);
 

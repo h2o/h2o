@@ -85,65 +85,25 @@ int h2o__lcstris_core(const char *target, const char *test, size_t test_len)
 
 size_t h2o_strtosize(const char *s, size_t len)
 {
-    uint64_t v = 0, m = 1;
-    const char *p = s + len;
-
-    if (len == 0)
-        goto Error;
-
-    while (1) {
-        int ch = *--p;
-        if (!('0' <= ch && ch <= '9'))
-            goto Error;
-        v += (ch - '0') * m;
-        if (p == s)
-            break;
-        m *= 10;
-        /* do not even try to overflow */
-        if (m == 10000000000000000000ULL)
-            goto Error;
-    }
-
-    if (v >= SIZE_MAX)
-        goto Error;
-    return v;
-
-Error:
-    return SIZE_MAX;
+    char *p = (char *)s;
+    size_t v = h2o_strtosizefwd(&p, len);
+    return p == s + len ? v : SIZE_MAX;
 }
 
 size_t h2o_strtosizefwd(char **s, size_t len)
 {
-    uint64_t v, c;
-    char *p = *s, *p_end = *s + len;
+    uint64_t v = 0;
+    size_t i;
 
-    if (len == 0)
-        goto Error;
-
-    int ch = *p++;
-    if (!('0' <= ch && ch <= '9'))
-        goto Error;
-    v = ch - '0';
-    c = 1;
-
-    while (1) {
-        ch = *p;
-        if (!('0' <= ch && ch <= '9'))
-            break;
-        v *= 10;
-        v += ch - '0';
-        p++;
-        c++;
-        if (p == p_end)
-            break;
-        /* similar as above, do not even try to overflow */
-        if (c == 20)
+    for (i = 0; i < len && '0' <= (*s)[i] && (*s)[i] <= '9'; ++i) {
+        /* 19 digits never overflow uint64_t */
+        if (i == 19)
             goto Error;
+        v = v * 10 + (*s)[i] - '0';
     }
-
-    if (v >= SIZE_MAX)
+    if (i == 0 || v >= SIZE_MAX)
         goto Error;
-    *s = p;
+    *s += i;
     return v;
 
 Error:
@@ -385,6 +345,9 @@ Fail:
 h2o_iovec_t h2o_get_filext(const char *path, size_t len)
 {
     const char *end = path + len, *p = end;
+
+    if (len == 0)
+        return h2o_iovec_init(NULL, 0);
 
     while (--p != path) {
         if (*p == '.') {

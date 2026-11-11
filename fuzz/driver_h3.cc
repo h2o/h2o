@@ -176,7 +176,8 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
     assert(ret == 0);
     assert(stream != NULL);
 
-    quicly_recvstate_update(&stream->recvstate, 0, &Size, 1, 63);
+    uint64_t off = 0;
+    quicly_recvstate_update(&stream->recvstate, &off, &Size, 1, Size);
     stream->callbacks->on_receive(stream, 0, Data, Size);
 
     uint64_t loop_start = h2o_now(ctx.loop);
@@ -204,7 +205,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *Data, size_t Size)
         }
     } while (!sent_response);
 
-    mquicly_closed_by_remote(conn->super.quic, 0, 0 /* TODO: frame_type */, ptls_iovec_init(NULL, 0));
+    mquicly_closed(conn->super.quic, 0, 0 /* TODO: frame_type */, ptls_iovec_init(NULL, 0), 1);
     /* simulate timer update at the end of process_packets() */
     h2o_quic_schedule_timer(&conn->super);
 

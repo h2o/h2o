@@ -52,38 +52,51 @@ my $server = spawn_h2o_raw($conf, [ $tls_port ]);
 
 my $ech_config_fn = "$tempdir/echconfig";
 my $trace_fn = "$tempdir/trace.out";
+my $stale_ech_config = pack "H*", join "", qw(
+    0063fe0d005f13001000410439d2c8fb6fcc7972b2282033adc49701ffd691
+    76aa1a11d93651b1b129d90ee0961f75fa19ffece2d791abf52939356690bf
+    f35673cfc142c16e9925d2abdbb600080002000200010001400b6578616d70
+    6c652e636f6d0000
+);
 
 
 subtest "tcp" => sub {
     my $req_fn = "$tempdir/req";
 
     my $fetch = sub {
-        my $path = shift;
+        my ($path, $ech_config_fn) = @_;
         open my $fh, ">", "$tempdir/req"
             or die "failed to create file:$tempdir/req:$!";
         print $fh "GET $path HTTP/1.0\r\n\r\n";
         close $fh;
-        open $fh, "@{[bindir()]}/picotls/cli -j $trace_fn -I -E $ech_config_fn localhost.examp1e.net $tls_port < $tempdir/req |"
+        my $ech_opt = defined($ech_config_fn) ? "-E $ech_config_fn" : "";
+        open $fh, "@{[bindir()]}/picotls/cli -j $trace_fn -I $ech_opt localhost.examp1e.net $tls_port < $tempdir/req |"
             or die "failed to launch @{[bindir()]}/picotls/cli:$!";
         join "", <$fh>;
     };
 
     my $doit = sub {
         my ($path, $resp_non_ech, $resp_ech) = @_;
-        create_empty_file($ech_config_fn);
         create_empty_file($trace_fn);
 
-        # first connection is grease ECH
-        my $resp = $fetch->($path);
+        # first connection is non-ECH
+        my $resp = $fetch->($path, undef);
         like $resp, $resp_non_ech, "non-ech response";
+
+        write_stale_ech_config($ech_config_fn);
+        create_empty_file($trace_fn);
+
+        # second connection uses a stale ECH config and learns retry_configs
+        $resp = $fetch->($path, $ech_config_fn);
+        is $resp, "", "stale ech response";
         sleep 0.1;
-        ok !trace_says_ech(), "connection is non-ECH";
+        ok !trace_says_ech(), "connection is stale ECH";
         isnt +(stat $ech_config_fn)[7], 0, "got retry_configs";
 
         create_empty_file($trace_fn);
 
-        # second connection is ECH
-        $resp = $fetch->($path);
+        # third connection is ECH
+        $resp = $fetch->($path, $ech_config_fn);
         like $resp, $resp_ech, "ech response";
         sleep 0.1;
         ok trace_says_ech(), "connection is ECH";
@@ -132,24 +145,26 @@ subtest "tcp" => sub {
 
 subtest "quic" => sub {
     my $fetch = sub {
-        open my $fh, "@{[bindir()]}/quicly/cli -a h3 -e $trace_fn --ech-configs $ech_config_fn localhost.examp1e.net $tls_port < /dev/null |"
+        my $ech_opt = shift;
+        $ech_opt = defined($ech_opt) ? "--ech-configs $ech_opt" : "";
+        open my $fh, "@{[bindir()]}/quicly/cli -a h3 -e $trace_fn $ech_opt localhost.examp1e.net $tls_port < /dev/null |"
             or die "failed to launch @{[bindir()]}/picotls/cli:$!";
         join "", <$fh>;
     };
 
-    create_empty_file($ech_config_fn);
+    write_stale_ech_config($ech_config_fn);
     create_empty_file($trace_fn);
 
-    # first connection is grease ECH
-    my $resp = $fetch->();
+    # first connection uses a stale ECH config and learns retry_configs
+    my $resp = $fetch->($ech_config_fn);
     sleep 0.1;
-    ok !trace_says_ech(), "connection is non-ECH";
+    ok !trace_says_ech(), "connection is stale ECH";
     isnt +(stat $ech_config_fn)[7], 0, "got retry_configs";
 
     create_empty_file($trace_fn);
 
     # second connection is ECH
-    $resp = $fetch->();
+    $resp = $fetch->($ech_config_fn);
     sleep 0.1;
     ok trace_says_ech(), "connection is ECH";
 };
@@ -169,4 +184,12 @@ sub create_empty_file {
     my $fn = shift;
     open my $fh, ">", $fn
         or die "failed to create file:$fn:$!";
+}
+
+sub write_stale_ech_config {
+    my $fn = shift;
+    open my $out, ">", $fn
+        or die "failed to create file:$fn:$!";
+    binmode $out;
+    print $out $stale_ech_config;
 }

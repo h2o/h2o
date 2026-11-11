@@ -26,7 +26,6 @@
 #include "h2o/header.h"
 #include "h2o/url.h"
 #include "h2o/memory.h"
-#include "h2o/cache_digests.h"
 
 #define H2O_HTTP2_SETTINGS_HEADER_TABLE_SIZE 1
 #define H2O_HTTP2_SETTINGS_ENABLE_PUSH 2

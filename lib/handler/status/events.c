@@ -98,7 +98,10 @@ static void *events_status_init(void)
 static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_req_t *req)
 {
     struct st_events_status_ctx_t *esc = priv;
-    h2o_iovec_t ret;
+    h2o_iovec_t ret = {NULL};
+
+    if (req == NULL)
+        goto Exit;
 
 #define H1_AGG_ERR(status_) esc->emitted_status_errors[H2O_STATUS_ERROR_##status_]
 #define H2_AGG_ERR(err_) esc->h2_protocol_level_errors[-H2O_HTTP2_ERROR_##err_]
@@ -171,6 +174,7 @@ static h2o_iovec_t events_status_final(void *priv, h2o_globalconf_t *gconf, h2o_
 #undef QUIC_VAL
 #undef BUFSIZE
 
+Exit:
     pthread_mutex_destroy(&esc->mutex);
     free(esc);
     return ret;

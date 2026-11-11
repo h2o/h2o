@@ -49,12 +49,11 @@ struct st_reprocess_request_deferred_t {
 };
 
 struct st_send_error_deferred_t {
-    h2o_req_t *req;
+    struct st_deferred_request_action_t super;
     int status;
     const char *reason;
     const char *body;
     int flags;
-    h2o_timer_t _timeout;
 };
 
 static void on_deferred_action_dispose(void *_action)
@@ -164,12 +163,23 @@ static void call_handlers(h2o_req_t *req, h2o_handler_t **handler)
     h2o_handler_t **end = req->pathconf->handlers.entries + req->pathconf->handlers.size;
 
     for (; handler != end; ++handler) {
-        req->handler = *handler;
-        if ((*handler)->on_req(*handler, req) == 0)
+        /* A handler that does not support request streaming cannot process a request that has been submitted before the entire
+         * request body is received (i.e., `proceed_req` is set). In such case, return the request to the protocol handler, which
+         * calls `h2o_process_request` again once the entire request body is received. Tunnel requests are dispatched immediately,
+         * as there is no request body; what follows is the payload of the tunnel. Requests being delegated or reprocessed have
+         * `req->dispatched` set, as they have already been dispatched to a handler that might have consumed part of the request
+         * body. */
+        if (!(*handler)->supports_request_streaming && !req->dispatched && req->proceed_req != NULL && !req->is_tunnel_req)
             return;
+        req->handler = *handler;
+        if ((*handler)->on_req(*handler, req) == 0) {
+            req->dispatched = 1;
+            return;
+        }
     }
 
-    h2o_send_error_404(req, "File Not Found", "not found", 0);
+    req->dispatched = 1;
+    h2o_send_error_404(req, "Not Found", "not found", 0);
 }
 
 static void setup_pathconf(h2o_req_t *req, h2o_hostconf_t *hostconf)
@@ -369,8 +379,7 @@ h2o_handler_t *h2o_get_first_handler(h2o_req_t *req)
 
 void h2o_process_request(h2o_req_t *req)
 {
-    assert(!req->process_called);
-    req->process_called = 1;
+    assert(!req->dispatched);
 
     if (req->pathconf == NULL) {
         h2o_hostconf_t *hostconf = h2o_req_setup(req);
@@ -681,18 +690,20 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
 #define DECL_SEND_ERROR_DEFERRED(status_)                                                                                          \
     static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                               \
     {                                                                                                                              \
-        struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, _timeout, entry);          \
-        reset_response(args->req);                                                                                                 \
-        args->req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                                  \
-        h2o_send_error_generic(args->req, args->status, args->reason, args->body, args->flags);                                    \
+        struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, super.timeout, entry);     \
+        reset_response(args->super.req);                                                                                           \
+        args->super.req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                            \
+        h2o_send_error_generic(args->super.req, args->status, args->reason, args->body, args->flags);                              \
     }                                                                                                                              \
                                                                                                                                    \
     static void h2o_send_error_deferred_##status_(h2o_req_t *req, const char *reason, const char *body, int flags)                 \
     {                                                                                                                              \
-        struct st_send_error_deferred_t *args = h2o_mem_alloc_pool(&req->pool, *args, 1);                                          \
-        *args = (struct st_send_error_deferred_t){req, status_, reason, body, flags};                                              \
-        h2o_timer_init(&args->_timeout, send_error_deferred_cb_##status_);                                                         \
-        h2o_timer_link(req->conn->ctx->loop, 0, &args->_timeout);                                                                  \
+        struct st_send_error_deferred_t *args =                                                                                    \
+            (struct st_send_error_deferred_t *)create_deferred_action(req, sizeof(*args), send_error_deferred_cb_##status_);       \
+        args->status = status_;                                                                                                    \
+        args->reason = reason;                                                                                                     \
+        args->body = body;                                                                                                         \
+        args->flags = flags;                                                                                                       \
     }
 
 DECL_SEND_ERROR_DEFERRED(502)
@@ -702,7 +713,7 @@ DECL_SEND_ERROR_DEFERRED(502)
 static size_t append_with_limit(char *dst, h2o_iovec_t input, size_t limit)
 {
     if (input.len < limit) {
-        memcpy(dst, input.base, input.len);
+        h2o_memcpy(dst, input.base, input.len);
         return input.len;
     } else {
         memcpy(dst, input.base, (limit - 3));

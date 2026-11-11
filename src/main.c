@@ -483,8 +483,8 @@ static int on_config_acme(h2o_configurator_command_t *cmd, h2o_configurator_cont
             ;
     } else if (getenv("H2O_VIA_MASTER") == NULL) {
         h2o_configurator_errprintf(cmd, node,
-                                    "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
-                                    "launched with neither `-m master` nor `-m worker`");
+                                   "[WARNING] ACME certificates will not be automatically installed or renewed, as h2o was "
+                                   "launched with neither `-m master` nor `-m worker`");
     }
 
     /* build a YOML node that maps the well-known directory, which is to be inserted it into every `paths` entry */
@@ -573,7 +573,7 @@ static int get_acme_cert_and_key(h2o_configurator_command_t *cmd, struct listene
         h2o_configurator_errprintf(cmd, *ssl_node,
                                    "cannot open file %s due to an unexpected reason:%s; forgot to run `make install` or set "
                                    "H2O_ROOT?",
-                                   identity->certificate_file.str, strerror(errno));
+                                   identity->key_file.str, strerror(errno));
         return 0;
     }
 
@@ -1026,7 +1026,7 @@ static int async_nb_picotls_sign(ptls_sign_certificate_t *_self, ptls_t *tls, pt
 
         ptls_clear_memory(digest, digestlen);
         free(digest);
-        return 0;
+        return ret;
     }
 
     /* select the signature scheme or return an error */
@@ -1262,7 +1262,9 @@ static int on_client_hello_ptls(ptls_on_client_hello_t *_self, ptls_t *tls, ptls
     if (!conn_is_quic) {
         set_tcp_congestion_controller(conn, ssl_config->cc.tcp);
     } else {
-        if (ssl_config->cc.quic != NULL)
+        /* per-host CC is applied only to connections using the default egress context, so that alternatives that require
+         * different properties (e.g., L4S) can be tested */
+        if (ssl_config->cc.quic != NULL && quicly_get_alt_egress(conn) == 0)
             quicly_set_cc(conn, ssl_config->cc.quic);
     }
 
@@ -1322,6 +1324,7 @@ IdentityFound:
     return ret;
 }
 
+#if H2O_USE_BROTLI
 static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptls_context_t *ctx, ptls_iovec_t ocsp_status)
 {
     ptls_emit_compressed_certificate_t *ecc = h2o_mem_alloc(sizeof(*ecc));
@@ -1332,24 +1335,29 @@ static ptls_emit_compressed_certificate_t *build_compressed_certificate_ptls(ptl
 
     return ecc;
 }
+#endif
 
 static void build_ssl_dynamic_data(struct listener_ssl_identity_t *identity, h2o_buffer_t *ocsp_status)
 {
     ptls_emit_compressed_certificate_t *emit_cert_compressed_ptls = NULL;
 
+#if H2O_USE_BROTLI
     if (identity->ptls.ctx != NULL)
         emit_cert_compressed_ptls = build_compressed_certificate_ptls(
             identity->ptls.ctx,
             ocsp_status != NULL ? ptls_iovec_init(ocsp_status->bytes, ocsp_status->size) : ptls_iovec_init(NULL, 0));
+#endif
 
     pthread_mutex_lock(&identity->dynamic.mutex);
 
     if (identity->dynamic.ocsp_status != NULL)
         h2o_buffer_dispose(&identity->dynamic.ocsp_status);
+#if H2O_USE_BROTLI
     if (identity->dynamic.emit_compressed_ptls != NULL) {
         ptls_dispose_compressed_certificate(identity->dynamic.emit_compressed_ptls);
         free(identity->dynamic.emit_compressed_ptls);
     }
+#endif
     identity->dynamic.ocsp_status = ocsp_status;
     identity->dynamic.emit_compressed_ptls = emit_cert_compressed_ptls;
 
@@ -1488,12 +1496,14 @@ static int on_emit_certificate_ptls(ptls_emit_certificate_t *_self, ptls_t *tls,
 
     pthread_mutex_lock(&self->conf->dynamic.mutex);
 
+#if H2O_USE_BROTLI
     if (self->conf->dynamic.emit_compressed_ptls != NULL) {
         ptls_emit_certificate_t *ec = &self->conf->dynamic.emit_compressed_ptls->super;
         if ((ret = ec->cb(ec, tls, emitter, key_sched, context, push_status_request, compress_algos, num_compress_algos)) !=
             PTLS_ERROR_DELEGATE)
             goto Exit;
     }
+#endif
 
     ptls_push_message(emitter, key_sched, PTLS_HANDSHAKE_TYPE_CERTIFICATE, {
         ptls_context_t *tlsctx = ptls_get_context(tls);
@@ -2063,8 +2073,8 @@ static int on_config_one_ech(h2o_configurator_command_t *cmd, yoml_t *map, struc
 static int on_config_ech(h2o_configurator_command_t *cmd, yoml_t *configs, ptls_ech_create_opener_t **_opener,
                          ptls_iovec_t *retry_configs)
 {
-    struct ech_create_opener_t *opener =
-        h2o_mem_alloc(sizeof(opener) + sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
+    struct ech_create_opener_t *opener = h2o_mem_alloc(offsetof(struct ech_create_opener_t, configs) +
+                                                       sizeof(opener->configs[0]) * (configs->data.sequence.size + 1));
     *opener = (struct ech_create_opener_t){{ech_create_opener}};
     *_opener = &opener->super;
 
@@ -2210,8 +2220,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
                 return -1;
             }
             if (ctx->hostconf == NULL) {
-                h2o_configurator_errprintf(cmd, *ssl_node,
-                                           "to use ACME, the `ssl` node must only be specified within each host");
+                h2o_configurator_errprintf(cmd, *ssl_node, "to use ACME, the `ssl` node must only be specified within each host");
                 return -1;
             }
             /* load certificate from acme.sh */
@@ -2274,8 +2283,8 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
         h2o_configurator_errprintf(cmd, *min_version, "unknown protocol version: %s", (*min_version)->data.scalar);
     VersionFound:;
     } else {
-        /* default is >= TLSv1 */
-        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3;
+        /* default is >= TLSv1.2 */
+        ssl_options |= SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1;
     }
     if (max_version != NULL) {
         if (strcasecmp((*max_version)->data.scalar, "tlsv1.3") < 0) {
@@ -2569,14 +2578,14 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             /* TCP; CC name is kept in the SSL config */
             ssl_config->cc.tcp = h2o_strdup(NULL, (*cc_node)->data.scalar, SIZE_MAX);
         } else {
-            /* QUIC; set quicly_context_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
+            /* QUIC; set quicly_cc_conf_t::init_cc (used for initialization) and ::cc for changing the type upon receiving SNI */
             quicly_cc_type_t **cand;
             for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
                 if (strcasecmp((*cand)->name, (*cc_node)->data.scalar) == 0)
                     break;
             if (*cand != NULL) {
                 if (listener_is_new)
-                    listener->quic.ctx->init_cc = (*cand)->cc_init;
+                    listener->quic.ctx->egress[0].cc.init_cc = (*cand)->cc_init;
                 ssl_config->cc.quic = *cand;
             } else {
                 h2o_configurator_errprintf(cmd, *cc_node, "specified congestion controller is unknown or unsupported for QUIC");
@@ -2594,7 +2603,7 @@ static int listener_setup_ssl(h2o_configurator_command_t *cmd, h2o_configurator_
             uint32_t initcwnd_packets;
             if (h2o_configurator_scanf(cmd, *initcwnd_node, "%" SCNu32, &initcwnd_packets) != 0)
                 goto Error;
-            listener->quic.ctx->initcwnd_packets = initcwnd_packets;
+            listener->quic.ctx->egress[0].cc.initcwnd_packets = initcwnd_packets;
         }
     }
 
@@ -2636,7 +2645,7 @@ static struct listener_config_t *add_listener(int fd, struct sockaddr *addr, soc
     }
     memset(&listener->ssl, 0, sizeof(listener->ssl));
     memset(&listener->quic, 0, sizeof(listener->quic));
-    listener->quic.qpack = (h2o_http3_qpack_context_t){.encoder_table_capacity = 4096 /* our default */};
+    listener->quic.qpack = (h2o_http3_qpack_context_t){16384, 16384}; /* default: 16KB encoder and decoder tables */
     listener->proxy_protocol = proxy_protocol;
     listener->tcp_congestion_controller = h2o_iovec_init(NULL, 0);
     listener->sndbuf = sndbuf;
@@ -2817,7 +2826,11 @@ static int open_listener(int domain, int type, int protocol, struct sockaddr *ad
         goto Error;
 
     /* TCP-specific actions */
-    if (protocol == IPPROTO_TCP) {
+    if (protocol == IPPROTO_TCP
+#if H2O_WITH_MPTCP
+        || protocol == IPPROTO_MPTCP
+#endif
+    ) {
 #ifdef TCP_DEFER_ACCEPT
         { /* set TCP_DEFER_ACCEPT */
             int flag = 1;
@@ -2862,13 +2875,28 @@ Error:
     return -1;
 }
 
+static const char *protocol_to_string(int protocol)
+{
+    switch (protocol) {
+    case IPPROTO_TCP:
+        return "TCP";
+    case IPPROTO_UDP:
+        return "UDP";
+#if H2O_WITH_MPTCP
+    case IPPROTO_MPTCP:
+        return "MPTCP";
+#endif
+    }
+    h2o_fatal("unexpected protocol number: %d", protocol);
+}
+
 static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, const char *hostname, const char *servname, int domain,
                               int type, int protocol, struct sockaddr *addr, socklen_t addrlen)
 {
     int fd;
 
     if ((fd = open_listener(domain, type, protocol, addr, addrlen)) == -1)
-        h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol == IPPROTO_TCP ? "TCP" : "UDP",
+        h2o_configurator_errprintf(cmd, node, "failed to listen to %s port %s:%s: %s", protocol_to_string(protocol),
                                    hostname != NULL ? hostname : "ANY", servname, strerror(errno));
 
     return fd;
@@ -2876,26 +2904,33 @@ static int open_inet_listener(h2o_configurator_command_t *cmd, yoml_t *node, con
 
 static void set_quic_sockopts(int fd, int family, unsigned sndbuf, unsigned rcvbuf)
 {
+    int on = 1;
+
     /* set the option for obtaining destination address */
     switch (family) {
-    case AF_INET: {
-#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux, macOS) */
-        int on = 1;
+    case AF_INET:
+#if defined(IP_PKTINFO) /* this is the de-facto API (that works on both linux and macOS) */
         if (setsockopt(fd, IPPROTO_IP, IP_PKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_PKTINFO option:%s", strerror(errno));
 #elif defined(IP_RECVDSTADDR) /* *BSD */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IP, IP_RECVDSTADDR, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IP_RECVDSTADDR option:%s", strerror(errno));
 #endif
-    } break;
-    case AF_INET6: {
+#ifdef IP_RECVTOS
+        if (setsockopt(fd, IPPROTO_IP, IP_RECVTOS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IP_RECVTOS option:%s", strerror(errno));
+#endif
+        break;
+    case AF_INET6:
 #ifdef IPV6_RECVPKTINFO /* API defined by RFC 3542 */
-        int on = 1;
         if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) != 0)
             h2o_fatal("failed to set IPV6_RECVPKTINFO option:%s", strerror(errno));
 #endif
-    } break;
+#ifdef IPV6_RECVTCLASS
+        if (setsockopt(fd, IPPROTO_IPV6, IPV6_RECVTCLASS, &on, sizeof(on)) != 0)
+            h2o_fatal("failed to set IPV6_RECVTCLASS option:%s", strerror(errno));
+#endif
+        break;
     default:
         break;
     }
@@ -2917,6 +2952,21 @@ static struct addrinfo *resolve_address(h2o_configurator_command_t *cmd, yoml_t 
     hints.ai_socktype = socktype;
     hints.ai_protocol = protocol;
     hints.ai_flags = AI_ADDRCONFIG | AI_NUMERICSERV | AI_PASSIVE;
+
+    /* When binding to the wildcard addresses, AI_ADDRCONFIG is omitted, as it would make the set of sockets depend on non-loopback
+     * addresses for each address family being configured at startup (e.g., the IPv4 socket would be missing if DHCP has not
+     * completed yet). Rather, call `socket` to check the availability. When both families are available, `hints.ai_family` is left
+     * as AF_UNSPEC and RFC 3493 specifies that getaddrinfo returns both families with AI_ADDRCONFIG unset. */
+    if (hostname == NULL) {
+        hints.ai_flags &= ~AI_ADDRCONFIG;
+        int fd;
+#define IS_SUPPORTED(af)                                                                                                           \
+    ((fd = socket((af), socktype, protocol)) != -1 ? (close(fd), 1) : !(errno == EAFNOSUPPORT || errno == EPROTONOSUPPORT))
+        int has_v4 = IS_SUPPORTED(AF_INET), has_v6 = IS_SUPPORTED(AF_INET6);
+#undef IS_SUPPORTED
+        if (has_v4 != has_v6)
+            hints.ai_family = has_v4 ? AF_INET : AF_INET6;
+    }
 
     if ((error = getaddrinfo(hostname, servname, &hints, &res)) != 0) {
         h2o_configurator_errprintf(cmd, node, "failed to resolve address: %s", gai_strerror(error));
@@ -2964,17 +3014,184 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
-static int parse_quic_enable_ratio(h2o_configurator_command_t *cmd, yoml_t *node, uint8_t *ratio)
+static int parse_quic_enable_flag(h2o_configurator_command_t *cmd, yoml_t *node, int *on)
 {
     assert(node->type == YOML_TYPE_SCALAR);
 
-    if (strcasecmp(node->data.scalar, "ON") == 0) {
-        *ratio = 255;
-    } else if (strcasecmp(node->data.scalar, "OFF") == 0) {
-        *ratio = 0;
-    } else if (sscanf(node->data.scalar, "%" SCNu8, ratio) != 1) {
-        h2o_configurator_errprintf(cmd, node, "argument must be `ON`, `OFF`, or an integer between 0 (never) and 255 (always)");
+    /* 0 and 255 are accepted for compatibility with the ratio-based configuration used by older versions */
+    if (strcasecmp(node->data.scalar, "ON") == 0 || strcmp(node->data.scalar, "255") == 0) {
+        *on = 1;
+    } else if (strcasecmp(node->data.scalar, "OFF") == 0 || strcmp(node->data.scalar, "0") == 0) {
+        *on = 0;
+    } else {
+        h2o_configurator_errprintf(cmd, node, "argument must be either of: `ON`, `OFF`");
         return -1;
+    }
+
+    return 0;
+}
+
+/**
+ * applies egress properties (i.e., those that can be set for both the default and alternative egress contexts)
+ */
+static int apply_quic_egress_config(h2o_configurator_command_t *cmd, struct st_quicly_context_egress_t *egress, yoml_t **ecn,
+                                    yoml_t **pacing, yoml_t **pacing_multiplier, yoml_t **pacing_multiplier_l4s,
+                                    yoml_t **respect_app_limited, yoml_t **jumpstart_default, yoml_t **jumpstart_max,
+                                    yoml_t **disengage_jumpstart, yoml_t **rapid_start, yoml_t **abba, yoml_t **normalize_mtu,
+                                    yoml_t **initial_rtt, yoml_t **speculative_pto)
+{
+    if (ecn != NULL) {
+        if (strcasecmp((*ecn)->data.scalar, "L4S") == 0) {
+            egress->ecn = QUICLY_ECN_MODE_L4S;
+        } else {
+            int on;
+            if (parse_quic_enable_flag(cmd, *ecn, &on) != 0)
+                return -1;
+            egress->ecn = on ? QUICLY_ECN_MODE_CLASSIC : QUICLY_ECN_MODE_OFF;
+        }
+    }
+
+#define APPLY_PACING_MULTIPLIER(node, fld)                                                                                         \
+    do {                                                                                                                           \
+        if (node != NULL) {                                                                                                        \
+            double v;                                                                                                              \
+            if (h2o_configurator_scanf(cmd, *node, "%lf", &v) != 0)                                                                \
+                return -1;                                                                                                         \
+            if (!(1 <= v && v <= 2)) {                                                                                             \
+                h2o_configurator_errprintf(cmd, *node, "pacing multiplier must be between 1 and 2");                               \
+                return -1;                                                                                                         \
+            }                                                                                                                      \
+            egress->fld = (uint16_t)(v * 1024);                                                                                    \
+        }                                                                                                                          \
+    } while (0)
+    APPLY_PACING_MULTIPLIER(pacing_multiplier, pacing_multiplier);
+    APPLY_PACING_MULTIPLIER(pacing_multiplier_l4s, pacing_multiplier_l4s);
+#undef APPLY_PACING_MULTIPLIER
+
+    if (jumpstart_default != NULL &&
+        h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32, &egress->default_jumpstart_packets) != 0)
+        return -1;
+    if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32, &egress->max_jumpstart_packets) != 0)
+        return -1;
+
+#define APPLY_FLAG(node, fld)                                                                                                      \
+    do {                                                                                                                           \
+        if (node != NULL) {                                                                                                        \
+            int on;                                                                                                                \
+            if (parse_quic_enable_flag(cmd, *node, &on) != 0)                                                                      \
+                return -1;                                                                                                         \
+            egress->fld = on;                                                                                                      \
+        }                                                                                                                          \
+    } while (0)
+    APPLY_FLAG(disengage_jumpstart, disengage_jumpstart);
+    APPLY_FLAG(rapid_start, cc.rapid_start);
+    APPLY_FLAG(abba, cc.abba);
+    APPLY_FLAG(normalize_mtu, cc.normalize_mtu);
+    APPLY_FLAG(pacing, pacing);
+    APPLY_FLAG(respect_app_limited, respect_app_limited);
+#undef APPLY_FLAG
+
+    if (initial_rtt != NULL) {
+        if (h2o_configurator_scanf(cmd, *initial_rtt, "%" SCNu32, &egress->loss.default_initial_rtt) != 0)
+            return -1;
+        if (egress->loss.default_initial_rtt == 0) {
+            h2o_configurator_errprintf(cmd, *initial_rtt, "initial-rtt must be greater than 0");
+            return -1;
+        }
+    }
+
+    if (speculative_pto != NULL) {
+        unsigned v;
+        if (h2o_configurator_scanf(cmd, *speculative_pto, "%u", &v) != 0)
+            return -1;
+        if (v > 2) {
+            h2o_configurator_errprintf(cmd, *speculative_pto, "speculative-pto must be an integer between 0 and 2");
+            return -1;
+        }
+        egress->loss.num_speculative_ptos = (uint8_t)v;
+    }
+
+    return 0;
+}
+
+static int parse_quic_alternatives(h2o_configurator_command_t *cmd, quicly_context_t *quic, yoml_t *alternatives)
+{
+    unsigned ratio_sum = 0;
+
+    if (alternatives->data.sequence.size > QUICLY_NUM_ALT_EGRESS) {
+        h2o_configurator_errprintf(cmd, alternatives, "too many alternatives are specified (max: %d)", QUICLY_NUM_ALT_EGRESS);
+        return -1;
+    }
+
+    for (size_t index = 0; index != alternatives->data.sequence.size; ++index) {
+        yoml_t *mapping = alternatives->data.sequence.elements[index];
+        if (mapping->type != YOML_TYPE_MAPPING) {
+            h2o_configurator_errprintf(cmd, mapping, "each alternative must be a mapping");
+            return -1;
+        }
+
+        yoml_t **ratio, **cc, **initcwnd, **ecn, **pacing, **pacing_multiplier, **pacing_multiplier_l4s, **respect_app_limited,
+            **jumpstart_default, **jumpstart_max, **disengage_jumpstart, **rapid_start, **abba, **normalize_mtu, **initial_rtt,
+            **speculative_pto;
+        if (h2o_configurator_parse_mapping(
+                cmd, mapping, "ratio:s",
+                "cc:s,initcwnd:s,ecn:s,pacing:s,pacing-multiplier:s,pacing-multiplier-l4s:s,respect-app-limited:s,"
+                "jumpstart-default:s,jumpstart-max:s,disengage-jumpstart:s,rapid-start:s,abba:s,normalize-mtu:s,initial-rtt:s,"
+                "speculative-pto:s",
+                &ratio, &cc, &initcwnd, &ecn, &pacing, &pacing_multiplier, &pacing_multiplier_l4s, &respect_app_limited,
+                &jumpstart_default, &jumpstart_max, &disengage_jumpstart, &rapid_start, &abba, &normalize_mtu, &initial_rtt,
+                &speculative_pto) != 0)
+            return -1;
+
+        { /* decode the ratio */
+            unsigned v;
+            if (h2o_configurator_scanf(cmd, *ratio, "%u", &v) != 0)
+                return -1;
+            if (v > 255) {
+                h2o_configurator_errprintf(cmd, *ratio, "ratio must be an integer between 0 (never) and 255 (always)");
+                return -1;
+            } else if (v + ratio_sum > 255) {
+                h2o_configurator_errprintf(cmd, *ratio, "sum of the ratios of the alternatives must not exceed 255");
+                return -1;
+            }
+            ratio_sum += v;
+            quic->alt_egress_ratio[index] = v;
+        }
+
+        /* the alternative starts as a copy of the default, then the properties being specified are applied; init_cc and
+         * initcwnd_packets are left unset unless specified, to be inherited from the default after `cc` and `initcwnd` of the
+         * `listen` directive are applied */
+        struct st_quicly_context_egress_t *egress = &quic->egress[1 + index];
+        *egress = quic->egress[0];
+        egress->cc.init_cc = NULL;
+        egress->cc.initcwnd_packets = 0;
+
+        /* handle cc and initcwnd; they appear at quic level in only the alternative settings, hence not handled by
+         * `apply_quic_egress_config` */
+        if (cc != NULL) {
+            quicly_cc_type_t **cand;
+            for (cand = quicly_cc_all_types; *cand != NULL; ++cand)
+                if (strcasecmp((*cand)->name, (*cc)->data.scalar) == 0)
+                    break;
+            if (*cand == NULL) {
+                h2o_configurator_errprintf(cmd, *cc, "specified congestion controller is unknown or unsupported for QUIC");
+                return -1;
+            }
+            egress->cc.init_cc = (*cand)->cc_init;
+        }
+        if (initcwnd != NULL) {
+            if (h2o_configurator_scanf(cmd, *initcwnd, "%" SCNu32, &egress->cc.initcwnd_packets) != 0)
+                return -1;
+            if (egress->cc.initcwnd_packets == 0) {
+                h2o_configurator_errprintf(cmd, *initcwnd, "initcwnd must be greater than 0");
+                return -1;
+            }
+        }
+
+        if (apply_quic_egress_config(cmd, egress, ecn, pacing, pacing_multiplier, pacing_multiplier_l4s, respect_app_limited,
+                                     jumpstart_default, jumpstart_max, disengage_jumpstart, rapid_start, abba, normalize_mtu,
+                                     initial_rtt, speculative_pto) != 0)
+            return -1;
     }
 
     return 0;
@@ -3027,6 +3244,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 
     if (strcmp(type, "unix") == 0) {
 
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a unix socket");
+            return -1;
+        }
         if (cc_node != NULL)
             h2o_configurator_errprintf(cmd, *cc_node, "[warning] cannot set congestion controller for unix socket");
         if (initcwnd_node != NULL)
@@ -3075,9 +3296,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         if (listener->hosts != NULL && ctx->hostconf != NULL)
             h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
 
-    } else if (strcmp(type, "tcp") == 0) {
-
+    } else if (strcmp(type, "tcp") == 0
+#if H2O_WITH_MPTCP
+               || strcmp(type, "mptcp") == 0
+#endif
+    ) {
         /* TCP socket */
+        if (quic_node != NULL) {
+            h2o_configurator_errprintf(cmd, *quic_node, "QUIC cannot be used on a TCP socket");
+            return -1;
+        }
 #if !defined(TCP_CONGESTION)
         if (cc_node != NULL)
             h2o_configurator_errprintf(
@@ -3085,6 +3313,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 #endif
         if (initcwnd_node != NULL)
             h2o_configurator_errprintf(cmd, *initcwnd_node, "[warning] cannot set initial congestion window for TCP");
+#if H2O_WITH_MPTCP
+        if (strcmp(type, "mptcp") == 0 &&
+            (conf.run_mode == RUN_MODE_MASTER || conf.run_mode == RUN_MODE_DAEMON || conf.server_starter.fds != NULL)) {
+            h2o_configurator_errprintf(cmd, node, "listen type mptcp is supported only in worker mode without server-starter");
+            return -1;
+        }
+#endif
         struct addrinfo *res, *ai;
         if ((res = resolve_address(cmd, node, SOCK_STREAM, IPPROTO_TCP, hostname, servname)) == NULL)
             return -1;
@@ -3103,7 +3338,17 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                             return -1;
                         }
                     } else {
-                        if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, ai->ai_protocol,
+                        int protocol = ai->ai_protocol;
+#if H2O_WITH_MPTCP
+                        if (strcmp(type, "mptcp") == 0) {
+                            if (protocol == IPPROTO_TCP) {
+                                /* glibc getaddrinfo() doesn't support IPPROTO_MPTCP until a8e9022e0f82("getaddrinfo.c: support
+                                 * MPTCP (BZ #29609)") i.e. version 2.42. We always pass IPPROTO_TCP and correct here. */
+                                protocol = IPPROTO_MPTCP;
+                            }
+                        }
+#endif
+                        if ((fd = open_inet_listener(cmd, node, hostname, servname, ai->ai_family, ai->ai_socktype, protocol,
                                                      ai->ai_addr, ai->ai_addrlen)) == -1) {
                             freeaddrinfo(res);
                             return -1;
@@ -3122,6 +3367,25 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 freeaddrinfo(res);
                 goto ProxyConflict;
             }
+#if H2O_WITH_MPTCP
+            if (listener_is_new == 0 && listener->fds.entries[0] != -1) {
+                int listener_protocol, expected_protocol = strcmp(type, "mptcp") == 0 ? IPPROTO_MPTCP : IPPROTO_TCP;
+                socklen_t listener_protocol_len = sizeof(listener_protocol);
+                if (getsockopt(listener->fds.entries[0], SOL_SOCKET, SO_PROTOCOL, &listener_protocol,
+                               &listener_protocol_len) != 0) {
+                    h2o_configurator_errprintf(cmd, node, "failed to obtain listener socket protocol:%s", strerror(errno));
+                    freeaddrinfo(res);
+                    return -1;
+                }
+                if (listener_protocol != expected_protocol) {
+                    h2o_configurator_errprintf(cmd, node, "cannot change listen type from %s to %s for %s:%s",
+                                               protocol_to_string(listener_protocol), protocol_to_string(expected_protocol),
+                                               hostname != NULL ? hostname : "ANY", servname);
+                    freeaddrinfo(res);
+                    return -1;
+                }
+            }
+#endif
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, NULL, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
@@ -3184,21 +3448,36 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
                 if (quic_node != NULL) {
-                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity, **max_streams_bidi,
-                        **max_udp_payload_size, **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn,
-                        **pacing, **respect_app_limited, **jumpstart_default, **jumpstart_max, **non_resume_jumpstart_ratio,
-                        **resume_jumpstart_ratio, **rapid_start;
+                    yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
+                        **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
+                        **handshake_timeout_rtt_multiplier, **max_initial_handshake_packets, **ecn, **pacing, **pacing_multiplier,
+                        **pacing_multiplier_l4s, **respect_app_limited, **jumpstart_default, **jumpstart_max, **disengage_jumpstart,
+                        **non_resume_jumpstart_ratio, **resume_jumpstart_ratio, **rapid_start, **abba, **normalize_mtu,
+                        **initial_rtt, **speculative_pto, **alternatives;
                     if (h2o_configurator_parse_mapping(
                             cmd, *quic_node, NULL,
-                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,max-"
-                            "streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
-                            "max-initial-handshake-packets:s,ecn:s,pacing:s,respect-app-limited:s,jumpstart-default:s,"
-                            "jumpstart-max:s,non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s",
-                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &max_streams_bidi,
-                            &max_udp_payload_size, &handshake_timeout_rtt_multiplier, &max_initial_handshake_packets, &ecn, &pacing,
-                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &non_resume_jumpstart_ratio,
-                            &resume_jumpstart_ratio, &rapid_start) != 0)
+                            "retry:s,sndbuf:s,rcvbuf:s,amp-limit:s,qpack-encoder-table-capacity:s,qpack-decoder-table-capacity:s,"
+                            "max-streams-bidi:s,max-udp-payload-size:s,handshake-timeout-rtt-multiplier:s,"
+                            "max-initial-handshake-packets:s,ecn:s,pacing:s,pacing-multiplier:s,pacing-multiplier-l4s:s,"
+                            "respect-app-limited:s,jumpstart-default:s,jumpstart-max:s,disengage-jumpstart:s,"
+                            "non-resume-jumpstart-ratio:s,resume-jumpstart-ratio:s,rapid-start:s,abba:s,normalize-mtu:s,"
+                            "initial-rtt:s,speculative-pto:s,alternatives:a",
+                            &retry_node, &sndbuf, &rcvbuf, &amp_limit, &qpack_encoder_table_capacity, &qpack_decoder_table_capacity,
+                            &max_streams_bidi, &max_udp_payload_size, &handshake_timeout_rtt_multiplier,
+                            &max_initial_handshake_packets, &ecn, &pacing, &pacing_multiplier, &pacing_multiplier_l4s,
+                            &respect_app_limited, &jumpstart_default, &jumpstart_max, &disengage_jumpstart,
+                            &non_resume_jumpstart_ratio, &resume_jumpstart_ratio, &rapid_start, &abba, &normalize_mtu, &initial_rtt,
+                            &speculative_pto, &alternatives) != 0)
                         return -1;
+                    if (non_resume_jumpstart_ratio != NULL) {
+                        h2o_configurator_errprintf(cmd, *non_resume_jumpstart_ratio,
+                                                   "`non-resume-jumpstart-ratio` has been removed");
+                        return -1;
+                    }
+                    if (resume_jumpstart_ratio != NULL) {
+                        h2o_configurator_errprintf(cmd, *resume_jumpstart_ratio, "`resume-jumpstart-ratio` has been removed");
+                        return -1;
+                    }
                     if (retry_node != NULL) {
                         ssize_t on = h2o_configurator_get_one_of(cmd, *retry_node, "OFF,ON");
                         if (on == -1)
@@ -3217,6 +3496,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                     if (qpack_encoder_table_capacity != NULL) {
                         if (h2o_configurator_scanf(cmd, *qpack_encoder_table_capacity, "%" SCNu32,
                                                    &listener->quic.qpack.encoder_table_capacity) != 0)
+                            return -1;
+                    }
+                    if (qpack_decoder_table_capacity != NULL) {
+                        if (h2o_configurator_scanf(cmd, *qpack_decoder_table_capacity, "%" SCNu32,
+                                                   &listener->quic.qpack.decoder_table_capacity) != 0)
                             return -1;
                     }
                     if (max_streams_bidi != NULL) {
@@ -3250,25 +3534,13 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                         }
                         listener->quic.ctx->max_initial_handshake_packets = v;
                     }
-                    if (jumpstart_default != NULL &&
-                        h2o_configurator_scanf(cmd, *jumpstart_default, "%" SCNu32,
-                                               &listener->quic.ctx->default_jumpstart_cwnd_packets) != 0)
+                    if (apply_quic_egress_config(cmd, &listener->quic.ctx->egress[0], ecn, pacing, pacing_multiplier,
+                                                 pacing_multiplier_l4s, respect_app_limited, jumpstart_default, jumpstart_max,
+                                                 disengage_jumpstart, rapid_start, abba, normalize_mtu, initial_rtt,
+                                                 speculative_pto) != 0)
                         return -1;
-                    if (jumpstart_max != NULL && h2o_configurator_scanf(cmd, *jumpstart_max, "%" SCNu32,
-                                                                        &listener->quic.ctx->max_jumpstart_cwnd_packets) != 0)
+                    if (alternatives != NULL && parse_quic_alternatives(cmd, listener->quic.ctx, *alternatives) != 0)
                         return -1;
-#define APPLY_RATIO(node, fld)                                                                                                     \
-    do {                                                                                                                           \
-        if (node != NULL && parse_quic_enable_ratio(cmd, *node, &listener->quic.ctx->enable_ratio.fld) != 0)                       \
-            return -1;                                                                                                             \
-    } while (0)
-                    APPLY_RATIO(non_resume_jumpstart_ratio, jumpstart.non_resume);
-                    APPLY_RATIO(resume_jumpstart_ratio, jumpstart.resume);
-                    APPLY_RATIO(rapid_start, rapid_start);
-                    APPLY_RATIO(ecn, ecn);
-                    APPLY_RATIO(pacing, pacing);
-                    APPLY_RATIO(respect_app_limited, respect_app_limited);
-#undef APPLY_RATIO
                 }
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
@@ -3277,6 +3549,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
                 return -1;
+            }
+            /* fields of the alternative egress contexts left unset by `alternatives` inherit the default, now that `cc` and
+             * `initcwnd` of the `listen` directive have been applied */
+            if (listener_is_new) {
+                for (size_t i = 1; i < PTLS_ELEMENTSOF(listener->quic.ctx->egress); ++i) {
+                    if (listener->quic.ctx->egress[i].cc.init_cc == NULL)
+                        listener->quic.ctx->egress[i].cc.init_cc = listener->quic.ctx->egress[0].cc.init_cc;
+                    if (listener->quic.ctx->egress[i].cc.initcwnd_packets == 0)
+                        listener->quic.ctx->egress[i].cc.initcwnd_packets = listener->quic.ctx->egress[0].cc.initcwnd_packets;
+                }
             }
             if (listener->hosts != NULL && ctx->hostconf != NULL)
                 h2o_append_to_null_terminated_list((void *)&listener->hosts, ctx->hostconf);
@@ -4003,7 +4285,7 @@ static uint8_t *encode_quic_address(uint8_t *dst, quicly_address_t *addr)
         *dst++ = 6;
         memcpy(dst, addr->sin6.sin6_addr.s6_addr, 16);
         dst += 16;
-        memcpy(dst, &addr->sin.sin_port, 2);
+        memcpy(dst, &addr->sin6.sin6_port, 2);
         dst += 2;
         break;
     case AF_UNSPEC:
@@ -4097,6 +4379,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
     int fd;
     h2o_context_t *h2octx = ctx->accept_ctx.ctx;
 
+    if (ttl == 0)
+        return 0;
+
     /* determine the file descriptor to which the packets should be forwarded, or return */
     if (node_id != NULL && *node_id != ctx->http3.ctx.super.next_cid->node_id) {
         /* inter-node forwarding */
@@ -4108,7 +4393,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             }
         }
         H2O_PROBE(H3_PACKET_FORWARD_TO_NODE_IGNORE, *node_id);
-        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(node_id, *node_id); });
+        PTLS_LOG(h2o, h3_packet_forward_to_node_ignore, { PTLS_LOG_ELEMENT_NUMBER(node_id, *node_id); });
         return 0;
     NodeFound:;
     } else {
@@ -4119,7 +4404,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
                 assert(h3ctx->acceptor == NULL);
                 /* FIXME forward packets to the newer generation process */
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
-                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_NUMBER(thread_id, thread_id); });
                 return 0;
             }
         } else {
@@ -4127,7 +4412,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
             assert(thread_id != ctx->http3.ctx.super.next_cid->thread_id);
             if (thread_id >= conf.quic.num_threads) {
                 H2O_PROBE(H3_PACKET_FORWARD_TO_THREAD_IGNORE, thread_id);
-                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_UNSIGNED(thread_id, thread_id); });
+                PTLS_LOG(h2o, h3_packet_forward_to_thread_ignore, { PTLS_LOG_ELEMENT_NUMBER(thread_id, thread_id); });
                 return 0;
             }
         }
@@ -4136,7 +4421,7 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
 
     /* forward (TODO coalesce packets that were coalesced upon receipt) */
     char header_buf[H2O_QUIC_FORWARDED_HEADER_MAX_SIZE];
-    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl);
+    size_t header_len = encode_quic_forwarded_header(header_buf, destaddr, srcaddr, ttl - 1);
     for (size_t i = 0; i != num_packets; ++i) {
         struct iovec vec[2] = {{header_buf, header_len}, {packets[i].octets.base, packets[i].octets.len}};
         writev(fd, vec, 2);
@@ -4151,9 +4436,9 @@ static int forward_quic_packets(h2o_quic_ctx_t *h3ctx, const uint64_t *node_id, 
         H2O_PROBE(H3_PACKET_FORWARD, &destaddr->sa, &srcaddr->sa, num_packets, num_bytes, fd);
         PTLS_LOG(h2o, h3_packet_forward, {
             /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
-            PTLS_LOG_ELEMENT_UNSIGNED(num_packets, num_packets);
-            PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, num_bytes);
-            PTLS_LOG_ELEMENT_SIGNED(fd, fd);
+            PTLS_LOG_ELEMENT_NUMBER(num_packets, num_packets);
+            PTLS_LOG_ELEMENT_NUMBER(num_bytes, num_bytes);
+            PTLS_LOG_ELEMENT_NUMBER(fd, fd);
         });
     }
 #endif
@@ -4180,6 +4465,10 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
         return 1; /* process the packet as-is */
     }
 
+    /* drop packets that do not have an IPv4 or IPv6 source address; QUIC runs only over IP */
+    if (!(encapsulated.srcaddr.sa.sa_family == AF_INET || encapsulated.srcaddr.sa.sa_family == AF_INET6))
+        return 0;
+
     /* process as-is, if the destination port is going to be different; the contexts are always bound to a specific port */
     switch (encapsulated.destaddr.sa.sa_family) {
     case AF_UNSPEC:
@@ -4193,7 +4482,7 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
             return 1;
         break;
     }
-    if (encapsulated.destaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
+    if (encapsulated.srcaddr.sa.sa_family != h3ctx->sock.addr.ss_family) {
         struct listener_config_t *listener_config = conf.listeners[lctx->listener_index];
         if (listener_config->quic.sibling != NULL) {
             int fd = listener_config->quic.sibling->quic.thread_fds[h3ctx->next_cid->thread_id];
@@ -4209,12 +4498,13 @@ static int rewrite_forwarded_quic_datagram(h2o_quic_ctx_t *h3ctx, struct msghdr 
     msg->msg_iov[0].iov_len -= encapsulated.offset;
     *destaddr = encapsulated.destaddr;
     *srcaddr = encapsulated.srcaddr;
-    *ttl = encapsulated.ttl;
+    /* clamp the TTL; as the envelope is unauthenticated and therefore could be spoofed */
+    *ttl = encapsulated.ttl < h3ctx->default_ttl ? encapsulated.ttl : h3ctx->default_ttl;
     ++h2octx->http3.events.forwarded_packet_received;
     H2O_PROBE(H3_FORWARDED_PACKET_RECEIVE, &destaddr->sa, &srcaddr->sa, msg->msg_iov[0].iov_len);
     PTLS_LOG(h2o, h3_forwarded_packet_receive, {
         /* TODO: maybe emit destaddr / srcaddr by creating QUICLY_LOG_SOCKADDR? */
-        PTLS_LOG_ELEMENT_UNSIGNED(num_bytes, msg->msg_iov[0].iov_len);
+        PTLS_LOG_ELEMENT_NUMBER(num_bytes, msg->msg_iov[0].iov_len);
     });
     return 1;
 }
@@ -4288,9 +4578,10 @@ static void on_accept(h2o_socket_t *listener, const char *err)
 static int validate_token(h2o_http3_server_ctx_t *ctx, struct sockaddr *remote, ptls_iovec_t client_cid, ptls_iovec_t server_cid,
                           quicly_address_token_plaintext_t *token)
 {
-    int64_t age;
+    double now, age;
 
-    if ((age = ctx->super.quic->now->cb(ctx->super.quic->now) - token->issued_at) < 0)
+    ctx->super.quic->now->cb(ctx->super.quic->now, &now);
+    if ((age = now - token->issued_at) < 0)
         age = 0;
 
     token->address_mismatch =
@@ -4352,7 +4643,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
                                                                   packet->cid.dest.encrypted, err_desc, payload);
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }
@@ -4391,7 +4682,7 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
             }
             assert(payload_size != SIZE_MAX);
             struct iovec vec = {.iov_base = payload, .iov_len = payload_size};
-            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1);
+            h2o_quic_send_datagrams(&ctx->super, srcaddr, destaddr, &vec, 1, 0);
             goto Exit;
         }
     }
@@ -4451,7 +4742,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
     size_t i;
 
     h2o_context_init(&conf.threads[thread_index].ctx, h2o_evloop_create(), &conf.globalconf);
-    conf.threads[thread_index].ctx.http3.next_cid.node_id = (uint32_t)conf.quic.node_id;
+    conf.threads[thread_index].ctx.http3.next_cid.node_id = conf.quic.node_id;
     conf.threads[thread_index].ctx.http3.next_cid.thread_id = (uint32_t)thread_index;
     h2o_multithread_register_receiver(conf.threads[thread_index].ctx.queue, &conf.threads[thread_index].server_notifications,
                                       on_server_notification);
@@ -4512,7 +4803,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         /* setup quic context and the unix socket to receive forwarded packets */
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
-                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, listener_config->quic.ctx,
+                                          conf.threads[thread_index].ctx.loop, listeners[i].sock, NULL, listener_config->quic.ctx,
                                           &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
                                           conf.globalconf.http3.use_gso);
             h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
@@ -5066,6 +5357,12 @@ int main(int argc, char **argv)
 #if H2O_USE_DTRACE
                 printf("dtrace: YES\n");
 #endif
+#if H2O_USE_BROTLI
+                printf("brotli: YES\n");
+#endif
+#if H2O_USE_ZSTD
+                printf("zstd: YES\n");
+#endif
 #if LIBCAP_FOUND
                 printf("capabilities: YES\n");
 #endif
@@ -5084,10 +5381,13 @@ int main(int argc, char **argv)
 #if H2O_USE_IO_URING
                 printf("io_uring: YES\n");
 #endif
+#if H2O_WITH_MPTCP
+                printf("mptcp: YES\n");
+#endif
                 printf("key-exchanges: ");
                 for (size_t i = 0; ptls_openssl_key_exchanges_all[i] != NULL; ++i)
-                        printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
-                               ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
+                    printf("%s%s", ptls_openssl_key_exchanges_all[i]->name,
+                           ptls_openssl_key_exchanges_all[i + 1] != NULL ? ", " : "\n");
                 exit(0);
             case 'h':
                 printf("h2o version " H2O_VERSION "\n"
@@ -5147,7 +5447,7 @@ int main(int argc, char **argv)
         size_t i;
         for (i = 0; i != conf.server_starter.num_fds; ++i)
             set_cloexec(conf.server_starter.fds[i]);
-        conf.server_starter.bound_fd_map = malloc(conf.server_starter.num_fds);
+        conf.server_starter.bound_fd_map = h2o_mem_alloc(conf.server_starter.num_fds);
         memset(conf.server_starter.bound_fd_map, 0, conf.server_starter.num_fds);
     }
 
@@ -5361,8 +5661,17 @@ int main(int argc, char **argv)
     /* launch threads that fetch OCSP responses for stapling */
     h2o_sem_set_capacity(&conf.ocsp_updater.semaphore, conf.ocsp_updater.capacity);
 
-    { /* initialize SSL_CTXs for session resumption and ticket-based resumption (also starts memcached client threads for the
-         purpose) */
+    /* apply HTTP/3 global configuration to the listeners; this has to be done before setting up session resumption, which tags QUIC
+     * tickets with the transport parameters */
+    for (size_t i = 0; i != conf.num_listeners; ++i) {
+        quicly_context_t *qctx;
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
+    }
+
+    { /* initialize SSL_CTXs for session resumption and ticket-based resumption, including:
+       * * the calculation of the 0-RTT tag, which is used to prevent 0-RTT resumption when parameters change
+       * * the launch of memcached client threads used for session resumption */
         size_t i, j;
         int has_quic = 0;
         H2O_VECTOR(SSL_CTX *) ssl_contexts = {NULL};
@@ -5390,16 +5699,9 @@ int main(int argc, char **argv)
             for (j = 0; j != conf.listeners[i]->ssl.size; ++j) {
                 ptls_context_t *ptls = conf.listeners[i]->ssl.entries[j]->identities[0].ptls.ctx;
                 if (ptls != NULL)
-                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx);
+                    ssl_setup_session_resumption_ptls(ptls, conf.listeners[i]->quic.ctx, &conf.listeners[i]->quic.qpack);
             }
         }
-    }
-
-    /* apply HTTP/3 global configuraton to the listeners */
-    for (size_t i = 0; i != conf.num_listeners; ++i) {
-        quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
-            h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
     }
 
     /* all setup should be complete by now */
@@ -5427,7 +5729,7 @@ int main(int argc, char **argv)
     }
 
     /* start the threads */
-    conf.threads = malloc(sizeof(conf.threads[0]) * conf.thread_map.size);
+    conf.threads = h2o_mem_alloc(sizeof(conf.threads[0]) * conf.thread_map.size);
     for (size_t i = 1; i != conf.thread_map.size; ++i) {
         pthread_t tid;
         h2o_multithread_create_thread(&tid, NULL, run_loop, (void *)i);

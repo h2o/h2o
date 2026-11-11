@@ -54,7 +54,7 @@ subtest "h2olog -S=1.00", sub {
     ok scalar(grep { $_->{type} eq "h1_accept" } @logs), "h1-accept has been logged";
   };
   subtest "QUIC", sub {
-    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+    my ($headers) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\b}, "req: HTTP/3";
 
     my $trace;
@@ -88,7 +88,7 @@ subtest "h2olog -S=0.00", sub {
   };
 
   subtest "QUIC", sub {
-    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+    my ($headers) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -121,7 +121,7 @@ subtest "h2olog -A=127.0.0.2", sub {
   });
 
   subtest "with non-matched IP address", sub {
-    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+    my ($headers) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -183,7 +183,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
   });
 
   subtest "with non-matched domain name", sub {
-    my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+    my ($headers) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -209,7 +209,7 @@ subtest "h2olog -N=localhost.examp1e.net", sub {
   };
 
   subtest "with matched domain name", sub {
-    my ($headers) = run_prog("$client_prog -3 100 https://localhost.examp1e.net:$server->{quic_port}/");
+    my ($headers) = run_prog("$client_prog -k -3 100 https://localhost.examp1e.net:$server->{quic_port}/");
     like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
     sleep(1);
@@ -240,7 +240,7 @@ subtest "multiple h2olog with sampling filters", sub {
     args => ["-S", "0.0"],
   });
 
-  my ($headers) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}, "req: HTTP/3";
 
   my($trace1, $trace2);

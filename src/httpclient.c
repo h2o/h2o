@@ -25,6 +25,7 @@
 #ifdef LIBC_HAS_BACKTRACE
 #include <execinfo.h>
 #endif
+#include <fcntl.h>
 #include <getopt.h>
 #include <netinet/in.h>
 #include <signal.h>
@@ -43,7 +44,8 @@
 
 static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, quicly_conn_t *conn, ptls_iovec_t token);
 static quicly_save_resumption_token_t save_http3_token = {save_http3_token_cb};
-static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src);
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src,
+                                const ptls_save_ticket_properties_t *properties);
 static void add_header(h2o_iovec_t name, h2o_iovec_t value);
 static ptls_save_ticket_t save_http3_ticket = {save_http3_ticket_cb};
 static h2o_httpclient_connection_pool_t *connpool;
@@ -64,11 +66,13 @@ static h2o_iovec_t iov_filler;
 static struct {
     h2o_socket_t *sock;
     int closed;
-} std_in;
+} input;
 static int io_interval = 0, req_interval = 0;
 static uint64_t io_timeout = DEFAULT_IO_TIMEOUT;
 static int ssl_verify_none = 0;
 static int exit_failure_on_http_errors = 0;
+static const char *input_file = NULL;
+static int input_fd = 0;
 static int program_exit_status = EXIT_SUCCESS;
 static h2o_socket_t *udp_sock = NULL;
 static const char *upgrade_token = NULL;
@@ -84,7 +88,9 @@ static h2o_http3client_ctx_t h3ctx = {
             .cipher_suites = ptls_openssl_cipher_suites,
             .save_ticket = &save_http3_ticket,
         },
+    .qpack = {.encoder_table_capacity = 4096},
     .max_frame_payload_size = 16384,
+    .max_concurrent_streams = 100,
 };
 static quicly_cid_plaintext_t h3_next_cid;
 static const char *session_file = NULL;
@@ -229,10 +235,14 @@ static quicly_error_t save_http3_token_cb(quicly_save_resumption_token_t *self, 
     return 0;
 }
 
-static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src)
+static int save_http3_ticket_cb(ptls_save_ticket_t *self, ptls_t *tls, ptls_iovec_t src,
+                                const ptls_save_ticket_properties_t *properties)
 {
     quicly_conn_t *conn = *ptls_get_data_ptr(tls);
     assert(quicly_get_tls(conn) == tls);
+
+    if (properties->early_data && properties->max_early_data_size != 0xffffffff)
+        return -(int)QUICLY_ERROR_GET_ERROR_CODE(QUICLY_TRANSPORT_ERROR_PROTOCOL_VIOLATION);
 
     save_session(tls, &src, quicly_get_remote_transport_parameters(conn), NULL);
     return 0;
@@ -283,27 +293,27 @@ static void on_error(h2o_httpclient_ctx_t *ctx, h2o_mem_pool_t *pool, const char
     free(pool);
 }
 
-static void stdin_on_read(h2o_socket_t *_sock, const char *err)
+static void input_on_read(h2o_socket_t *_sock, const char *err)
 {
-    assert(std_in.sock == _sock);
+    assert(input.sock == _sock);
 
-    h2o_socket_read_stop(std_in.sock);
+    h2o_socket_read_stop(input.sock);
     if (err != NULL)
-        std_in.closed = 1;
+        input.closed = 1;
     if (udp_sock != NULL)
         h2o_socket_read_stop(udp_sock);
 
-    h2o_httpclient_t *client = std_in.sock->data;
+    h2o_httpclient_t *client = input.sock->data;
 
     /* bail out if the client is not yet ready to receive data */
     if (client == NULL || client->write_req == NULL)
         return;
 
-    if (client->write_req(client, h2o_iovec_init(std_in.sock->input->bytes, std_in.sock->input->size), std_in.closed) != 0) {
+    if (client->write_req(client, h2o_iovec_init(input.sock->input->bytes, input.sock->input->size), input.closed) != 0) {
         fprintf(stderr, "write_req error\n");
         exit(1);
     }
-    h2o_buffer_consume(&std_in.sock->input, std_in.sock->input->size);
+    h2o_buffer_consume(&input.sock->input, input.sock->input->size);
 }
 
 static size_t build_capsule_header(uint8_t *header_buf, size_t payload_len)
@@ -342,7 +352,7 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
     if (rret == -1)
         return;
 
-    h2o_httpclient_t *client = std_in.sock->data;
+    h2o_httpclient_t *client = input.sock->data;
 
     /* drop datagram if the connection is not ready */
     if (client == NULL || client->write_req == NULL)
@@ -353,12 +363,12 @@ static void tunnel_on_udp_sock_read(h2o_socket_t *sock, const char *err)
         h2o_iovec_t datagram = h2o_iovec_init(buf, context_id_len + rret);
         udp_write(client, &datagram, 1);
     } else {
-        /* append UDP chunk to the input buffer of stdin read socket! */
+        /* append UDP chunk to the input buffer */
         uint8_t header_buf[3];
-        h2o_buffer_append(&std_in.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
-        h2o_buffer_append(&std_in.sock->input, buf, context_id_len + rret);
-        /* pretend as if we read from stdin */
-        stdin_on_read(std_in.sock, NULL);
+        h2o_buffer_append(&input.sock->input, header_buf, build_capsule_header(header_buf, context_id_len + rret));
+        h2o_buffer_append(&input.sock->input, buf, context_id_len + rret);
+        /* pretend as if we read from the input */
+        input_on_read(input.sock, NULL);
     }
 }
 
@@ -396,10 +406,10 @@ static void tunnel_on_udp_read(h2o_httpclient_t *client, h2o_iovec_t *datagrams,
     }
 }
 
-static void stdin_proceed_request(h2o_httpclient_t *client, const char *errstr)
+static void input_proceed_request(h2o_httpclient_t *client, const char *errstr)
 {
-    if (errstr == NULL && !std_in.closed) {
-        h2o_socket_read_start(std_in.sock, stdin_on_read);
+    if (errstr == NULL && !input.closed) {
+        h2o_socket_read_start(input.sock, input_on_read);
         if (udp_sock != NULL)
             h2o_socket_read_start(udp_sock, tunnel_on_udp_sock_read);
     }
@@ -467,11 +477,28 @@ static void start_request(h2o_httpclient_ctx_t *ctx)
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_NONE, NULL);
         } else {
             SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
+            X509_STORE *store = X509_STORE_new();
+            if (store == NULL) {
+                on_error(ctx, pool, "failed to allocate X509 store");
+                return;
+            }
+            if (X509_STORE_load_locations(store, crt_fullpath, NULL) != 1) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to load certificates file:%s", crt_fullpath);
+                return;
+            }
+            if (ptls_openssl_init_verify_certificate(&h3ctx.verify_cert, store) != 0) {
+                X509_STORE_free(store);
+                on_error(ctx, pool, "failed to initialize HTTP/3 certificate verifier");
+                return;
+            }
+            X509_STORE_free(store);
+            h3ctx.tls.verify_certificate = &h3ctx.verify_cert.super;
         }
         h2o_socketpool_set_ssl_ctx(sockpool, ssl_ctx);
         SSL_CTX_free(ssl_ctx);
     }
-    h2o_httpclient_connect(std_in.sock != NULL ? (h2o_httpclient_t **)&std_in.sock->data : NULL, pool, target_uri, ctx, connpool,
+    h2o_httpclient_connect(input.sock != NULL ? (h2o_httpclient_t **)&input.sock->data : NULL, pool, target_uri, ctx, connpool,
                            target_uri, upgrade_to, on_connect);
 }
 
@@ -630,17 +657,21 @@ h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *errstr, 
     *body = h2o_iovec_init(NULL, 0);
     *proceed_req_cb = NULL;
 
-    if (client->upgrade_to != NULL) {
-        *proceed_req_cb = stdin_proceed_request;
-        if (std_in.sock->input->size != 0) {
-            body->len = std_in.sock->input->size;
+    if (client->upgrade_to != NULL || input_file != NULL) {
+        if (client->upgrade_to == NULL && props->chunked != NULL) {
+            *props->chunked = 1;
+            h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_TRANSFER_ENCODING, NULL, H2O_STRLIT("chunked"));
+        }
+        *proceed_req_cb = input_proceed_request;
+        if (input.sock->input->size != 0) {
+            body->len = input.sock->input->size;
             body->base = h2o_mem_alloc_pool(client->pool, char, body->len);
-            memcpy(body->base, std_in.sock->input->bytes, body->len);
-            h2o_buffer_consume(&std_in.sock->input, body->len);
+            memcpy(body->base, input.sock->input->bytes, body->len);
+            h2o_buffer_consume(&input.sock->input, body->len);
         }
     } else if (req.body_size > 0) {
         *filler_remaining_bytes(client) = req.body_size;
-        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_UINT32_LONGEST_STR) - 1);
+        char *clbuf = h2o_mem_alloc_pool(client->pool, char, sizeof(H2O_SIZE_T_LONGEST_STR));
         size_t clbuf_len = sprintf(clbuf, "%zu", req.body_size);
         h2o_add_header(client->pool, &headers_vec, H2O_TOKEN_CONTENT_LENGTH, NULL, clbuf, clbuf_len);
         *proceed_req_cb = filler_proceed_request;
@@ -671,11 +702,12 @@ static void usage(const char *progname)
             "  -k           skip peer verification\n"
             "  -m <method>  request method (default: GET). When method is CONNECT,\n"
             "               \"host:port\" should be specified in place of URL.\n"
-            "  -o <path>    file to which the response body is written (default: stdout)\n"
+            "  -o, --output <path>\n"
+            "               file to which the response body is written (default: stdout)\n"
             "  -s <session-file>\n"
             "               file to read / write session information (atm HTTP/3 only)\n"
             "  -t <times>   number of requests to send the request (default: 1)\n"
-            "  -W <bytes>   receive window size (HTTP/3 only)\n"
+            "  -W <bytes>   receive window size of request streams (HTTP/3 only)\n"
             "  -x <URL>     specifies the host and port to connect to. When the scheme is\n"
             "               set to HTTP, cleartext TCP is used. When the scheme is HTTPS,\n"
             "               TLS is used and the provided hostname is used for peer.\n"
@@ -692,6 +724,11 @@ static void usage(const char *progname)
             "               specifies the timeout for I/O operations (default: 5000ms)\n"
             " --http3-key-exchange <name>\n"
             "               overrides the TLS/1.3 key exchanges to be used\n"
+            " --http3-qpack-encoder-table-capacity <bytes>\n"
+            "               sets the QPACK encoder dynamic table capacity for outgoing requests\n"
+            "               (default: 4096; set to 0 to disable dynamic-table use)\n"
+            " --input <path>\n"
+            "               file from which the request body is read\n"
             "  -h, --help   prints this help\n"
             "\n",
             progname, quicly_spec_context.initial_egress_max_udp_payload_size,
@@ -716,6 +753,7 @@ h2o_socket_t *create_udp_socket(h2o_loop_t *loop, uint16_t port)
     }
     return h2o_evloop_socket_create(loop, fd, H2O_SOCKET_FLAG_DONT_READ);
 }
+
 #endif
 
 static void on_sigfatal(int signo)
@@ -758,6 +796,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     h3ctx.quic.transport_params.max_datagram_frame_size = 1500;
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
     h3ctx.quic.tls = &h3ctx.tls;
@@ -781,26 +820,6 @@ int main(int argc, char **argv)
     ctx.loop = h2o_evloop_create();
 #endif
 
-#if H2O_USE_LIBUV
-#else
-    { /* initialize QUIC context */
-        int fd;
-        struct sockaddr_in sin;
-        if ((fd = socket(PF_INET, SOCK_DGRAM, 0)) == -1) {
-            perror("failed to create UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        memset(&sin, 0, sizeof(sin));
-        if (bind(fd, (void *)&sin, sizeof(sin)) != 0) {
-            perror("failed to bind bind UDP socket");
-            exit(EXIT_FAILURE);
-        }
-        h2o_socket_t *sock = h2o_evloop_socket_create(ctx.loop, fd, H2O_SOCKET_FLAG_DONT_READ);
-        h2o_quic_init_context(&h3ctx.h3, ctx.loop, sock, &h3ctx.quic, &h3_next_cid, NULL,
-                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
-    }
-#endif
-
     enum {
         OPT_INITIAL_UDP_PAYLOAD_SIZE = 0x100,
         OPT_MAX_UDP_PAYLOAD_SIZE,
@@ -809,20 +828,28 @@ int main(int argc, char **argv)
         OPT_IO_TIMEOUT,
         OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE,
         OPT_HTTP3_KEY_EXCHANGE,
+        OPT_HTTP3_NO_ECN,
+        OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY,
         OPT_UPGRADE,
+        OPT_INPUT,
         OPT_RATIO_H3QX,
     };
-    struct option longopts[] = {{"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
-                                {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
-                                {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
-                                {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
-                                {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
-                                {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
-                                {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
-                                {"upgrade", required_argument, NULL, OPT_UPGRADE},
-                                {"h3qx", required_argument, NULL, OPT_RATIO_H3QX},
-                                {"help", no_argument, NULL, 'h'},
-                                {NULL}};
+    struct option longopts[] = {
+        {"initial-udp-payload-size", required_argument, NULL, OPT_INITIAL_UDP_PAYLOAD_SIZE},
+        {"max-udp-payload-size", required_argument, NULL, OPT_MAX_UDP_PAYLOAD_SIZE},
+        {"disallow-delayed-ack", no_argument, NULL, OPT_DISALLOW_DELAYED_ACK},
+        {"ack-frequency", required_argument, NULL, OPT_ACK_FREQUENCY},
+        {"io-timeout", required_argument, NULL, OPT_IO_TIMEOUT},
+        {"http3-max-frame-payload-size", required_argument, NULL, OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE},
+        {"http3-key-exchange", required_argument, NULL, OPT_HTTP3_KEY_EXCHANGE},
+        {"no-http3-ecn", no_argument, NULL, OPT_HTTP3_NO_ECN},
+        {"http3-qpack-encoder-table-capacity", required_argument, NULL, OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY},
+        {"upgrade", required_argument, NULL, OPT_UPGRADE},
+        {"output", required_argument, NULL, 'o'},
+        {"input", required_argument, NULL, OPT_INPUT},
+        {"h3qx", required_argument, NULL, OPT_RATIO_H3QX},
+        {"help", no_argument, NULL, 'h'},
+        {NULL}};
     const char *optstring = "t:m:o:b:x:X:C:c:d:H:i:fk2:W:s:h3:"
 #ifdef __GNUC__
                             ":" /* for backward compatibility, optarg of -3 is optional when using glibc */
@@ -846,8 +873,7 @@ int main(int argc, char **argv)
             }
             break;
         case 'b':
-            req.body_size = atoi(optarg);
-            if (req.body_size <= 0) {
+            if (sscanf(optarg, "%zu", &req.body_size) != 1 || req.body_size == 0) {
                 fprintf(stderr, "body size must be greater than 0\n");
                 exit(EXIT_FAILURE);
             }
@@ -959,7 +985,6 @@ int main(int argc, char **argv)
                 fprintf(stderr, "failed to parse HTTP/3 receive window size (-W)\n");
                 exit(EXIT_FAILURE);
             }
-            h3ctx.quic.transport_params.max_stream_data.uni = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_local = v;
             h3ctx.quic.transport_params.max_stream_data.bidi_remote = v;
         } break;
@@ -1003,7 +1028,7 @@ int main(int argc, char **argv)
             }
             break;
         case OPT_HTTP3_MAX_FRAME_PAYLOAD_SIZE:
-            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != -1) {
+            if (sscanf(optarg, "%" SCNu64, &h3ctx.max_frame_payload_size) != 1) {
                 fprintf(stderr, "failed to parse --http3-max-frame-payload-size\n");
                 exit(EXIT_FAILURE);
             }
@@ -1019,10 +1044,26 @@ int main(int argc, char **argv)
             }
             for (slot = h3_key_exchanges; *slot != NULL; ++slot)
                 ;
+            if (slot == h3_key_exchanges + PTLS_ELEMENTSOF(h3_key_exchanges) - 1) {
+                fprintf(stderr, "too many key exchanges\n");
+                exit(EXIT_FAILURE);
+            }
             *slot = *named;
         } break;
+        case OPT_HTTP3_NO_ECN:
+            h3ctx.quic.egress[0].ecn = QUICLY_ECN_MODE_OFF;
+            break;
+        case OPT_HTTP3_QPACK_ENCODER_TABLE_CAPACITY:
+            if (sscanf(optarg, "%" SCNu32, &h3ctx.qpack.encoder_table_capacity) != 1) {
+                fprintf(stderr, "--http3-qpack-encoder-table-capacity must be a non-negative integer\n");
+                exit(EXIT_FAILURE);
+            }
+            break;
         case OPT_UPGRADE:
             upgrade_token = optarg;
+            break;
+        case OPT_INPUT:
+            input_file = optarg;
             break;
         default:
             exit(EXIT_FAILURE);
@@ -1041,6 +1082,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "sum of the use ratio of HTTP/2 and HTTP/3 is greater than 100\n");
         exit(EXIT_FAILURE);
     }
+    if (input_file != NULL && req.body_size != 0) {
+        fprintf(stderr, "--input cannot be used with -b\n");
+        exit(EXIT_FAILURE);
+    }
 
     if (h3_key_exchanges[0] == NULL) {
         size_t i = 0;
@@ -1049,6 +1094,22 @@ int main(int argc, char **argv)
 #endif
         h3_key_exchanges[i++] = &ptls_openssl_secp256r1;
     }
+#if H2O_USE_LIBUV
+#else
+    { /* initialize QUIC context */
+        h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
+            ++sp;
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
+            ++sp;
+        if (sp == socks) {
+            perror("failed to create UDP socket for both IPv4 and v6");
+            exit(EXIT_FAILURE);
+        }
+        h2o_quic_init_context(&h3ctx.h3, ctx.loop, socks[0], socks[1], &h3ctx.quic, &h3_next_cid, NULL,
+                              h2o_httpclient_http3_notify_connection_update, 1 /* use_gso */, NULL);
+    }
+#endif
 
     int is_connect = 0;
     if ((strcmp(req.method, "CONNECT") == 0 && upgrade_token == NULL) || strcmp(req.method, "CONNECT-UDP") == 0) {
@@ -1069,20 +1130,31 @@ int main(int argc, char **argv)
         } else if (strcmp(req.method, "CONNECT") == 0) {
             if (ctx.protocol_selector.ratio.http2 < 0 ||
                 ctx.protocol_selector.ratio.http2 + ctx.protocol_selector.ratio.http3 + ctx.protocol_selector.ratio.h3qx != 100) {
-                fprintf(stderr,
-                        "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 and H2\n");
+                fprintf(stderr, "extended CONNECT using CONNECT method cannot be used on H1; specify `-2 100` or a mixture of H2 "
+                                "and H3 using `-3 <ratio>`\n");
                 exit(EXIT_FAILURE);
             }
         }
         is_connect = 1;
     }
-    if (is_connect) {
+    if (udp_sock != NULL && !is_connect) {
+        fprintf(stderr, "-X can only be used for creating a tunnel\n");
+        exit(EXIT_FAILURE);
+    }
+    const char *input_path = input_file;
+    if (is_connect && input_path == NULL)
+        input_path = "/dev/stdin";
+    if (input_path != NULL) {
+        if ((input_fd = open(input_path, O_RDONLY)) == -1) {
+            fprintf(stderr, "failed to open file:%s:%s\n", input_path, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
 #if H2O_USE_LIBUV
-        std_in.sock = h2o_uv__poll_create(ctx.loop, 0, (uv_close_cb)free);
+        input.sock = h2o_uv__poll_create(ctx.loop, input_fd, (uv_close_cb)free);
 #else
-        std_in.sock = h2o_evloop_socket_create(ctx.loop, 0, 0);
+        input.sock = h2o_evloop_socket_create(ctx.loop, input_fd, 0);
 #endif
-        h2o_socket_read_start(std_in.sock, stdin_on_read);
+        h2o_socket_read_start(input.sock, input_on_read);
     }
 
     if (argc < 1) {

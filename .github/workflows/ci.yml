@@ -5,7 +5,7 @@ on: [push, pull_request]
 jobs:
   build:
     name: "${{ matrix.name }}"
-    runs-on: [ubuntu-24.04]
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-24.04' }}
 
     # We want to run on external PRs, but not on our own internal PRs as they'll be run
     # by the push to the branch.
@@ -32,10 +32,12 @@ jobs:
 
     timeout-minutes: 60
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
       with:
         submodules: recursive
     - name: setup-docker
+      # self-hosted runners (selected by CI_RUNNER) share a preconfigured docker daemon
+      if: ${{ !vars.CI_RUNNER }}
       uses: docker/setup-docker-action@v4
       with:
         daemon-config: |
@@ -45,7 +47,7 @@ jobs:
           }
         channel: stable
     - name: Login to Docker Hub
-      uses: docker/login-action@v2
+      uses: docker/login-action@v4
       with:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -55,18 +57,25 @@ jobs:
       shell: 'script -q -e -c "bash -xe {0}"'
       run: |
         chmod -R ugo+w .
-        ${{ matrix.command }}
+        ${{ matrix.command }} DOCKER_RUN_EXTRA_OPTS=--cidfile=$RUNNER_TEMP/container_id
         # if there's a summary markdown in the container, show it.
-        container_id=$(docker container ls -al --format '{{ .ID }}')
-        docker cp $container_id:/home/ci/summary.md $GITHUB_STEP_SUMMARY || true
+        docker cp $(cat $RUNNER_TEMP/container_id):/home/ci/summary.md $GITHUB_STEP_SUMMARY || true
+
+    - name: Remove container
+      if: always()
+      run: |
+        if [ -f $RUNNER_TEMP/container_id ]; then
+          docker rm -f $(cat $RUNNER_TEMP/container_id) || true
+          rm -f $RUNNER_TEMP/container_id
+        fi
 
   # See https://github.com/google/oss-fuzz/tree/master/projects/h2o for details
   ossfuzz:
     name: OSS Fuzz
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
 
-    # see above
-    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # see above; also skippable by setting the CI_SKIP_OSSFUZZ repository variable
+    if: (github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository) && !vars.CI_SKIP_OSSFUZZ
 
     timeout-minutes: 60
     steps:

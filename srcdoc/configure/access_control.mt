@@ -136,7 +136,7 @@ Matching methods can only be used in a condition block of the ACL methods.
 $ctx->{mruby_method}->(
     name    => "addr",
     params  => [
-        { label => 'forwarded', desc => 'If true, returns the value of X-Forwarded-For header if it exists. Default value: true' },
+        { label => 'forwarded', desc => 'If true, returns the value of X-Forwarded-For header if it exists. As the header can be set by clients, it should be set to true only when H2O receives requests solely from proxies that it trusts, and those proxies overwrite (rather than append to) the header. Default value: false' },
     ],
     desc    => q{ Returns the remote IP address of the request. },
 )->(sub {

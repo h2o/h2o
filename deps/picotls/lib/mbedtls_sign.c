@@ -403,6 +403,7 @@ int ptls_mbedtls_set_available_schemes(ptls_mbedtls_sign_certificate_t *signer)
         }
         break;
     case PSA_ALG_ED25519PH:
+    case PSA_ALG_PURE_EDDSA:
         signer->schemes = ed25519_signature_schemes;
         break;
     default:
@@ -540,14 +541,15 @@ int ptls_mbedtls_rsa_get_key_bits(const unsigned char *key_value, size_t key_len
         }
     }
 
-    if (ret == 0 && key_value[x] == 0x02 && key_value[x + 1] == 0x01 && key_value[x + 2] == 0x00 && key_value[x + 3] == 0x02) {
+    if (ret == 0 && x + 3 < key_length && key_value[x] == 0x02 && key_value[x + 1] == 0x01 && key_value[x + 2] == 0x00 &&
+        key_value[x + 3] == 0x02) {
         x += 4;
         ret = ptls_mbedtls_parse_der_length(key_value, key_length, &x, &nb_bytes);
     } else {
         ret = -1;
     }
 
-    if (ret == 0) {
+    if (ret == 0 && x < key_length) {
         unsigned char v = key_value[x];
         nb_bits = 8 * nb_bytes;
 
@@ -669,8 +671,7 @@ int ptls_mbedtls_load_private_key(ptls_context_t *ctx, char const *pem_fname)
                 } else if (oid_length == sizeof(ptls_mbedtls_oid_rsa_key) &&
                            memcmp(pem.private_buf + oid_index, ptls_mbedtls_oid_rsa_key, sizeof(ptls_mbedtls_oid_rsa_key)) == 0) {
                     /* We recognized RSA */
-                    key_length = pem.private_buflen;
-                    ptls_mbedtls_set_rsa_key_attributes(signer, pem.private_buf, key_length);
+                    ptls_mbedtls_set_rsa_key_attributes(signer, pem.private_buf + key_index, key_length);
                 } else {
                     ret = PTLS_ERROR_NOT_AVAILABLE;
                 }

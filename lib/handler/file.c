@@ -42,6 +42,7 @@
 
 #define MAX_BUF_SIZE 65000
 #define BOUNDARY_SIZE 20
+#define MAX_RANGES 200
 #define FIXED_PART_SIZE (sizeof("\r\n--") - 1 + BOUNDARY_SIZE + sizeof("\r\nContent-Range: bytes=-/\r\nContent-Type: \r\n\r\n") - 1)
 
 struct st_h2o_sendfile_generator_t {
@@ -334,7 +335,8 @@ static struct st_h2o_sendfile_generator_t *create_generator(h2o_req_t *req, cons
     if ((flags & H2O_FILE_FLAG_SEND_COMPRESSED) != 0 && req->version >= 0x101) {
         int compressible_types = h2o_get_compressible_types(&req->headers);
         if (compressible_types != 0) {
-            char *variant_path = h2o_mem_alloc_pool(&req->pool, *variant_path, path_len + sizeof(".gz"));
+            /* the buffer has to accommodate the longest of the variant extensions tried below (`.zstd`) */
+            char *variant_path = h2o_mem_alloc_pool(&req->pool, *variant_path, path_len + sizeof(".zstd"));
             memcpy(variant_path, path, path_len);
 #define TRY_VARIANT(mask, enc, ext)                                                                                                \
     if ((compressible_types & mask) != 0) {                                                                                        \
@@ -553,7 +555,7 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
     if (range == SIZE_MAX)                                                                                                         \
         return NULL;
 
-    size_t range_start = SIZE_MAX, range_count = 0;
+    size_t range_start = SIZE_MAX, range_size = 0, total_size = 0;
     char *buf = range_value->base, *buf_end = buf + range_value->len;
     int needs_comma = 0;
     H2O_VECTOR(size_t) ranges = {NULL};
@@ -574,6 +576,8 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             }
             needs_comma = 0;
             buf++;
+            if (buf == buf_end)
+                break;
             while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
                 buf++;
                 CHECK_EOF();
@@ -585,28 +589,28 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
             CHECK_EOF();
             if (*buf++ != '-')
                 return NULL;
-            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
+            range_size = h2o_strtosizefwd(&buf, buf_end - buf);
             if (H2O_UNLIKELY(range_start >= file_size)) {
                 range_start = SIZE_MAX;
-            } else if (H2O_LIKELY(range_count != SIZE_MAX)) {
-                if (H2O_UNLIKELY(range_count > file_size - 1))
-                    range_count = file_size - 1;
-                if (H2O_LIKELY(range_start <= range_count))
-                    range_count -= range_start - 1;
+            } else if (H2O_LIKELY(range_size != SIZE_MAX)) {
+                if (H2O_UNLIKELY(range_size > file_size - 1))
+                    range_size = file_size - 1;
+                if (H2O_LIKELY(range_start <= range_size))
+                    range_size -= range_start - 1;
                 else
                     range_start = SIZE_MAX;
             } else {
-                range_count = file_size - range_start;
+                range_size = file_size - range_start;
             }
         } else if (H2O_LIKELY(*buf++ == '-')) {
             CHECK_EOF();
-            range_count = h2o_strtosizefwd(&buf, buf_end - buf);
-            if (H2O_UNLIKELY(range_count == SIZE_MAX))
+            range_size = h2o_strtosizefwd(&buf, buf_end - buf);
+            if (H2O_UNLIKELY(range_size == SIZE_MAX))
                 return NULL;
-            if (H2O_LIKELY(range_count != 0)) {
-                if (H2O_UNLIKELY(range_count > file_size))
-                    range_count = file_size;
-                range_start = file_size - range_count;
+            if (H2O_LIKELY(range_size != 0)) {
+                if (H2O_UNLIKELY(range_size > file_size))
+                    range_size = file_size;
+                range_start = file_size - range_size;
             } else {
                 range_start = SIZE_MAX;
             }
@@ -615,9 +619,21 @@ static size_t *process_range(h2o_mem_pool_t *pool, h2o_iovec_t *range_value, siz
         }
 
         if (H2O_LIKELY(range_start != SIZE_MAX)) {
+            /* If there are too many ranges, or if the ranges add up to more than the size of the file (which can only happen when
+             * they overlap), return one range covering the entire file. Otherwise, a short header like `bytes=0-,0-,0-,...` would
+             * yield as many copies of the file, and one like `bytes=0-0,2-2,4-4,...` would yield as many parts each carrying the
+             * multipart framing. */
+            if (ranges.size / 2 == MAX_RANGES || range_size > file_size - total_size) {
+                assert(ranges.size != 0); /* a single range never exceeds the limits */
+                ranges.entries[0] = 0;
+                ranges.entries[1] = file_size;
+                *ret = 1;
+                return ranges.entries;
+            }
+            total_size += range_size;
             h2o_vector_reserve(pool, &ranges, ranges.size + 2);
             ranges.entries[ranges.size++] = range_start;
-            ranges.entries[ranges.size++] = range_count;
+            ranges.entries[ranges.size++] = range_size;
         }
         if (buf != buf_end)
             while (H2O_UNLIKELY(*buf == ' ') || H2O_UNLIKELY(*buf == '\t')) {
@@ -794,6 +810,10 @@ static int serve_with_generator(struct st_h2o_sendfile_generator_t *generator, h
             h2o_send_error_416(req, "Request Range Not Satisfiable", "requested range not satisfiable",
                                H2O_SEND_ERROR_KEEP_HEADERS);
             goto Close;
+        } else if (range_count == 1 && range_infos[1] == generator->bytesleft) {
+            /* send the entire file as 200 rather than as 206 with one range covering the entire file (RFC 9110 section 14.2) */
+            assert(range_infos[0] == 0);
+            goto EntireFile;
         }
         generator->ranged.range_count = range_count;
         generator->ranged.range_infos = range_infos;
@@ -881,7 +901,8 @@ static int on_req(h2o_handler_t *_self, h2o_req_t *req)
 
     /* build path (still unterminated at the end of the block) */
     req_path_prefix = self->conf_path.len;
-    rpath = alloca(self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
+    rpath = h2o_mem_alloc_pool(&req->pool, char,
+                               self->real_path.len + (req->path_normalized.len - req_path_prefix) + self->max_index_file_len + 1);
     rpath_len = 0;
     memcpy(rpath + rpath_len, self->real_path.base, self->real_path.len);
     rpath_len += self->real_path.len;

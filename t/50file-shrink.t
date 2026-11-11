@@ -83,7 +83,7 @@ subtest 'http/3' => sub {
         unless -e $h3client;
     $doit->(sub {
         my $fn = shift;
-        `$h3client -3 100 https://127.0.0.1:$quic_port/$fn 2> /dev/null`;
+        `$h3client -k -3 100 https://127.0.0.1:$quic_port/$fn 2> /dev/null`;
     });
 };
 

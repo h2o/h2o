@@ -19,6 +19,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <limits.h>
 #include "h2o/hostinfo.h"
 #include "h2o/memory.h"
 #include "h2o/socket.h"
@@ -26,6 +27,15 @@
 #include "../probes_.h"
 
 #define MODULE_NAME "lib/handler/connect.c"
+
+/**
+ * Maximum Capsule Value size accepted on CONNECT-UDP streams.
+ *
+ * The limit is as large as the largest permitted UDP datagram capsule, the only capsule type we handle: up to 8 bytes of Context ID
+ * followed by the 65,527 byte UDP payload limit defined by RFC 9298, Section 5. Though clients are allowed to send capsules of
+ * arbitrary type, we treat capsules exceeding this limit as an error instead of buffering or skipping them.
+ */
+#define MAX_CAPSULE_SIZE (8 + 65527)
 
 struct st_connect_handler_t {
     h2o_handler_t super;
@@ -231,6 +241,7 @@ static void record_socket_error(struct st_connect_generator_t *self, const char 
 static void try_connect(struct st_connect_generator_t *self);
 static int tcp_start_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address);
+static void udp_on_read(h2o_socket_t *_sock, const char *err);
 
 static h2o_loop_t *get_loop(struct st_connect_generator_t *self)
 {
@@ -276,14 +287,10 @@ static void dispose_generator(struct st_connect_generator_t *self)
 
 static int close_socket(struct st_connect_generator_t *self)
 {
-    int send_inflight;
+    int send_inflight = !h2o_socket_is_reading(self->sock);
 
-    if (self->is_tcp) {
+    if (self->is_tcp)
         self->tcp.recvbuf_detached = self->sock->input;
-        send_inflight = self->tcp.recvbuf_detached->size != 0;
-    } else {
-        send_inflight = !h2o_socket_is_reading(self->sock);
-    }
     h2o_buffer_init(&self->sock->input, &h2o_socket_buffer_prototype);
     h2o_socket_close(self->sock);
     self->sock = NULL;
@@ -294,12 +301,16 @@ static int close_socket(struct st_connect_generator_t *self)
 
 static void close_readwrite(struct st_connect_generator_t *self)
 {
-    int send_inflight = 0;
+    int send_inflight;
 
-    if (self->sock != NULL)
+    if (self->sock != NULL) {
         send_inflight = close_socket(self);
-    else if (self->is_tcp)
-        send_inflight = self->tcp.recvbuf_detached->size != 0;
+    } else {
+        /* if `h2o_send` was not inflight when the socket was closed (see the if arm above), read-close would have been notified
+         * immediately; the fact that that didn't happen implies that send is inflight, until `on_proceed` calls
+         * h2o_send(FINAL). */
+        send_inflight = 1;
+    }
 
     if (h2o_timer_is_linked(&self->timeout))
         h2o_timer_unlink(&self->timeout);
@@ -407,7 +418,7 @@ static int store_server_addresses(struct st_connect_generator_t *self, struct ad
         assert(self->server_addresses.size < PTLS_ELEMENTSOF(self->server_addresses.list));
         if (h2o_connect_lookup_acl(self->handler->acl.entries, self->handler->acl.count, res->ai_addr)) {
             struct st_server_address_t *dst = self->server_addresses.list + self->server_addresses.size++;
-            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr), res->ai_addrlen);
+            dst->sa = h2o_mem_alloc_pool_aligned(&self->src_req->pool, H2O_ALIGNOF(struct sockaddr_storage), res->ai_addrlen);
             memcpy(dst->sa, res->ai_addr, res->ai_addrlen);
             dst->salen = res->ai_addrlen;
             ++num_added;
@@ -430,12 +441,12 @@ static void on_getaddr(h2o_hostinfo_getaddr_req_t *getaddr_req, const char *errs
 
     /* Store addresses, or convert error to ACL denial. */
     if (errstr == NULL) {
+        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
         if (self->is_tcp) {
             assert(res->ai_socktype == SOCK_STREAM);
         } else {
             assert(res->ai_socktype == SOCK_DGRAM);
         }
-        assert(res != NULL && "upon successful return, getaddrinfo shall return at least one address (RFC 3493 Section 6.1)");
         if (!store_server_addresses(self, res))
             set_last_error(self, ERROR_CLASS_ACCESS_PROHIBITED, "destination_ip_prohibited");
     } else {
@@ -638,7 +649,7 @@ static void tcp_on_read(h2o_socket_t *_sock, const char *err)
     }
 }
 
-static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
+static void on_proceed(h2o_generator_t *_self, h2o_req_t *req)
 {
     struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
 
@@ -647,7 +658,7 @@ static void tcp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
     if (self->sock != NULL) {
         h2o_buffer_consume(&self->sock->input, self->sock->input->size);
         reset_io_timeout(self);
-        h2o_socket_read_start(self->sock, tcp_on_read);
+        h2o_socket_read_start(self->sock, self->is_tcp ? tcp_on_read : udp_on_read);
     } else {
         self->read_closed = 1;
         h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
@@ -707,7 +718,7 @@ static int tcp_start_connect(struct st_connect_generator_t *self, struct st_serv
     return 1;
 }
 
-static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_consume, int *skip)
+static size_t udp_get_next_chunk(h2o_iovec_t *datagram, const char *start, size_t len, int *skip)
 {
     const uint8_t *bytes = (const uint8_t *)start;
     const uint8_t *end = bytes + len;
@@ -715,14 +726,16 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
 
     chunk_type = ptls_decode_quicint(&bytes, end);
     if (chunk_type == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
     chunk_length = ptls_decode_quicint(&bytes, end);
     if (chunk_length == UINT64_MAX)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
+    if (chunk_length > MAX_CAPSULE_SIZE)
+        return SIZE_MAX;
 
     /* chunk is incomplete */
     if (end - bytes < chunk_length)
-        return h2o_iovec_init(NULL, 0);
+        return 0;
 
     /*
      * https://tools.ietf.org/html/draft-ietf-masque-connect-udp-03#section-6
@@ -730,9 +743,9 @@ static h2o_iovec_t udp_get_next_chunk(const char *start, size_t len, size_t *to_
      * using a CONNECT-UDP Stream Chunk Type of UDP_PACKET (value 0x00).
      */
     *skip = chunk_type != 0;
-    *to_consume = (bytes + chunk_length) - (const uint8_t *)start;
+    *datagram = h2o_iovec_init(bytes, chunk_length);
 
-    return h2o_iovec_init(bytes, chunk_length);
+    return bytes + chunk_length - (const uint8_t *)start;
 }
 
 static void udp_write_core(struct st_connect_generator_t *self, h2o_iovec_t datagram)
@@ -761,7 +774,7 @@ static void udp_write_stream_complete_delayed(h2o_timer_t *_timer)
     self->src_req->proceed_req(self->src_req, NULL);
 }
 
-static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
+static int udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t chunk)
 {
     int from_buf = 0;
     size_t off = 0;
@@ -770,16 +783,21 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
 
     if (self->udp.egress.buf->size != 0) {
         from_buf = 1;
-        if (chunk.len != 0)
+        if (chunk.len != 0) {
+            if (self->udp.egress.buf->size > MAX_CAPSULE_SIZE || chunk.len > MAX_CAPSULE_SIZE - self->udp.egress.buf->size)
+                return -1;
             h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
+        }
         chunk.base = self->udp.egress.buf->bytes;
         chunk.len = self->udp.egress.buf->size;
     }
     do {
         int skip = 0;
-        size_t to_consume;
-        h2o_iovec_t datagram = udp_get_next_chunk(chunk.base + off, chunk.len - off, &to_consume, &skip);
-        if (datagram.base == NULL)
+        h2o_iovec_t datagram;
+        size_t to_consume = udp_get_next_chunk(&datagram, chunk.base + off, chunk.len - off, &skip);
+        if (to_consume == SIZE_MAX)
+            return -1;
+        if (to_consume == 0)
             break;
         if (!skip)
             udp_write_core(self, datagram);
@@ -793,6 +811,7 @@ static void udp_do_write_stream(struct st_connect_generator_t *self, h2o_iovec_t
     }
 
     h2o_timer_link(get_loop(self), 0, &self->udp.egress.delayed);
+    return 0;
 }
 
 static int udp_write_stream(void *_self, int is_end_stream)
@@ -811,14 +830,7 @@ static int udp_write_stream(void *_self, int is_end_stream)
     if (is_end_stream)
         self->write_closed = 1;
 
-    /* if the socket is not yet open, buffer input and return */
-    if (self->sock == NULL) {
-        h2o_buffer_append(&self->udp.egress.buf, chunk.base, chunk.len);
-        return 0;
-    }
-
-    udp_do_write_stream(self, chunk);
-    return 0;
+    return udp_do_write_stream(self, chunk) == 0 ? 0 : 1;
 }
 
 static void udp_write_datagrams(h2o_req_t *_req, h2o_iovec_t *datagrams, size_t num_datagrams)
@@ -879,20 +891,6 @@ static void udp_on_read(h2o_socket_t *_sock, const char *err)
     }
 }
 
-static void udp_on_proceed(h2o_generator_t *_self, h2o_req_t *req)
-{
-    struct st_connect_generator_t *self = H2O_STRUCT_FROM_MEMBER(struct st_connect_generator_t, super, _self);
-
-    if (self->sock != NULL) {
-        h2o_buffer_consume(&self->sock->input, self->sock->input->size);
-        reset_io_timeout(self);
-        h2o_socket_read_start(self->sock, udp_on_read);
-    } else {
-        self->read_closed = 1;
-        h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_FINAL);
-    }
-}
-
 static int udp_connect(struct st_connect_generator_t *self, struct st_server_address_t *server_address)
 {
     int fd;
@@ -946,7 +944,8 @@ static int udp_connect(struct st_connect_generator_t *self, struct st_server_add
     h2o_send(self->src_req, NULL, 0, H2O_SEND_STATE_IN_PROGRESS);
 
     /* write any data if provided, or just call the proceed_req callback */
-    self->src_req->write_req.cb(self, self->no_req_streaming);
+    if (self->src_req->write_req.cb(self, self->no_req_streaming) != 0)
+        self->src_req->proceed_req(self->src_req, h2o_httpclient_error_io);
 
     return 1;
 }
@@ -1007,12 +1006,11 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     self->handler = handler;
     self->src_req = req;
     self->timeout.cb = on_connect_timeout;
+    self->super.proceed = on_proceed;
     if (is_tcp) {
         self->is_tcp = 1;
-        self->super.proceed = tcp_on_proceed;
         h2o_buffer_init(&self->tcp.sendbuf, &h2o_socket_buffer_prototype);
     } else {
-        self->super.proceed = udp_on_proceed;
         h2o_buffer_init(&self->udp.egress.buf, &h2o_socket_buffer_prototype);
         self->udp.egress.delayed = (h2o_timer_t){.cb = udp_write_stream_complete_delayed};
         self->udp.is_draft03 = is_masque_draft03;
@@ -1025,6 +1023,19 @@ static int on_req_core(struct st_connect_handler_t *handler, h2o_req_t *req, h2o
     self->src_req->write_req.ctx = self;
     if (self->src_req->proceed_req == NULL)
         self->no_req_streaming = 1;
+
+    /* Unless the host is an IP address, append a dot so that the resolver treats the name as fully-qualified and does not try the
+     * search domains (e.g., those listed in resolv.conf). */
+    if (host.base[host.len - 1] != '.') {
+        char *buf = h2o_mem_alloc_pool(&req->pool, char, host.len + 2);
+        memcpy(buf, host.base, host.len);
+        buf[host.len] = '\0';
+        struct in6_addr addr;
+        if (inet_pton(AF_INET, buf, &addr) != 1 && inet_pton(AF_INET6, buf, &addr) != 1) {
+            buf[host.len] = '.';
+            host = h2o_iovec_init(buf, host.len + 1);
+        }
+    }
 
     char port_str[sizeof(H2O_UINT16_LONGEST_STR)];
     int port_strlen = sprintf(port_str, "%" PRIu16, port);
@@ -1130,6 +1141,109 @@ void h2o_connect_udp_register(h2o_pathconf_t *pathconf, h2o_proxy_config_vars_t 
     do_register(pathconf, config, acl_entries, num_acl_entries, on_req_connect_udp);
 }
 
+/**
+ * Parses a decimal number at the beginning of [*s, end), advancing *s past the digits consumed. Returns the parsed value, or -1 if
+ * no digit is found or the value would not fit in a non-negative int. The caller is responsible for range-checking the result.
+ */
+static int parse_decimal(const char **s, const char *end)
+{
+    const char *start = *s;
+    int v = 0;
+
+    for (; *s != end && '0' <= **s && **s <= '9'; ++*s) {
+        int digit = **s - '0';
+        /* reject if `v * 10 + digit` would overflow INT_MAX, checked before the multiply to avoid relying on a wider type */
+        if (v > (INT_MAX - digit) / 10)
+            return -1;
+        v = v * 10 + digit;
+    }
+    if (*s == start)
+        return -1;
+    return v;
+}
+
+/**
+ * Parse an ACL host/mask:port specification.
+ * Accepted format: host[/mask][:port[-port]] (the netmask may also appear after the port, e.g. host:port/mask, for backward
+ * compatibility). A port of `*` means any port, same as omitting it.
+ * Examples: 10.0.0.0/8:80-443, [::1]:443, *:25, 127.0.0.1/32, 127.0.0.1:25/24, 127.0.0.1:*, local
+ * Returns pointer to first unparsed character on success, NULL on error.
+ */
+static const char *parse_acl_hostport(const char *s, size_t len, h2o_iovec_t *host, size_t *addr_mask, uint16_t *port_min,
+                                      uint16_t *port_max)
+{
+    const char *token_start = s, *token_end, *end = s + len;
+
+    /* default to matching any port; overridden below if a port or range is given */
+    *port_min = 0;
+    *port_max = 65535;
+    *addr_mask = 0;
+
+    if (token_start == end)
+        return NULL;
+
+    /* parse host */
+    if (*token_start == '[') {
+        /* IPv6 address in brackets */
+        ++token_start;
+        if ((token_end = memchr(token_start, ']', end - token_start)) == NULL)
+            return NULL;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end + 1;
+    } else {
+        for (token_end = token_start; !(token_end == end || *token_end == '/' || *token_end == ':'); ++token_end)
+            ;
+        *host = h2o_iovec_init(token_start, token_end - token_start);
+        token_start = token_end;
+    }
+
+    /* disallow zero-length host */
+    if (host->len == 0)
+        return NULL;
+
+    /* parse optional /mask appearing before the port (e.g. 10.0.0.0/8:80) */
+    if (token_start != end && *token_start == '/') {
+        int mask;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
+            return NULL;
+        *addr_mask = mask;
+    }
+
+    /* parse optional :port, :port-port, or :* (any port) */
+    if (token_start != end && *token_start == ':') {
+        ++token_start;
+        if (token_start != end && *token_start == '*') {
+            /* `:*` means any port; leave the default full range in place */
+            ++token_start;
+        } else {
+            int p;
+            if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                return NULL;
+            *port_min = (uint16_t)p;
+            if (token_start != end && *token_start == '-') {
+                ++token_start;
+                if ((p = parse_decimal(&token_start, end)) < 0 || p > 65535)
+                    return NULL;
+            }
+            *port_max = (uint16_t)p;
+        }
+    }
+
+    /* parse optional /mask appearing after the port (legacy order, e.g. 10.0.0.0:80/8) */
+    if (token_start != end && *token_start == '/') {
+        int mask;
+        if (*addr_mask != 0) /* mask already given before the port */
+            return NULL;
+        ++token_start;
+        if ((mask = parse_decimal(&token_start, end)) <= 0)
+            return NULL;
+        *addr_mask = mask;
+    }
+
+    return token_start;
+}
+
 const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *input)
 {
     /* type */
@@ -1144,25 +1258,17 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
         return "ACL entry must begin with + or -";
     }
 
-    /* extract address, port */
+    /* extract address, optional netmask, optional port or port range. Port ranges are INCLUSIVE on both min and max */
     h2o_iovec_t host_vec;
-    uint16_t port;
-    const char *slash_at;
-    if ((slash_at = h2o_url_parse_hostport(input + 1, strlen(input + 1), &host_vec, &port)) == NULL)
+    uint16_t port_min, port_max;
+    const char *rest;
+    if ((rest = parse_acl_hostport(input + 1, strlen(input + 1), &host_vec, &output->addr_mask, &port_min, &port_max)) == NULL)
+        goto GenericParseError;
+    if (*rest != '\0')
         goto GenericParseError;
     char *host = alloca(host_vec.len + 1);
     memcpy(host, host_vec.base, host_vec.len);
     host[host_vec.len] = '\0';
-
-    /* parse netmask (or addr_mask is set to zero to indicate that mask was not specified) */
-    if (*slash_at != '\0') {
-        if (*slash_at != '/')
-            goto GenericParseError;
-        if (sscanf(slash_at + 1, "%zu", &output->addr_mask) != 1 || output->addr_mask == 0)
-            return "invalid address mask";
-    } else {
-        output->addr_mask = 0;
-    }
 
     /* parse address */
     struct in_addr v4addr;
@@ -1197,13 +1303,16 @@ const char *h2o_connect_parse_acl(h2o_connect_acl_entry_t *output, const char *i
         return "failed to parse address";
     }
 
-    /* set port (for whatever reason, `h2o_url_parse_hostport` sets port to 65535 when not specified, convert that to zero) */
-    output->port = port == 65535 ? 0 : port;
+    if (port_max < port_min)
+        return "port range end must be >= start";
+
+    output->port_min = port_min;
+    output->port_max = port_max;
 
     return NULL;
 
 GenericParseError:
-    return "failed to parse input, expected format is: [+-]address(?::port|)(?:/netmask|)";
+    return "failed to parse input, expected format is: [+-]address[/netmask][:port[-port]]";
 }
 
 int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_entries, struct sockaddr *target)
@@ -1229,7 +1338,7 @@ int h2o_connect_lookup_acl(h2o_connect_acl_entry_t *acl_entries, size_t num_acl_
     for (size_t i = 0; i != num_acl_entries; ++i) {
         h2o_connect_acl_entry_t *entry = acl_entries + i;
         /* check port */
-        if (entry->port != 0 && entry->port != target_port)
+        if (target_port < entry->port_min || target_port > entry->port_max)
             goto Next;
         /* check address */
         switch (entry->addr_family) {

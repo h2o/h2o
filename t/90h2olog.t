@@ -44,7 +44,7 @@ subtest "h2olog", sub {
     args => [],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -72,7 +72,7 @@ subtest "h2olog -t", sub {
     ],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -96,7 +96,7 @@ subtest "h2olog -H", sub {
     args => ["-H"],
   });
 
-  my ($headers, $body) = run_prog("$client_prog -3 100 https://127.0.0.1:$server->{quic_port}/");
+  my ($headers, $body) = run_prog("$client_prog -k -3 100 https://127.0.0.1:$server->{quic_port}/");
   like $headers, qr{^HTTP/3 200\n}m, "req: HTTP/3";
 
   my $trace;
@@ -110,6 +110,45 @@ subtest "h2olog -H", sub {
   like $trace, qr{\bTxStatus\s+200\b};
 };
 
+subtest "tls_properties", sub {
+  for my $t (
+    ["h1", "-2 0 https://localhost:$server->{tls_port}/", "localhost"],
+    ["h2", "-2 100 https://localhost:$server->{tls_port}/", "localhost"],
+    ["h3", "-3 100 https://localhost:$server->{quic_port}/", "localhost"],
+    ["h3 without SNI", "-3 100 https://127.0.0.1:$server->{quic_port}/", ""], # picotls does not send SNI for IP addresses
+    ["cleartext", "http://localhost:$server->{port}/", undef],
+  ) {
+    my ($name, $args, $server_name) = @$t;
+    subtest $name, sub {
+      my $tracer = H2ologTracer->new({
+        path => $h2olog_socket,
+        args => ["-t", "h2o:tls_properties", "-t", "h2o:send_response"],
+      });
+
+      my ($headers, $body) = run_prog("$client_prog -k $args");
+      like $headers, qr{^HTTP/\S+ 200\b}m, "req";
+
+      my $trace;
+      until (($trace .= $tracer->get_trace()) =~ m{"send_response"}) {}
+
+      if ($ENV{H2OLOG_DEBUG}) {
+        diag "h2olog output:\n", $trace;
+      }
+
+      my @events = map { decode_json($_) } split /\n/, $trace;
+      my @tls_properties = grep { $_->{type} eq "tls_properties" } @events;
+      my ($send_response) = grep { $_->{type} eq "send_response" } @events;
+      if (!defined $server_name) {
+        is scalar(@tls_properties), 0, "not emitted";
+        return;
+      }
+      is scalar(@tls_properties), 1, "emitted once";
+      is $tls_properties[0]->{server_name}, $server_name, "server_name";
+      is $tls_properties[0]->{conn_id}, $send_response->{conn_id}, "conn_id";
+    };
+  }
+};
+
 subtest "multi clients", sub {
   my @tracers;
 
@@ -120,7 +159,7 @@ subtest "multi clients", sub {
     push @tracers, $tracer;
   }
 
-  system($client_prog, "-3", "100", "https://127.0.0.1:$server->{quic_port}/");
+  system($client_prog, "-k", "-3", "100", "https://127.0.0.1:$server->{quic_port}/");
 
   my @logs;
   for my $tracer(@tracers) {
@@ -174,7 +213,7 @@ EOT
   ) or croak "Cannot connect to a unix domain socket '$h2olog_socket': $!";
   $client->syswrite("GET /.well-known/h2olog HTTP/1.0\r\n\r\n");
 
-  system($client_prog, "-3", "100", "https://127.0.0.1:$server->{quic_port}/") == 0 or die $!;
+  system($client_prog, "-k", "-3", "100", "https://127.0.0.1:$server->{quic_port}/") == 0 or die $!;
 
   cmp_ok get_status($server)->{"h2olog.lost"}, ">", 0, "losts messages if client does not read socket";
 };

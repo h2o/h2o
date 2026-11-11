@@ -60,7 +60,10 @@ static void *ssl_status_init(void)
 static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2o_req_t *req)
 {
     struct st_ssl_status_ctx_t *ssc = _ssc;
-    h2o_iovec_t buf;
+    h2o_iovec_t buf = {NULL};
+
+    if (req == NULL)
+        goto Exit;
 
 #define BUFSIZE (1024)
     buf.base = h2o_mem_alloc_pool(&req->pool, char, BUFSIZE);
@@ -74,10 +77,12 @@ static h2o_iovec_t ssl_status_final(void *_ssc, h2o_globalconf_t *globalconf, h2
                        " \"ssl.handshake.accumulated-time.resume\": %" PRIu64 "\n",
                        ssc->alpn_h1, ssc->alpn_h2, ssc->handshake_full, ssc->handshake_resume, ssc->handshake_accum_time_full,
                        ssc->handshake_accum_time_resume);
+#undef BUFSIZE
+
+Exit:
     pthread_mutex_destroy(&ssc->mutex);
     free(ssc);
     return buf;
-#undef BUFSIZE
 }
 
 h2o_status_handler_t h2o_ssl_status_handler = {{H2O_STRLIT("ssl")}, ssl_status_final, ssl_status_init, ssl_status_per_thread};

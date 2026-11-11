@@ -346,7 +346,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
 
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
-            newsz = size;
+            newsz = 0;
             client->_do_keepalive = 0;
             errstr = h2o_httpclient_error_http1_parse_failed;
             break;
@@ -419,15 +419,20 @@ static void on_head(h2o_socket_t *sock, const char *err)
     /* continue parsing the responses until we see a final one */
     while (1) {
         /* parse response */
+        size_t inresplen = sock->input->size < H2O_MAX_RESPLEN ? sock->input->size : H2O_MAX_RESPLEN;
         struct phr_header src_headers[MAX_HEADERS];
         num_headers = MAX_HEADERS;
-        rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, src_headers,
+        rlen = phr_parse_response(sock->input->bytes, inresplen, &minor_version, &http_status, &msg, &msg_len, src_headers,
                                   &num_headers, 0);
         switch (rlen) {
         case -1: /* error */
             on_error(client, h2o_httpclient_error_http1_parse_failed);
             return;
         case -2: /* incomplete */
+            if (inresplen == H2O_MAX_RESPLEN) {
+                on_error(client, h2o_httpclient_error_http1_headers_too_long);
+                return;
+            }
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             return;
         }
@@ -460,8 +465,8 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
 
         if (http_status == 101) {
-            if (client->_send_own_expect) {
-                /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
+            if (client->super.upgrade_to == NULL) {
+                /* 101 is expected only when trying to establish a tunnel */
                 on_error(client, h2o_httpclient_error_unexpected_101);
                 return;
             }
@@ -525,6 +530,9 @@ static void on_head(h2o_socket_t *sock, const char *err)
                     reader = on_body_content_length;
             }
         }
+        /* Never pool a rejected CONNECT connection; it might contain optimistically forwarded tunnel data. */
+        if (client->super.upgrade_to == h2o_httpclient_upgrade_to_connect)
+            client->_do_keepalive = 0;
     }
 
     client->state.res = STREAM_STATE_BODY;

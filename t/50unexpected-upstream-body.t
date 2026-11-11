@@ -13,6 +13,11 @@ sub nc_get {
     $body;
 }
 
+sub curl_get {
+    my ($server, $path) = @_;
+    `curl --silent 'http://127.0.0.1:$server->{port}$path'`;
+}
+
 sub nghttp_get {
     my ($server, $path) = @_; 
     my $out = `nghttp -vn 'https://127.0.0.1:$server->{tls_port}$path'`;
@@ -37,7 +42,7 @@ sub create_upstream {
 }
 
 sub doit {
-    my ($spawner, $chunked_enabled) = @_;
+    my ($spawner, $chunked_enabled, $has_content_length) = @_;
 
     subtest 'http1-client' => sub {
         plan skip_all => "nc not found"
@@ -45,13 +50,13 @@ sub doit {
 
         subtest 'oversize body' => sub {
             my ($server, $upstream) = $spawner->();
-            my $body = nc_get($server, '/content?size=100000&cl=80000');
+            my $body = curl_get($server, '/content?size=100000&cl=80000');
             is length($body), 80000, 'body size';
         };
 
         subtest 'incomplete body' => sub {
             my ($server, $upstream) = $spawner->();
-            my $body = nc_get($server, '/content?size=100000&cl=120000');
+            my $body = curl_get($server, '/content?size=100000&cl=120000');
             is length($body), 100000, 'body size';
         };
 
@@ -83,7 +88,8 @@ sub doit {
         subtest 'incomplete body' => sub {
             my ($server, $upstream) = $spawner->();
             my ($body_size, $info) = nghttp_get($server, '/content?size=100000&cl=120000');
-            like $info, qr/RST_STREAM/is, 'RST_STREAM';
+            like $info, qr/RST_STREAM/is, 'RST_STREAM'
+                if $has_content_length;
             is $body_size, 100000, 'body size';
         };
 
@@ -112,7 +118,7 @@ hosts:
 EOT
         ($server, $upstream);
     };
-    doit($spawner, 1);
+    doit($spawner, 1, 1);
 };
 
 subtest 'fastcgi' => sub {
@@ -129,7 +135,7 @@ hosts:
 EOT
         ($server, $upstream);
     };
-    doit($spawner, 0);
+    doit($spawner, 0, 1);
 };
 
 subtest 'mruby-callback-chunked' => sub {
@@ -159,7 +165,7 @@ hosts:
 EOT
         ($server, $upstream);
     };
-    doit($spawner, 1);
+    doit($spawner, 1, 0);
 };
 
 subtest 'mruby-http-chunked' => sub {
@@ -181,7 +187,7 @@ hosts:
 EOT
         ($server, $upstream);
     };
-    doit($spawner, 1);
+    doit($spawner, 1, 0);
 };
 
 subtest 'mruby-middleware-chunked' => sub {
@@ -203,7 +209,7 @@ hosts:
 EOT
         ($server, $upstream);
     };
-    doit($spawner, 1);
+    doit($spawner, 1, 1);
 };
 
 done_testing;

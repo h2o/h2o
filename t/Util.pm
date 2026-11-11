@@ -12,7 +12,7 @@ use IO::Poll qw(POLLIN POLLOUT POLLHUP POLLERR);
 use IPC::Open3;
 use List::Util qw(shuffle);
 use List::MoreUtils qw(firstidx);
-use Net::EmptyPort qw(check_port);
+use Net::EmptyPort qw(check_port wait_port);
 use Net::DNS::Nameserver;
 use POSIX ":sys_wait_h";
 use Path::Tiny;
@@ -87,9 +87,28 @@ sub server_features {
     open my $fh, "-|", bindir() . "/h2o", "--version"
         or die "failed to invoke: h2o --version:$!";
     <$fh>; # skip h2o version
-    +{
-        map { chomp($_); split /:/, $_, 2 } <$fh>
-    };
+
+    my %features;
+    while (my $line = <$fh>) {
+        chomp $line;
+        my ($name, $value) = split/\s*:\s*/, $line, 2;
+        $features{$name} = $value;
+    }
+
+    # In CI, EXPECTED_SERVER_FEATURES pins the set of features that the build should advertise. It is an exact match over `*: YES`
+    # lines, so that both missing coverage and newly-added feature gates require an explicit CI expectation update, instead of
+    # silently changing which tests can be skipped.
+    if ($ENV{EXPECTED_SERVER_FEATURES}) {
+        my $expected = join ", ", sort split /\s*,\s*/, $ENV{EXPECTED_SERVER_FEATURES};
+        my $actual = join ", ", sort grep { $features{$_} eq "YES" } keys %features;
+        BAIL_OUT join "\n",
+            "h2o server feature set mismatch",
+            "  expected features: $expected",
+            "  actual features: $actual"
+            if $expected ne $actual;
+    }
+
+    \%features;
 }
 
 sub exec_unittest {
@@ -610,7 +629,7 @@ sub wait_debugger {
     print STDERR "waiting debugger for pid $pid ..\n";
     while ($timeout-- != 0) {
         my $out = `ps -p $pid -o 'state' | tail -n 1`;
-        if ($out =~ /^(T|.+X).*$/) {
+        if ($out =~ /^(T|t|.+X).*$/) {
             print STDERR "debugger attached\n";
             return 1;
         }
@@ -813,6 +832,10 @@ EOC
     }, +{ stderr => 1 });
 
     $backend->{tls_port} = $backend_port;
+
+    # wait until h2get starts listening, otherwise h2o might fail to connect to the backend
+    wait_port($backend_port);
+
     return $backend;
 }
 # usage: see t/90h2olog.t

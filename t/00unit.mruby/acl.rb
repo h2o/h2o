@@ -110,16 +110,17 @@ class ACLTest < MTest::Unit::TestCase
         assert_equal(403, handler.call({ "REMOTE_ADDR" => "200.0.0.1"})[0])
         assert_equal(503, handler.call({ "REMOTE_ADDR" => "201.0.0.1"})[0])
         assert_equal(399, handler.call({ "REMOTE_ADDR" => "127.0.0.1"})[0])
-        assert_equal(200, handler.call({ "HTTP_X_FORWARDED_FOR" => "192.168.0.1"})[0])
+        assert_equal(399, handler.call({ "REMOTE_ADDR" => "127.0.0.1", "HTTP_X_FORWARDED_FOR" => "192.168.0.1"})[0])
     end
 
-    def test_addr_not_forwarded
+    def test_addr_forwarded
         handler = acl {
-            respond(200) { addr(false).match(/^192\.168\./) }
+            respond(200) { addr(true).match(/^192\.168\./) }
             respond(403)
         }
         assert_equal(200, handler.call({ "REMOTE_ADDR" => "192.168.0.1"})[0])
-        assert_equal(403, handler.call({ "HTTP_X_FORWARDED_FOR" => "192.168.0.1"})[0])
+        assert_equal(200, handler.call({ "REMOTE_ADDR" => "127.0.0.1", "HTTP_X_FORWARDED_FOR" => "192.168.0.1"})[0])
+        assert_equal(403, handler.call({ "REMOTE_ADDR" => "192.168.0.1", "HTTP_X_FORWARDED_FOR" => "127.0.0.1"})[0])
     end
 
     def test_path

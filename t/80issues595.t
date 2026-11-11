@@ -28,9 +28,10 @@ subtest "trailing HEADERS with CONTINUATION" => sub {
     my $doit = sub {
         my ($proto, $opts, $port) = @_;
         my $cmd = "nghttp $opts -M 1 -m 3 -H ':method: GET' -d /dev/null";
+        my $value = "X" x 1024;
         $cmd .= join "", map {
-            " --trailer 'foo$_: 0123456789abcdef:$_'"
-        } 1..1000;
+            " --trailer 'foo$_: $value'"
+        } 1..20;
         $cmd .= " '$proto://127.0.0.1:$port/'";
         my $resp = `$cmd`;
         is $resp, "hello\n" x 3, $proto;

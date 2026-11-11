@@ -28,11 +28,32 @@
 #include "../deps/picotest/picotest.h"
 #include "../lib/cifra.c"
 #include "../lib/uecc.c"
+#include "picotls/asn1.h"
 #include "test.h"
 
 static void test_secp256r1_key_exchange(void)
 {
     test_key_exchange(&ptls_minicrypto_secp256r1, &ptls_minicrypto_secp256r1);
+
+    /* points that are not on the curve are rejected */
+    ptls_key_exchange_context_t *ctx;
+    ptls_iovec_t pubkey = {NULL}, secret = {NULL};
+    uint8_t offcurve[SECP256R1_PUBLIC_KEY_SIZE];
+    int ret;
+
+    ret = ptls_minicrypto_secp256r1.create(&ptls_minicrypto_secp256r1, &ctx);
+    ok(ret == 0);
+    memcpy(offcurve, ctx->pubkey.base, sizeof(offcurve));
+    offcurve[sizeof(offcurve) - 1] ^= 1;
+    ret = ptls_minicrypto_secp256r1.exchange(&ptls_minicrypto_secp256r1, &pubkey, &secret,
+                                             ptls_iovec_init(offcurve, sizeof(offcurve)));
+    ok(ret != 0);
+    ok(pubkey.base == NULL);
+    ok(secret.base == NULL);
+    ret = ctx->on_exchange(&ctx, 1, &secret, ptls_iovec_init(offcurve, sizeof(offcurve)));
+    ok(ret != 0);
+    ok(ctx == NULL);
+    ok(secret.base == NULL);
 }
 
 static void test_x25519_key_exchange(void)
@@ -135,6 +156,57 @@ static void test_hrr(void)
     ptls_free(server);
 }
 
+static void test_asn1_empty_input(void)
+{
+    int decode_error = 0;
+    uint32_t length = 0;
+    size_t last_byte = 0;
+    uint8_t dummy = 0x30;
+
+    ptls_asn1_get_expected_type_and_length(&dummy, 0, 0, 0x30, &length, NULL, &last_byte, &decode_error, NULL);
+    ok(decode_error != 0);
+
+    decode_error = 0;
+    uint8_t buf[2] = {0x30, 0x00};
+    ptls_asn1_get_expected_type_and_length(buf, 2, 2, 0x30, &length, NULL, &last_byte, &decode_error, NULL);
+    ok(decode_error != 0);
+
+    decode_error = 0;
+    ptls_asn1_get_expected_type_and_length(buf, 1, 1, 0x04, &length, NULL, &last_byte, &decode_error, NULL);
+    ok(decode_error != 0);
+}
+
+static size_t build_nested_asn1_sequence(uint8_t *buf, size_t depth)
+{
+    size_t len = 3;
+
+    buf[2 * depth] = 0x04;
+    buf[2 * depth + 1] = 0x01;
+    buf[2 * depth + 2] = 0x00;
+
+    for (size_t i = depth; i != 0; --i) {
+        size_t off = 2 * (i - 1);
+        buf[off] = 0x30;
+        buf[off + 1] = (uint8_t)len;
+        len += 2;
+    }
+
+    return len;
+}
+
+static void test_asn1_recursion(void)
+{
+    uint8_t shallow[3 + 2 * 32];
+    uint8_t too_deep[3 + 2 * 40];
+    size_t len;
+
+    len = build_nested_asn1_sequence(shallow, 32);
+    ok(ptls_asn1_validation(shallow, len, NULL) == 0);
+
+    len = build_nested_asn1_sequence(too_deep, 40);
+    ok(ptls_asn1_validation(too_deep, len, NULL) == PTLS_ERROR_INCORRECT_ASN1_SYNTAX);
+}
+
 DEFINE_FFX_AES128_ALGORITHMS(minicrypto);
 DEFINE_FFX_CHACHA20_ALGORITHMS(minicrypto);
 
@@ -161,6 +233,8 @@ int main(int argc, char **argv)
     ADD_FFX_CHACHA20_ALGORITHMS(minicrypto);
 
     subtest("picotls", test_picotls);
+    subtest("asn1-bounds", test_asn1_empty_input);
+    subtest("asn1-recursion", test_asn1_recursion);
     subtest("hrr", test_hrr);
 
     return done_testing();

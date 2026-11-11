@@ -50,7 +50,7 @@ sleep 1;
 my $chunk_size = 1;
 my $total_sent = 120000;
 
-open my $client_resp, '-|', "$client_prog -3 100 -b $total_sent -c $chunk_size -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
+open my $client_resp, '-|', "$client_prog -k -3 100 -b $total_sent -c $chunk_size -i 1000 -m POST https://127.0.0.1:$quic_port 2>&1"
     or die "failed to launch $client_prog:$!";
 
 # wait until the request received by upstream is 3 seconds' worth of data

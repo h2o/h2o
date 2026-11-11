@@ -129,7 +129,7 @@ static int req_requires_content_length(h2o_req_t *req)
                           (h2o_memis(req->method.base, req->method.len, H2O_STRLIT("POST")) ||
                            h2o_memis(req->method.base, req->method.len, H2O_STRLIT("PUT"))));
 
-    return is_put_or_post && h2o_find_header(&req->res.headers, H2O_TOKEN_TRANSFER_ENCODING, -1) == -1;
+    return is_put_or_post;
 }
 
 static h2o_iovec_t build_content_length(h2o_mem_pool_t *pool, size_t cl)
@@ -179,7 +179,8 @@ static void build_request(h2o_req_t *req, h2o_iovec_t *method, h2o_url_t *url, h
         h2o_fatal("h2o_url_init failed");
 
     if (props->connection_header != NULL) {
-        if (keepalive) {
+        /* A rejected CONNECT must close the HTTP/1.1 connection, as tunnel data might have been sent before the response. */
+        if (keepalive && upgrade_to != h2o_httpclient_upgrade_to_connect) {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("keep-alive"));
         } else {
             *props->connection_header = h2o_iovec_init(H2O_STRLIT("close"));
@@ -383,7 +384,7 @@ static void do_send_from_pipe(struct rp_generator_t *self)
         return;
     }
 
-   size_t len;
+    size_t len;
     if ((len = self->body_bytes_read - self->pipe_sender.bytes_sent) > H2O_PULL_SENDVEC_MAX_SIZE) {
         if (send_state == H2O_SEND_STATE_FINAL)
             send_state = H2O_SEND_STATE_IN_PROGRESS;
@@ -675,7 +676,14 @@ static int on_informational(h2o_httpclient_t *client, int version, int status, h
     if (status != 100 ||
         (self->src_req->overrides != NULL && self->src_req->overrides->proxy_expect_mode == H2O_PROXY_EXPECT_FORWARD)) {
         self->src_req->res.status = status;
-        self->src_req->res.headers = (h2o_headers_t){headers, num_headers, num_headers};
+        self->src_req->res.headers = (h2o_headers_t){NULL};
+        h2o_vector_reserve(&self->src_req->pool, &self->src_req->res.headers, num_headers);
+        for (i = 0; i != num_headers; ++i) {
+            if (h2o_iovec_is_token(headers[i].name) &&
+                H2O_STRUCT_FROM_MEMBER(h2o_token_t, buf, headers[i].name)->flags.proxy_should_drop_for_res)
+                continue;
+            self->src_req->res.headers.entries[self->src_req->res.headers.size++] = headers[i];
+        }
         h2o_send_informational(self->src_req);
     } else {
         /* we don't need to forward 100 since protocol handlers have already done */
@@ -732,6 +740,8 @@ static h2o_httpclient_head_cb on_connect(h2o_httpclient_t *client, const char *e
         detach_client(self);
         h2o_req_log_error(self->src_req, "lib/core/proxy.c", "%s", errstr);
         h2o_send_error_502(self->src_req, "Gateway Error", errstr, 0);
+        if (self->src_req->proceed_req != NULL)
+            self->src_req->proceed_req(self->src_req, h2o_httpclient_error_refused_stream);
         return NULL;
     }
 

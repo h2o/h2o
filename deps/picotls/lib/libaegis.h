@@ -100,6 +100,7 @@ static void aegis128l_dispose_crypto(ptls_aead_context_t *_ctx)
 {
     struct aegis128l_context_t *ctx = (struct aegis128l_context_t *)_ctx;
 
+    ptls_clear_memory(&ctx->st, sizeof(ctx->st));
     ptls_clear_memory(ctx->key, sizeof(ctx->key));
 
     return;
@@ -212,6 +213,7 @@ static void aegis256_dispose_crypto(ptls_aead_context_t *_ctx)
 {
     struct aegis256_context_t *ctx = (struct aegis256_context_t *)_ctx;
 
+    ptls_clear_memory(&ctx->st, sizeof(ctx->st));
     ptls_clear_memory(ctx->key, sizeof(ctx->key));
 
     return;

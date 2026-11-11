@@ -200,7 +200,13 @@ struct st_h2o_http3client_ctx_t {
     ptls_context_t tls;
     quicly_context_t quic;
     h2o_quic_ctx_t h3;
+    h2o_http3_qpack_context_t qpack;
     uint64_t max_frame_payload_size;
+    /**
+     * maximum number of requests issued concurrently over a connection; once reached, new requests are issued using another
+     * connection
+     */
+    uint64_t max_concurrent_streams;
     /**
      * Optional callback invoked by the HTTP/3 client implementation to obtain information used for resuming a connection. When the
      * connection is to be resumed, the callback should set `*address_token` and `*session_ticket` to a vector that can be freed by
@@ -375,6 +381,10 @@ struct st_h2o_httpclient__h3_conn_t {
      * linklist used to queue pending requests
      */
     h2o_linklist_t pending_requests;
+    /**
+     * number of requests associated to the connection, including the pending ones
+     */
+    uint64_t num_requests;
 };
 
 /**
@@ -393,6 +403,7 @@ extern const char h2o_httpclient_error_flow_control[];
 extern const char h2o_httpclient_error_http1_line_folding[];
 extern const char h2o_httpclient_error_http1_unexpected_transfer_encoding[];
 extern const char h2o_httpclient_error_http1_parse_failed[];
+extern const char h2o_httpclient_error_http1_headers_too_long[];
 extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 extern const char h2o_httpclient_error_malformed_frame[];

@@ -30,7 +30,8 @@
 #
 # Additional flags were added to support on the fly validation
 # of headers: NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME,
-# NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE and NGHTTP2_HUFF_UPPER_CASE_CHAR.
+# NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE, NGHTTP2_HUFF_UPPER_CASE_CHAR,
+# NGHTTP2_HUFF_INVALID_FOR_METHOD and NGHTTP2_HUFF_INVALID_FOR_PATH.
 #
 # This script reads Huffman Code table [1] and generates symbol table
 # and decoding tables in C language.  The resulting code is used in
@@ -331,6 +332,30 @@ valid_h2_field_value_char = [
         1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, # 224-255
 ]
 
+# tchar (RFC 9110 Section 5.6.2), which is the set of characters allowed in the :method pseudo-header
+valid_method_char = [
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #    0-31
+        0,1,0,1,1,1,1,1,0,0,1,1,0,1,1,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0, #   32-63
+        0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,1,1, #   64-95
+        1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,0,1,0, #  96-127
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 128-159
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 160-191
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 192-223
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 224-255
+]
+
+# characters that are valid in header values but not in the :path pseudo-header
+invalid_path_char = [
+        0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #    0-31
+        1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #   32-63
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #   64-95
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, #  96-127
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 128-159
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 160-191
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 192-223
+        0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, # 224-255
+]
+
 
 class Node:
 
@@ -422,6 +447,8 @@ NGHTTP2_HUFF_FAIL = 1 << 2
 NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME = 1 << 3
 NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE = 1 << 4
 NGHTTP2_HUFF_UPPER_CASE_CHAR = 1 << 5
+NGHTTP2_HUFF_INVALID_FOR_METHOD = 1 << 6
+NGHTTP2_HUFF_INVALID_FOR_PATH = 1 << 7
 
 def _print_transition_table(node):
     if node.term is not None:
@@ -441,6 +468,10 @@ def _print_transition_table(node):
                 flags |= NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE
             if sym >= ord('A') and sym <= ord('Z'):
                 flags |= NGHTTP2_HUFF_UPPER_CASE_CHAR
+            if not valid_method_char[sym]:
+                flags |= NGHTTP2_HUFF_INVALID_FOR_METHOD
+            if invalid_path_char[sym]:
+                flags |= NGHTTP2_HUFF_INVALID_FOR_PATH
         if nd is None:
             id = 0
             flags |= NGHTTP2_HUFF_FAIL
@@ -535,9 +566,11 @@ typedef enum {{
   NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME = {},
   NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE = {},
   NGHTTP2_HUFF_UPPER_CASE_CHAR = {},
+  NGHTTP2_HUFF_INVALID_FOR_METHOD = {},
+  NGHTTP2_HUFF_INVALID_FOR_PATH = {},
 #define NGHTTP2_HUFF_INVALID_CHARS (NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME | NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE)
 }} nghttp2_huff_decode_flag;
-'''.format(NGHTTP2_HUFF_ACCEPTED, NGHTTP2_HUFF_SYM, NGHTTP2_HUFF_FAIL, NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME, NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE, NGHTTP2_HUFF_UPPER_CASE_CHAR))
+'''.format(NGHTTP2_HUFF_ACCEPTED, NGHTTP2_HUFF_SYM, NGHTTP2_HUFF_FAIL, NGHTTP2_HUFF_INVALID_FOR_HEADER_NAME, NGHTTP2_HUFF_INVALID_FOR_HEADER_VALUE, NGHTTP2_HUFF_UPPER_CASE_CHAR, NGHTTP2_HUFF_INVALID_FOR_METHOD, NGHTTP2_HUFF_INVALID_FOR_PATH))
 
     print('''\
 typedef struct {

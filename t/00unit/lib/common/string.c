@@ -397,6 +397,50 @@ static void test_split(void)
     h2o_mem_clear_pool(&pool);
 }
 
+static void test_strtosize(void)
+{
+    ok(h2o_strtosize(H2O_STRLIT("0")) == 0);
+    ok(h2o_strtosize(H2O_STRLIT("123456789")) == 123456789);
+    if (sizeof(size_t) == 4) {
+        ok(h2o_strtosize(H2O_STRLIT("4294967294")) == 4294967294U);
+        ok(h2o_strtosize(H2O_STRLIT("4294967295")) == SIZE_MAX);
+        ok(h2o_strtosize(H2O_STRLIT("4294967296")) == SIZE_MAX);
+    } else {
+        ok(h2o_strtosize(H2O_STRLIT("9999999999999999999")) == 9999999999999999999U);
+        ok(h2o_strtosize(H2O_STRLIT("10000000000000000000")) == SIZE_MAX);
+    }
+    ok(h2o_strtosize(H2O_STRLIT("0000000000000000001")) == 1);
+    ok(h2o_strtosize(H2O_STRLIT("00000000000000000001")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("a1")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("1a1")) == SIZE_MAX);
+    ok(h2o_strtosize(H2O_STRLIT("1a")) == SIZE_MAX);
+}
+
+static void test_strtosizefwd(void)
+{
+    char buf[32], *p;
+
+    strcpy(buf, "123456789");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == 123456789);
+    ok(p == buf + strlen(buf));
+
+    strcpy(buf, "123-");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == 123);
+    ok(p == buf + 3);
+
+    /* 20 digits ending at the end of the buffer must be rejected rather than wrap */
+    strcpy(buf, "18446744073709551616");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == SIZE_MAX);
+
+    strcpy(buf, "18446744073709551616-");
+    p = buf;
+    ok(h2o_strtosizefwd(&p, strlen(buf)) == SIZE_MAX);
+}
+
 void test_lib__common__string_c(void)
 {
     subtest("strstr", test_strstr);
@@ -412,4 +456,6 @@ void test_lib__common__string_c(void)
     subtest("at_position", test_at_position);
     subtest("join_list", test_join_list);
     subtest("split", test_split);
+    subtest("strtosize", test_strtosize);
+    subtest("strtosizefwd", test_strtosizefwd);
 }
