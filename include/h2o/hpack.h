@@ -106,7 +106,8 @@ int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o
  */
 int h2o_hpack_return_soft_errors(const h2o_iovec_t *name, unsigned soft_errors, const char **err_desc);
 /**
- * Request parser that uses given callback as the decoder.
+ * Request parser that uses given callback as the decoder. If `headers` is NULL, the header block is decoded (thereby updating the
+ * state of the decoder) but the decoded fields are discarded without being validated.
  */
 int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb decode_cb, void *decode_ctx, h2o_iovec_t *method,
                             const h2o_url_scheme_t **scheme, h2o_iovec_t *authority, h2o_iovec_t *path, h2o_iovec_t *protocol,
