@@ -745,22 +745,26 @@ static int on_write_req(void *_session, int is_end_stream)
             session->close_received = 1;
             terminate_session_streams(session);
             close_backend(session, code, reason);
-            session->resp.is_final = 1;
-            flush_response(session);
         }
         /* other capsules (e.g., DRAIN_WEBTRANSPORT_SESSION, unknown types) are ignored */
         h2o_buffer_consume(&session->capsules, src + length - (const uint8_t *)session->capsules->bytes);
     }
 
-    if (is_end_stream) {
-        /* the client has ended the request stream, which terminates the session */
+    if (!(session->close_received || is_end_stream)) {
+        req->proceed_req(req, NULL);
+        return 0;
+    }
+
+    /* The session has terminated, by CLOSE_WEBTRANSPORT_SESSION or by the client ending the request stream; end the response.
+     * Ending the response might end the request stream as well (the HTTP/3 layer stops the receive side and releases the request
+     * body when the response has been sent in full), so the request body is not proceeded, and nothing follows; in particular, data
+     * that arrives after CLOSE_WEBTRANSPORT_SESSION is detected as above only when delivered together with the capsule. */
+    if (!session->close_received) {
         terminate_session_streams(session);
         close_backend(session, 0, "");
-        session->resp.is_final = 1;
-        flush_response(session);
-    } else {
-        req->proceed_req(req, NULL);
     }
+    session->resp.is_final = 1;
+    flush_response(session);
     return 0;
 
 Malformed:
