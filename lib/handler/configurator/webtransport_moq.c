@@ -24,11 +24,12 @@
 
 static int on_config_webtransport_moq(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t **url_node;
+    yoml_t **url_node, **qmux_cleartext_node;
     h2o_iovec_t host;
     uint16_t port;
+    int qmux_cleartext = 0;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "url:s", NULL, &url_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, node, "url:s", "qmux-cleartext:s", &url_node, &qmux_cleartext_node) != 0)
         return -1;
 
     /* the URL of the relay, in the form of `moqt://host:port` */
@@ -39,7 +40,11 @@ static int on_config_webtransport_moq(h2o_configurator_command_t *cmd, h2o_confi
         return -1;
     }
 
-    h2o_webtransport_moq_register(ctx->pathconf, host, port);
+    /* for testing; connects to the relay using QMux over cleartext TCP */
+    if (qmux_cleartext_node != NULL && (qmux_cleartext = h2o_configurator_get_one_of(cmd, *qmux_cleartext_node, "OFF,ON")) == -1)
+        return -1;
+
+    h2o_webtransport_moq_register(ctx->pathconf, host, port, qmux_cleartext);
     return 0;
 }
 
