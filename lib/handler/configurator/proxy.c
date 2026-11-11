@@ -454,6 +454,16 @@ static int on_config_reverse_url(h2o_configurator_command_t *cmd, h2o_configurat
             cmd, node, "when `proxy.http2.force-cleartext` is `ON`, `proxy.http2.ratio` must be set to `100` (percent)");
         return -1;
     }
+    if (self->vars->conf.h3qx.force_cleartext && self->vars->conf.protocol_ratio.h3qx != 100) {
+        h2o_configurator_errprintf(
+            cmd, node, "when `proxy.h3qx.force-cleartext` is `ON`, `proxy.h3qx.ratio` must be set to `100` (percent)");
+        return -1;
+    }
+    if (self->vars->conf.http2.force_cleartext && self->vars->conf.h3qx.force_cleartext) {
+        h2o_configurator_errprintf(cmd, node,
+                                   "`proxy.http2.force-cleartext` and `proxy.h3qx.force-cleartext` cannot be both `ON`");
+        return -1;
+    }
 
     if (self->vars->conf.headers_cmds != NULL)
         h2o_mem_addref_shared(self->vars->conf.headers_cmds);
@@ -631,6 +641,29 @@ static int on_config_http3_ratio(h2o_configurator_command_t *cmd, h2o_configurat
         h2o_configurator_errprintf(cmd, node, "proxy.http3.ratio must be between 0 and 100");
         return -1;
     }
+    return 0;
+}
+
+static int on_config_h3qx_ratio(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    int ret = h2o_configurator_scanf(cmd, node, "%" SCNd8, &self->vars->conf.protocol_ratio.h3qx);
+    if (ret < 0)
+        return ret;
+    if (self->vars->conf.protocol_ratio.h3qx < 0 || 100 < self->vars->conf.protocol_ratio.h3qx) {
+        h2o_configurator_errprintf(cmd, node, "proxy.h3qx.ratio must be between 0 and 100");
+        return -1;
+    }
+    return 0;
+}
+
+static int on_config_h3qx_force_cleartext(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    struct proxy_configurator_t *self = (void *)cmd->configurator;
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret < 0)
+        return -1;
+    self->vars->conf.h3qx.force_cleartext = (unsigned)ret;
     return 0;
 }
 
@@ -849,6 +882,11 @@ void h2o_proxy_register_configurator(h2o_globalconf_t *conf)
                                     on_config_http3_max_concurrent_streams);
     h2o_configurator_define_command(&c->super, "proxy.http3.ratio",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_http3_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.h3qx.ratio",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_h3qx_ratio);
+    h2o_configurator_define_command(&c->super, "proxy.h3qx.force-cleartext",
+                                    H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                    on_config_h3qx_force_cleartext);
     h2o_configurator_define_command(&c->super, "proxy.expect",
                                     H2O_CONFIGURATOR_FLAG_ALL_LEVELS | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR, on_config_expect);
     h2o_configurator_define_command(&c->super, "proxy.forward.close-connection",

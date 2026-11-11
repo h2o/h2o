@@ -63,6 +63,9 @@ extern "C" {
 #define QUICLY_FRAME_TYPE_DATAGRAM_NOLEN 48
 #define QUICLY_FRAME_TYPE_DATAGRAM_WITHLEN 49
 #define QUICLY_FRAME_TYPE_ACK_FREQUENCY 0xaf
+#define QUICLY_FRAME_TYPE_QX_TRANSPORT_PARAMETERS 0x3f5153300d0a0d0a
+#define QUICLY_FRAME_TYPE_QX_PING 0x348c67529ef8c7bd
+#define QUICLY_FRAME_TYPE_QX_PONG 0x348c67529ef8c7be
 
 #define QUICLY_FRAME_TYPE_STREAM_BITS 0x7
 #define QUICLY_FRAME_TYPE_STREAM_BIT_OFF 0x4
@@ -83,6 +86,7 @@ extern "C" {
 #define QUICLY_PATH_CHALLENGE_FRAME_CAPACITY (1 + 8)
 #define QUICLY_STREAM_FRAME_CAPACITY (1 + 8 + 8 + 1)
 #define QUICLY_ACK_FREQUENCY_FRAME_CAPACITY (2 + 8 + 8 + 8 + 8)
+#define QUICLY_QX_PING_FRAME_CAPACITY (8 + 8)
 
 /**
  * maximum number of ACK blocks (inclusive)
@@ -292,6 +296,13 @@ static uint8_t *quicly_encode_ack_frequency_frame(uint8_t *dst, uint64_t sequenc
                                                   uint64_t max_ack_delay, uint64_t reordering_threshold);
 static quicly_error_t quicly_decode_ack_frequency_frame(const uint8_t **src, const uint8_t *end,
                                                         quicly_ack_frequency_frame_t *frame);
+
+typedef struct st_quicly_qx_ping_frame_t {
+    uint64_t sequence;
+} quicly_qx_ping_frame_t;
+
+static uint8_t *quicly_encode_qx_ping_frame(uint8_t *dst, int pong, uint64_t sequence);
+static quicly_error_t quicly_decode_qx_ping_frame(const uint8_t **src, const uint8_t *end, quicly_qx_ping_frame_t *frame);
 
 /* inline definitions */
 
@@ -836,6 +847,23 @@ inline quicly_error_t quicly_decode_ack_frequency_frame(const uint8_t **src, con
     if ((frame->max_ack_delay = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
     if ((frame->reordering_threshold = quicly_decodev(src, end)) == UINT64_MAX)
+        goto Error;
+    return 0;
+
+Error:
+    return QUICLY_TRANSPORT_ERROR_FRAME_ENCODING;
+}
+
+inline uint8_t *quicly_encode_qx_ping_frame(uint8_t *dst, int pong, uint64_t sequence)
+{
+    dst = quicly_encodev(dst, pong ? QUICLY_FRAME_TYPE_QX_PONG : QUICLY_FRAME_TYPE_QX_PING);
+    dst = quicly_encodev(dst, sequence);
+    return dst;
+}
+
+inline quicly_error_t quicly_decode_qx_ping_frame(const uint8_t **src, const uint8_t *end, quicly_qx_ping_frame_t *frame)
+{
+    if ((frame->sequence = quicly_decodev(src, end)) == UINT64_MAX)
         goto Error;
     return 0;
 

@@ -608,6 +608,8 @@ static void shutdown_stream(struct st_h2o_http3_server_stream_t *stream, quicly_
 static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_getsockname(conn->h3.super.streams_sock, sa);
     struct sockaddr *src = quicly_get_sockname(conn->h3.super.quic);
     socklen_t len = src->sa_family == AF_UNSPEC ? sizeof(struct sockaddr) : quicly_get_socklen(src);
     memcpy(sa, src, len);
@@ -617,6 +619,8 @@ static socklen_t get_sockname(h2o_conn_t *_conn, struct sockaddr *sa)
 static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_getpeername(conn->h3.super.streams_sock, sa);
     struct sockaddr *src = quicly_get_peername(conn->h3.super.quic);
     socklen_t len = quicly_get_socklen(src);
     memcpy(sa, src, len);
@@ -626,19 +630,25 @@ static socklen_t get_peername(h2o_conn_t *_conn, struct sockaddr *sa)
 static ptls_t *get_ptls(h2o_conn_t *_conn)
 {
     struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_get_ptls(conn->h3.super.streams_sock);
     return quicly_get_tls(conn->h3.super.quic);
 }
 
-static const char *get_ssl_server_name(h2o_conn_t *conn)
+static const char *get_ssl_server_name(h2o_conn_t *_conn)
 {
-    ptls_t *ptls = get_ptls(conn);
-    return ptls_get_server_name(ptls);
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_get_ssl_server_name(conn->h3.super.streams_sock);
+    return ptls_get_server_name(quicly_get_tls(conn->h3.super.quic));
 }
 
-static ptls_log_conn_state_t *log_state(h2o_conn_t *conn)
+static ptls_log_conn_state_t *log_state(h2o_conn_t *_conn)
 {
-    ptls_t *ptls = get_ptls(conn);
-    return ptls_get_log_state(ptls);
+    struct st_h2o_http3_server_conn_t *conn = (void *)_conn;
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_state(conn->h3.super.streams_sock);
+    return ptls_get_log_state(quicly_get_tls(conn->h3.super.quic));
 }
 
 static uint64_t get_req_id(h2o_req_t *req)
@@ -685,8 +695,11 @@ DEFINE_NUMERIC_LOGGER(response_header_count, "%zu", stream->stats.resp.qpack.cou
 static h2o_iovec_t log_cc_name(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    quicly_stats_t stats;
 
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_tcp_congestion_controller(conn->h3.super.streams_sock, &req->pool);
+
+    quicly_stats_t stats;
     if (quicly_get_stats(conn->h3.super.quic, &stats) == 0)
         return h2o_iovec_init(stats.cc.type->name, strlen(stats.cc.type->name));
     return h2o_iovec_init(NULL, 0);
@@ -695,8 +708,11 @@ static h2o_iovec_t log_cc_name(h2o_req_t *req)
 static h2o_iovec_t log_delivery_rate(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
-    quicly_rate_t rate;
 
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_tcp_delivery_rate(conn->h3.super.streams_sock, &req->pool);
+
+    quicly_rate_t rate;
     if (quicly_get_delivery_rate(conn->h3.super.quic, &rate) == 0 && rate.latest != 0) {
         char *buf = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT64_LONGEST_STR));
         size_t len = sprintf(buf, "%" PRIu64, rate.latest);
@@ -706,14 +722,23 @@ static h2o_iovec_t log_delivery_rate(h2o_req_t *req)
     return h2o_iovec_init(NULL, 0);
 }
 
-static h2o_iovec_t log_tls_protocol_version(h2o_req_t *_req)
+static h2o_iovec_t log_tls_protocol_version(h2o_req_t *req)
 {
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_protocol_version(conn->h3.super.streams_sock, &req->pool);
+
     return h2o_iovec_init(H2O_STRLIT("TLSv1.3"));
 }
 
 static h2o_iovec_t log_session_reused(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_session_reused(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     return ptls_is_psk_handshake(tls) ? h2o_iovec_init(H2O_STRLIT("1")) : h2o_iovec_init(H2O_STRLIT("0"));
 }
@@ -721,6 +746,10 @@ static h2o_iovec_t log_session_reused(h2o_req_t *req)
 static h2o_iovec_t log_cipher(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_cipher(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
     return cipher != NULL ? h2o_iovec_init(cipher->name, strlen(cipher->name)) : h2o_iovec_init(NULL, 0);
@@ -729,6 +758,10 @@ static h2o_iovec_t log_cipher(h2o_req_t *req)
 static h2o_iovec_t log_cipher_bits(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_cipher_bits(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_cipher_suite_t *cipher = ptls_get_cipher(tls);
     if (cipher == NULL)
@@ -738,8 +771,13 @@ static h2o_iovec_t log_cipher_bits(h2o_req_t *req)
     return h2o_iovec_init(buf, sprintf(buf, "%" PRIu16, (uint16_t)(cipher->aead->key_size * 8)));
 }
 
-static h2o_iovec_t log_session_id(h2o_req_t *_req)
+static h2o_iovec_t log_session_id(h2o_req_t *req)
 {
+    struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_session_id(conn->h3.super.streams_sock, &req->pool);
+
     /* FIXME */
     return h2o_iovec_init(NULL, 0);
 }
@@ -747,6 +785,10 @@ static h2o_iovec_t log_session_id(h2o_req_t *_req)
 static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_negotiated_protocol(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     const char *proto = ptls_get_negotiated_protocol(tls);
     return proto != NULL ? h2o_iovec_init(proto, strlen(proto)) : h2o_iovec_init(NULL, 0);
@@ -755,9 +797,12 @@ static h2o_iovec_t log_negotiated_protocol(h2o_req_t *req)
 static h2o_iovec_t log_ech_config_id(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_ech_config_id(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     uint8_t config_id;
-
     if (ptls_is_ech_handshake(tls, &config_id, NULL, NULL)) {
         char *s = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT8_LONGEST_STR));
         size_t len = sprintf(s, "%" PRIu8, config_id);
@@ -770,9 +815,12 @@ static h2o_iovec_t log_ech_config_id(h2o_req_t *req)
 static h2o_iovec_t log_ech_kem(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_ech_kem(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_hpke_kem_t *kem;
-
     if (ptls_is_ech_handshake(tls, NULL, &kem, NULL)) {
         return h2o_iovec_init(kem->keyex->name, strlen(kem->keyex->name));
     } else {
@@ -783,9 +831,12 @@ static h2o_iovec_t log_ech_kem(h2o_req_t *req)
 static h2o_iovec_t log_ech_cipher(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_ech_cipher(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_hpke_cipher_suite_t *cipher;
-
     if (ptls_is_ech_handshake(tls, NULL, NULL, &cipher)) {
         return h2o_iovec_init(cipher->name, strlen(cipher->name));
     } else {
@@ -796,9 +847,12 @@ static h2o_iovec_t log_ech_cipher(h2o_req_t *req)
 static h2o_iovec_t log_ech_cipher_bits(h2o_req_t *req)
 {
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
+
+    if (conn->h3.super.streams_sock != NULL)
+        return h2o_socket_log_ssl_ech_cipher_bits(conn->h3.super.streams_sock, &req->pool);
+
     ptls_t *tls = quicly_get_tls(conn->h3.super.quic);
     ptls_hpke_cipher_suite_t *cipher;
-
     if (ptls_is_ech_handshake(tls, NULL, NULL, &cipher)) {
         uint16_t bits = (uint16_t)(cipher->aead->key_size * 8);
         char *s = h2o_mem_alloc_pool(&req->pool, char, sizeof(H2O_UINT16_LONGEST_STR));
@@ -831,7 +885,7 @@ static h2o_iovec_t log_quic_stats(h2o_req_t *req)
     struct st_h2o_http3_server_conn_t *conn = (struct st_h2o_http3_server_conn_t *)req->conn;
     quicly_stats_t stats;
 
-    if (quicly_get_stats(conn->h3.super.quic, &stats) != 0)
+    if (conn->h3.super.streams_sock != NULL || quicly_get_stats(conn->h3.super.quic, &stats) != 0)
         return h2o_iovec_init(H2O_STRLIT("-"));
 
     char *buf;
@@ -849,7 +903,16 @@ Redo:
 #undef PUSH_FIELD
 }
 
-DEFINE_NUMERIC_LOGGER(quic_version, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn))
+static h2o_iovec_t log_quic_version(h2o_req_t *_req)
+{
+    struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, _req);
+
+    if (get_conn(stream)->h3.super.streams_sock != NULL)
+        return h2o_iovec_init(H2O_STRLIT("-"));
+
+    char *buf = h2o_mem_alloc_pool(&stream->req.pool, char, sizeof(H2O_UINT32_LONGEST_STR));
+    return h2o_iovec_init(buf, sprintf(buf, "%" PRIu32, quicly_get_protocol_version(stream->quic->conn)));
+}
 
 static uint64_t get_request_stream_size(struct st_h2o_http3_server_stream_t *stream)
 {
@@ -2163,7 +2226,7 @@ Exit:
     /* Send a resumption token if we've sent all available data and there is still room to send something, but not too frequently.
      * We send a token every 200KB at most; the threshold has been chosen so that the additional overhead would be ~0.1% assuming a
      * token size of 200 bytes (in reality, one NEW_TOKEN frame will uses 56 bytes). */
-    if (ret == 0 && had_data_to_send && !HAS_DATA_TO_SEND()) {
+    if (ret == 0 && conn->h3.super.streams_sock == NULL && had_data_to_send && !HAS_DATA_TO_SEND()) {
         uint64_t max_data_sent;
         quicly_get_max_data(conn->h3.super.quic, NULL, &max_data_sent, NULL, NULL);
         if (max_data_sent >= conn->skip_jumpstart_token_until) {
@@ -2337,9 +2400,9 @@ void h2o_http3_server_init_context(h2o_context_t *h2o, h2o_quic_ctx_t *ctx, h2o_
                                  &h2o->quic_stats);
 }
 
-h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
-                                          quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
-                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
+static struct st_h2o_http3_server_conn_t *create_connection(h2o_accept_ctx_t *accept_ctx, h2o_quic_ctx_t *quic_ctx,
+                                                            h2o_http3_qpack_context_t *qpack_ctx,
+                                                            const h2o_http3_conn_callbacks_t *h3_callbacks)
 {
     static const h2o_conn_callbacks_t conn_callbacks = {
         .get_sockname = get_sockname,
@@ -2392,10 +2455,10 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
 
     /* setup the structure */
     struct st_h2o_http3_server_conn_t *conn = (void *)h2o_create_connection(
-        sizeof(*conn), ctx->accept_ctx->ctx, ctx->accept_ctx->hosts, h2o_gettimeofday(ctx->accept_ctx->ctx->loop), &conn_callbacks);
+        sizeof(*conn), accept_ctx->ctx, accept_ctx->hosts, h2o_gettimeofday(accept_ctx->ctx->loop), &conn_callbacks);
     memset((char *)conn + sizeof(conn->super), 0, sizeof(*conn) - sizeof(conn->super));
 
-    h2o_http3_init_conn(&conn->h3, &ctx->super, h3_callbacks, &ctx->qpack, H2O_MAX_REQLEN);
+    h2o_http3_init_conn(&conn->h3, quic_ctx, h3_callbacks, qpack_ctx, H2O_MAX_REQLEN);
     conn->handshake_properties = (ptls_handshake_properties_t){{{{NULL}}}};
     h2o_linklist_init_anchor(&conn->delayed_streams.recv_body_blocked);
     h2o_linklist_init_anchor(&conn->delayed_streams.req_streaming);
@@ -2404,15 +2467,20 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     h2o_linklist_init_anchor(&conn->streams_resp_settings_blocked);
     h2o_timer_init(&conn->timeout, run_delayed);
     memset(&conn->num_streams, 0, sizeof(conn->num_streams));
-    conn->num_streams_req_streaming = 0;
-    conn->num_streams_tunnelling = 0;
     req_scheduler_init(&conn->scheduler.reqs);
-    conn->scheduler.uni.active = 0;
-    conn->scheduler.uni.conn_blocked = 0;
     if ((conn->datagram_flows = kh_init(stream)) == NULL)
         h2o_fatal("no memory");
 
+    return conn;
+}
+
+h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                          quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
+                                          const h2o_http3_conn_callbacks_t *h3_callbacks)
+{
     assert(ctx->super.next_cid != NULL && "to set next_cid, h2o_quic_set_context_identifier must be called");
+
+    struct st_h2o_http3_server_conn_t *conn = create_connection(ctx->accept_ctx, &ctx->super, &ctx->qpack, h3_callbacks);
 
     /* accept connection */
     ptls_log_conn_state_t log_state_override;
@@ -2441,7 +2509,7 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
         quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_get_alt_egress(qconn)].cc.initcwnd_packets,
                                     ctx->super.quic->transport_params.max_udp_payload_size) *
         4; /* sending jumpstart token is meaningless until CWND has grown 2x of IW, which translates to 4x data being sent */
-    if (h2o_http3_setup(&conn->h3, qconn) != 0)
+    if (h2o_http3_setup(&conn->h3, qconn, NULL) != 0)
         h2o_fatal("no memory");
 
     H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
@@ -2459,6 +2527,16 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     return &conn->h3;
 }
 
+void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
+{
+    struct st_h2o_http3_server_conn_t *conn =
+        create_connection(ctx, &ctx->ctx->http3.qmux.quic, &ctx->ctx->globalconf->http3.qmux.qpack, &H2O_HTTP3_CONN_CALLBACKS);
+    quicly_conn_t *quic = quicly_qmux_new(conn->h3.super.ctx->quic, 0, NULL);
+    assert(quic != NULL);
+    if (h2o_http3_setup(&conn->h3, quic, sock) != 0)
+        h2o_fatal("no memory");
+}
+
 void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic)
 {
     quic->transport_params.max_data =
@@ -2474,10 +2552,14 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
     quic->stream_open = &on_stream_open;
     quic->stream_scheduler = &scheduler;
     quic->receive_datagram_frame = &on_receive_datagram_frame;
+    quic->qmux_writable = &h2o_quic_qmux_writable;
+    quic->qmux_log_state = &h2o_quic_qmux_log_state;
 
-    for (size_t i = 0; quic->tls->cipher_suites[i] != NULL; ++i)
-        assert(quic->tls->cipher_suites[i]->aead->ctr_cipher != NULL &&
-               "for header protection, QUIC ciphers MUST provide CTR mode");
+    if (quic->tls != NULL) {
+        for (size_t i = 0; quic->tls->cipher_suites[i] != NULL; ++i)
+            assert(quic->tls->cipher_suites[i]->aead->ctr_cipher != NULL &&
+                   "for header protection, QUIC ciphers MUST provide CTR mode");
+    }
 }
 
 h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic)

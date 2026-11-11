@@ -166,6 +166,14 @@ QUICLY_CALLBACK_TYPE(void, update_open_count, ssize_t delta);
  * is complete.
  */
 QUICLY_CALLBACK_TYPE(void, async_handshake, ptls_t *tls);
+/**
+ * returns a boolean indicating if the underlying transport is ready for writing
+ */
+QUICLY_CALLBACK_TYPE(int, qmux_writable, quicly_conn_t *conn);
+/**
+ * [probing] returns log state and the getsni delayed callback object associated with the underlying transport
+ */
+QUICLY_CALLBACK_TYPE(ptls_log_conn_state_t *, qmux_log_state, quicly_conn_t *conn, ptls_log_getsni_t *getsni);
 
 /**
  * crypto offload API
@@ -397,6 +405,14 @@ struct st_quicly_context_t {
      */
     quicly_async_handshake_t *async_handshake;
     /**
+     *
+     */
+    quicly_qmux_writable_t *qmux_writable;
+    /**
+     *
+     */
+    quicly_qmux_log_state_t *qmux_log_state;
+    /**
      * expand client hello so that it does not fit into one datagram
      */
     unsigned expand_client_hello : 1;
@@ -619,7 +635,7 @@ struct st_quicly_conn_streamgroup_state_t {
         uint64_t padding, ping, ack, reset_stream, stop_sending, crypto, new_token, stream, max_data, max_stream_data,             \
             max_streams_bidi, max_streams_uni, data_blocked, stream_data_blocked, streams_blocked, new_connection_id,              \
             retire_connection_id, path_challenge, path_response, transport_close, application_close, handshake_done, datagram,     \
-            ack_frequency, immediate_ack, reset_stream_at;                                                                         \
+            ack_frequency, immediate_ack, reset_stream_at, qx_transport_parameters, qx_ping, qx_pong;                              \
     } num_frames_received, num_frames_sent;                                                                                        \
     struct {                                                                                                                       \
         /**                                                                                                                        \
@@ -815,7 +831,10 @@ typedef struct st_quicly_stats_t {
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(datagram, dir, apply)                                                                      \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(ack_frequency, dir, apply)                                                                 \
     QUICLY_STATS__DO_FOREACH_NUM_FRAMES(immediate_ack, dir, apply)                                                                 \
-    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(reset_stream_at, dir, apply)
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(reset_stream_at, dir, apply)                                                               \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(qx_transport_parameters, dir, apply) \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(qx_ping, dir, apply) \
+    QUICLY_STATS__DO_FOREACH_NUM_FRAMES(qx_pong, dir, apply)
 
 #define QUICLY_STATS_FOREACH_TRANSPORT_COUNTERS(apply)                                                                             \
     apply(num_paths.created, "num-paths.created")                                                                                  \
@@ -1248,6 +1267,10 @@ static const quicly_transport_parameters_t *quicly_get_remote_transport_paramete
 /**
  *
  */
+int quicly_is_qmux(quicly_conn_t *conn);
+/**
+ *
+ */
 static quicly_state_t quicly_get_state(quicly_conn_t *conn);
 /**
  * Returns the error code and other information regarding the closure of the connection. The out parameters may be NULL. This
@@ -1445,7 +1468,7 @@ int quicly_calc_initial_keys(ptls_cipher_suite_t *cs, uint8_t *ingress, uint8_t 
 /**
  *
  */
-int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_transport_parameters_t *params,
+int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, int qmux, const quicly_transport_parameters_t *params,
                                            const quicly_cid_t *original_dcid, const quicly_cid_t *initial_scid,
                                            const quicly_cid_t *retry_scid, const void *stateless_reset_token, size_t expand_by);
 /**
@@ -1458,7 +1481,7 @@ int quicly_encode_transport_parameter_list(ptls_buffer_t *buf, const quicly_tran
  * pre-fills the vector with an unpredictable value (i.e. random), then calls this function to set the stateless reset token to the
  * value supplied by peer.
  */
-quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, quicly_cid_t *original_dcid,
+quicly_error_t quicly_decode_transport_parameter_list(quicly_transport_parameters_t *params, int qmux, quicly_cid_t *original_dcid,
                                                       quicly_cid_t *initial_scid, quicly_cid_t *retry_scid,
                                                       void *stateless_reset_token, const uint8_t *src, const uint8_t *end);
 /**
@@ -1581,7 +1604,9 @@ static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
  * Notes:
  * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled, but is subject to the
  *   anti-amplification limit.
- * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
+ * * While the API is designed to look like synchronous, application still has to call `quicly_send` (or `quicly_qmux_send`) for
+ *   the time being.
+ * * In QMux, frames that do not fit into a QMux record are dropped.
  */
 void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);
 /**
@@ -1594,6 +1619,10 @@ int quicly_set_cc(quicly_conn_t *conn, quicly_cc_type_t *cc);
  * unchanged for the lifetime of the connection.
  */
 int quicly_get_alt_egress(quicly_conn_t *conn);
+/**
+ *
+ */
+ptls_log_conn_state_t *quicly_log_state(quicly_conn_t *conn, ptls_log_getsni_t *getsni);
 /**
  *
  */
@@ -1673,12 +1702,12 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
         quicly_conn_t *_c = (_conn);                                                                                               \
-        ptls_t *_tls = quicly_get_tls(_c);                                                                                         \
-        ptls_log_conn_state_t *conn_state = ptls_get_log_state(_tls);                                                              \
-        active &= ptls_log_conn_maybe_active(conn_state, ptls_log_getsni_ptls(_tls));                                              \
+        ptls_log_getsni_t getsni;                                                                                                  \
+        ptls_log_conn_state_t *conn_state = quicly_log_state(_c, &getsni);                                                         \
+        active &= ptls_log_conn_maybe_active(conn_state, getsni);                                                                  \
         if (PTLS_LIKELY(active == 0))                                                                                              \
             break;                                                                                                                 \
-        PTLS_LOG__DO_LOG(quicly, _name, conn_state, ptls_log_getsni_ptls(_tls), _c->stash.now == 0, {                              \
+        PTLS_LOG__DO_LOG(quicly, _name, conn_state, getsni, _c->stash.now == 0, {                                                  \
             if (_c->stash.now != 0)                                                                                                \
                 PTLS_LOG_ELEMENT_NUMBER(time, _c->stash.now);                                                                      \
             PTLS_LOG_ELEMENT_PTR(conn, _c);                                                                                        \
@@ -1690,6 +1719,33 @@ extern const quicly_stream_callbacks_t quicly_stream_noop_callbacks;
             } while (0);                                                                                                           \
         });                                                                                                                        \
     } while (0)
+
+/**
+ * Creates a new connection object.
+ */
+quicly_conn_t *quicly_qmux_new(quicly_context_t *ctx, int is_client, void *appdata);
+/**
+ * Writes a QMux record to the given buffer.
+ * @param [in,out] bufsize  Upon entry, the size of the buffer, which must be at least 16384 bytes. Upon return, number of bytes
+ *                          being written to the buffer.
+ * @return 0 if successful. QUICLY_ERROR_FREE_CONNECTION once the connection is closed; i.e., after CONNECTION_CLOSE is sent or
+ * received, or when the idle timeout expires (in which case no frames are sent). Upon QUICLY_ERROR_FREE_CONNECTION, the application
+ * frees the connection, gracefully shuts down the sending side of the underlying transport, and then waits for the peer to shut
+ * down its sending side, discarding any data being received (draft-ietf-quic-qmux-02 Section 7.2).
+ */
+quicly_error_t quicly_qmux_send(quicly_conn_t *conn, void *buf, size_t *bufsize);
+/**
+ * Reads QMux records in a given buffer and processes them. When the peer gracefully shuts down its sending side of the
+ * underlying transport, the application is expected to shut down its sending side as well, either without sending anything or
+ * after sending CONNECTION_CLOSE by calling `quicly_close` followed by `quicly_qmux_send` (draft-ietf-quic-qmux-02 Section 7.3).
+ * @param [in,out] len  Upon entry, the size of the input. Upon return, the number of bytes being read out. A record that is only
+ *                      partially contained in the input is not read out, and has to be supplied again along with the rest of the
+ *                      record. Once the connection is closing, the entire input is read out and discarded.
+ * @return 0 if successful, including when the input contains errors, in which case the connection enters the closing state and
+ *         CONNECTION_CLOSE is sent by the subsequent call to `quicly_qmux_send`. QUICLY_ERROR_IS_CLOSING if CONNECTION_CLOSE has
+ *         been received.
+ */
+quicly_error_t quicly_qmux_receive(quicly_conn_t *conn, const void *src, size_t *len);
 
 /* inline definitions */
 

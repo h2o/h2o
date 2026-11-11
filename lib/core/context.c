@@ -76,6 +76,8 @@ h2o_http3client_ctx_t *h2o_create_proxy_http3_context(h2o_context_t *ctx, SSL_CT
         &ptls_openssl_aes128ecb, &ptls_openssl_sha256, ptls_iovec_init(cid_key, sizeof(cid_key)));
     ptls_clear_memory(cid_key, sizeof(cid_key));
     h3ctx->quic.stream_open = &h2o_httpclient_http3_on_stream_open;
+    h3ctx->quic.qmux_writable = &h2o_quic_qmux_writable;
+    h3ctx->quic.qmux_log_state = &h2o_quic_qmux_log_state;
 
     /* http3 client-specific fields */
     h3ctx->qpack = (h2o_http3_qpack_context_t){0}; /* TODO: expose proxy.http3.qpack-* knobs and consider enabling by default */
@@ -183,6 +185,10 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
     h2o_linklist_init_anchor(&ctx->_conns.active);
     h2o_linklist_init_anchor(&ctx->_conns.idle);
     h2o_linklist_init_anchor(&ctx->_conns.shutdown);
+    ctx->http3.qmux._quicly = quicly_spec_context;
+    ctx->http3.qmux.quic.loop = loop;
+    ctx->http3.qmux.quic.quic = &ctx->http3.qmux._quicly;
+    h2o_http3_server_amend_quicly_context(ctx->globalconf, ctx->http3.qmux.quic.quic);
     ctx->proxy.client_ctx.loop = loop;
     ctx->proxy.client_ctx.io_timeout = ctx->globalconf->proxy.io_timeout;
     ctx->proxy.client_ctx.connect_timeout = ctx->globalconf->proxy.connect_timeout;
@@ -198,8 +204,7 @@ void h2o_context_init(h2o_context_t *ctx, h2o_loop_t *loop, h2o_globalconf_t *co
         ctx->proxy.client_ctx.http3 =
             h2o_create_proxy_http3_context(ctx, ctx->globalconf->proxy.global_socketpool._ssl_ctx, ctx->globalconf->proxy.http3.ecn,
                                            ctx->globalconf->http3.use_gso, ctx->globalconf->proxy.http3.max_concurrent_streams);
-    ctx->proxy.connpool.socketpool = &ctx->globalconf->proxy.global_socketpool;
-    h2o_linklist_init_anchor(&ctx->proxy.connpool.http2.conns);
+    h2o_httpclient_connection_pool_init(&ctx->proxy.connpool, &ctx->globalconf->proxy.global_socketpool);
 
     ctx->_module_configs = h2o_mem_alloc(sizeof(*ctx->_module_configs) * config->_num_config_slots);
     memset(ctx->_module_configs, 0, sizeof(*ctx->_module_configs) * config->_num_config_slots);

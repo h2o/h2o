@@ -97,12 +97,13 @@ static void on_context_init(h2o_handler_t *_self, h2o_context_t *ctx)
         .tunnel_enabled = self->config.tunnel_enabled,
         .protocol_selector = {.ratio = self->config.protocol_ratio},
         .force_cleartext_http2 = self->config.http2.force_cleartext,
+        .force_cleartext_h3qx = self->config.h3qx.force_cleartext,
         .http2 =
             {
                 .latency_optimization = ctx->globalconf->http2.latency_optimization, /* TODO provide config knob, or disable? */
                 .max_concurrent_streams = self->config.http2.max_concurrent_streams,
             },
-        .http3 = self->config.protocol_ratio.http3 != 0
+        .http3 = self->config.protocol_ratio.http3 != 0 || self->config.protocol_ratio.h3qx != 0
                      ? h2o_create_proxy_http3_context(ctx, self->sockpool->_ssl_ctx, self->config.http3.ecn,
                                                       ctx->globalconf->http3.use_gso, self->config.http3.max_concurrent_streams)
                      : NULL,

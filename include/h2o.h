@@ -499,6 +499,12 @@ struct st_h2o_globalconf_t {
          * maximum number of HTTP3 streaming requests (per connection) to be handled simultaneously internally.
          */
         size_t max_concurrent_streaming_requests_per_connection;
+        /**
+         *
+         */
+        struct {
+            h2o_http3_qpack_context_t qpack;
+        } qmux;
     } http3;
 
     struct {
@@ -791,6 +797,13 @@ struct st_h2o_context_t {
              */
             uint64_t forwarded_packet_received;
         } events;
+        /**
+         *
+         */
+        struct {
+            quicly_context_t _quicly;
+            h2o_quic_ctx_t quic;
+        } qmux;
     } http3;
 
     struct {
@@ -814,6 +827,7 @@ struct st_h2o_context_t {
          */
         uint64_t alpn_h1;
         uint64_t alpn_h2;
+        uint64_t alpn_h3qx;
         /**
          * counter for handshakes
          */
@@ -1497,6 +1511,8 @@ extern const char h2o_http2_npn_protocols[];
 extern const char h2o_npn_protocols[];
 extern const h2o_iovec_t h2o_http2_alpn_protocols[];
 extern const h2o_iovec_t h2o_alpn_protocols[];
+extern const h2o_iovec_t h2o_h3qx_alpn_protocols[];
+extern const h2o_iovec_t h2o_alpn_protocols_including_h3qx[];
 
 /**
  * accepts a connection
@@ -2331,6 +2347,9 @@ typedef struct st_h2o_proxy_config_vars_t {
         uint64_t max_concurrent_streams;
         unsigned ecn : 1;
     } http3;
+    struct {
+        unsigned force_cleartext : 1;
+    } h3qx;
     h2o_httpclient_protocol_ratio_t protocol_ratio;
 } h2o_proxy_config_vars_t;
 
