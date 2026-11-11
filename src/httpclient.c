@@ -950,7 +950,10 @@ int main(int argc, char **argv)
             }
             break;
         case OPT_RATIO_H3QX:
-            if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.h3qx) != 1 ||
+            if (!strcasecmp(optarg, "f")) {
+                ctx.protocol_selector.ratio.h3qx = 100;
+                ctx.force_cleartext_h3qx = 1;
+            } else if (sscanf(optarg, "%" SCNd8, &ctx.protocol_selector.ratio.h3qx) != 1 ||
                 !(0 <= ctx.protocol_selector.ratio.h3qx && ctx.protocol_selector.ratio.h3qx <= 100)) {
                 fprintf(stderr, "failed to parse HTTP/3-on-QMux ratio (--h3qx)\n");
                 exit(EXIT_FAILURE);

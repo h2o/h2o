@@ -137,10 +137,14 @@ static void on_pool_connect(h2o_socket_t *sock, const char *errstr, void *data, 
          * H2 context, to avoid having this connection reused for H1
          * accidentaly */
         goto ForceH2;
+    } else if (client->ctx->force_cleartext_h3qx && sock->ssl == NULL && client->ctx->protocol_selector.ratio.h3qx == 100) {
+        /* same as above, but for HTTP/3 on QMux */
+        goto ForceH3qx;
     } else if (sock->ssl == NULL || (alpn_proto = h2o_socket_ssl_get_selected_protocol(sock)).len == 0) {
         h2o_httpclient__h1_on_connect(client, sock, origin);
     } else {
         if (h2o_memis(alpn_proto.base, alpn_proto.len, H2O_STRLIT("h3qx-01"))) {
+        ForceH3qx:
             /* detach this socket from the socketpool to count the number of h1 connections correctly */
             h2o_socketpool_detach(client->connpool->socketpool, sock);
             h2o_httpclient__h3qx_on_connect(client, sock, origin);
