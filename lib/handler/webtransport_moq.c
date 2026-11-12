@@ -1297,9 +1297,11 @@ static struct st_wtmoq_thread_ctx_t *create_thread_ctx(h2o_context_t *ctx)
 
     /* sockets */
     h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET, ctx->globalconf->http3.client_socket.sndbuf,
+                                             ctx->globalconf->http3.client_socket.rcvbuf)) != NULL)
         ++sp;
-    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6)) != NULL)
+    if ((*sp = h2o_quic_create_client_socket(ctx->loop, AF_INET6, ctx->globalconf->http3.client_socket.sndbuf,
+                                             ctx->globalconf->http3.client_socket.rcvbuf)) != NULL)
         ++sp;
     if (sp == socks)
         h2o_fatal("webtransport.moq: failed to create a UDP socket");
