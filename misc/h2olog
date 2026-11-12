@@ -57,18 +57,49 @@ if (defined $write_file) {
         or die "failed to open $write_file:$!";
 }
 
-# open socket
-my $sock = IO::Socket::UNIX->new(
-    Type => SOCK_STREAM,
-    Peer => $unix_socket,
-) or die "failed to open unix socket:$?";
+my $reader = do {
+    # open socket
+    my $sock = IO::Socket::UNIX->new(
+        Type => SOCK_STREAM,
+        Peer => $unix_socket,
+    ) or die "failed to open unix socket:$?";
 
-# send request; HTTP/1.0 is used to avoid chunked encoding, etc.
-print $sock "GET /.well-known/h2olog?@{[join '&', @query]} HTTP/1.0\r\n\r\n";
+    # send request; HTTP/1.0 is used to avoid chunked encoding, etc.
+    print $sock "GET /.well-known/h2olog?@{[join '&', @query]} HTTP/1.0\r\n\r\n";
+
+    my $buffered = '';
+    my $read_bytes = sub {
+        my $r = sysread($sock, $buffered, 1024, length $buffered);
+        $sock = undef unless defined($r) and $r > 0;
+    };
+    +{
+        getline => sub {
+            while (1) {
+                if ($buffered =~ /\n/) {
+                    $buffered = $';
+                    return "$`\n";
+                } elsif (!$sock) {
+                    return $buffered;
+                }
+                $read_bytes->();
+            }
+        },
+        getbytes => sub {
+            while (1) {
+                if ($buffered ne '' or !$sock) {
+                    my $ret = $buffered;
+                    $buffered = '';
+                    return $ret;
+                }
+                $read_bytes->();
+            }
+        },
+    };
+};
 
 # read the respose header section
 my $resp = "";
-while (my $line = <$sock>) {
+while (my $line = $reader->{getline}->()) {
     last if $line =~ /^[\r\n]/;
     $resp .= $line;
 }
@@ -79,8 +110,8 @@ if ($exit_status == 0 && $debug) {
 
 # forward all response to the client, then exit
 $| = 1;
-while (my $line = <$sock>) {
-    if ($http_mode && $exit_status == 0) {
+if ($http_mode && $exit_status == 0) {
+    while (my $line = $reader->{getline}->()) {
         my $json = decode_json($line);
         if ($json->{module} eq 'h2o') {
             if ($json->{type} eq 'receive_request') {
@@ -95,8 +126,10 @@ while (my $line = <$sock>) {
                 print "$json->{conn_id} $json->{req_id} TxStatus   $json->{status}\n";
             }
         }
-    } else {
-        print $line;
+    }
+} else {
+    while (my $bytes = $reader->{getbytes}->()) {
+        syswrite STDOUT, $bytes, length $bytes;
     }
 }
 exit $exit_status;
