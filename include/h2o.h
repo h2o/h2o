@@ -500,6 +500,10 @@ struct st_h2o_globalconf_t {
          */
         size_t max_concurrent_streaming_requests_per_connection;
         /**
+         * if SETTINGS_ENABLE_WEBTRANSPORT of draft-02 is advertised on every HTTP/3 connection
+         */
+        uint8_t webtransport : 1;
+        /**
          *
          */
         struct {
@@ -1485,6 +1489,26 @@ struct st_h2o_req_t {
     struct {
         h2o_forward_datagram_cb write_, read_;
     } forward_datagram;
+
+    /**
+     * Set by the protocol layer for extended CONNECT requests on HTTP/3; NULL otherwise. Lets the request extend the HTTP/3
+     * connection: returns the QUIC connection, through which the handler opens streams with `quicly_open_stream`, scheduled
+     * together with the request stream. Thereafter, streams that the peer opens and HTTP/3 does not recognize are passed to
+     * `on_stream_open`, which takes them by returning 0, refuses them by returning an error code, or returns
+     * H2O_HTTP3_ERROR_DECLINED to leave them to HTTP/3. The handler's context is `write_req.ctx`, as for
+     * `forward_datagram.write_`. Returns NULL if the connection is already extended. The extension ends when the request is
+     * disposed.
+     *
+     * Streams are offered once their first varint (the stream type of a unidirectional stream, of a type HTTP/3 does not define;
+     * or the first frame type of a bidirectional stream) has been received, before HTTP/3 consumes any byte. `*recvbuf` holds the
+     * received bytes starting at `qs->recvstate.data_off`, i.e., from the beginning of the stream, the first varint included;
+     * only `quicly_recvstate_bytes_available` of them are valid. The callee decodes them, and when taking the stream, sets
+     * `qs->callbacks` and `qs->data`, and takes `*recvbuf` (setting it to NULL), consuming the bytes as it sees fit. When
+     * declining, it leaves `*recvbuf` untouched. The stream might have ended already.
+     */
+    struct st_h2o_quic_conn_t *(*open_extended_http3)(h2o_req_t *req, quicly_error_t (*on_stream_open)(h2o_req_t *req,
+                                                                                                     quicly_stream_t *qs,
+                                                                                                     h2o_buffer_t **recvbuf));
 
     /* internal structure */
     h2o_generator_t *_generator;
@@ -2478,6 +2502,17 @@ void h2o_self_trace_register(h2o_pathconf_t *conf);
  *
  */
 void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
+
+/* lib/handler/webtransport_moq.c */
+/**
+ * registers the handler forwarding MoQ sessions received over WebTransport to a MoQ relay over native QUIC (`host`:`port`), or, if
+ * `qmux_cleartext` is set (for testing), over QMux on cleartext TCP
+ */
+void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext);
+/**
+ * registers the configurator of the webtransport.moq directive
+ */
+void h2o_webtransport_moq_register_configurator(h2o_globalconf_t *conf);
 
 /* lib/handler/h2olog.c */
 

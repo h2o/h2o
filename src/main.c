@@ -5212,6 +5212,7 @@ static void setup_configurators(void)
     h2o_mruby_register_configurator(&conf.globalconf);
 #endif
     h2o_self_trace_register_configurator(&conf.globalconf);
+    h2o_webtransport_moq_register_configurator(&conf.globalconf);
     h2o_log_register_configurator(&conf.globalconf);
 
     static h2o_status_handler_t extra_status_handler = {{H2O_STRLIT("main")}, on_extra_status};

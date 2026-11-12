@@ -291,6 +291,7 @@ static void ingress_unistream_on_destroy(quicly_stream_t *qs, quicly_error_t err
     free(stream);
 }
 
+
 static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const void *input, size_t len)
 {
     h2o_http3_conn_t *conn = *quicly_get_data(qs->conn);
@@ -308,6 +309,8 @@ static void ingress_unistream_on_receive(quicly_stream_t *qs, size_t off, const 
 
     /* handle the bytes */
     stream->handle_input(conn, stream, &src, src + bytes_available, quicly_recvstate_transfer_complete(&stream->quic->recvstate));
+    if (qs->data != stream)
+        return; /* taken by the extension of the connection, and `stream` has been freed */
     if (stream->bytes_received != NULL && *stream->bytes_received < bytes_received)
         *stream->bytes_received = bytes_received;
     if (quicly_get_state(conn->super.quic) >= QUICLY_STATE_CLOSING)
@@ -437,10 +440,19 @@ static void unknown_type_handle_input(h2o_http3_conn_t *conn, struct st_h2o_http
         stream->bytes_received = &conn->stats.bytes_received.qpack_decoder;
         stream->handle_input = qpack_decoder_stream_handle_input;
         break;
-    default:
-        quicly_request_stop(stream->quic, H2O_HTTP3_ERROR_STREAM_CREATION);
+    default: {
+        quicly_error_t ret = H2O_HTTP3_ERROR_DECLINED;
+        /* offer the stream to the extension of the connection, with the receive buffer untouched (i.e., the type included) */
+        if (get_callbacks(conn)->on_extension_unistream != NULL &&
+            (ret = get_callbacks(conn)->on_extension_unistream(conn, stream->quic, &stream->recvbuf)) == 0) {
+            /* taken; the caller notices that `qs->data` no longer points to `stream` */
+            assert(stream->recvbuf == NULL);
+            free(stream);
+            return;
+        }
+        quicly_request_stop(stream->quic, ret == H2O_HTTP3_ERROR_DECLINED ? H2O_HTTP3_ERROR_STREAM_CREATION : ret);
         stream->handle_input = discard_handle_input;
-        break;
+    } break;
     }
 
     return stream->handle_input(conn, stream, src, src_end, is_eos);
@@ -486,15 +498,16 @@ static void egress_unistream_on_send_stop(quicly_stream_t *qs, quicly_error_t er
     h2o_quic_close_connection(&conn->super, H2O_HTTP3_ERROR_CLOSED_CRITICAL_STREAM, NULL);
 }
 
+const quicly_stream_callbacks_t h2o_http3_egress_unistream_callbacks = {egress_unistream_on_destroy, egress_unistream_on_send_shift,
+                                                                         egress_unistream_on_send_emit, egress_unistream_on_send_stop};
+
 void h2o_http3_on_create_unidirectional_stream(quicly_stream_t *qs)
 {
     if (quicly_stream_is_self_initiated(qs)) {
         /* create egress unistream */
-        static const quicly_stream_callbacks_t callbacks = {egress_unistream_on_destroy, egress_unistream_on_send_shift,
-                                                            egress_unistream_on_send_emit, egress_unistream_on_send_stop};
         struct st_h2o_http3_egress_unistream_t *stream = h2o_mem_alloc(sizeof(*stream));
         qs->data = stream;
-        qs->callbacks = &callbacks;
+        qs->callbacks = &h2o_http3_egress_unistream_callbacks;
         stream->quic = qs;
         stream->bytes_sent = NULL;
         h2o_buffer_init(&stream->sendbuf, &h2o_socket_buffer_prototype);
@@ -1400,6 +1413,10 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
         }
         ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_CONNECT_PROTOCOL);
         ptls_buffer_push_quicint(&buf, 1);
+        if (conn->local_settings.webtransport) {
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02);
+            ptls_buffer_push_quicint(&buf, 1);
+        }
     });
 
     assert(!buf.is_allocated);
@@ -1423,7 +1440,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_
     conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
-        uint8_t firstflight[32];
+        uint8_t firstflight[48];
         size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
         if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, &conn->stats.bytes_sent.control_stream,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
@@ -1553,6 +1570,22 @@ int h2o_http3_handle_settings_frame(h2o_http3_conn_t *conn, const uint8_t *paylo
             } break;
             default:
                 goto Malformed;
+            }
+            break;
+        case H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02:
+            /* checked as draft-02 section 3.1 requires and quiche does, unless we do not advertise WebTransport, in which case it
+             * is ignored as any other unknown setting */
+            if (!conn->local_settings.webtransport)
+                break;
+            switch (value) {
+            case 0:
+                break;
+            case 1:
+                conn->peer_settings.webtransport = 1;
+                break;
+            default:
+                *err_desc = "invalid SETTINGS_ENABLE_WEBTRANSPORT";
+                return H2O_HTTP3_ERROR_SETTINGS;
             }
             break;
         default:

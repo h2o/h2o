@@ -44,4 +44,9 @@ struct st_h2o_http3_egress_unistream_t {
     h2o_buffer_t *sendbuf;
 };
 
+/**
+ * callbacks of the unidirectional streams that HTTP/3 opens (control and QPACK streams)
+ */
+extern const quicly_stream_callbacks_t h2o_http3_egress_unistream_callbacks;
+
 #endif
