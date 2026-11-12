@@ -488,6 +488,13 @@ struct st_h2o_globalconf_t {
          */
         uint16_t ack_frequency;
         /**
+         * SO_SNDBUF and SO_RCVBUF of the UDP sockets that h2o opens as a QUIC client (e.g., toward HTTP/3 upstreams), or 0 to use
+         * the default of the kernel
+         */
+        struct {
+            unsigned sndbuf, rcvbuf;
+        } client_socket;
+        /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
         uint8_t allow_delayed_ack : 1;

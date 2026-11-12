@@ -624,6 +624,16 @@ static int on_config_http3_input_window_size(h2o_configurator_command_t *cmd, h2
     return 0;
 }
 
+static int on_config_quic_client_sndbuf(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http3.client_socket.sndbuf);
+}
+
+static int on_config_quic_client_rcvbuf(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
+{
+    return h2o_configurator_scanf(cmd, node, "%u", &ctx->globalconf->http3.client_socket.rcvbuf);
+}
+
 static int on_config_http3_ack_frequency(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     double v;
@@ -1143,6 +1153,12 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http3-input-window-size",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_input_window_size);
+        h2o_configurator_define_command(&c->super, "quic-client-sndbuf",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_quic_client_sndbuf);
+        h2o_configurator_define_command(&c->super, "quic-client-rcvbuf",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_quic_client_rcvbuf);
         h2o_configurator_define_command(&c->super, "http3-ack-frequency",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http3_ack_frequency);

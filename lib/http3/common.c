@@ -78,7 +78,7 @@ static void report_sendmsg_errors(h2o_error_reporter_t *reporter, uint64_t total
 static h2o_error_reporter_t track_sendmsg = H2O_ERROR_REPORTER_INITIALIZER(report_sendmsg_errors);
 
 #if !H2O_USE_LIBUV
-h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, unsigned sndbuf, unsigned rcvbuf)
 {
     int fd, on = 1;
     quicly_address_t addr = {.sa.sa_family = family};
@@ -86,6 +86,13 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family)
 
     if ((fd = socket(family, SOCK_DGRAM, 0)) == -1)
         return NULL;
+
+    /* As a socket is shared by the connections of a thread, the default of the kernel might not be large enough. The kernel caps the
+     * values at net.core.{w,r}mem_max. */
+    if (sndbuf != 0)
+        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+    if (rcvbuf != 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 
     switch (family) {
     case AF_INET:
