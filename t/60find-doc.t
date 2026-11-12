@@ -10,6 +10,7 @@ my @private_commands = (
     qw(header.cookie.unset header.cookie.unsetunless), # removing "cookie" headers in response?
     qw(http3-ack-frequency http3-allow-delayed-ack proxy.h3qx.force-cleartext proxy.h3qx.ratio quic-nodes self-trace), # highly
         # experimental and therefore undocumented
+    qw(webtransport webtransport.moq), # experimental and therefore undocumented
 );
 
 my $tempdir = tempdir(CLEANUP => 1);
