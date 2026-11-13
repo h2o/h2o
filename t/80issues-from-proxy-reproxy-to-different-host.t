@@ -69,6 +69,22 @@ EOT
     like $headers, qr{^HTTP/1\.1 502 }is;
 };
 
+subtest "x-reproxy-url containing SP" => sub {
+    my $server = spawn_h2o(<< "EOT");
+reproxy: ON
+hosts:
+  default:
+    paths:
+      "/":
+        proxy.reverse.url: http://127.0.0.1:$upstream/
+EOT
+    # SP is percent-encoded, as browsers do, rather than being sent as part of the request line
+    my ($headers, $body) = run_prog(
+        "curl --max-time 5 --silent --dump-header /dev/stderr 'http://127.0.0.1:$server->{port}/?resp:x-reproxy-url=/echo-request-uri/a%20b'");
+    like $headers, qr{^HTTP/1\.1 200 }is;
+    is $body, "/echo-request-uri/a%20b";
+};
+
 subtest "internal-redirect-within-proxy" => sub {
     plan skip_all => 'mruby support is off'
         unless server_features()->{mruby};
