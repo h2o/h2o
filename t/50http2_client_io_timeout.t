@@ -82,15 +82,19 @@ EOC
     $h2g->{kill}->();
 };
 
-subtest "first byte timeout longer than I/O timeout on a fresh connection" => sub {
+subtest "first byte timeout longer than I/O timeout" => sub {
+    # While the response is awaited, the upstream sends a frame to which h2o does not respond, as is the case with SETTINGS ACK
+    # on a fresh connection.
     my $h2g = spawn_h2get_backend(<< "EOC");
     if f.type == 'HEADERS' then
+        sleep 1
+        conn.send_window_update(0, 1)
         sleep 2
         conn.send_headers({":status" => "200", "content-length" => "5"}, f.stream_id, END_HEADERS)
         conn.send_data(f.stream_id, END_STREAM, "hello")
     end
 EOC
-    my $server = spawn_h2o_with_backend($h2g, "proxy.timeout.io: 1000\n        proxy.timeout.first_byte: 4000");
+    my $server = spawn_h2o_with_backend($h2g, "proxy.timeout.io: 1000\n        proxy.timeout.first_byte: 5000");
     my $resp = `curl --silent --show-error --max-time 10 http://127.0.0.1:$server->{port}/ 2>&1`;
     is $resp, "hello", "response is received";
     $h2g->{kill}->();
