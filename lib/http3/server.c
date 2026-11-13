@@ -1798,6 +1798,12 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
         h2o_iovec_t datagram_flow_id;
         ssize_t priority_header_index;
+        if (stream->req.upstream_refused) {
+            /* to let the client retry, reject the request without sending a response (RFC 9114 Section 4.1.1) */
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 1, 0);
+            h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
+            return;
+        }
         if (stream->req.send_server_timing != 0)
             h2o_add_server_timing_header(&stream->req, 0 /* TODO add support for trailers; it's going to be a little complex as we
                                                           * need to build trailers the moment they are emitted onto wire */);
