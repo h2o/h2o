@@ -639,6 +639,11 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
     int is_end_stream = (frame->flags & H2O_HTTP2_FRAME_FLAG_END_STREAM) != 0;
 
     if (stream != NULL) {
+        if (stream->state.res == STREAM_STATE_CLOSED) {
+            *err_desc = "unexpected stream id in HEADERS frame";
+            return H2O_HTTP2_ERROR_PROTOCOL;
+        }
+
         h2o_timer_unlink(&stream->super._timeout);
 
         if (stream->state.res == STREAM_STATE_BODY && !is_end_stream) {
