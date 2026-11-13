@@ -1140,6 +1140,10 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
         FRAME( MAX_PUSH_ID             ,    0 ,    0 ,    1 ,    0 );
         FRAME( PRIORITY_UPDATE_REQUEST ,    0 ,    0 ,    1 ,    0 );
         FRAME( PRIORITY_UPDATE_PUSH    ,    0 ,    0 ,    1 ,    0 );
+        FRAME( HTTP2_PRIORITY          ,    0 ,    0 ,    0 ,    0 );
+        FRAME( HTTP2_PING              ,    0 ,    0 ,    0 ,    0 );
+        FRAME( HTTP2_WINDOW_UPDATE     ,    0 ,    0 ,    0 ,    0 );
+        FRAME( HTTP2_CONTINUATION      ,    0 ,    0 ,    0 ,    0 );
         /*   +-------------------------+------+------+------+------+ */
         /* clang-format on */
 #undef FRAME
