@@ -941,6 +941,13 @@ static void on_upgrade_complete(h2o_socket_t *socket, const char *err)
     cb(data, sock, headers_size);
 }
 
+static void on_upgrade_io_timeout(h2o_timer_t *entry)
+{
+    struct st_h2o_http1_conn_t *conn = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http1_conn_t, _io_timeout_entry, entry);
+    conn->super.ctx->http1.events.request_io_timeouts++;
+    on_upgrade_complete(conn->sock, "I/O timeout");
+}
+
 static size_t flatten_headers_estimate_size(h2o_req_t *req, size_t server_name_and_connection_len)
 {
     size_t len = sizeof("HTTP/1.1  \r\nserver: \r\nconnection: \r\ncontent-length: \r\n\r\n") + 3 + strlen(req->res.reason) +
@@ -1131,6 +1138,7 @@ static void do_send_informational(struct st_h2o_http1_conn_t *conn)
     assert(!conn->_ostr_final.informational.write_inflight && conn->_ostr_final.informational.pending.size != 0);
 
     conn->_ostr_final.informational.write_inflight = 1;
+    set_req_io_timeout(conn, conn->super.ctx->globalconf->http1.req_io_timeout, req_io_on_timeout);
     h2o_socket_write(conn->sock, conn->_ostr_final.informational.pending.entries, conn->_ostr_final.informational.pending.size,
                      on_send_informational_complete);
     conn->_ostr_final.informational.pending.size = 0;
@@ -1153,8 +1161,12 @@ static void on_send_informational_complete(h2o_socket_t *sock, const char *err)
         return;
     }
 
-    if (conn->_ostr_final.informational.pending.size != 0)
+    if (conn->_ostr_final.informational.pending.size != 0) {
         do_send_informational(conn);
+    } else {
+        /* stop the timer set for writing the 1xx response(s); the final response has not been generated yet */
+        set_req_io_timeout(conn, 0, NULL);
+    }
 }
 
 static void finalostream_send_informational(h2o_ostream_t *_self, h2o_req_t *req)
@@ -1353,6 +1365,13 @@ void h2o_http1_upgrade(h2o_req_t *req, h2o_iovec_t *inbufs, size_t inbufcnt, h2o
         flatten_headers_estimate_size(&conn->req, conn->super.ctx->globalconf->server_name.len + sizeof("upgrade") - 1));
     bufs[0].len = flatten_headers(bufs[0].base, &conn->req, conn->req.res.status == 101 ? "upgrade" : "close");
     h2o_memcpy(bufs + 1, inbufs, sizeof(h2o_iovec_t) * inbufcnt);
+
+    /* Set the timer directly, as `set_req_io_timeout` does not do so for tunnels (e.g., WebSocket); the timer is not used for
+     * the tunnelled data but for writing the response. Upon timeout, the connection is closed and `on_complete` is notified. */
+    if (conn->_io_timeout_entry.cb != NULL)
+        h2o_timer_unlink(&conn->_io_timeout_entry);
+    conn->_io_timeout_entry.cb = on_upgrade_io_timeout;
+    h2o_timer_link(conn->super.ctx->loop, conn->super.ctx->globalconf->http1.req_io_timeout, &conn->_io_timeout_entry);
 
     h2o_socket_write(conn->sock, bufs, inbufcnt + 1, on_upgrade_complete);
 }
