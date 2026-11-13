@@ -71,6 +71,7 @@ static void enqueue_server_preface(h2o_http2_conn_t *conn)
     h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
     h2o_http2_encode_window_update_frame(
         &conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
@@ -1365,13 +1366,12 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     {
-        enqueue_server_preface(conn);
+        /* when upgrading from HTTP/1.1, the server connection preface has been sent already (see `on_upgrade_complete`) */
+        if (h2o_timeval_is_null(&conn->timestamps.settings_sent_at))
+            enqueue_server_preface(conn);
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
-        }
-        if (h2o_timeval_is_null(&conn->timestamps.settings_sent_at)) {
-            conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
         }
         h2o_http2_conn_request_write(conn);
     }
