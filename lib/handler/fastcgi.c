@@ -695,7 +695,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
                 goto Error;
             }
             h2o_buffer_consume(&sock->input, recsize);
-            can_keepalive = 1;
+            /* the connection cannot be reused if the application responded before we finished sending the request */
+            can_keepalive = !h2o_socket_is_writing(sock);
             goto EOS_Received;
         default:
             h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);
