@@ -127,6 +127,10 @@ void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *coo
         keys = h2o_mem_alloc(capacity * sizeof(*keys));
     }
 
+    /* drop the keys that `calc_key` never generates (the decoded keys are sorted in ascending order) */
+    while (num_keys != 0 && keys[num_keys - 1] >= (uint64_t)1 << casper->capacity_bits)
+        --num_keys;
+
     /* copy or merge the entries */
     if (num_keys == 0) {
         /* nothing to do */
@@ -160,6 +164,8 @@ void h2o_http2_casper_consume_cookie(h2o_http2_casper_t *casper, const char *coo
             } while (new_index != num_keys);
         }
         free(orig_keys);
+        free(casper->cookie_cache.base);
+        casper->cookie_cache = (h2o_iovec_t){NULL};
     }
 
 Exit:
