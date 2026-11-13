@@ -73,6 +73,7 @@ struct st_h2o_http2client_conn_t {
         h2o_http2_window_t window;
         ssize_t (*read_frame)(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
         h2o_buffer_t *headers_unparsed;
+        uint32_t headers_unparsed_stream_id;
     } input;
     h2o_mem_pool_t rst_streams_pool;
 };
@@ -458,6 +459,10 @@ static ssize_t expect_continuation_of_headers(struct st_h2o_http2client_conn_t *
         *err_desc = "expected CONTINUATION frame";
         return H2O_HTTP2_ERROR_PROTOCOL;
     }
+    if (frame.stream_id != conn->input.headers_unparsed_stream_id) {
+        *err_desc = "unexpected stream id in CONTINUATION frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
 
     stream = get_stream(conn, frame.stream_id);
     if (stream != NULL && stream->state.res == STREAM_STATE_CLOSED) {
@@ -647,6 +652,7 @@ static int handle_headers_frame(struct st_h2o_http2client_conn_t *conn, h2o_http
         h2o_buffer_reserve(&conn->input.headers_unparsed, payload.headers_len);
         memcpy(conn->input.headers_unparsed->bytes, payload.headers, payload.headers_len);
         conn->input.headers_unparsed->size = payload.headers_len;
+        conn->input.headers_unparsed_stream_id = frame->stream_id;
         return 0;
     }
 
