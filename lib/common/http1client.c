@@ -618,6 +618,9 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
             break;
         case STREAM_STATE_BODY:
+            /* the timer was used for sending the request; use it for receiving the response unless reading is paused */
+            if (h2o_socket_is_reading(client->sock))
+                h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             break;
         case STREAM_STATE_CLOSED:
             close_client(client);
