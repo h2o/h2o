@@ -124,6 +124,8 @@ static quicly_error_t handle_input_expect_data_frame(struct st_h2o_http3client_r
                                                      const uint8_t *src_end, quicly_error_t err, const char **err_desc);
 static void start_request(struct st_h2o_http3client_req_t *req);
 static int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream);
+static void on_first_byte_timeout(h2o_timer_t *entry);
+static void on_io_timeout(h2o_timer_t *entry);
 
 /**
  * Set while `on_send_emit` is calling `proceed_req`. Request body written synchronously during that period is not notified to
@@ -174,10 +176,20 @@ static void destroy_request(struct st_h2o_http3client_req_t *req)
     free(req);
 }
 
+static void link_timeout(struct st_h2o_http3client_req_t *req, h2o_timer_cb cb, uint64_t timeout)
+{
+    if (h2o_timer_is_linked(&req->super._timeout))
+        h2o_timer_unlink(&req->super._timeout);
+    req->super._timeout.cb = cb;
+    h2o_timer_link(req->super.ctx->loop, timeout, &req->super._timeout);
+}
+
 static void detach_stream(struct st_h2o_http3client_req_t *req)
 {
     /* the request might outlive the connection once the stream is detached */
     uncount_request(req);
+    if (h2o_timer_is_linked(&req->super._timeout))
+        h2o_timer_unlink(&req->super._timeout);
     req->quic->callbacks = &quicly_stream_noop_callbacks;
     req->quic->data = NULL;
     req->quic = NULL;
@@ -196,6 +208,7 @@ static void close_stream(struct st_h2o_http3client_req_t *req, quicly_error_t er
 static void write_datagrams(h2o_httpclient_t *_client, h2o_iovec_t *datagrams, size_t num_datagrams)
 {
     struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, super, _client);
+    link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
     h2o_http3_send_h3_datagrams(&req->conn->super, req->quic->stream_id, datagrams, num_datagrams);
 }
 
@@ -460,6 +473,40 @@ static int call_on_body(struct st_h2o_http3client_req_t *req, const char *errstr
     return ret;
 }
 
+static void handle_stream_error(struct st_h2o_http3client_req_t *req, quicly_error_t err, const char *errstr)
+{
+    notify_response_error(req, errstr);
+    int send_is_open = quicly_sendstate_is_open(&req->quic->sendstate);
+    close_stream(req, err);
+    /* immediately dispose of the request if possible, or wait for the send-side to close */
+    if (!send_is_open) {
+        destroy_request(req);
+    } else if (req->proceed_req.bytes_inflight != SIZE_MAX) {
+        call_proceed_req(req, errstr);
+        destroy_request(req);
+    } else {
+        /* wait for write_req to be called */
+    }
+}
+
+static void handle_timeout(h2o_timer_t *entry, const char *errstr)
+{
+    struct st_h2o_http3client_req_t *req = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3client_req_t, super._timeout, entry);
+    h2o_quic_conn_t *conn = &req->conn->super.super;
+    handle_stream_error(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED, errstr);
+    h2o_quic_schedule_timer(conn);
+}
+
+static void on_first_byte_timeout(h2o_timer_t *entry)
+{
+    handle_timeout(entry, h2o_httpclient_error_first_byte_timeout);
+}
+
+static void on_io_timeout(h2o_timer_t *entry)
+{
+    handle_timeout(entry, h2o_httpclient_error_io_timeout);
+}
+
 static quicly_error_t handle_input_data_payload(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                                 quicly_error_t err, const char **err_desc)
 {
@@ -670,6 +717,16 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *dst, size_t *len
         if (req->sendbuf->size > off + *len)
             *wrote_all = 0;
     }
+
+    /* Restart the timer when new bytes are emitted; once the entire request has been emitted, wait for the first byte of the
+     * response. Retransmissions are not counted, as they do not indicate the progress of the request. */
+    if (qs->sendstate.acked.ranges[0].end + off + *len > qs->sendstate.size_inflight) {
+        if (*wrote_all && !quicly_sendstate_is_open(&qs->sendstate) && req->response_state == H2O_HTTP3CLIENT_RESPONSE_STATE_HEAD) {
+            link_timeout(req, on_first_byte_timeout, req->super.ctx->first_byte_timeout);
+        } else {
+            link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
+        }
+    }
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -717,6 +774,14 @@ static quicly_error_t on_receive_process_bytes(struct st_h2o_http3client_req_t *
 
 static void finish_processing_input(struct st_h2o_http3client_req_t *req, size_t bytes_consumed, quicly_error_t err)
 {
+    /* as http1client does, stop the timer while the response body buffer is full, as it is not the server that is stalling */
+    if (!quicly_recvstate_transfer_complete(&req->quic->recvstate) && req->recvbuf.body->size >= req->super.ctx->max_buffer_size) {
+        if (h2o_timer_is_linked(&req->super._timeout))
+            h2o_timer_unlink(&req->super._timeout);
+    } else {
+        link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
+    }
+
     /* update QUIC stream-level state */
     if (bytes_consumed != 0)
         quicly_stream_sync_recvbuf(req->quic, bytes_consumed);
@@ -730,18 +795,7 @@ static void finish_processing_input(struct st_h2o_http3client_req_t *req, size_t
             destroy_request(req);
         }
     } else if (err != 0) {
-        notify_response_error(req, h2o_httpclient_error_io);
-        int send_is_open = quicly_sendstate_is_open(&req->quic->sendstate);
-        close_stream(req, err);
-        /* immediately dispose of the request if possible, or wait for the send-side to close */
-        if (!send_is_open) {
-            destroy_request(req);
-        } else if (req->proceed_req.bytes_inflight != SIZE_MAX) {
-            call_proceed_req(req, h2o_httpclient_error_io);
-            destroy_request(req);
-        } else {
-            /* wait for write_req to be called */
-        }
+        handle_stream_error(req, err, h2o_httpclient_error_io);
     }
 }
 
@@ -853,6 +907,7 @@ void start_request(struct st_h2o_http3client_req_t *req)
     quicly_stream_sync_sendbuf(req->quic, 1);
 
     req->handle_input = handle_input_expect_headers;
+    link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
 }
 
 static void cancel_request(h2o_httpclient_t *_client)
@@ -888,8 +943,12 @@ static void do_update_window(h2o_httpclient_t *_client)
     struct st_h2o_http3client_req_t *req = (void *)_client;
     h2o_quic_conn_t *conn = &req->conn->super.super;
 
+    if (req->quic == NULL)
+        return;
+    link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
+
     /* resume processing the bytes that have been retained while the response body buffer was full */
-    if (req->quic == NULL || quicly_recvstate_bytes_available(&req->quic->recvstate) == 0)
+    if (quicly_recvstate_bytes_available(&req->quic->recvstate) == 0)
         return;
     process_buffered_input(req);
     h2o_quic_schedule_timer(conn);
@@ -918,6 +977,9 @@ int do_write_req(h2o_httpclient_t *_client, h2o_iovec_t chunk, int is_end_stream
     if (is_end_stream) {
         assert(quicly_sendstate_is_open(&req->quic->sendstate));
         quicly_sendstate_shutdown(&req->quic->sendstate, req->quic->sendstate.acked.ranges[0].end + req->sendbuf->size);
+        /* `on_send_emit` is not called for a FIN without data; the entire request has been sent when it goes out */
+        if (chunk.len == 0 && req->response_state == H2O_HTTP3CLIENT_RESPONSE_STATE_HEAD)
+            link_timeout(req, on_first_byte_timeout, req->super.ctx->first_byte_timeout);
     } else {
         assert(chunk.len != 0);
     }
@@ -1028,8 +1090,10 @@ static void on_receive_datagram_frame(quicly_receive_datagram_frame_t *self, qui
         return;
 
     struct st_h2o_http3client_req_t *req = qs->data;
-    if (req != NULL && req->on_read_datagrams != NULL)
+    if (req != NULL && req->on_read_datagrams != NULL) {
+        link_timeout(req, on_io_timeout, req->super.ctx->io_timeout);
         req->on_read_datagrams(&req->super, &payload, 1);
+    }
 }
 
 quicly_receive_datagram_frame_t h2o_httpclient_http3_on_receive_datagram_frame = {on_receive_datagram_frame};
