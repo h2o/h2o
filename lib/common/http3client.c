@@ -107,6 +107,10 @@ struct st_h2o_http3client_req_t {
         H2O_HTTP3CLIENT_RESPONSE_STATE_CLOSED
     } response_state;
     /**
+     * number of informational responses received
+     */
+    unsigned num_informational;
+    /**
      * callback used for forwarding CONNECT-UDP using H3_DATAGRAMS
      */
     h2o_httpclient_forward_datagram_cb on_read_datagrams;
@@ -596,6 +600,10 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
         if (frame_is_eos) {
             notify_response_error(req, h2o_httpclient_error_io);
             return 0;
+        }
+        if (++req->num_informational > H2O_HTTPCLIENT_MAX_INFORMATIONAL_RESPONSES) {
+            notify_response_error(req, h2o_httpclient_error_too_many_informational);
+            return H2O_HTTP3_ERROR_REQUEST_CANCELLED;
         }
         if (req->super.informational_cb != NULL &&
             req->super.informational_cb(&req->super, 0x300, status, h2o_iovec_init(NULL, 0), headers.entries, headers.size) != 0) {

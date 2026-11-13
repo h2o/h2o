@@ -39,6 +39,7 @@ const char h2o_httpclient_error_protocol_violation[] = "protocol violation";
 const char h2o_httpclient_error_internal[] = "internal error";
 const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
 const char h2o_httpclient_error_unexpected_101[] = "received unexpected 101 response";
+const char h2o_httpclient_error_too_many_informational[] = "too many informational responses";
 
 /**
  * Used to indicate that the HTTP request is to be "upgraded" into a CONNECT tunnel.
