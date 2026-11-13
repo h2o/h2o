@@ -427,8 +427,10 @@ static void send_decompressed(h2o_ostream_t *_self, h2o_req_t *req, h2o_sendvec_
     h2o_sendvec_t *outbufs;
     size_t outbufcnt;
 
-    state = h2o_compress_transform(self->decompressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
-    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, state);
+    h2o_send_state_t transformed = h2o_compress_transform(self->decompressor, req, inbufs, inbufcnt, state, &outbufs, &outbufcnt);
+    if (transformed == H2O_SEND_STATE_ERROR && state != H2O_SEND_STATE_ERROR)
+        h2o_req_log_error(req, "lib/handler/file.c", "failed to decompress the file");
+    h2o_ostream_send_next(&self->super, req, outbufs, outbufcnt, transformed);
 }
 
 static void do_send_file(struct st_h2o_sendfile_generator_t *self, h2o_req_t *req, int status, const char *reason,

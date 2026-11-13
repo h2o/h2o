@@ -122,8 +122,27 @@ void test_gzip_multi(void)
 #undef P3
 }
 
+void test_gunzip_corrupt(void)
+{
+    h2o_mem_pool_t pool;
+    h2o_sendvec_t inbuf, *outbufs;
+    size_t outbufcnt;
+
+    h2o_mem_init_pool(&pool);
+
+    /* a gzip header followed by bytes that are not valid deflate data */
+    static const char corrupt[] = "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03\xff\xff\xff\xff\xff\xff\xff\xff";
+    h2o_compress_context_t *decompressor = h2o_compress_gunzip_open(&pool);
+    h2o_sendvec_init_raw(&inbuf, corrupt, sizeof(corrupt) - 1);
+    h2o_send_state_t state = h2o_compress_transform(decompressor, NULL, &inbuf, 1, H2O_SEND_STATE_FINAL, &outbufs, &outbufcnt);
+    ok(state == H2O_SEND_STATE_ERROR);
+
+    h2o_mem_clear_pool(&pool);
+}
+
 void test_lib__handler__gzip_c()
 {
     subtest("gzip_simple", test_gzip_simple);
     subtest("gzip_multi", test_gzip_multi);
+    subtest("gunzip_corrupt", test_gunzip_corrupt);
 }

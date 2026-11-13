@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use Test::More;
 use t::Util;
 
@@ -101,6 +102,33 @@ EOT
 
     $doit->("gunzip", "", ['/alice2.txt'], $alice2_orig_len);
     $doit->("gunzip", q{--header "Accept-Encoding: gzip"}, ['/alice2.txt'], $alice2_gz_len);
+};
+
+subtest 'gunzip-corrupt' => sub {
+    my $docroot = tempdir(CLEANUP => 1);
+    {
+        open my $fh, '>', "$docroot/corrupt.txt.gz"
+            or die "failed to create file:$!";
+        # gzip header followed by bytes that are not valid deflate data
+        print $fh "\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\x03" . ("\xff" x 8);
+        close $fh;
+        open $fh, '>', "$docroot/ok.txt"
+            or die "failed to create file:$!";
+        print $fh "ok\n";
+        close $fh;
+    }
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        file.dir: $docroot
+        file.send-compressed: gunzip
+EOT
+    my $resp = `curl --silent --max-time 10 http://127.0.0.1:$server->{port}/corrupt.txt`;
+    is $resp, "", "nothing is decoded from the corrupt file";
+    $resp = `curl --silent --max-time 10 http://127.0.0.1:$server->{port}/ok.txt`;
+    is $resp, "ok\n", "server is still running";
 };
 
 subtest 'dir-listing' => sub {
