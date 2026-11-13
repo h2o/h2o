@@ -43,6 +43,14 @@ EOT
         like $headers, qr{^HTTP/1\.1 200 }s, "status";
         is $body, "hello dankogai\n", "content";
     };
+
+    for my $auth ("Authorization: Basic", "Authorization;", "Authorization: Basic ZGFua29nYWk=") {
+        subtest "malformed ($auth)" => sub {
+            my ($headers, $body) = run_prog("curl --silent --dump-header /dev/stderr -H '$auth' http://127.0.0.1:$server->{port}/");
+            like $headers, qr{^HTTP/1\.1 401 }s, "status";
+            unlike $body, qr/hello/;
+        };
+    }
 };
 
 done_testing();
