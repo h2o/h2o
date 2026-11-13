@@ -55,6 +55,20 @@ EOT
     is $body, "123";
 };
 
+subtest "unparsable x-reproxy-url" => sub {
+    my $server = spawn_h2o(<< "EOT");
+reproxy: ON
+hosts:
+  default:
+    paths:
+      "/":
+        proxy.reverse.url: http://127.0.0.1:$upstream/
+EOT
+    my ($headers, $body) = run_prog(
+        "curl --max-time 5 --silent --dump-header /dev/stderr 'http://127.0.0.1:$server->{port}/?resp:x-reproxy-url=http://127.0.0.1:99999/'");
+    like $headers, qr{^HTTP/1\.1 502 }is;
+};
+
 subtest "internal-redirect-within-proxy" => sub {
     plan skip_all => 'mruby support is off'
         unless server_features()->{mruby};
