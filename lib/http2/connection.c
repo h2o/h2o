@@ -758,12 +758,22 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 {
     size_t dummy_content_length;
     h2o_iovec_t dummy_expect = h2o_iovec_init(NULL, 0);
+    h2o_headers_t trailers = {NULL};
     int ret;
 
+    /* Trailers are decoded to keep the HPACK state in sync, but are discarded, as they cannot be merged into the request headers
+     * (RFC 9110 Section 6.5.1). The other protocol handlers discard them as well. */
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
-                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
-                                       err_desc)) != 0)
-        return ret;
+                                       NULL, NULL, &trailers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
+                                       err_desc)) != 0) {
+        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+            return ret;
+        /* malformed (RFC 9113 Section 8.1.1) */
+        stream->reset_by_peer_action = 1;
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_stream_reset(conn, stream);
+        return 0;
+    }
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
 }
