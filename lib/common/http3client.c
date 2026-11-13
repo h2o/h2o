@@ -544,10 +544,8 @@ static quicly_error_t handle_input_expect_headers(struct st_h2o_http3client_req_
     if ((ret = h2o_http3_read_frame(&frame, 1, H2O_HTTP3_STREAM_TYPE_REQUEST, req->conn->super.max_frame_payload_size, src, src_end,
                                     err_desc)) != 0) {
         if (ret == H2O_HTTP3_ERROR_INCOMPLETE) {
-            if (err != 0) {
+            if (err != 0)
                 notify_response_error(req, h2o_httpclient_error_io);
-                return 0;
-            }
             return ret;
         }
         notify_response_error(req, "response header too large");
