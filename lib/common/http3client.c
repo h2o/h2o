@@ -696,14 +696,15 @@ static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
 static quicly_error_t on_receive_process_bytes(struct st_h2o_http3client_req_t *req, const uint8_t **src, const uint8_t *src_end,
                                                const char **err_desc)
 {
-    int is_eos = quicly_recvstate_transfer_complete(&req->quic->recvstate);
-    assert(is_eos || *src != src_end);
+    int is_complete = quicly_recvstate_transfer_complete(&req->quic->recvstate),
+        is_eos = is_complete && req->quic->recvstate.app_error_code == UINT64_MAX;
+    assert(is_complete || *src != src_end);
     quicly_error_t ret = 0;
 
     do {
         /* stop processing (thereby not extending the stream-level window) while the response body buffer is full, unless the
          * entire stream has been received */
-        if (!is_eos && req->recvbuf.body->size >= req->super.ctx->max_buffer_size)
+        if (!is_complete && req->recvbuf.body->size >= req->super.ctx->max_buffer_size)
             break;
         if ((ret = req->handle_input(req, src, src_end, is_eos ? ERROR_EOS : 0, err_desc)) != 0) {
             if (ret == H2O_HTTP3_ERROR_INCOMPLETE)
@@ -724,9 +725,16 @@ static void finish_processing_input(struct st_h2o_http3client_req_t *req, size_t
 
     /* cleanup */
     if (quicly_recvstate_transfer_complete(&req->quic->recvstate)) {
-        /* destroy the request if send-side is already closed, otherwise wait until the send-side gets closed */
-        if (quicly_sendstate_transfer_complete(&req->quic->sendstate)) {
-            detach_stream(req);
+        if (req->quic->recvstate.app_error_code == UINT64_MAX) {
+            /* destroy the request if send-side is already closed, otherwise wait until the send-side gets closed */
+            if (quicly_sendstate_transfer_complete(&req->quic->sendstate)) {
+                detach_stream(req);
+                destroy_request(req);
+            }
+        } else {
+            /* reset by peer */
+            notify_response_error(req, h2o_httpclient_error_io);
+            close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
             destroy_request(req);
         }
     } else if (err != 0) {
@@ -788,15 +796,6 @@ static void on_receive(quicly_stream_t *qs, size_t off, const void *input, size_
         return;
 
     process_buffered_input(req);
-}
-
-static void on_receive_reset(quicly_stream_t *qs, quicly_error_t err)
-{
-    struct st_h2o_http3client_req_t *req = qs->data;
-
-    notify_response_error(req, h2o_httpclient_error_io);
-    close_stream(req, H2O_HTTP3_ERROR_REQUEST_CANCELLED);
-    destroy_request(req);
 }
 
 void start_request(struct st_h2o_http3client_req_t *req)
@@ -1001,7 +1000,7 @@ static quicly_error_t stream_open_cb(quicly_stream_open_t *self, quicly_stream_t
         h2o_http3_on_create_unidirectional_stream(qs);
     } else {
         static const quicly_stream_callbacks_t callbacks = {on_stream_destroy, on_send_shift, on_send_emit,
-                                                            on_send_stop,      on_receive,    on_receive_reset};
+                                                            on_send_stop,      on_receive,    NULL};
         assert(quicly_stream_is_client_initiated(qs->stream_id));
         qs->callbacks = &callbacks;
     }
