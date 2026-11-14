@@ -796,6 +796,7 @@ int main(int argc, char **argv)
     quicly_amend_ptls_context(&h3ctx.tls);
     h3ctx.quic = quicly_spec_context;
     h3ctx.quic.transport_params.max_streams_uni = 10;
+    h3ctx.quic.transport_params.max_streams_bidi = 0;
     h3ctx.quic.transport_params.max_stream_data.uni = h2o_http3_calc_min_flow_control_size(H2O_MAX_REQLEN);
     h3ctx.quic.transport_params.max_datagram_frame_size = 1500;
     h3ctx.quic.receive_datagram_frame = &h2o_httpclient_http3_on_receive_datagram_frame;
