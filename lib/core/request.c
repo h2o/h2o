@@ -691,6 +691,7 @@ void h2o_send_error_generic(h2o_req_t *req, int status, const char *reason, cons
     static void send_error_deferred_cb_##status_(h2o_timer_t *entry)                                                               \
     {                                                                                                                              \
         struct st_send_error_deferred_t *args = H2O_STRUCT_FROM_MEMBER(struct st_send_error_deferred_t, super.timeout, entry);     \
+        close_generator_and_filters(args->super.req);                                                                              \
         reset_response(args->super.req);                                                                                           \
         args->super.req->conn->ctx->emitted_error_status[H2O_STATUS_ERROR_##status_]++;                                            \
         h2o_send_error_generic(args->super.req, args->status, args->reason, args->body, args->flags);                              \

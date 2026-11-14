@@ -656,6 +656,14 @@ static void test_parse(void)
     ok(ret == 0);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/?abc")));
 
+    /* SP and control characters are percent-encoded and tab, LF, CR are removed, as browsers do */
+    ret = h2o_url_parse(&pool, "http://example.com/a b\t\r\nc\x7f", SIZE_MAX, &parsed);
+    ok(ret == 0);
+    ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/a%20bc%7F")));
+    ret = h2o_url_parse(&pool, "http://example.com?a b", SIZE_MAX, &parsed);
+    ok(ret == 0);
+    ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/?a%20b")));
+
     h2o_mem_clear_pool(&pool);
 }
 
@@ -675,6 +683,10 @@ static void test_parse_relative(void)
     ok(parsed.host.base == NULL);
     ok(parsed._port == 65535);
     ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("abc")));
+
+    ret = h2o_url_parse_relative(&pool, "/a b\x01", SIZE_MAX, &parsed);
+    ok(ret == 0);
+    ok(h2o_memis(parsed.path.base, parsed.path.len, H2O_STRLIT("/a%20b%01")));
 
     memset(&parsed, 0x55, sizeof(parsed));
     ret = h2o_url_parse_relative(&pool, "/abc", SIZE_MAX, &parsed);

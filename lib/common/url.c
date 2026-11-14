@@ -244,6 +244,40 @@ const char *h2o_url_parse_hostport(const char *s, size_t len, h2o_iovec_t *host,
     return token_start;
 }
 
+/**
+ * Returns the path, after percent-encoding SP and control characters and removing tab, LF, and CR, as the URL Standard does when
+ * parsing URLs (https://url.spec.whatwg.org/), so that the path can be used as the request-target.
+ */
+static h2o_iovec_t normalize_path(h2o_mem_pool_t *pool, const char *src, size_t len)
+{
+    size_t i;
+
+    for (i = 0; i != len; ++i) {
+        if ((unsigned char)src[i] <= ' ' || src[i] == 0x7f)
+            goto Rewrite;
+    }
+    return h2o_iovec_init(src, len);
+
+Rewrite: {
+    char *dst = h2o_mem_alloc_pool(pool, char, i + (len - i) * 3), *d = dst;
+    memcpy(d, src, i);
+    d += i;
+    for (; i != len; ++i) {
+        unsigned char ch = src[i];
+        if (ch == '\t' || ch == '\n' || ch == '\r')
+            continue;
+        if (ch <= ' ' || ch == 0x7f) {
+            *d++ = '%';
+            *d++ = "0123456789ABCDEF"[ch >> 4];
+            *d++ = "0123456789ABCDEF"[ch & 0xf];
+        } else {
+            *d++ = ch;
+        }
+    }
+    return h2o_iovec_init(dst, d - dst);
+}
+}
+
 static int parse_authority_and_path(h2o_mem_pool_t *pool, const char *src, const char *url_end, h2o_url_t *parsed)
 {
     const char *p = h2o_url_parse_hostport(src, url_end - src, &parsed->host, &parsed->_port);
@@ -253,9 +287,9 @@ static int parse_authority_and_path(h2o_mem_pool_t *pool, const char *src, const
     if (p == url_end) {
         parsed->path = h2o_iovec_init(H2O_STRLIT("/"));
     } else if (*p == '/') {
-        parsed->path = h2o_iovec_init(p, url_end - p);
+        parsed->path = normalize_path(pool, p, url_end - p);
     } else if (*p == '?') {
-        parsed->path = h2o_concat(pool, h2o_iovec_init(H2O_STRLIT("/")), h2o_iovec_init(p, url_end - p));
+        parsed->path = h2o_concat(pool, h2o_iovec_init(H2O_STRLIT("/")), normalize_path(pool, p, url_end - p));
     } else {
         return -1;
     }
@@ -304,7 +338,7 @@ int h2o_url_parse_relative(h2o_mem_pool_t *pool, const char *url, size_t url_len
     parsed->authority = (h2o_iovec_t){NULL};
     parsed->host = (h2o_iovec_t){NULL};
     parsed->_port = 65535;
-    parsed->path = h2o_iovec_init(p, url_end - p);
+    parsed->path = normalize_path(pool, p, url_end - p);
 
     return 0;
 }
