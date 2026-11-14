@@ -236,6 +236,61 @@ static void test_zerocopy_buffers_random(void)
 #undef RAND
 }
 
+#if !H2O_USE_LIBUV && defined(__linux__) && H2O_USE_EPOLL
+static void on_write_between_turns(h2o_socket_t *sock, const char *err)
+{
+    int *completed = sock->data;
+    ok(err == NULL);
+    ++*completed;
+}
+
+static void test_write_between_turns(void)
+{
+    int fds[2], sndbuf = 4096, completed = 0;
+    char payload[14000], received[14000];
+    h2o_evloop_t *loop = h2o_evloop_create();
+
+    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0, fds) != 0 ||
+        setsockopt(fds[0], SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
+        h2o_fatal("failed to set up socketpair");
+    h2o_socket_t *sock = h2o_evloop_socket_create(loop, fds[0], 0);
+    sock->data = &completed;
+    for (size_t i = 0; i < sizeof(payload); ++i)
+        payload[i] = (char)(i % 251);
+
+    /* Linux AF_UNIX with SO_SNDBUF=4096 accepts 8064 bytes of this write. */
+    h2o_iovec_t vec = h2o_iovec_init(payload, 12000);
+    h2o_socket_write(sock, &vec, 1, on_write_between_turns);
+    ok(completed == 0 && h2o_socket_is_writing(sock));
+    ok(h2o_evloop_run(loop, 0) == 0);
+    ok(completed == 0);
+    ok(read(fds[1], received, sizeof(received)) == 8064);
+    ok(memcmp(received, payload, 8064) == 0);
+    ok(h2o_evloop_run(loop, 0) == 0);
+    ok(completed == 1 && !h2o_socket_is_writing(sock));
+
+    /* Submit an immediately completed write before the previous interest update is consumed. */
+    vec = h2o_iovec_init(payload + 12000, 2000);
+    h2o_socket_write(sock, &vec, 1, on_write_between_turns);
+    ok(completed == 1 && h2o_socket_is_writing(sock));
+    ok(sock->_write_buf.cnt == 0);
+    ok(h2o_evloop_run(loop, 0) == 0);
+    ok(completed == 2 && !h2o_socket_is_writing(sock));
+    ok(read(fds[1], received + 8064, sizeof(received) - 8064) == 5936);
+    ok(memcmp(received, payload, sizeof(payload)) == 0);
+
+    /* Draining the peer makes stale EPOLLOUT interest observable on the fourth turn. */
+    ok(h2o_evloop_run(loop, 0) == 0);
+    ok(completed == 2 && !h2o_socket_is_writing(sock));
+    ok(read(fds[1], received, sizeof(received)) == -1 && (errno == EAGAIN || errno == EWOULDBLOCK));
+
+    h2o_socket_close(sock);
+    ok(h2o_evloop_run(loop, 0) == 0);
+    ok(close(fds[1]) == 0);
+    h2o_evloop_destroy(loop);
+}
+#endif
+
 void test_lib__common__socket_c(void)
 {
     subtest("on_alpn_select", test_on_alpn_select);
@@ -243,4 +298,9 @@ void test_lib__common__socket_c(void)
     subtest("prepare_for_latency_optimization", test_prepare_for_latency_optimization);
     subtest("zerocopy_buffers", test_zerocopy_buffers);
     subtest("zerocopy_buffers_random", test_zerocopy_buffers_random);
+#if !H2O_USE_LIBUV && defined(__linux__) && H2O_USE_EPOLL
+    subtest("write_between_turns", test_write_between_turns);
+#else
+    note("write_between_turns requires Linux epoll and Linux AF_UNIX buffer sizes");
+#endif
 }
