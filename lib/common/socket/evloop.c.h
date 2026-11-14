@@ -866,6 +866,7 @@ static void run_socket(struct st_h2o_evloop_socket_t *sock)
             }
             sock->_flags &= ~(H2O_SOCKET_FLAG_IS_CONNECTING | H2O_SOCKET_FLAG_IS_CONNECTING_CONNECTED);
         }
+        link_to_statechanged(sock);
         on_write_complete(&sock->super, err);
     }
 }
