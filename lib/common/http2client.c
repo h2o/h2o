@@ -103,6 +103,7 @@ struct st_h2o_http2client_stream_t {
         h2o_buffer_t *body;
         h2o_headers_t trailers;
         size_t remaining_content_length;
+        unsigned num_informational;
         unsigned message_body_forbidden : 1;
     } input;
 
@@ -349,6 +350,11 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         if (is_end_stream) {
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
+        }
+        if (++stream->input.num_informational > H2O_HTTPCLIENT_MAX_INFORMATIONAL_RESPONSES) {
+            call_callback_with_error(stream, h2o_httpclient_error_too_many_informational);
+            ret = H2O_HTTP2_ERROR_CANCEL;
+            goto SendRSTStream;
         }
         if (stream->input.status == 100 && stream->send_own_expect) {
             stream->input.status = 0;

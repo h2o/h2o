@@ -82,6 +82,7 @@ struct st_h2o_http1client_t {
      * maintain the number of bytes being already processed on the associated socket
      */
     uint64_t _socket_bytes_processed;
+    unsigned _num_informational;
     unsigned _is_chunked : 1;
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
@@ -471,7 +472,12 @@ static void on_head(h2o_socket_t *sock, const char *err)
                 return;
             }
             break;
-        } else if (http_status == 100 || http_status >= 200) {
+        }
+        if (http_status <= 199 && ++client->_num_informational > H2O_HTTPCLIENT_MAX_INFORMATIONAL_RESPONSES) {
+            on_error(client, h2o_httpclient_error_too_many_informational);
+            return;
+        }
+        if (http_status == 100 || http_status >= 200) {
             /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
              * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634. */
             if (client->_send_own_expect) {

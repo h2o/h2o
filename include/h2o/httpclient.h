@@ -36,6 +36,11 @@ extern "C" {
 
 typedef struct st_h2o_httpclient_t h2o_httpclient_t;
 
+/**
+ * maximum number of informational (1xx) responses accepted for each request; the request fails when more are received
+ */
+#define H2O_HTTPCLIENT_MAX_INFORMATIONAL_RESPONSES 10
+
 typedef void (*h2o_httpclient_forward_datagram_cb)(h2o_httpclient_t *client, h2o_iovec_t *datagrams, size_t num_datagrams);
 
 /**
@@ -400,6 +405,7 @@ extern const char h2o_httpclient_error_protocol_violation[];
 extern const char h2o_httpclient_error_internal[];
 extern const char h2o_httpclient_error_malformed_frame[];
 extern const char h2o_httpclient_error_unexpected_101[];
+extern const char h2o_httpclient_error_too_many_informational[];
 
 extern const char h2o_httpclient_upgrade_to_connect[];
 
