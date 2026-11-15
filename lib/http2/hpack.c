@@ -548,6 +548,8 @@ int h2o_hpack_parse_request(h2o_mem_pool_t *pool, h2o_hpack_decode_header_cb dec
             *err_desc = h2o_hpack_err_headers_too_long;
             return H2O_HTTP2_ERROR_COMPRESSION;
         }
+        if (headers == NULL)
+            goto Next;
         decoded_size += name->len + value.len;
         if (decoded_size > H2O_MAX_REQLEN && *err_desc == NULL)
             *err_desc = h2o_hpack_err_headers_too_long;
