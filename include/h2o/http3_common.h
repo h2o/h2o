@@ -290,7 +290,18 @@ struct st_h2o_quic_conn_t {
      * unless set to NULL, the connection is QUIC on Streams using `streams_sock` as the underlying socket
      */
     h2o_socket_t *streams_sock;
+    /**
+     * the record being written to `streams_sock` (of H2O_QUIC_STREAMS_SENDBUF_SIZE bytes, allocated on first use);
+     * `h2o_socket_write` does not copy the data, which therefore has to remain until the write completes
+     */
+    uint8_t *_streams_sendbuf;
 };
+
+/**
+ * size of `h2o_quic_conn_t::_streams_sendbuf`; holds one QMux record, which is the 2-byte header and up to 16382 bytes (the maximum
+ * record size of quicly)
+ */
+#define H2O_QUIC_STREAMS_SENDBUF_SIZE 16384
 
 typedef struct st_h2o_http3_qpack_context_t {
     /**

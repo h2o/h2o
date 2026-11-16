@@ -1251,6 +1251,7 @@ void h2o_quic_dispose_conn(h2o_quic_conn_t *conn)
     }
     if (conn->streams_sock != NULL)
         h2o_socket_close(conn->streams_sock);
+    free(conn->_streams_sendbuf);
     h2o_timer_unlink(&conn->_timeout);
 }
 
@@ -1452,8 +1453,11 @@ quicly_error_t h2o_quic_send(h2o_quic_conn_t *conn)
     if (conn->streams_sock != NULL) {
         if (h2o_socket_is_writing(conn->streams_sock))
             return 1;
-        uint8_t buf[16384];
-        h2o_iovec_t vec = h2o_iovec_init(buf, sizeof(buf));
+        /* The record is built in a buffer of the connection, as `h2o_socket_write` does not copy the data, and the rest of a record
+         * written partially is written once the socket becomes writable. One write is in flight at a time (see above). */
+        if (conn->_streams_sendbuf == NULL)
+            conn->_streams_sendbuf = h2o_mem_alloc(H2O_QUIC_STREAMS_SENDBUF_SIZE);
+        h2o_iovec_t vec = h2o_iovec_init(conn->_streams_sendbuf, H2O_QUIC_STREAMS_SENDBUF_SIZE);
         if ((send_result = quicly_qmux_send(conn->quic, vec.base, &vec.len)) != 0)
             goto Fail;
         if (vec.len != 0)
