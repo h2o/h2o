@@ -53,6 +53,14 @@ int h2o_http2_update_peer_settings(h2o_http2_settings_t *settings, const uint8_t
             SET(MAX_CONCURRENT_STREAMS, max_concurrent_streams, 0, UINT32_MAX, 0);
             SET(INITIAL_WINDOW_SIZE, initial_window_size, 0, 0x7fffffff, H2O_HTTP2_ERROR_FLOW_CONTROL);
             SET(MAX_FRAME_SIZE, max_frame_size, 16384, 16777215, H2O_HTTP2_ERROR_PROTOCOL);
+            /* only clients are required to validate WT_ENABLED (draft-ietf-webtrans-http2-15 section 3.1) */
+            SET(WT_ENABLED, webtransport.enabled, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_DATA, webtransport.initial_max_data, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_STREAM_DATA_UNI, webtransport.initial_max_stream_data_uni, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_STREAM_DATA_BIDI_LOCAL, webtransport.initial_max_stream_data_bidi_local, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_STREAM_DATA_BIDI_REMOTE, webtransport.initial_max_stream_data_bidi_remote, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_STREAMS_UNI, webtransport.initial_max_streams_uni, 0, UINT32_MAX, 0);
+            SET(WT_INITIAL_MAX_STREAMS_BIDI, webtransport.initial_max_streams_bidi, 0, UINT32_MAX, 0);
 #undef SET
         default:
             /* ignore unknown (5.5) */
