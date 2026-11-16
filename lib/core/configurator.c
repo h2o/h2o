@@ -438,6 +438,16 @@ static int on_config_http1_request_io_timeout(h2o_configurator_command_t *cmd, h
     return config_timeout(cmd, node, &ctx->globalconf->http1.req_io_timeout);
 }
 
+static int on_config_http1_request_io_timeout_while_generating(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx,
+                                                                yoml_t *node)
+{
+    ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
+    if (ret == -1)
+        return -1;
+    ctx->globalconf->http1.req_io_timeout_while_generating = (int)ret;
+    return 0;
+}
+
 static int on_config_http1_upgrade_to_http2(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
     ssize_t ret = h2o_configurator_get_one_of(cmd, node, "OFF,ON");
@@ -1077,6 +1087,9 @@ void h2o_configurator__init_core(h2o_globalconf_t *conf)
         h2o_configurator_define_command(&c->super, "http1-request-io-timeout",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_request_io_timeout);
+        h2o_configurator_define_command(&c->super, "http1-request-io-timeout-while-generating",
+                                        H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
+                                        on_config_http1_request_io_timeout_while_generating);
         h2o_configurator_define_command(&c->super, "http1-upgrade-to-http2",
                                         H2O_CONFIGURATOR_FLAG_GLOBAL | H2O_CONFIGURATOR_FLAG_EXPECT_SCALAR,
                                         on_config_http1_upgrade_to_http2);
