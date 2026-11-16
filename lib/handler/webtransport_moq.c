@@ -47,7 +47,7 @@
 /**
  * the MoQ drafts being supported, used as the WebTransport subprotocol and the ALPN
  */
-static const char *supported_protocols[] = {"moqt-20", "moqt-21", "moqt-22", NULL};
+static const char *supported_protocols[] = {"moqt-20", "moqt-21", "moqt-22", "moqt-23", NULL};
 
 struct st_wtmoq_handler_t {
     h2o_handler_t super;
