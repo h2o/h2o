@@ -3441,13 +3441,16 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
             const char *url = (*moq_node)->data.scalar;
             h2o_iovec_t moq_host;
             uint16_t moq_port;
-            if (strncmp(url, "moqt://", 7) != 0 || h2o_url_parse_hostport(url + 7, strlen(url + 7), &moq_host, &moq_port) == NULL ||
+            if (strncmp(url, "unix:/", 6) == 0) {
+                moq = h2o_webtransport_moq_native_create_unix(url + 5);
+            } else if (strncmp(url, "moqt://", 7) != 0 || h2o_url_parse_hostport(url + 7, strlen(url + 7), &moq_host, &moq_port) == NULL ||
                 moq_port == 65535) {
-                h2o_configurator_errprintf(cmd, *moq_node, "`moq` must be in the form of `moqt://host:port`");
+                h2o_configurator_errprintf(cmd, *moq_node, "`moq` must be in the form of `moqt://host:port` or `unix:<path>`");
                 freeaddrinfo(res);
                 return -1;
+            } else {
+                moq = h2o_webtransport_moq_native_create(moq_host, moq_port);
             }
-            moq = h2o_webtransport_moq_native_create(moq_host, moq_port);
         }
         struct listener_config_t *siblings[2] = {NULL, NULL};
         for (ai = res; ai != NULL; ai = ai->ai_next) {

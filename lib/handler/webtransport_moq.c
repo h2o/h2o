@@ -26,6 +26,8 @@
  * draft is selected as the WebTransport subprotocol, and used as the ALPN of the backend connection.
  */
 #include <stdio.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include "picotls/openssl.h"
 #include "h2o.h"
 #include "h2o/http3_common.h"
@@ -51,6 +53,17 @@
 static const char *supported_protocols[] = {"moqt-20", "moqt-21", "moqt-22", NULL};
 
 /**
+ * returns if `protocol` is one of `supported_protocols` (as a pointer, not by its value)
+ */
+static int is_supported_protocol(const char *protocol)
+{
+    for (const char **s = supported_protocols; *s != NULL; ++s)
+        if (protocol == *s)
+            return 1;
+    return 0;
+}
+
+/**
  * the relay to which the sessions are forwarded
  */
 struct st_wtmoq_relay_t {
@@ -60,7 +73,15 @@ struct st_wtmoq_relay_t {
      * for testing; connects to the relay using QMux over cleartext TCP, instead of QUIC
      */
     unsigned qmux_cleartext : 1;
+    /**
+     * if set, connects to the relay using QMux over a Unix socket at this path instead (`url: unix:<path>`); `{alpn}` in the path
+     * is replaced by the session's MoQ draft (e.g., `moqt-22`), so that each draft can have a socket of its own, and `{thread}` by the
+     * index of the worker thread
+     */
+    char *unix_path;
 };
+
+#define UNIX_SNDBUF (64 * 1024) /* small, so that what is queued stays in quicly, where the streams are scheduled */
 
 struct st_wtmoq_handler_t {
     h2o_handler_t super;
@@ -943,8 +964,9 @@ static struct st_wtmoq_backend_t *create_backend(struct st_wtmoq_session_t *sess
 }
 
 /**
- * Called when the TCP connection to the relay has been established, when QMux is used. QMux has no handshake; the session is
- * established at once, and streams opened before the transport parameters of the relay arrive wait for its stream limits.
+ * Called when the TCP or Unix connection to the relay has been established, when QMux is used. QMux has no handshake; the session
+ * is established at once, and streams opened before the transport parameters of the relay arrive wait for its stream limits.
+ * Datagrams sent before then are dropped, as the relay's max_datagram_frame_size is not known yet (see `datagram_is_acceptable`).
  */
 static void on_qmux_connect(h2o_socket_t *sock, const char *err)
 {
@@ -956,6 +978,11 @@ static void on_qmux_connect(h2o_socket_t *sock, const char *err)
         h2o_socket_close(sock);
         fail_session(session, err);
         return;
+    }
+
+    if (session->relay->unix_path != NULL) {
+        int sndbuf = UNIX_SNDBUF;
+        setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
     }
 
     struct st_wtmoq_backend_t *backend = create_backend(session);
@@ -1192,6 +1219,37 @@ static void init_session(struct st_wtmoq_session_t *session)
 }
 
 /**
+ * Builds the path of the relay's Unix socket from `tmpl`, replacing `{alpn}` with the MoQ draft, and `{thread}` with the index of
+ * the worker thread (so that a relay can listen on a socket per thread of ours, e.g., to spread the sessions over its cores).
+ * Returns if the path fits in `size` bytes.
+ */
+static int build_unix_path(char *dst, size_t size, const char *tmpl, const char *protocol, uint32_t thread_id)
+{
+    size_t off = 0;
+    while (*tmpl != '\0') {
+        char thread_str[sizeof(H2O_UINT32_LONGEST_STR)];
+        const char *subst = NULL;
+        size_t skip = 1;
+        if (strncmp(tmpl, "{alpn}", 6) == 0) {
+            subst = protocol;
+            skip = 6;
+        } else if (strncmp(tmpl, "{thread}", 8) == 0) {
+            sprintf(thread_str, "%" PRIu32, thread_id);
+            subst = thread_str;
+            skip = 8;
+        }
+        size_t len = subst != NULL ? strlen(subst) : 1;
+        if (off + len >= size)
+            return 0;
+        memcpy(dst + off, subst != NULL ? subst : tmpl, len);
+        off += len;
+        tmpl += skip;
+    }
+    dst[off] = '\0';
+    return 1;
+}
+
+/**
  * starts connecting to the relay
  */
 static void connect_backend(struct st_wtmoq_session_t *session, h2o_context_t *ctx)
@@ -1199,6 +1257,26 @@ static void connect_backend(struct st_wtmoq_session_t *session, h2o_context_t *c
     const struct st_wtmoq_relay_t *relay = session->relay;
 
     h2o_timer_link(ctx->loop, CONNECT_TIMEOUT, &session->connect_timeout);
+
+    if (relay->unix_path != NULL) {
+        struct sockaddr_un sa = {.sun_family = AF_UNIX};
+        const char *errstr = NULL;
+        /* the draft goes into a path; it is always one of ours, never a value the client sent */
+        assert(is_supported_protocol(session->protocol) && strchr(session->protocol, '/') == NULL);
+        if (!build_unix_path(sa.sun_path, sizeof(sa.sun_path), relay->unix_path, session->protocol,
+                             ctx->http3.next_cid.thread_id)) {
+            fail_session(session, "unix socket path too long");
+            return;
+        }
+        /* failing to connect (e.g., ENOENT, ECONNREFUSED) means that the relay is down */
+        if ((session->connect_sock = h2o_socket_connect(ctx->loop, (void *)&sa, sizeof(sa), on_qmux_connect, &errstr)) == NULL) {
+            fail_session(session, errstr);
+            return;
+        }
+        session->connect_sock->data = session;
+        return;
+    }
+
     session->getaddr_req = h2o_hostinfo_getaddr(
         &ctx->receivers.hostinfo_getaddr, h2o_iovec_init(relay->host, strlen(relay->host)), relay->port, AF_UNSPEC,
         relay->qmux_cleartext ? SOCK_STREAM : SOCK_DGRAM, relay->qmux_cleartext ? IPPROTO_TCP : IPPROTO_UDP,
@@ -1288,6 +1366,7 @@ static struct st_wtmoq_thread_ctx_t *create_thread_ctx(h2o_context_t *ctx)
                                                                 ptls_iovec_init(cid_key, sizeof(cid_key)));
     ptls_clear_memory(cid_key, sizeof(cid_key));
     tctx->quic.transport_params.max_datagram_frame_size = MAX_DATAGRAM_FRAME_SIZE;
+    tctx->quic.transport_params.reset_stream_at = 1;
     tctx->stream_open = (quicly_stream_open_t){on_backend_stream_open};
     tctx->quic.stream_open = &tctx->stream_open;
     tctx->receive_datagram_frame = (quicly_receive_datagram_frame_t){on_backend_datagram};
@@ -1331,10 +1410,15 @@ static void on_context_dispose(h2o_handler_t *_handler, h2o_context_t *ctx)
 
 static void init_relay(struct st_wtmoq_relay_t *relay, h2o_iovec_t host, uint16_t port, int qmux_cleartext)
 {
-    relay->host = h2o_strdup(NULL, host.base, host.len).base;
+    /* initialize every field, as the native listener allocates the relay with malloc */
+    *relay = (struct st_wtmoq_relay_t){.host = h2o_strdup(NULL, host.base, host.len).base, .qmux_cleartext = qmux_cleartext};
     relay->port.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
     relay->port.len = sprintf(relay->port.base, "%" PRIu16, port);
-    relay->qmux_cleartext = qmux_cleartext;
+}
+
+static void init_relay_unix(struct st_wtmoq_relay_t *relay, const char *path)
+{
+    *relay = (struct st_wtmoq_relay_t){.host = h2o_strdup(NULL, H2O_STRLIT("")).base, .unix_path = h2o_strdup(NULL, path, SIZE_MAX).base};
 }
 
 static void on_handler_dispose(h2o_handler_t *_handler)
@@ -1342,6 +1426,7 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     struct st_wtmoq_handler_t *handler = (void *)_handler;
     free(handler->relay.host);
     free(handler->relay.port.base);
+    free(handler->relay.unix_path);
 }
 
 void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext)
@@ -1354,6 +1439,18 @@ void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, u
     handler->super.on_req = on_req;
     handler->super.supports_request_streaming = 1;
     init_relay(&handler->relay, host, port, qmux_cleartext);
+}
+
+void h2o_webtransport_moq_register_unix(h2o_pathconf_t *pathconf, const char *path)
+{
+    struct st_wtmoq_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
+
+    handler->super.on_context_init = on_context_init;
+    handler->super.on_context_dispose = on_context_dispose;
+    handler->super.dispose = on_handler_dispose;
+    handler->super.on_req = on_req;
+    handler->super.supports_request_streaming = 1;
+    init_relay_unix(&handler->relay, path);
 }
 
 /* native MoQ: the client speaks MoQ directly over QUIC, on a listener of its own */
@@ -1595,6 +1692,13 @@ h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t ho
 {
     h2o_webtransport_moq_native_t *native = h2o_mem_alloc(sizeof(*native));
     init_relay(&native->relay, host, port, 0);
+    return native;
+}
+
+h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create_unix(const char *path)
+{
+    h2o_webtransport_moq_native_t *native = h2o_mem_alloc(sizeof(*native));
+    init_relay_unix(&native->relay, path);
     return native;
 }
 

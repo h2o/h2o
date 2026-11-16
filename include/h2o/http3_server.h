@@ -84,6 +84,11 @@ extern const h2o_quic_conn_callbacks_t H2O_WEBTRANSPORT_MOQ_NATIVE_CONN_CALLBACK
  */
 h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t host, uint16_t port);
 /**
+ * as `h2o_webtransport_moq_native_create`, but forwarding over QMux on the Unix socket at `path` (`{alpn}` and `{thread}` are replaced
+ * by the draft and the index of the worker thread)
+ */
+h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create_unix(const char *path);
+/**
  * amends the quicly context of a native listener; to be used instead of `h2o_http3_server_amend_quicly_context`
  */
 void h2o_webtransport_moq_native_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic);

@@ -4,6 +4,8 @@ no warnings 'portable';
 use IO::Select;
 use IO::Socket::INET;
 use IO::Socket::SSL;
+use IO::Socket::UNIX;
+use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port);
 use Test::More;
 use Time::HiRes qw(time);
@@ -244,17 +246,30 @@ sub decode_close_capsule {
     (unpack("N", $bytes), substr $bytes, 4, $len - 4);
 }
 
-my $relay_listener = IO::Socket::INET->new(
-    LocalHost => '127.0.0.1',
-    LocalPort => 0,
-    Proto     => 'tcp',
-    Listen    => 5,
-    ReuseAddr => 1,
-) or die "failed to listen:$!";
-my $relay_port = $relay_listener->sockport;
+# The relay listens on cleartext TCP (`qmux-cleartext`), or, when `$main::RELAY_UNIX` is set (see t/50webtransport-moq-qmux-unix.t),
+# on a Unix socket (`url: unix:...`) whose path has the session's MoQ draft in place of `{alpn}`, and the index of the worker thread
+# in place of `{thread}`.
+our $RELAY_UNIX;
+my ($relay_listener, $relay_conf);
+if ($RELAY_UNIX) {
+    my $dir = tempdir(CLEANUP => 1);
+    $relay_listener = IO::Socket::UNIX->new(Local => "$dir/relay-moqt-22-0.sock", Type => SOCK_STREAM, Listen => 5)
+        or die "failed to listen:$!";
+    $relay_conf = "url: unix:$dir/relay-{alpn}-{thread}.sock";
+} else {
+    $relay_listener = IO::Socket::INET->new(
+        LocalHost => '127.0.0.1',
+        LocalPort => 0,
+        Proto     => 'tcp',
+        Listen    => 5,
+        ReuseAddr => 1,
+    ) or die "failed to listen:$!";
+    $relay_conf = "url: moqt://127.0.0.1:@{[$relay_listener->sockport]}\n          qmux-cleartext: ON";
+}
 my $h3qx_port = empty_port();
 
 my $server = spawn_h2o(<< "EOT");
+num-threads: 1
 webtransport: ON
 listen:
   port: $h3qx_port
@@ -267,8 +282,7 @@ hosts:
     paths:
       /moq:
         webtransport.moq:
-          url: moqt://127.0.0.1:$relay_port
-          qmux-cleartext: ON
+          $relay_conf
 EOT
 
 # Opens a session: connects as the client, sends the extended CONNECT on `$session_id`, accepts the connection from h2o as the

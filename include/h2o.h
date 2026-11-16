@@ -2517,6 +2517,11 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
  */
 void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext);
 /**
+ * as `h2o_webtransport_moq_register`, but connects to the relay using QMux over the Unix socket at `path`, in which `{alpn}` is
+ * replaced by the session's MoQ draft, and `{thread}` by the index of the worker thread
+ */
+void h2o_webtransport_moq_register_unix(h2o_pathconf_t *pathconf, const char *path);
+/**
  * registers the configurator of the webtransport.moq directive
  */
 void h2o_webtransport_moq_register_configurator(h2o_globalconf_t *conf);
