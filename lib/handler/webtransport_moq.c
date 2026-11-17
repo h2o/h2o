@@ -1125,7 +1125,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
 
     /* extend the connection; there can be one session per connection */
     h2o_quic_conn_t *frontend;
-    if ((frontend = req->open_extended_http3(req, on_frontend_stream_open)) == NULL) {
+    if ((frontend = req->open_extended_http3(req, on_frontend_stream_open, NULL)) == NULL) {
         h2o_send_error_generic(req, 409, "Conflict", "WebTransport session already exists on the connection", 0);
         return 0;
     }
