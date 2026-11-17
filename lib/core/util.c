@@ -603,6 +603,76 @@ Unknown:
     return 15;
 }
 
+h2o_iovec_t h2o_build_proxy_v2_header(struct sockaddr *src, struct sockaddr *dst, int socktype, const h2o_proxy_v2_tlv_t *tlvs,
+                                      size_t num_tlvs)
+{
+    static const uint8_t signature[12] = {0x0d, 0x0a, 0x0d, 0x0a, 0x00, 0x0d, 0x0a, 0x51, 0x55, 0x49, 0x54, 0x0a};
+    uint8_t family = 0; /* AF_UNSPEC, with the transport protocol being UNSPEC too */
+    size_t len = 0;
+
+    if (src != NULL && dst != NULL && src->sa_family == dst->sa_family) {
+        switch (src->sa_family) {
+        case AF_INET:
+            family = 0x10;
+            len = 4 * 2 + 2 * 2;
+            break;
+        case AF_INET6:
+            family = 0x20;
+            len = 16 * 2 + 2 * 2;
+            break;
+        default:
+            break;
+        }
+        if (family != 0)
+            family |= socktype == SOCK_DGRAM ? 0x02 : 0x01;
+    }
+    for (size_t i = 0; i != num_tlvs; ++i) {
+        if (tlvs[i].value.len > 0xffff)
+            return h2o_iovec_init(NULL, 0);
+        len += 3 + tlvs[i].value.len;
+    }
+    if (len > 0xffff)
+        return h2o_iovec_init(NULL, 0);
+
+    uint8_t *buf = h2o_mem_alloc(sizeof(signature) + 4 + len), *p = buf;
+    memcpy(p, signature, sizeof(signature));
+    p += sizeof(signature);
+    *p++ = 0x21; /* version 2, PROXY */
+    *p++ = family;
+    *p++ = (uint8_t)(len >> 8);
+    *p++ = (uint8_t)len;
+    switch (family >> 4) {
+    case 1: {
+        struct sockaddr_in *s = (void *)src, *d = (void *)dst;
+        memcpy(p, &s->sin_addr, 4);
+        memcpy(p + 4, &d->sin_addr, 4);
+        memcpy(p + 8, &s->sin_port, 2);
+        memcpy(p + 10, &d->sin_port, 2);
+        p += 12;
+    } break;
+    case 2: {
+        struct sockaddr_in6 *s = (void *)src, *d = (void *)dst;
+        memcpy(p, &s->sin6_addr, 16);
+        memcpy(p + 16, &d->sin6_addr, 16);
+        memcpy(p + 32, &s->sin6_port, 2);
+        memcpy(p + 34, &d->sin6_port, 2);
+        p += 36;
+    } break;
+    default:
+        break;
+    }
+    for (size_t i = 0; i != num_tlvs; ++i) {
+        *p++ = tlvs[i].type;
+        *p++ = (uint8_t)(tlvs[i].value.len >> 8);
+        *p++ = (uint8_t)tlvs[i].value.len;
+        if (tlvs[i].value.len != 0)
+            memcpy(p, tlvs[i].value.base, tlvs[i].value.len);
+        p += tlvs[i].value.len;
+    }
+
+    return h2o_iovec_init(buf, p - buf);
+}
+
 static h2o_iovec_t to_push_path(h2o_mem_pool_t *pool, h2o_iovec_t url, h2o_iovec_t base_path, const h2o_url_scheme_t *input_scheme,
                                 h2o_iovec_t input_authority, const h2o_url_scheme_t *base_scheme, h2o_iovec_t *base_authority,
                                 int allow_cross_origin_push)

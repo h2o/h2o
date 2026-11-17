@@ -263,9 +263,82 @@ void test_build_destination_escaping(void)
     h2o_mem_clear_pool(&req.pool);
 }
 
+static void test_build_proxy_v2_header(void)
+{
+#define SIGNATURE "\r\n\r\n\0\r\nQUIT\n"
+    h2o_iovec_t hdr;
+
+    { /* IPv4 over UDP, with TLVs */
+        struct sockaddr_in src = {.sin_family = AF_INET, .sin_port = htons(1234)},
+                           dst = {.sin_family = AF_INET, .sin_port = htons(443)};
+        inet_pton(AF_INET, "192.0.2.1", &src.sin_addr);
+        inet_pton(AF_INET, "198.51.100.2", &dst.sin_addr);
+        h2o_proxy_v2_tlv_t tlvs[] = {{H2O_PROXY_V2_TLV_AUTHORITY, h2o_iovec_init(H2O_STRLIT("example.com"))},
+                                     {H2O_PROXY_V2_TLV_MIN_CUSTOM, h2o_iovec_init(H2O_STRLIT("/moq"))}};
+        hdr = h2o_build_proxy_v2_header((void *)&src, (void *)&dst, SOCK_DGRAM, tlvs, PTLS_ELEMENTSOF(tlvs));
+        static const char expected[] = SIGNATURE "\x21\x12\x00\x21"
+                                                 "\xc0\x00\x02\x01"
+                                                 "\xc6\x33\x64\x02"
+                                                 "\x04\xd2\x01\xbb"
+                                                 "\x02\x00\x0b"
+                                                 "example.com"
+                                                 "\xe0\x00\x04"
+                                                 "/moq";
+        ok(h2o_memis(hdr.base, hdr.len, expected, sizeof(expected) - 1));
+        free(hdr.base);
+    }
+
+    { /* IPv6 over TCP, without TLVs */
+        struct sockaddr_in6 src = {.sin6_family = AF_INET6, .sin6_port = htons(5678)},
+                            dst = {.sin6_family = AF_INET6, .sin6_port = htons(8443)};
+        inet_pton(AF_INET6, "2001:db8::1", &src.sin6_addr);
+        inet_pton(AF_INET6, "2001:db8::2", &dst.sin6_addr);
+        hdr = h2o_build_proxy_v2_header((void *)&src, (void *)&dst, SOCK_STREAM, NULL, 0);
+        static const char expected[] = SIGNATURE "\x21\x21\x00\x24"
+                                                 "\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"
+                                                 "\x20\x01\x0d\xb8\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02"
+                                                 "\x16\x2e\x20\xfb";
+        ok(h2o_memis(hdr.base, hdr.len, expected, sizeof(expected) - 1));
+        free(hdr.base);
+    }
+
+    { /* addresses of different families are not sent */
+        struct sockaddr_in src = {.sin_family = AF_INET};
+        struct sockaddr_in6 dst = {.sin6_family = AF_INET6};
+        h2o_proxy_v2_tlv_t tlv = {H2O_PROXY_V2_TLV_AUTHORITY, h2o_iovec_init(H2O_STRLIT("a"))};
+        hdr = h2o_build_proxy_v2_header((void *)&src, (void *)&dst, SOCK_DGRAM, &tlv, 1);
+        static const char expected[] = SIGNATURE "\x21\x00\x00\x04"
+                                                 "\x02\x00\x01"
+                                                 "a";
+        ok(h2o_memis(hdr.base, hdr.len, expected, sizeof(expected) - 1));
+        free(hdr.base);
+        /* neither are those unknown */
+        hdr = h2o_build_proxy_v2_header(NULL, NULL, SOCK_DGRAM, NULL, 0);
+        ok(h2o_memis(hdr.base, hdr.len, H2O_STRLIT(SIGNATURE "\x21\x00\x00\x00")));
+        free(hdr.base);
+    }
+
+    { /* too large */
+        static char big[0x10000];
+        h2o_proxy_v2_tlv_t tlvs[] = {{H2O_PROXY_V2_TLV_AUTHORITY, h2o_iovec_init(big, 0xffff)},
+                                     {H2O_PROXY_V2_TLV_AUTHORITY, h2o_iovec_init(big, 0x10000)}};
+        hdr = h2o_build_proxy_v2_header(NULL, NULL, SOCK_DGRAM, tlvs + 1, 1);
+        ok(hdr.base == NULL);
+        hdr = h2o_build_proxy_v2_header(NULL, NULL, SOCK_DGRAM, tlvs, 1);
+        ok(hdr.base == NULL);
+        tlvs[0].value.len = 0xffff - 3;
+        hdr = h2o_build_proxy_v2_header(NULL, NULL, SOCK_DGRAM, tlvs, 1);
+        ok(hdr.base != NULL && hdr.len == 16 + 0xffff);
+        free(hdr.base);
+    }
+
+#undef SIGNATURE
+}
+
 void test_lib__core__util_c()
 {
     subtest("parse_proxy_line", test_parse_proxy_line);
+    subtest("build_proxy_v2_header", test_build_proxy_v2_header);
     subtest("extract_push_path_from_link_header", test_extract_push_path_from_link_header);
     subtest("test_build_destination", test_build_destination);
     subtest("test_build_destination_escaping", test_build_destination_escaping);
