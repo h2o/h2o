@@ -294,7 +294,7 @@ sub open_session {
     my $lit = sub { my ($n, $v) = @_; die if length($n) - 7 >= 127; pack("CC", 0x27, length($n) - 7) . $n . $qstr->($v) };
     my $headers = "\0\0" . "\xcf" . "\xd7" . "\x50" . $qstr->("127.0.0.1") . "\x51" . $qstr->("/moq")
         . $lit->(":protocol", "webtransport") . $lit->("sec-webtransport-http3-draft02", "1")
-        . $lit->("wt-available-protocols", '"moqt-22"');
+        . $lit->("wt-available-protocols", $opts{protocols} // '"moqt-22"');
     $client->send($client->stream_frame($ctrl, encode_varint(0) . encode_h3_frame(4, $settings)),
         $client->stream_frame($session_id, encode_h3_frame(1, $headers)));
 
@@ -346,6 +346,22 @@ subtest 'streams' => sub {
     ok pump([$client, $relay], sub { ($cid) = grep { $_ % 4 == 1 && $client->stream($_)->{fin} } keys %{$client->{streams}}; defined $cid }),
         "bidi stream reached the client";
     is $client->stream($cid)->{data}, $wt_bidi . "from-relay", "bidi stream payload, with the WebTransport signal";
+};
+
+subtest 'settings and drafts' => sub {
+    my ($client, $relay, $session_id) = open_session(protocols => '"moqt-23"');
+    # h2o's control stream is its first unidirectional stream
+    my $ctrl = $client->stream(3)->{data};
+    is decode_varint(\$ctrl), 0, "control stream";
+    is decode_varint(\$ctrl), 4, "SETTINGS";
+    my $settings = substr $ctrl, 0, decode_varint(\$ctrl);
+    my %settings;
+    while (length $settings) {
+        my $id = decode_varint(\$settings);
+        $settings{$id} = decode_varint(\$settings);
+    }
+    is $settings{0x2b603742}, 1, "SETTINGS_ENABLE_WEBTRANSPORT of draft-02";
+    is $settings{0xc671706a}, 1, "SETTINGS_WEBTRANSPORT_MAX_SESSIONS of draft-07";
 };
 
 subtest 'datagrams' => sub {

@@ -1416,6 +1416,9 @@ static size_t build_firstflight(h2o_http3_conn_t *conn, uint8_t *bytebuf, size_t
         if (conn->local_settings.webtransport) {
             ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_ENABLE_WEBTRANSPORT_DRAFT02);
             ptls_buffer_push_quicint(&buf, 1);
+            /* clients implementing draft-07 and later (e.g., Safari) send the extended CONNECT only once they see this */
+            ptls_buffer_push_quicint(&buf, H2O_HTTP3_SETTINGS_WEBTRANSPORT_MAX_SESSIONS_DRAFT07);
+            ptls_buffer_push_quicint(&buf, 1);
         }
     });
 
@@ -1440,7 +1443,7 @@ quicly_error_t h2o_http3_setup(h2o_http3_conn_t *conn, quicly_conn_t *quic, h2o_
     conn->qpack.dec = h2o_qpack_create_decoder(conn->qpack.ctx->decoder_table_capacity, calc_max_blocked_streams(conn));
 
     { /* open control streams, send SETTINGS */
-        uint8_t firstflight[48];
+        uint8_t firstflight[64];
         size_t firstflight_len = build_firstflight(conn, firstflight, sizeof(firstflight));
         if ((ret = open_egress_unistream(conn, &conn->_control_streams.egress.control, &conn->stats.bytes_sent.control_stream,
                                          h2o_iovec_init(firstflight, firstflight_len))) != 0)
