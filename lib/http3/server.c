@@ -147,6 +147,10 @@ struct st_h2o_http3_server_conn_t {
     struct {
         struct st_h2o_http3_server_stream_t *stream;
         quicly_error_t (*on_stream_open)(h2o_req_t *req, quicly_stream_t *qs, h2o_buffer_t **recvbuf);
+        /**
+         * the scheduler of the streams of the extension; NULL if quicly's default scheduler is used
+         */
+        quicly_stream_scheduler_t *scheduler;
     } extension;
     /**
      * next application-level timeout
@@ -560,6 +564,7 @@ static void pre_dispose_request(struct st_h2o_http3_server_stream_t *stream)
     if (conn->extension.stream == stream) {
         conn->extension.stream = NULL;
         conn->extension.on_stream_open = NULL;
+        conn->extension.scheduler = NULL;
     }
 }
 
@@ -1587,7 +1592,8 @@ static int handle_input_expect_headers_process_request_immediately(struct st_h2o
 }
 
 static h2o_quic_conn_t *open_extended_http3(h2o_req_t *req,
-                                            quicly_error_t (*on_stream_open)(h2o_req_t *req, quicly_stream_t *qs, h2o_buffer_t **recvbuf))
+                                            quicly_error_t (*on_stream_open)(h2o_req_t *req, quicly_stream_t *qs, h2o_buffer_t **recvbuf),
+                                            quicly_stream_scheduler_t *scheduler)
 {
     struct st_h2o_http3_server_stream_t *stream = H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, req, req);
     struct st_h2o_http3_server_conn_t *conn = get_conn(stream);
@@ -1596,6 +1602,7 @@ static h2o_quic_conn_t *open_extended_http3(h2o_req_t *req,
         return NULL;
     conn->extension.stream = stream;
     conn->extension.on_stream_open = on_stream_open;
+    conn->extension.scheduler = scheduler;
     return &conn->h3.super;
 }
 
@@ -2197,7 +2204,8 @@ static quicly_stream_open_t on_stream_open = {stream_open_cb};
 
 /**
  * Returns if the stream is one opened by, or taken by, the handler extending the connection, i.e., one whose callbacks are not
- * HTTP/3's; such streams are scheduled by quicly's default scheduler, nested under the request stream of the extension.
+ * HTTP/3's; such streams are scheduled by the scheduler of the extension (see `get_extension_scheduler`), nested under the request
+ * stream of the extension.
  */
 static int is_extension_stream(quicly_stream_t *qs)
 {
@@ -2206,11 +2214,21 @@ static int is_extension_stream(quicly_stream_t *qs)
 }
 
 /**
+ * returns the scheduler of the extension streams; quicly's default scheduler unless the extension provides one (once the extension
+ * ends, the streams that remain are left to quicly's default scheduler)
+ */
+static quicly_stream_scheduler_t *get_extension_scheduler(struct st_h2o_http3_server_conn_t *conn)
+{
+    return conn->extension.scheduler != NULL ? conn->extension.scheduler : &quicly_default_stream_scheduler;
+}
+
+/**
  * returns if any of the extension streams has something to send (without moving the conn-blocked ones)
  */
 static int extension_streams_can_send(struct st_h2o_http3_server_conn_t *conn)
 {
-    return quicly_default_stream_scheduler.can_send(&quicly_default_stream_scheduler, conn->h3.super.quic, 1);
+    quicly_stream_scheduler_t *sched = get_extension_scheduler(conn);
+    return sched->can_send(sched, conn->h3.super.quic, 1);
 }
 
 static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn)
@@ -2223,7 +2241,7 @@ static void unblock_conn_blocked_streams(struct st_h2o_http3_server_conn_t *conn
      * the extension if any of them can send */
     struct st_h2o_http3_server_stream_t *ext;
     if ((ext = get_extension_stream(conn)) != NULL &&
-        quicly_default_stream_scheduler.can_send(&quicly_default_stream_scheduler, conn->h3.super.quic, 0) &&
+        get_extension_scheduler(conn)->can_send(get_extension_scheduler(conn), conn->h3.super.quic, 0) &&
         !ext->proceed_while_sending && !h2o_linklist_is_linked(&ext->scheduler.link))
         req_scheduler_activate(&conn->scheduler.reqs, &ext->scheduler, req_scheduler_compare_stream_id);
 }
@@ -2307,7 +2325,7 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
                 H2O_STRUCT_FROM_MEMBER(struct st_h2o_http3_server_stream_t, scheduler.link, anchor->next);
             /* the request stream of the extension, having nothing to send itself; send the extension streams */
             if (stream == get_extension_stream(conn) && !quicly_stream_can_send(stream->quic, 1)) {
-                if ((ret = quicly_default_stream_scheduler.do_send(&quicly_default_stream_scheduler, conn->h3.super.quic, s)) != 0)
+                if ((ret = get_extension_scheduler(conn)->do_send(get_extension_scheduler(conn), conn->h3.super.quic, s)) != 0)
                     goto Exit;
                 if (extension_streams_can_send(conn)) {
                     req_scheduler_setup_for_next(&conn->scheduler.reqs, &stream->scheduler, req_scheduler_compare_stream_id);
@@ -2342,7 +2360,7 @@ static quicly_error_t scheduler_do_send(quicly_stream_scheduler_t *sched, quicly
             /* 5. send the extension streams, if the stream is the request stream of the extension */
             int is_extension = stream == get_extension_stream(conn);
             if (is_extension &&
-                (ret = quicly_default_stream_scheduler.do_send(&quicly_default_stream_scheduler, conn->h3.super.quic, s)) != 0)
+                (ret = get_extension_scheduler(conn)->do_send(get_extension_scheduler(conn), conn->h3.super.quic, s)) != 0)
                 goto Exit;
             /* 6. prepare for next */
             if (quicly_stream_can_send(stream->quic, 1)) {
@@ -2399,7 +2417,7 @@ static void scheduler_update_state(struct st_quicly_stream_scheduler_t *sched, q
     }
 
     if (is_extension_stream(qs)) {
-        quicly_default_stream_scheduler.update_state(&quicly_default_stream_scheduler, qs);
+        get_extension_scheduler(conn)->update_state(get_extension_scheduler(conn), qs);
         /* activate the request stream of the extension, under which the stream is scheduled */
         struct st_h2o_http3_server_stream_t *ext = get_extension_stream(conn);
         if (new_state != DEACTIVATE && ext != NULL && !ext->proceed_while_sending && !h2o_linklist_is_linked(&ext->scheduler.link))

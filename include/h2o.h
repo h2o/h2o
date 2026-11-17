@@ -1505,10 +1505,17 @@ struct st_h2o_req_t {
      * only `quicly_recvstate_bytes_available` of them are valid. The callee decodes them, and when taking the stream, sets
      * `qs->callbacks` and `qs->data`, and takes `*recvbuf` (setting it to NULL), consuming the bytes as it sees fit. When
      * declining, it leaves `*recvbuf` untouched. The stream might have ended already.
+     *
+     * The streams of the extension, i.e., those the handler opens or takes, are sent when the request stream would be, ordered
+     * among themselves by `scheduler`, or by quicly's default scheduler if `scheduler` is NULL. `scheduler` is called for them
+     * until the extension ends; it then stops being used, and the streams that remain are left to quicly's default scheduler.
+     * Therefore, `scheduler` has to remain valid until the request is disposed, and must not use the fields of the streams that
+     * quicly's default scheduler uses (`_send_aux.pending_link.default_scheduler`).
      */
-    struct st_h2o_quic_conn_t *(*open_extended_http3)(h2o_req_t *req, quicly_error_t (*on_stream_open)(h2o_req_t *req,
-                                                                                                     quicly_stream_t *qs,
-                                                                                                     h2o_buffer_t **recvbuf));
+    struct st_h2o_quic_conn_t *(*open_extended_http3)(h2o_req_t *req,
+                                                      quicly_error_t (*on_stream_open)(h2o_req_t *req, quicly_stream_t *qs,
+                                                                                       h2o_buffer_t **recvbuf),
+                                                      quicly_stream_scheduler_t *scheduler);
 
     /* internal structure */
     h2o_generator_t *_generator;
