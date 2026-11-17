@@ -307,6 +307,31 @@ static int extract_content_length(const h2o_headers_t *headers, size_t *content_
     return 1;
 }
 
+static int discard_headers(struct st_h2o_http2client_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
+{
+    const uint8_t *src_end = src + len;
+    size_t num_headers_decoded = 0;
+
+    /* Decode the entire block to keep HPACK state in sync, without imposing response or trailer semantics. */
+    while (src != src_end) {
+        h2o_iovec_t *name, value;
+        const char *decode_err = NULL;
+        int ret = h2o_hpack_decode_header(&conn->rst_streams_pool, &conn->input.header_table, &name, &value, &src, src_end,
+                                        &decode_err);
+        if (ret != 0 && ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
+            *err_desc = decode_err;
+            return ret;
+        }
+        ++num_headers_decoded;
+        if (num_headers_decoded > H2O_HPACK_MAX_HEADERS_HARD_LIMIT) {
+            *err_desc = h2o_hpack_err_headers_too_long;
+            return H2O_HTTP2_ERROR_COMPRESSION;
+        }
+    }
+    h2o_mem_clear_pool(&conn->rst_streams_pool);
+    return 0;
+}
+
 static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2client_stream_t *stream, const uint8_t *src,
                    size_t len, const char **err_desc, int is_end_stream)
 {
@@ -314,8 +339,6 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
     h2o_mem_pool_t *pool;
     int *status;
     h2o_headers_t *headers;
-    int dummy_status;
-    h2o_headers_t dummy_headers = {0};
 
     if (stream != NULL) {
         pool = stream->super.pool;
@@ -323,24 +346,17 @@ static int on_head(struct st_h2o_http2client_conn_t *conn, struct st_h2o_http2cl
         headers = &stream->input.headers;
         *headers = (h2o_headers_t){NULL}; /* start a new list, keeping the one passed for the preceding 1xx response intact */
     } else {
-        pool = &conn->rst_streams_pool;
-        status = &dummy_status;
-        headers = &dummy_headers;
+        return discard_headers(conn, src, len, err_desc);
     }
 
     if ((ret = h2o_hpack_parse_response(pool, h2o_hpack_decode_header, &conn->input.header_table, status, headers, NULL, src, len,
                                         err_desc)) != 0) {
         if (ret == H2O_HTTP2_ERROR_INVALID_HEADER_CHAR) {
-            if (stream == NULL)
-                return 0;
             ret = H2O_HTTP2_ERROR_PROTOCOL;
             goto Failed;
         }
         return ret;
     }
-
-    if (stream == NULL)
-        return 0;
 
     if (100 <= stream->input.status && stream->input.status <= 199) {
         if (stream->input.status == 101) {
