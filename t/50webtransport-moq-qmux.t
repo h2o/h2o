@@ -456,4 +456,17 @@ subtest 'relay gone' => sub {
     ok defined $client->stream($cu)->{stop_sending}, "client stream stopped";
 };
 
+subtest 'idle timeout' => sub {
+    subtest 'none on our side' => sub {
+        my ($client, $relay, $session_id) = open_session();
+        ok !exists $relay->{peer_tp}{1}, "max_idle_timeout not declared";
+    };
+    subtest 'that of the relay' => sub {
+        my ($client, $relay, $session_id) = open_session(relay_tp => {1 => 1000});
+        my $start = time;
+        ok pump([$client, $relay], sub { $client->stream($session_id)->{fin} }), "response ended";
+        cmp_ok time - $start, '>=', 0.9, "after the relay's idle timeout";
+    };
+};
+
 done_testing;

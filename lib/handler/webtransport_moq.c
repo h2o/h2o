@@ -1175,6 +1175,11 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
                                                                 ptls_iovec_init(cid_key, sizeof(cid_key)));
     ptls_clear_memory(cid_key, sizeof(cid_key));
     tctx->quic.transport_params.max_datagram_frame_size = MAX_DATAGRAM_FRAME_SIZE;
+    /* The connection to the relay lives as long as the session. A session can stay quiet for long, while the client keeps its own
+     * connection alive by PINGs that are not relayed; therefore, the connection to the relay does not time out on its own. It is
+     * closed when the session ends, or when the relay goes away: a QMux connection by its socket being closed, a QUIC connection by
+     * the idle timeout the relay declares, if any. */
+    tctx->quic.transport_params.max_idle_timeout = 0;
     tctx->stream_open = (quicly_stream_open_t){on_backend_stream_open};
     tctx->quic.stream_open = &tctx->stream_open;
     tctx->receive_datagram_frame = (quicly_receive_datagram_frame_t){on_backend_datagram};
