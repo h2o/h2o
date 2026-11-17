@@ -1538,6 +1538,26 @@ size_t h2o_stringify_proxy_header(h2o_conn_t *conn, char *buf);
 #define H2O_PROXY_HEADER_MAX_LENGTH                                                                                                \
     (sizeof("PROXY TCP6 ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff 65535 65535\r\n") - 1)
 /**
+ * a TLV of the PROXY protocol version 2
+ */
+typedef struct st_h2o_proxy_v2_tlv_t {
+    uint8_t type;
+    h2o_iovec_t value;
+} h2o_proxy_v2_tlv_t;
+#define H2O_PROXY_V2_TLV_ALPN 0x01
+#define H2O_PROXY_V2_TLV_AUTHORITY 0x02
+#define H2O_PROXY_V2_TLV_UNIQUE_ID 0x05
+#define H2O_PROXY_V2_TLV_MIN_CUSTOM 0xe0
+#define H2O_PROXY_V2_TLV_MAX_CUSTOM 0xef
+/**
+ * Builds the header of the PROXY protocol version 2 with the PROXY command, carrying the addresses of a connection from `src` to
+ * `dst` that uses `socktype` (`SOCK_STREAM` or `SOCK_DGRAM`), followed by `tlvs`. The addresses are sent only if both are given and
+ * are of the same family, either IPv4 or IPv6; otherwise, the family is sent as unspecified. Returns the header, allocated using
+ * malloc, or an iovec with `base` set to NULL if the header would exceed the maximum size.
+ */
+h2o_iovec_t h2o_build_proxy_v2_header(struct sockaddr *src, struct sockaddr *dst, int socktype, const h2o_proxy_v2_tlv_t *tlvs,
+                                      size_t num_tlvs);
+/**
  * extracts path to be pushed from `Link: rel=preload` header.
  */
 void h2o_extract_push_path_from_link_header(h2o_mem_pool_t *pool, const char *value, size_t value_len, h2o_iovec_t base_path,
