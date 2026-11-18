@@ -1417,7 +1417,9 @@ void h2o_http3_update_recvbuf(h2o_buffer_t **buf, size_t off, const void *src, s
         h2o_buffer_reserve(buf, new_size - (*buf)->size);
         (*buf)->size = new_size;
     }
-    memcpy((*buf)->bytes + off, src, len);
+    /* a zero-length frame (e.g., a bare FIN) on a buffer that has nothing allocated would pass NULL to memcpy */
+    if (len != 0)
+        memcpy((*buf)->bytes + off, src, len);
 }
 
 void h2o_quic_schedule_timer(h2o_quic_conn_t *conn)
