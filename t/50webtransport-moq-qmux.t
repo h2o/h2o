@@ -445,6 +445,28 @@ subtest 'relay closes the session' => sub {
     is length $reason, 1000 + 3 * 8, "reason limited to 1024 bytes, at a character boundary";
 };
 
+subtest 'relay closes the session with streams open' => sub {
+    # The relay's CONNECTION_CLOSE destroys its streams with the application error code; that is not passed to the client as
+    # stream resets ahead of CLOSE_WEBTRANSPORT_SESSION. The streams toward the client are reset as the session ends, with the
+    # generic code.
+    my ($client, $relay, $session_id) = open_session();
+    my $ru = $relay->open_stream(1);
+    $relay->send($relay->stream_frame($ru, "abc"));
+    my $cid;
+    ok pump([$client, $relay], sub {
+        ($cid) = grep { $_ % 4 == 3 && $client->stream($_)->{data} =~ /abc$/ } keys %{$client->{streams}};
+        defined $cid;
+    }), "stream reached the client";
+    $relay->send($relay->close_frame(9, "bye"));
+    ok pump([$client, $relay], sub { $client->stream($session_id)->{fin} }), "response ended";
+    my (undef, $data) = parse_request_stream($client->stream($session_id)->{data});
+    my ($code, $reason) = decode_close_capsule($data);
+    is $code, 9, "CLOSE_WEBTRANSPORT_SESSION with the application error code";
+    is $reason, "bye", "with the reason";
+    ok pump([$client, $relay], sub { defined $client->stream($cid)->{reset} }), "client stream reset";
+    is $client->stream($cid)->{reset}, wt_error_to_http3(0), "with the generic code, not that of the relay's close";
+};
+
 subtest 'relay gone' => sub {
     my ($client, $relay, $session_id) = open_session();
     my $wt_uni = encode_varint(WT_STREAM_TYPE_UNI) . encode_varint($session_id);
