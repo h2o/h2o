@@ -89,10 +89,10 @@ h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, unsign
 
     /* As a socket is shared by the connections of a thread, the default of the kernel might not be large enough. The kernel caps the
      * values at net.core.{w,r}mem_max. */
-    if (sndbuf != 0)
-        setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
-    if (rcvbuf != 0)
-        setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+    if (sndbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
+        h2o_perror("failed to set SO_SNDBUF");
+    if (rcvbuf != 0 && setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) != 0)
+        h2o_perror("failed to set SO_RCVBUF");
 
     switch (family) {
     case AF_INET:

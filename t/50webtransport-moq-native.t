@@ -1,5 +1,6 @@
 use strict;
 use warnings;
+use File::Temp qw(tempdir);
 use Net::EmptyPort qw(empty_port);
 use Test::More;
 use t::Util;
@@ -62,5 +63,41 @@ subtest 'HTTP/3' => sub {
 };
 
 ok kill(0, $server->{pid}), "h2o is running";
+
+subtest 'moq on an address of another listen' => sub {
+    # `moq` applies to the listener of the address, which the first `listen` of the address sets up
+    my $tempdir = tempdir(CLEANUP => 1);
+    my $port = empty_port({ host => "127.0.0.1", proto => "udp" });
+    my $test_conf = sub {
+        my ($first, $second) = @_;
+        open my $fh, '>', "$tempdir/h2o.conf"
+            or die "failed to create file:$!";
+        my $host = sub {
+            my ($name, $moq) = @_;
+            << "EOT";
+  $name:
+    listen:
+      type: quic
+      host: 127.0.0.1
+      port: $port
+@{[$moq ? "      moq: moqt://127.0.0.1:$relay_port\n" : ""]}      ssl:
+        key-file: examples/h2o/server.key
+        certificate-file: examples/h2o/server.crt
+    paths:
+      /:
+        file.dir: @{[DOC_ROOT]}
+EOT
+        };
+        print {$fh} "hosts:\n", $host->("a.example.com", $first), $host->("b.example.com", $second);
+        close $fh;
+        my $out = `@{[bindir]}/h2o -t -c $tempdir/h2o.conf 2>&1`;
+        ($?, $out);
+    };
+    my ($status, $out) = $test_conf->(0, 1);
+    isnt $status, 0, "refused after a listen without moq";
+    like $out, qr{`moq` cannot be set on an address already being listened to without it}, "with the reason";
+    ($status, $out) = $test_conf->(1, 0);
+    is $status, 0, "accepted after a listen with moq" or diag $out;
+};
 
 done_testing;

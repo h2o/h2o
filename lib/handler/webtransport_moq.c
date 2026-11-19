@@ -993,7 +993,8 @@ static void on_qmux_connect(h2o_socket_t *sock, const char *err)
 
     if (session->relay->unix_path != NULL) {
         int sndbuf = UNIX_SNDBUF;
-        setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf));
+        if (setsockopt(h2o_socket_get_fd(sock), SOL_SOCKET, SO_SNDBUF, &sndbuf, sizeof(sndbuf)) != 0)
+            h2o_perror("failed to set SO_SNDBUF");
     }
 
     struct st_wtmoq_backend_t *backend = create_backend(session);

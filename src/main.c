@@ -3445,21 +3445,21 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                                        "mapping defines the buffer sizes of the socket shared among all the QUIC connections.");
         if (h3qx)
             h2o_configurator_errprintf(cmd, node, "[warining] ignoring `h3qx` flag set on a QUIC listen context.");
-        /* `moq: moqt://host:port` makes the listener serve MoQ natively as well as HTTP/3, forwarding the sessions to the relay */
+        /* `moq: moqt://host:port` makes the listener serve MoQ natively as well as HTTP/3, forwarding the sessions to the relay. It
+         * is validated here, and created once a new listener needs it; the listeners of the address families share one. */
         h2o_webtransport_moq_native_t *moq = NULL;
+        const char *moq_unix_path = NULL;
+        h2o_iovec_t moq_host = {NULL};
+        uint16_t moq_port = 0;
         if (moq_node != NULL) {
             const char *url = (*moq_node)->data.scalar;
-            h2o_iovec_t moq_host;
-            uint16_t moq_port;
             if (strncmp(url, "unix:/", 6) == 0) {
-                moq = h2o_webtransport_moq_native_create_unix(url + 5);
+                moq_unix_path = url + 5;
             } else if (strncmp(url, "moqt://", 7) != 0 || h2o_url_parse_hostport(url + 7, strlen(url + 7), &moq_host, &moq_port) == NULL ||
                 moq_port == 65535) {
                 h2o_configurator_errprintf(cmd, *moq_node, "`moq` must be in the form of `moqt://host:port` or `unix:<path>`");
                 freeaddrinfo(res);
                 return -1;
-            } else {
-                moq = h2o_webtransport_moq_native_create(moq_host, moq_port);
             }
         }
         struct listener_config_t *siblings[2] = {NULL, NULL};
@@ -3497,6 +3497,9 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 else if (ai->ai_family == AF_INET6)
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
+                if (moq_node != NULL && moq == NULL)
+                    moq = moq_unix_path != NULL ? h2o_webtransport_moq_native_create_unix(moq_unix_path)
+                                                : h2o_webtransport_moq_native_create(moq_host, moq_port);
                 listener->quic.moq = moq;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
@@ -3596,6 +3599,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
                 listener_is_new = 1;
+            } else if (moq_node != NULL && listener->quic.moq == NULL) {
+                /* `moq` applies to the listener, which has been set up by another `listen` of the address */
+                h2o_configurator_errprintf(cmd, *moq_node,
+                                           "`moq` cannot be set on an address already being listened to without it");
+                freeaddrinfo(res);
+                return -1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
