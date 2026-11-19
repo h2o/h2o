@@ -41,6 +41,8 @@
 #define MAX_STREAMS 100
 #define STREAM_WINDOW (1024 * 1024)
 #define CONNECT_TIMEOUT 10000 /* in milliseconds */
+#define CLOSE_ACK_TIMEOUT 3000 /* in milliseconds; how long the streams toward the client wait for the close to be acknowledged */
+#define CLOSE_ACK_POLL 10      /* in milliseconds */
 #define MAX_CAPSULE_SIZE 16384
 #define MAX_DATAGRAM_FRAME_SIZE 1500 /* advertised to the relay; same as what h2o advertises to the client */
 
@@ -196,6 +198,14 @@ struct st_wtmoq_session_t {
      */
     unsigned terminated : 1;
     unsigned disposed : 1;
+    /**
+     * set once CLOSE_WEBTRANSPORT_SESSION has been sent for the relay's close; the streams toward the client are terminated once it
+     * has been acknowledged (polled by `close_acked_timer`), or `CLOSE_ACK_TIMEOUT` has passed, as a client that sees the resets of
+     * its streams first might never see the close
+     */
+    unsigned closing : 1;
+    h2o_timer_t close_acked_timer;
+    uint64_t close_acked_deadline;
 };
 
 static void close_backend(struct st_wtmoq_session_t *session, uint64_t code, const char *reason);
@@ -567,7 +577,7 @@ static quicly_error_t on_frontend_stream_open(h2o_req_t *req, quicly_stream_t *q
     assert(type != UINT64_MAX);
     if (type != (unidirectional ? WT_STREAM_TYPE_UNI : WT_SIGNAL_BIDI))
         return H2O_HTTP3_ERROR_DECLINED;
-    if (!session->established || session->terminated)
+    if (!session->established || session->terminated || session->closing)
         return WT_ERROR_BUFFERED_STREAM_REJECTED;
 
     /* take the stream, consuming the type */
@@ -828,6 +838,42 @@ static void fail_session(struct st_wtmoq_session_t *session, const char *errstr)
 }
 
 /**
+ * Terminates the streams toward the client once CLOSE_WEBTRANSPORT_SESSION, sent for the relay's close, has been acknowledged
+ * (i.e., the send side of the request stream has been acknowledged in full, or the stream is gone), or once `CLOSE_ACK_TIMEOUT`
+ * has passed.
+ */
+static void on_close_acked_timer(h2o_timer_t *timer)
+{
+    struct st_wtmoq_session_t *session = H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_session_t, close_acked_timer, timer);
+    h2o_loop_t *loop = session->req->conn->ctx->loop;
+    quicly_stream_t *qs = quicly_get_stream(session->frontend, session->session_id);
+
+    if (qs != NULL && !quicly_sendstate_transfer_complete(&qs->sendstate) && h2o_now(loop) < session->close_acked_deadline) {
+        h2o_timer_link(loop, CLOSE_ACK_POLL, &session->close_acked_timer);
+        return;
+    }
+    terminate_session_streams(session);
+}
+
+/**
+ * Detaches the streams toward the client from those of the relay, which are about to be destroyed, so that they are not aborted
+ * with the relay's error codes; they are terminated once the client has the close (see `closing`). The bytes received from the
+ * relay are retained, as they might still be emitted toward the client.
+ */
+static void detach_backend_halves(struct st_wtmoq_session_t *session)
+{
+    for (h2o_linklist_t *l = session->pairs.next; l != &session->pairs; l = l->next) {
+        struct st_wtmoq_pair_t *pair = H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_pair_t, link, l);
+        quicly_stream_t *qs;
+        if ((qs = pair->backend.quic) != NULL) {
+            qs->callbacks = &quicly_stream_noop_callbacks;
+            qs->data = NULL;
+            pair->backend.quic = NULL;
+        }
+    }
+}
+
+/**
  * Ends the session of a backend connection that is going away without the session having closed it (see `close_backend`): fails the
  * session if it has not been established, or closes it with the application error code of the relay's CONNECTION_CLOSE, if any.
  */
@@ -851,8 +897,12 @@ static void detach_session_on_backend_gone(struct st_wtmoq_backend_t *backend)
             if (reason == NULL)
                 reason = "";
         }
-        terminate_session_streams(session);
+        detach_backend_halves(session);
         send_session_close(session, code, reason, strlen(reason));
+        /* the streams toward the client are terminated once the client has the close (see `closing`) */
+        session->closing = 1;
+        session->close_acked_deadline = h2o_now(session->req->conn->ctx->loop) + CLOSE_ACK_TIMEOUT;
+        on_close_acked_timer(&session->close_acked_timer);
     }
 }
 
@@ -1046,6 +1096,7 @@ static void dispose_session(struct st_wtmoq_session_t *session)
 
     cancel_connect(session);
     h2o_timer_unlink(&session->connect_timeout);
+    h2o_timer_unlink(&session->close_acked_timer);
 
     /* terminate the streams on the client connection; the backend ones are destroyed with the connection */
     terminate_session_streams(session);
@@ -1141,6 +1192,7 @@ static int on_req(h2o_handler_t *_handler, h2o_req_t *req)
     h2o_buffer_init(&session->resp.pending, &h2o_socket_buffer_prototype);
     h2o_buffer_init(&session->resp.inflight, &h2o_socket_buffer_prototype);
     h2o_timer_init(&session->connect_timeout, on_connect_timeout);
+    h2o_timer_init(&session->close_acked_timer, on_close_acked_timer);
 
     /* capsules are not read until the session is established; datagrams are not received until the 2xx is sent */
     req->write_req.cb = on_write_req;

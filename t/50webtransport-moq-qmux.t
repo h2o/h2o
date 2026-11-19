@@ -65,7 +65,7 @@ package QMuxConn {
             sock       => $sock,
             is_client  => $is_client,
             rbuf       => '',
-            streams    => {},    # stream ID => {data, fin, reset, reset_at, stop_sending}
+            streams    => {},    # stream ID => {data, fin, reset, reset_at, stop_sending}, and the order of their arrival (*_seq)
             send_off   => {},
             datagrams  => [],
             close      => undef, # {error, frame_type, reason}
@@ -153,18 +153,22 @@ package QMuxConn {
                 my $s = $self->stream($id);
                 die "out-of-order STREAM frame" if $off > length $s->{data};
                 substr($s->{data}, $off, length($data)) = $data;
+                $s->{fin_seq} //= ++$self->{seq} if $type & 1 && !$s->{fin};
                 $s->{fin} = 1 if $type & 1;
             } elsif ($type == 0x04) {
                 my ($id, $err, $final) = ($d->(), $d->(), $d->());
                 $self->stream($id)->{reset} = $err;
+                $self->stream($id)->{reset_seq} //= ++$self->{seq};
             } elsif ($type == 0x24) {
                 my ($id, $err, $final, $reliable) = ($d->(), $d->(), $d->(), $d->());
                 my $s = $self->stream($id);
                 $s->{reset} = $err;
                 $s->{reset_at} = $reliable;
+                $s->{reset_seq} //= ++$self->{seq};
             } elsif ($type == 0x05) {
                 my ($id, $err) = ($d->(), $d->());
                 $self->stream($id)->{stop_sending} = $err;
+                $self->stream($id)->{stop_sending_seq} //= ++$self->{seq};
             } elsif ($type == 0x10 || $type == 0x12 || $type == 0x13 || $type == 0x14 || $type == 0x16 || $type == 0x17) {
                 $d->();
             } elsif ($type == 0x11 || $type == 0x15) {
@@ -448,7 +452,8 @@ subtest 'relay closes the session' => sub {
 subtest 'relay closes the session with streams open' => sub {
     # The relay's CONNECTION_CLOSE destroys its streams with the application error code; that is not passed to the client as
     # stream resets ahead of CLOSE_WEBTRANSPORT_SESSION. The streams toward the client are reset as the session ends, with the
-    # generic code.
+    # generic code, and only once the capsule has been acknowledged: a client that sees its streams reset first (e.g., its MoQ
+    # control stream) might never learn the code of the close.
     my ($client, $relay, $session_id) = open_session();
     my $ru = $relay->open_stream(1);
     $relay->send($relay->stream_frame($ru, "abc"));
@@ -457,6 +462,11 @@ subtest 'relay closes the session with streams open' => sub {
         ($cid) = grep { $_ % 4 == 3 && $client->stream($_)->{data} =~ /abc$/ } keys %{$client->{streams}};
         defined $cid;
     }), "stream reached the client";
+    # the client's bidirectional stream, as its MoQ control stream is
+    my $cb = $client->open_stream(0);
+    $client->send($client->stream_frame($cb, encode_varint(WT_SIGNAL_BIDI) . encode_varint($session_id) . "control"));
+    ok pump([$client, $relay], sub { grep { $_ % 4 == 0 && $relay->stream($_)->{data} eq "control" } keys %{$relay->{streams}} }),
+        "client's bidirectional stream reached the relay";
     $relay->send($relay->close_frame(9, "bye"));
     ok pump([$client, $relay], sub { $client->stream($session_id)->{fin} }), "response ended";
     my (undef, $data) = parse_request_stream($client->stream($session_id)->{data});
@@ -465,6 +475,12 @@ subtest 'relay closes the session with streams open' => sub {
     is $reason, "bye", "with the reason";
     ok pump([$client, $relay], sub { defined $client->stream($cid)->{reset} }), "client stream reset";
     is $client->stream($cid)->{reset}, wt_error_to_http3(0), "with the generic code, not that of the relay's close";
+    ok pump([$client, $relay], sub { defined $client->stream($cb)->{reset} && defined $client->stream($cb)->{stop_sending} }),
+        "client's bidirectional stream reset and stopped";
+    my $closed_at = $client->stream($session_id)->{fin_seq};
+    ok $client->stream($cid)->{reset_seq} > $closed_at, "the relay's stream is reset after the close";
+    ok $client->stream($cb)->{reset_seq} > $closed_at && $client->stream($cb)->{stop_sending_seq} > $closed_at,
+        "the client's stream is reset and stopped after the close";
 };
 
 subtest 'relay gone' => sub {
@@ -475,7 +491,8 @@ subtest 'relay gone' => sub {
     ok pump([$client, $relay], sub { $relay->stream(2)->{data} eq "abc" }), "stream reached the relay";
     close $relay->{sock};
     ok pump([$client], sub { $client->stream($session_id)->{fin} }), "response ended";
-    ok defined $client->stream($cu)->{stop_sending}, "client stream stopped";
+    ok pump([$client], sub { defined $client->stream($cu)->{stop_sending} }), "client stream stopped";
+    ok $client->stream($cu)->{stop_sending_seq} > $client->stream($session_id)->{fin_seq}, "after the close";
 };
 
 done_testing;
