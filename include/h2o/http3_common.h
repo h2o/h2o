@@ -471,6 +471,12 @@ void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_qu
  */
 void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
 /**
+ * Prepares `to`, initialized by `h2o_quic_init_conn` with the same context, to take over the QUIC connection of `from`, which must
+ * not be QUIC on Streams. Returns the QUIC connection, to be set up with `to` right away by `h2o_quic_setup` (or
+ * `h2o_http3_setup`). `from` no longer refers to it, and is to be disposed of without closing it.
+ */
+quicly_conn_t *h2o_quic_hand_over(h2o_quic_conn_t *from, h2o_quic_conn_t *to);
+/**
  *
  */
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock);

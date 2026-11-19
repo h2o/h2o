@@ -56,6 +56,12 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                                           quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
                                           const h2o_http3_conn_callbacks_t *h3_callbacks);
 /**
+ * Sets up an HTTP/3 connection taking over the QUIC connection accepted by another `h2o_quic_conn_t` of the context (see
+ * `h2o_quic_hand_over`), once `h3` has been selected as the ALPN. `from` is to be disposed of by the caller, without closing it.
+ */
+h2o_http3_conn_t *h2o_http3_server_adopt(h2o_http3_server_ctx_t *ctx, h2o_quic_conn_t *from,
+                                         const h2o_http3_conn_callbacks_t *h3_callbacks);
+/**
  *
  */
 void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);

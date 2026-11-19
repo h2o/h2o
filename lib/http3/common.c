@@ -781,10 +781,13 @@ static void process_packets(h2o_quic_ctx_t *ctx, quicly_address_t *destaddr, qui
         }
     }
 
-    /* receive packets to the found connection */
+    /* Receive packets to the found connection. The connection might be handed over to another `h2o_quic_conn_t` while receiving
+     * (see `h2o_quic_hand_over`); therefore, it is looked up again after each packet. */
+    quicly_conn_t *quic = conn->quic;
     for (size_t i = 0; i != num_packets; ++i) {
         if (i != accepted_packet_index) {
-            quicly_error_t ret = quicly_receive(conn->quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            quicly_error_t ret = quicly_receive(quic, &destaddr->sa, &srcaddr->sa, packets + i);
+            conn = *quicly_get_data(quic);
             switch (ret) {
             case 0:
                 if (ctx->quic_stats != NULL)
@@ -1332,6 +1335,28 @@ static ptls_log_conn_state_t *qmux_log_state(quicly_qmux_log_state_t *_self, qui
 }
 
 quicly_qmux_log_state_t h2o_quic_qmux_log_state = {.cb = qmux_log_state};
+
+quicly_conn_t *h2o_quic_hand_over(h2o_quic_conn_t *from, h2o_quic_conn_t *to)
+{
+    quicly_conn_t *quic = from->quic;
+
+    assert(quic != NULL && from->streams_sock == NULL && from->ctx == to->ctx && to->quic == NULL);
+
+    /* the Initial packets still being received are routed to `to`; the idmap is updated by `h2o_quic_setup` */
+    if (from->_accept_hashkey != 0) {
+        khint_t iter;
+        if ((iter = kh_get_h2o_quic_acceptmap(from->ctx->conns_accepting, from->_accept_hashkey)) !=
+            kh_end(from->ctx->conns_accepting))
+            kh_val(from->ctx->conns_accepting, iter) = to;
+        to->_accept_hashkey = from->_accept_hashkey;
+        from->_accept_hashkey = 0;
+    }
+    *quicly_get_data(quic) = NULL;
+    from->quic = NULL;
+    h2o_timer_unlink(&from->_timeout);
+
+    return quic;
+}
 
 void h2o_quic_setup(h2o_quic_conn_t *conn, quicly_conn_t *quic, h2o_socket_t *streams_sock)
 {
