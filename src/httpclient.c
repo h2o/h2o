@@ -1101,9 +1101,9 @@ int main(int argc, char **argv)
 #else
     { /* initialize QUIC context */
         h2o_socket_t *socks[2] = {NULL, NULL}, **sp = socks;
-        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET)) != NULL)
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET, 0, 0)) != NULL)
             ++sp;
-        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6)) != NULL)
+        if ((*sp = h2o_quic_create_client_socket(ctx.loop, AF_INET6, 0, 0)) != NULL)
             ++sp;
         if (sp == socks) {
             perror("failed to create UDP socket for both IPv4 and v6");

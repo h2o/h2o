@@ -226,6 +226,10 @@ struct listener_config_t {
          * the matching ipv6 listener for an ipv4 listener and vice versa
          */
         struct listener_config_t *sibling;
+        /**
+         * if set, the listener serves MoQ natively as well as HTTP/3, forwarding the sessions to a relay (`moq` of `listen`)
+         */
+        h2o_webtransport_moq_native_t *moq;
     } quic;
     /**
      * SO_SNDBUF, SO_RCVBUF values to be set (or 0 to use default)
@@ -1292,7 +1296,11 @@ IdentityFound:
 
     /* handle ALPN */
     if (params->negotiated_protocols.count != 0) {
-        if (conn_is_quic) {
+        if (conn_is_quic && self->listener->quic.moq != NULL) {
+            if ((ret = h2o_webtransport_moq_native_select_alpn(tls, params->negotiated_protocols.list,
+                                                               params->negotiated_protocols.count)) != 0)
+                return ret;
+        } else if (conn_is_quic) {
             size_t i, j;
             for (i = 0; i != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++i) {
                 for (j = 0; j != params->negotiated_protocols.count; ++j)
@@ -3014,6 +3022,26 @@ static void on_http3_conn_destroy(h2o_quic_conn_t *conn)
     H2O_HTTP3_CONN_CALLBACKS.super.destroy_connection(conn);
 }
 
+static void on_moq_native_conn_destroy(h2o_quic_conn_t *conn)
+{
+    num_connections(-1);
+    num_quic_connections(-1);
+
+    H2O_WEBTRANSPORT_MOQ_NATIVE_CONN_CALLBACKS.destroy_connection(conn);
+}
+
+static const h2o_quic_conn_callbacks_t moq_native_conn_callbacks = {on_moq_native_conn_destroy};
+
+/**
+ * Called when a client of a native listener has selected `h3`. The connection, counted when accepted, is counted by the HTTP/3
+ * connection from now on.
+ */
+static h2o_quic_conn_t *on_moq_native_adopt_h3(h2o_quic_conn_t *from)
+{
+    h2o_http3_server_ctx_t *ctx = H2O_STRUCT_FROM_MEMBER(h2o_http3_server_ctx_t, super, from->ctx);
+    return &h2o_http3_server_adopt(ctx, from, &conf.quic.conn_callbacks)->super;
+}
+
 static int parse_quic_enable_flag(h2o_configurator_command_t *cmd, yoml_t *node, int *on)
 {
     assert(node->type == YOML_TYPE_SCALAR);
@@ -3201,7 +3229,7 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
 {
     const char *hostname = NULL, *servname, *type = "tcp";
     yoml_t **ssl_node = NULL, **owner_node = NULL, **permission_node = NULL, **quic_node = NULL, **cc_node = NULL,
-           **initcwnd_node = NULL, **group_node = NULL;
+           **initcwnd_node = NULL, **group_node = NULL, **moq_node = NULL;
     int proxy_protocol = 0, h3qx = 0;
     unsigned stream_sndbuf = 0, stream_rcvbuf = 0;
 
@@ -3214,10 +3242,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
         yoml_t **port_node, **host_node, **type_node, **proxy_protocol_node, **sndbuf_node, **rcvbuf_node, **h3qx_node;
         if (h2o_configurator_parse_mapping(cmd, node, "port:s",
                                            "host:s,type:s,owner:s,group:s,permission:*,ssl:m,proxy-protocol:*,quic:m,cc:s,initcwnd:"
-                                           "s,sndbuf:s,rcvbuf:s,h3qx:s",
+                                           "s,sndbuf:s,rcvbuf:s,h3qx:s,moq:s",
                                            &port_node, &host_node, &type_node, &owner_node, &group_node, &permission_node,
                                            &ssl_node, &proxy_protocol_node, &quic_node, &cc_node, &initcwnd_node, &sndbuf_node,
-                                           &rcvbuf_node, &h3qx_node) != 0)
+                                           &rcvbuf_node, &h3qx_node, &moq_node) != 0)
             return -1;
         servname = (*port_node)->data.scalar;
         if (host_node != NULL)
@@ -3239,6 +3267,11 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
     } break;
     default:
         h2o_configurator_errprintf(cmd, node, "value must be a string or a mapping (with keys: `port` and optionally `host`)");
+        return -1;
+    }
+
+    if (moq_node != NULL && strcmp(type, "quic") != 0) {
+        h2o_configurator_errprintf(cmd, *moq_node, "`moq` can be set only on a QUIC listener");
         return -1;
     }
 
@@ -3412,6 +3445,23 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                                        "mapping defines the buffer sizes of the socket shared among all the QUIC connections.");
         if (h3qx)
             h2o_configurator_errprintf(cmd, node, "[warining] ignoring `h3qx` flag set on a QUIC listen context.");
+        /* `moq: moqt://host:port` makes the listener serve MoQ natively as well as HTTP/3, forwarding the sessions to the relay. It
+         * is validated here, and created once a new listener needs it; the listeners of the address families share one. */
+        h2o_webtransport_moq_native_t *moq = NULL;
+        const char *moq_unix_path = NULL;
+        h2o_iovec_t moq_host = {NULL};
+        uint16_t moq_port = 0;
+        if (moq_node != NULL) {
+            const char *url = (*moq_node)->data.scalar;
+            if (strncmp(url, "unix:/", 6) == 0) {
+                moq_unix_path = url + 5;
+            } else if (strncmp(url, "moqt://", 7) != 0 || h2o_url_parse_hostport(url + 7, strlen(url + 7), &moq_host, &moq_port) == NULL ||
+                moq_port == 65535) {
+                h2o_configurator_errprintf(cmd, *moq_node, "`moq` must be in the form of `moqt://host:port` or `unix:<path>`");
+                freeaddrinfo(res);
+                return -1;
+            }
+        }
         struct listener_config_t *siblings[2] = {NULL, NULL};
         for (ai = res; ai != NULL; ai = ai->ai_next) {
             struct listener_config_t *listener = find_listener(ai->ai_addr, ai->ai_addrlen, 1);
@@ -3447,6 +3497,10 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 else if (ai->ai_family == AF_INET6)
                     siblings[1] = listener;
                 listener->quic.ctx = quic;
+                if (moq_node != NULL && moq == NULL)
+                    moq = moq_unix_path != NULL ? h2o_webtransport_moq_native_create_unix(moq_unix_path)
+                                                : h2o_webtransport_moq_native_create(moq_host, moq_port);
+                listener->quic.moq = moq;
                 if (quic_node != NULL) {
                     yoml_t **retry_node, **sndbuf, **rcvbuf, **amp_limit, **qpack_encoder_table_capacity,
                         **qpack_decoder_table_capacity, **max_streams_bidi, **max_udp_payload_size,
@@ -3545,6 +3599,12 @@ static int on_config_listen_element(h2o_configurator_command_t *cmd, h2o_configu
                 if (conf.run_mode == RUN_MODE_WORKER)
                     set_quic_sockopts(fd, ai->ai_family, listener->sndbuf, listener->rcvbuf);
                 listener_is_new = 1;
+            } else if (moq_node != NULL && listener->quic.moq == NULL) {
+                /* `moq` applies to the listener, which has been set up by another `listen` of the address */
+                h2o_configurator_errprintf(cmd, *moq_node,
+                                           "`moq` cannot be set on an address already being listened to without it");
+                freeaddrinfo(res);
+                return -1;
             }
             if (listener_setup_ssl(cmd, ctx, node, ssl_node, cc_node, initcwnd_node, listener, listener_is_new) != 0) {
                 freeaddrinfo(res);
@@ -4688,6 +4748,22 @@ static h2o_quic_conn_t *on_http3_accept(h2o_quic_ctx_t *_ctx, quicly_address_t *
     }
 
     /* accept the connection */
+    struct listener_ctx_t *listener_ctx = H2O_STRUCT_FROM_MEMBER(struct listener_ctx_t, http3.ctx, ctx);
+    h2o_webtransport_moq_native_t *moq;
+    if ((moq = conf.listeners[listener_ctx->listener_index]->quic.moq) != NULL) {
+        h2o_quic_conn_t *qconn =
+            h2o_webtransport_moq_native_accept(moq, ctx->accept_ctx->ctx, &ctx->super, destaddr, srcaddr, packet, token,
+                                               &moq_native_conn_callbacks, on_moq_native_adopt_h3);
+        if (qconn == &h2o_http3_accept_conn_closed.super)
+            return NULL;
+        if (qconn == NULL || qconn == &h2o_quic_accept_conn_decryption_failed) {
+            num_connections(-1);
+            num_quic_connections(-1);
+        } else {
+            num_sessions(1);
+        }
+        return qconn;
+    }
     conn = h2o_http3_server_accept(ctx, destaddr, srcaddr, packet, token, &conf.quic.conn_callbacks);
     if (conn == NULL || &conn->super == &h2o_quic_accept_conn_decryption_failed) {
         goto Exit;
@@ -4804,7 +4880,8 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         if (thread_index < conf.quic.num_threads && listener_config->quic.ctx != NULL) {
             h2o_http3_server_init_context(listeners[i].accept_ctx.ctx, &listeners[i].http3.ctx.super,
                                           conf.threads[thread_index].ctx.loop, listeners[i].sock, NULL, listener_config->quic.ctx,
-                                          &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept, NULL,
+                                          &conf.threads[thread_index].ctx.http3.next_cid, on_http3_accept,
+                                          listener_config->quic.moq != NULL ? h2o_webtransport_moq_native_on_conn_update : NULL,
                                           conf.globalconf.http3.use_gso);
             h2o_quic_set_forwarding_context(&listeners[i].http3.ctx.super, 0, 4, forward_quic_packets,
                                             rewrite_forwarded_quic_datagram);
@@ -4871,6 +4948,7 @@ H2O_NORETURN static void *run_loop(void *_thread_index)
         }
     }
     h2o_context_request_shutdown(&conf.threads[thread_index].ctx);
+    h2o_webtransport_moq_native_request_shutdown(&conf.threads[thread_index].ctx);
 
     /* Wait until all the connections get closed. At least one worker thread that closed the last connection, turning
      * `num_connections(0)` to zero, will exit from this loop. Other worker threads might get stuck, as `h2o_evloop_run` does not
@@ -5666,8 +5744,11 @@ int main(int argc, char **argv)
      * tickets with the transport parameters */
     for (size_t i = 0; i != conf.num_listeners; ++i) {
         quicly_context_t *qctx;
-        if ((qctx = conf.listeners[i]->quic.ctx) != NULL)
+        if ((qctx = conf.listeners[i]->quic.ctx) != NULL) {
             h2o_http3_server_amend_quicly_context(&conf.globalconf, qctx);
+            if (conf.listeners[i]->quic.moq != NULL)
+                h2o_webtransport_moq_native_amend_quicly_context(conf.listeners[i]->quic.moq, qctx);
+        }
     }
 
     { /* initialize SSL_CTXs for session resumption and ticket-based resumption, including:

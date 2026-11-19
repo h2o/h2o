@@ -56,6 +56,12 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
                                           quicly_decoded_packet_t *packet, quicly_address_token_plaintext_t *address_token,
                                           const h2o_http3_conn_callbacks_t *h3_callbacks);
 /**
+ * Sets up an HTTP/3 connection taking over the QUIC connection accepted by another `h2o_quic_conn_t` of the context (see
+ * `h2o_quic_hand_over`), once `h3` has been selected as the ALPN. `from` is to be disposed of by the caller, without closing it.
+ */
+h2o_http3_conn_t *h2o_http3_server_adopt(h2o_http3_server_ctx_t *ctx, h2o_quic_conn_t *from,
+                                         const h2o_http3_conn_callbacks_t *h3_callbacks);
+/**
  *
  */
 void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at);
@@ -68,6 +74,57 @@ void h2o_http3_server_amend_quicly_context(h2o_globalconf_t *conf, quicly_contex
  * for other purposes than serving HTTP response (e.g., that created by http3client).
  */
 h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic);
+
+/* lib/handler/webtransport_moq.c */
+/**
+ * A QUIC listener serving MoQ natively (i.e., the `moqt-*` ALPNs) as well as HTTP/3, picked by the ALPN. The sessions are forwarded
+ * to the relay as those of the `webtransport.moq` handler are.
+ */
+typedef struct st_h2o_webtransport_moq_native_t h2o_webtransport_moq_native_t;
+/**
+ * the callbacks of the connections accepted by `h2o_webtransport_moq_native_accept`, to be wrapped by the caller
+ */
+extern const h2o_quic_conn_callbacks_t H2O_WEBTRANSPORT_MOQ_NATIVE_CONN_CALLBACKS;
+/**
+ * creates the configuration of a native listener, forwarding to the relay at `host`:`port`
+ */
+h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t host, uint16_t port);
+/**
+ * as `h2o_webtransport_moq_native_create`, but forwarding over QMux on the Unix socket at `path` (`{alpn}` and `{thread}` are replaced
+ * by the draft and the index of the worker thread)
+ */
+h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create_unix(const char *path);
+/**
+ * amends the quicly context of a native listener, after `h2o_http3_server_amend_quicly_context`, so that the callbacks dispatch to
+ * the native connections or to HTTP/3
+ */
+void h2o_webtransport_moq_native_amend_quicly_context(h2o_webtransport_moq_native_t *native, quicly_context_t *quic);
+/**
+ * selects the ALPN of a connection to a native listener among those offered by the client, either MoQ or HTTP/3; returns 0 or a TLS
+ * alert
+ */
+int h2o_webtransport_moq_native_select_alpn(ptls_t *tls, const ptls_iovec_t *protocols, size_t num_protocols);
+/**
+ * the counterpart of `h2o_http3_server_accept` for native listeners; returns the connection, NULL,
+ * `&h2o_quic_accept_conn_decryption_failed`, or `&h2o_http3_accept_conn_closed.super` as `h2o_http3_server_accept` does. Once `h3`
+ * has been selected, which might be after the connection is accepted, `adopt_h3` is called to set up the HTTP/3 connection taking
+ * over the QUIC connection (see `h2o_http3_server_adopt`).
+ */
+h2o_quic_conn_t *h2o_webtransport_moq_native_accept(h2o_webtransport_moq_native_t *native, h2o_context_t *ctx, h2o_quic_ctx_t *qctx,
+                                                    quicly_address_t *destaddr, quicly_address_t *srcaddr,
+                                                    quicly_decoded_packet_t *packet,
+                                                    quicly_address_token_plaintext_t *address_token,
+                                                    const h2o_quic_conn_callbacks_t *callbacks,
+                                                    h2o_quic_conn_t *(*adopt_h3)(h2o_quic_conn_t *from));
+/**
+ * the connection-update callback (`h2o_quic_notify_connection_update_cb`) of native listeners
+ */
+void h2o_webtransport_moq_native_on_conn_update(h2o_quic_ctx_t *ctx, h2o_quic_conn_t *conn);
+/**
+ * to be called when the server is shutting down; the native connections of the thread are closed once
+ * `http3-graceful-shutdown-timeout` has passed, if it is set
+ */
+void h2o_webtransport_moq_native_request_shutdown(h2o_context_t *ctx);
 
 #ifdef __cplusplus
 }

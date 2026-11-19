@@ -425,9 +425,9 @@ int h2o_http3_read_frame(h2o_http3_read_frame_t *frame, int is_client, uint64_t 
                          const uint8_t **src, const uint8_t *src_end, const char **err_desc);
 
 /**
- * a helper function that opens an unbound UDP socket
+ * a helper function that opens an unbound UDP socket; `sndbuf` and `rcvbuf` set SO_SNDBUF and SO_RCVBUF unless zero
  */
-h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family);
+h2o_socket_t *h2o_quic_create_client_socket(h2o_loop_t *loop, int family, unsigned sndbuf, unsigned rcvbuf);
 /**
  * Initializes the QUIC context, binding the event loop, socket, quic, and other properties. `next_cid` should be a thread-local
  * that contains the CID seed to be used; see `h2o_quic_ctx_t::next_cid` for more information.
@@ -470,6 +470,12 @@ void h2o_quic_init_conn(h2o_quic_conn_t *conn, h2o_quic_ctx_t *ctx, const h2o_qu
  *
  */
 void h2o_quic_dispose_conn(h2o_quic_conn_t *conn);
+/**
+ * Prepares `to`, initialized by `h2o_quic_init_conn` with the same context, to take over the QUIC connection of `from`, which must
+ * not be QUIC on Streams. Returns the QUIC connection, to be set up with `to` right away by `h2o_quic_setup` (or
+ * `h2o_http3_setup`). `from` no longer refers to it, and is to be disposed of without closing it.
+ */
+quicly_conn_t *h2o_quic_hand_over(h2o_quic_conn_t *from, h2o_quic_conn_t *to);
 /**
  *
  */

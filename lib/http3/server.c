@@ -2692,6 +2692,30 @@ h2o_http3_conn_t *h2o_http3_server_accept(h2o_http3_server_ctx_t *ctx, quicly_ad
     return &conn->h3;
 }
 
+h2o_http3_conn_t *h2o_http3_server_adopt(h2o_http3_server_ctx_t *ctx, h2o_quic_conn_t *from,
+                                         const h2o_http3_conn_callbacks_t *h3_callbacks)
+{
+    struct st_h2o_http3_server_conn_t *conn = create_connection(ctx->accept_ctx, &ctx->super, &ctx->qpack, h3_callbacks);
+    quicly_conn_t *qconn = h2o_quic_hand_over(from, &conn->h3.super);
+
+    conn->skip_jumpstart_token_until =
+        quicly_cc_calc_initial_cwnd(ctx->super.quic->egress[quicly_get_alt_egress(qconn)].cc.initcwnd_packets,
+                                    ctx->super.quic->transport_params.max_udp_payload_size) *
+        4; /* see `h2o_http3_server_accept` */
+    if (h2o_http3_setup(&conn->h3, qconn, NULL) != 0)
+        h2o_fatal("no memory");
+
+    H2O_PROBE_CONN(H3S_ACCEPT, &conn->super, &conn->super, conn->h3.super.quic, h2o_conn_get_uuid(&conn->super));
+    H2O_LOG_CONN(h3s_accept, &conn->super, {
+        PTLS_LOG_ELEMENT_PTR(conn, &conn->super);
+        PTLS_LOG_ELEMENT_PTR(quic, conn->h3.super.quic);
+        PTLS_LOG_ELEMENT_SAFESTR(conn_uuid, h2o_conn_get_uuid(&conn->super));
+    });
+
+    h2o_quic_schedule_timer(&conn->h3.super);
+    return &conn->h3;
+}
+
 void h2o_http3_qmux_accept(h2o_accept_ctx_t *ctx, h2o_socket_t *sock, struct timeval connected_at)
 {
     struct st_h2o_http3_server_conn_t *conn =

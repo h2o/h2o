@@ -7,8 +7,8 @@ use Test::More;
 use Time::HiRes qw(sleep);
 use t::Util;
 
-# End-to-end tests of the webtransport.moq handler, using moq-dev (https://github.com/moq-dev/moq) as the peers: `moq-relay` as
-# the relay, and `moq` as the publisher and the subscriber.
+# End-to-end tests of the webtransport.moq handler, and of the native MoQ listener (`moq` of `listen`), using moq-dev
+# (https://github.com/moq-dev/moq) as the peers: `moq-relay` as the relay, and `moq` as the publisher and the subscriber.
 for my $prog (qw(moq-relay moq ffmpeg)) {
     plan skip_all => "$prog not found"
         unless prog_exists($prog);
@@ -27,22 +27,35 @@ my $relay = spawn_server(
     is_ready => sub { !Net::EmptyPort::can_bind("127.0.0.1", $relay_port, "udp") },
 );
 
-# h2o; moq-dev clients exit without waiting for their CONNECTION_CLOSE to be sent, leaving connections that the graceful shutdown
-# closes only after the timeout
-my $server = spawn_h2o(<< "EOT");
+# h2o, accepting WebTransport on its HTTP/3 port and native MoQ on a QUIC listener of its own; moq-dev clients exit without waiting
+# for their CONNECTION_CLOSE to be sent, leaving connections that the graceful shutdown closes only after the timeout
+my $native_port = empty_port({ host => "127.0.0.1", proto => "udp" });
+my $server = spawn_h2o({
+    conf => << "EOT",
 webtransport: ON
 http3-graceful-shutdown-timeout: 1
 hosts:
   default:
+    listen:
+      type: quic
+      host: 127.0.0.1
+      port: $native_port
+      moq: moqt://127.0.0.1:$relay_port
+      ssl:
+        key-file: examples/h2o/server.key
+        certificate-file: examples/h2o/server.crt
     paths:
       /moq:
         webtransport.moq:
           url: moqt://127.0.0.1:$relay_port
 EOT
+    extra_ports => { port => $native_port, proto => 'udp' },
+});
 
 my %urls = (
-    h2o   => "https://127.0.0.1:$server->{quic_port}/moq",
-    relay => "moqt://127.0.0.1:$relay_port",
+    h2o    => "https://127.0.0.1:$server->{quic_port}/moq",
+    native => "moqt://127.0.0.1:$native_port",
+    relay  => "moqt://127.0.0.1:$relay_port",
 );
 
 # Runs a subscriber, then a publisher, each connecting either through h2o or directly to the relay. As the subscriber starts first,
@@ -84,10 +97,15 @@ sub run_case {
 for my $version (qw(moq-transport-22 moq-transport-20)) {
     subtest $version => sub {
         my %cases = (
-            direct     => [ qw(relay relay) ],
-            "h2o-h2o"   => [ qw(h2o h2o) ],
-            "h2o-relay" => [ qw(h2o relay) ],
-            "relay-h2o" => [ qw(relay h2o) ],
+            direct          => [ qw(relay relay) ],
+            "h2o-h2o"       => [ qw(h2o h2o) ],
+            "h2o-relay"     => [ qw(h2o relay) ],
+            "relay-h2o"     => [ qw(relay h2o) ],
+            "native-native" => [ qw(native native) ],
+            "native-relay"  => [ qw(native relay) ],
+            "relay-native"  => [ qw(relay native) ],
+            "h2o-native"    => [ qw(h2o native) ],
+            "native-h2o"    => [ qw(native h2o) ],
         );
         # run the cases in parallel, each with a broadcast of its own
         my %pids;

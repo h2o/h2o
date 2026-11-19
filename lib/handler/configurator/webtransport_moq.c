@@ -32,11 +32,23 @@ static int on_config_webtransport_moq(h2o_configurator_command_t *cmd, h2o_confi
     if (h2o_configurator_parse_mapping(cmd, node, "url:s", "qmux-cleartext:s", &url_node, &qmux_cleartext_node) != 0)
         return -1;
 
-    /* the URL of the relay, in the form of `moqt://host:port` */
+    /* the URL of the relay, in the form of `moqt://host:port`, or `unix:<path>` for QMux over a Unix socket */
     const char *url = (*url_node)->data.scalar;
+    if (strncmp(url, "unix:", 5) == 0) {
+        if (url[5] != '/') {
+            h2o_configurator_errprintf(cmd, *url_node, "the path of `unix:` must be absolute");
+            return -1;
+        }
+        if (qmux_cleartext_node != NULL) {
+            h2o_configurator_errprintf(cmd, *qmux_cleartext_node, "`qmux-cleartext` cannot be used with `unix:`");
+            return -1;
+        }
+        h2o_webtransport_moq_register_unix(ctx->pathconf, url + 5);
+        return 0;
+    }
     if (strncmp(url, "moqt://", 7) != 0 || h2o_url_parse_hostport(url + 7, strlen(url + 7), &host, &port) == NULL ||
         port == 65535) {
-        h2o_configurator_errprintf(cmd, *url_node, "url must be in the form of `moqt://host:port`");
+        h2o_configurator_errprintf(cmd, *url_node, "url must be in the form of `moqt://host:port` or `unix:<path>`");
         return -1;
     }
 

@@ -11,6 +11,7 @@ my @private_commands = (
     qw(http3-ack-frequency http3-allow-delayed-ack proxy.h3qx.force-cleartext proxy.h3qx.ratio quic-nodes self-trace), # highly
         # experimental and therefore undocumented
     qw(webtransport webtransport.moq), # experimental and therefore undocumented
+    qw(quic-client-rcvbuf quic-client-sndbuf), # to be documented once settled
 );
 
 my $tempdir = tempdir(CLEANUP => 1);

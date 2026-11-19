@@ -488,6 +488,13 @@ struct st_h2o_globalconf_t {
          */
         uint16_t ack_frequency;
         /**
+         * SO_SNDBUF and SO_RCVBUF of the UDP sockets that h2o opens as a QUIC client (e.g., toward HTTP/3 upstreams), or 0 to use
+         * the default of the kernel
+         */
+        struct {
+            unsigned sndbuf, rcvbuf;
+        } client_socket;
+        /**
          * a boolean indicating if the delayed ack extension should be used (default true)
          */
         uint8_t allow_delayed_ack : 1;
@@ -2509,6 +2516,11 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
  * `qmux_cleartext` is set (for testing), over QMux on cleartext TCP
  */
 void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext);
+/**
+ * as `h2o_webtransport_moq_register`, but connects to the relay using QMux over the Unix socket at `path`, in which `{alpn}` is
+ * replaced by the session's MoQ draft, and `{thread}` by the index of the worker thread
+ */
+void h2o_webtransport_moq_register_unix(h2o_pathconf_t *pathconf, const char *path);
 /**
  * registers the configurator of the webtransport.moq directive
  */
