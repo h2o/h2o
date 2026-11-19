@@ -64,6 +64,17 @@ static int is_supported_protocol(const char *protocol)
 }
 
 /**
+ * returns the entry of `supported_protocols` that matches `protocol`, or NULL if none does
+ */
+static const char *find_supported_protocol(const char *protocol)
+{
+    for (const char **s = supported_protocols; *s != NULL; ++s)
+        if (strcmp(protocol, *s) == 0)
+            return *s;
+    return NULL;
+}
+
+/**
  * the relay to which the sessions are forwarded
  */
 struct st_wtmoq_relay_t {
@@ -1453,10 +1464,33 @@ void h2o_webtransport_moq_register_unix(h2o_pathconf_t *pathconf, const char *pa
     init_relay_unix(&handler->relay, path);
 }
 
-/* native MoQ: the client speaks MoQ directly over QUIC, on a listener of its own */
+/* native MoQ: the client speaks MoQ directly over QUIC, on a listener that serves HTTP/3 as well, picked by the ALPN */
 
 struct st_h2o_webtransport_moq_native_t {
     struct st_wtmoq_relay_t relay;
+    /**
+     * the callbacks of the native connections, as passed to `h2o_webtransport_moq_native_accept`; tells them apart from the HTTP/3
+     * connections of the listener
+     */
+    const h2o_quic_conn_callbacks_t *conn_callbacks;
+};
+
+/**
+ * The callbacks of the quicly context of a listener, which dispatch to those of the native connections, or to those of HTTP/3 set
+ * by `h2o_http3_server_amend_quicly_context`.
+ */
+struct st_wtmoq_native_dispatch_t {
+    quicly_stream_open_t stream_open;
+    quicly_receive_datagram_frame_t receive_datagram_frame;
+    quicly_closed_t closed;
+    quicly_stream_scheduler_t stream_scheduler;
+    h2o_webtransport_moq_native_t *native;
+    struct {
+        quicly_stream_open_t *stream_open;
+        quicly_receive_datagram_frame_t *receive_datagram_frame;
+        quicly_closed_t *closed;
+        quicly_stream_scheduler_t *stream_scheduler;
+    } h3;
 };
 
 /**
@@ -1471,6 +1505,10 @@ struct st_wtmoq_native_conn_t {
     h2o_webtransport_moq_native_t *native;
     h2o_context_t *ctx;
     ptls_handshake_properties_t handshake_properties;
+    /**
+     * sets up the HTTP/3 connection taking over the QUIC connection, if the client has selected `h3`
+     */
+    h2o_quic_conn_t *(*adopt_h3)(h2o_quic_conn_t *from);
     /**
      * link in `native_conns`
      */
@@ -1565,9 +1603,7 @@ static struct st_wtmoq_session_t *native_start_session(struct st_wtmoq_native_co
     /* the ALPN is selected while handling the ClientHello (see `h2o_webtransport_moq_native_select_alpn`) */
     const char *alpn = ptls_get_negotiated_protocol(quicly_get_tls(qc)), *protocol = NULL;
     if (alpn != NULL)
-        for (const char **s = supported_protocols; *s != NULL; ++s)
-            if (strcmp(alpn, *s) == 0)
-                protocol = *s;
+        protocol = find_supported_protocol(alpn);
     if (protocol == NULL) {
         /* the handshake has completed without the client offering an ALPN; MoQT's PROTOCOL_VIOLATION */
         if (quicly_connection_is_ready(qc))
@@ -1591,9 +1627,47 @@ static struct st_wtmoq_session_t *native_start_session(struct st_wtmoq_native_co
     return session;
 }
 
+/**
+ * Once the ALPN has been selected, hands the connection over to HTTP/3 if it is not MoQ, or sets up the native session. Returns the
+ * connection now carrying the QUIC connection; `conn` is freed if it has been handed over.
+ */
+static h2o_quic_conn_t *native_resolve(struct st_wtmoq_native_conn_t *conn)
+{
+    quicly_conn_t *qc = conn->super.quic;
+    const char *alpn;
+
+    if (conn->session == NULL && quicly_get_state(qc) < QUICLY_STATE_CLOSING &&
+        (alpn = ptls_get_negotiated_protocol(quicly_get_tls(qc))) != NULL && find_supported_protocol(alpn) == NULL) {
+        h2o_quic_conn_t *h3 = conn->adopt_h3(&conn->super);
+        h2o_linklist_unlink(&conn->link);
+        h2o_quic_dispose_conn(&conn->super);
+        free(conn);
+        return h3;
+    }
+    native_start_session(conn);
+    return &conn->super;
+}
+
+/**
+ * Returns the native connection carrying `quic`, after handing it over to HTTP/3 if `h3` has been selected (see `native_resolve`),
+ * or NULL if it is an HTTP/3 connection.
+ */
+static struct st_wtmoq_native_conn_t *native_get_resolved(h2o_webtransport_moq_native_t *native, quicly_conn_t *quic)
+{
+    h2o_quic_conn_t *conn = *quicly_get_data(quic);
+
+    if (conn == NULL || conn->callbacks != native->conn_callbacks)
+        return NULL;
+    if ((conn = native_resolve((void *)conn))->callbacks != native->conn_callbacks)
+        return NULL;
+    return (void *)conn;
+}
+
 void h2o_webtransport_moq_native_on_conn_update(h2o_quic_ctx_t *qctx, h2o_quic_conn_t *conn)
 {
-    native_start_session((void *)conn);
+    struct st_wtmoq_native_dispatch_t *dispatch =
+        H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_native_dispatch_t, stream_open, qctx->quic->stream_open);
+    native_get_resolved(dispatch->native, conn->quic);
 }
 
 /**
@@ -1671,6 +1745,71 @@ static void on_native_closed(quicly_closed_t *self, quicly_conn_t *quic)
 
 static quicly_closed_t native_closed = {on_native_closed};
 
+static int is_native_conn(struct st_wtmoq_native_dispatch_t *dispatch, quicly_conn_t *quic)
+{
+    h2o_quic_conn_t *conn = *quicly_get_data(quic);
+    return conn != NULL && conn->callbacks == dispatch->native->conn_callbacks;
+}
+
+static quicly_error_t dispatch_stream_open(quicly_stream_open_t *self, quicly_stream_t *qs)
+{
+    struct st_wtmoq_native_dispatch_t *dispatch = H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_native_dispatch_t, stream_open, self);
+
+    if (native_get_resolved(dispatch->native, qs->conn) == NULL)
+        return dispatch->h3.stream_open->cb(dispatch->h3.stream_open, qs);
+    return on_native_stream_open(&native_stream_open, qs);
+}
+
+static void dispatch_receive_datagram_frame(quicly_receive_datagram_frame_t *self, quicly_conn_t *quic, ptls_iovec_t payload)
+{
+    struct st_wtmoq_native_dispatch_t *dispatch =
+        H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_native_dispatch_t, receive_datagram_frame, self);
+
+    if (native_get_resolved(dispatch->native, quic) == NULL) {
+        dispatch->h3.receive_datagram_frame->cb(dispatch->h3.receive_datagram_frame, quic, payload);
+        return;
+    }
+    on_native_datagram(&native_receive_datagram_frame, quic, payload);
+}
+
+static void dispatch_closed(quicly_closed_t *self, quicly_conn_t *quic)
+{
+    struct st_wtmoq_native_dispatch_t *dispatch = H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_native_dispatch_t, closed, self);
+
+    if (is_native_conn(dispatch, quic)) {
+        on_native_closed(&native_closed, quic);
+    } else if (dispatch->h3.closed != NULL) {
+        dispatch->h3.closed->cb(dispatch->h3.closed, quic);
+    }
+}
+
+/**
+ * the stream scheduler; that of quicly for the native connections, which have no priorities of their own
+ */
+static quicly_stream_scheduler_t *get_stream_scheduler(quicly_stream_scheduler_t *self, quicly_conn_t *quic)
+{
+    struct st_wtmoq_native_dispatch_t *dispatch = H2O_STRUCT_FROM_MEMBER(struct st_wtmoq_native_dispatch_t, stream_scheduler, self);
+    return is_native_conn(dispatch, quic) ? &quicly_default_stream_scheduler : dispatch->h3.stream_scheduler;
+}
+
+static int dispatch_can_send(quicly_stream_scheduler_t *self, quicly_conn_t *quic, int conn_is_saturated)
+{
+    quicly_stream_scheduler_t *sched = get_stream_scheduler(self, quic);
+    return sched->can_send(sched, quic, conn_is_saturated);
+}
+
+static quicly_error_t dispatch_do_send(quicly_stream_scheduler_t *self, quicly_conn_t *quic, quicly_send_context_t *s)
+{
+    quicly_stream_scheduler_t *sched = get_stream_scheduler(self, quic);
+    return sched->do_send(sched, quic, s);
+}
+
+static void dispatch_update_state(quicly_stream_scheduler_t *self, quicly_stream_t *qs)
+{
+    quicly_stream_scheduler_t *sched = get_stream_scheduler(self, qs->conn);
+    sched->update_state(sched, qs);
+}
+
 static void on_native_destroy(h2o_quic_conn_t *_conn)
 {
     struct st_wtmoq_native_conn_t *conn = (void *)_conn;
@@ -1691,6 +1830,7 @@ const h2o_quic_conn_callbacks_t H2O_WEBTRANSPORT_MOQ_NATIVE_CONN_CALLBACKS = {on
 h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t host, uint16_t port)
 {
     h2o_webtransport_moq_native_t *native = h2o_mem_alloc(sizeof(*native));
+    *native = (h2o_webtransport_moq_native_t){};
     init_relay(&native->relay, host, port, 0);
     return native;
 }
@@ -1698,36 +1838,42 @@ h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t ho
 h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create_unix(const char *path)
 {
     h2o_webtransport_moq_native_t *native = h2o_mem_alloc(sizeof(*native));
+    *native = (h2o_webtransport_moq_native_t){};
     init_relay_unix(&native->relay, path);
     return native;
 }
 
-void h2o_webtransport_moq_native_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic)
+void h2o_webtransport_moq_native_amend_quicly_context(h2o_webtransport_moq_native_t *native, quicly_context_t *quic)
 {
-    /* as HTTP/3 does; in particular, a client might send ACK_FREQUENCY frames, which are a protocol violation unless negotiated */
-    quic->transport_params.max_idle_timeout = conf->http3.idle_timeout;
-    quic->transport_params.min_ack_delay_usec = conf->http3.allow_delayed_ack ? 0 : UINT64_MAX;
-    quic->ack_frequency = conf->http3.ack_frequency;
-    /* the stream limits and windows are those of the relay connections */
-    quic->transport_params.max_streams_uni = MAX_STREAMS;
-    quic->transport_params.max_streams_bidi = MAX_STREAMS;
-    quic->transport_params.max_stream_data.uni = STREAM_WINDOW;
-    quic->transport_params.max_stream_data.bidi_local = STREAM_WINDOW;
-    quic->transport_params.max_stream_data.bidi_remote = STREAM_WINDOW;
-    quic->transport_params.max_data = MAX_STREAMS * STREAM_WINDOW;
-    quic->transport_params.max_datagram_frame_size = MAX_DATAGRAM_FRAME_SIZE;
-    quic->stream_open = &native_stream_open;
-    quic->receive_datagram_frame = &native_receive_datagram_frame;
-    quic->closed = &native_closed;
+    /* The transport parameters are those of HTTP/3, as the protocol is not known when they are sent. The stream limits are the same
+     * as those of the relay connections; the windows of the streams grow to those of the relay connections as they are consumed
+     * (see `bind_half`). */
+    struct st_wtmoq_native_dispatch_t *dispatch = h2o_mem_alloc(sizeof(*dispatch));
+    *dispatch = (struct st_wtmoq_native_dispatch_t){
+        .stream_open = {dispatch_stream_open},
+        .receive_datagram_frame = {dispatch_receive_datagram_frame},
+        .closed = {dispatch_closed},
+        .stream_scheduler = {dispatch_can_send, dispatch_do_send, dispatch_update_state},
+        .native = native,
+        .h3 = {quic->stream_open, quic->receive_datagram_frame, quic->closed, quic->stream_scheduler},
+    };
+    quic->stream_open = &dispatch->stream_open;
+    quic->receive_datagram_frame = &dispatch->receive_datagram_frame;
+    quic->closed = &dispatch->closed;
+    quic->stream_scheduler = &dispatch->stream_scheduler;
 }
 
 int h2o_webtransport_moq_native_select_alpn(ptls_t *tls, const ptls_iovec_t *protocols, size_t num_protocols)
 {
-    /* the first of those offered by the client that is supported, as WT-Available-Protocols is handled */
-    for (size_t i = 0; i != num_protocols; ++i)
+    /* the first of those offered by the client that is supported, either MoQ or HTTP/3 */
+    for (size_t i = 0; i != num_protocols; ++i) {
         for (const char **s = supported_protocols; *s != NULL; ++s)
             if (h2o_memis(protocols[i].base, protocols[i].len, *s, strlen(*s)))
                 return ptls_set_negotiated_protocol(tls, *s, strlen(*s));
+        for (size_t j = 0; j != sizeof(h2o_http3_alpn) / sizeof(h2o_http3_alpn[0]); ++j)
+            if (h2o_memis(protocols[i].base, protocols[i].len, h2o_http3_alpn[j].base, h2o_http3_alpn[j].len))
+                return ptls_set_negotiated_protocol(tls, (const char *)h2o_http3_alpn[j].base, h2o_http3_alpn[j].len);
+    }
     return PTLS_ALERT_NO_APPLICATION_PROTOCOL;
 }
 
@@ -1735,12 +1881,15 @@ h2o_quic_conn_t *h2o_webtransport_moq_native_accept(h2o_webtransport_moq_native_
                                                     quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                     quicly_decoded_packet_t *packet,
                                                     quicly_address_token_plaintext_t *address_token,
-                                                    const h2o_quic_conn_callbacks_t *callbacks)
+                                                    const h2o_quic_conn_callbacks_t *callbacks,
+                                                    h2o_quic_conn_t *(*adopt_h3)(h2o_quic_conn_t *from))
 {
     struct st_wtmoq_native_conn_t *conn = h2o_mem_alloc(sizeof(*conn));
     quicly_conn_t *qc;
 
-    *conn = (struct st_wtmoq_native_conn_t){.native = native, .ctx = ctx};
+    assert(native->conn_callbacks == NULL || native->conn_callbacks == callbacks);
+    native->conn_callbacks = callbacks;
+    *conn = (struct st_wtmoq_native_conn_t){.native = native, .ctx = ctx, .adopt_h3 = adopt_h3};
     h2o_quic_init_conn(&conn->super, qctx, callbacks);
     quicly_error_t ret = quicly_accept(&qc, qctx->quic, &destaddr->sa, &srcaddr->sa, packet, address_token, qctx->next_cid,
                                        &conn->handshake_properties, &conn->super);
@@ -1754,11 +1903,12 @@ h2o_quic_conn_t *h2o_webtransport_moq_native_accept(h2o_webtransport_moq_native_
         h2o_linklist_init_anchor(&native_conns);
     h2o_linklist_insert(&native_conns, &conn->link);
 
-    native_start_session(conn);
+    /* the ALPN has been selected unless the ClientHello spans more than one Initial packet */
+    h2o_quic_conn_t *resolved = native_resolve(conn);
 
-    if (!h2o_quic_send(&conn->super))
+    if (!h2o_quic_send(resolved))
         return &h2o_http3_accept_conn_closed.super;
-    return &conn->super;
+    return resolved;
 }
 
 static void on_native_shutdown_timeout(h2o_timer_t *timer)

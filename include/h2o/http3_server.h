@@ -77,8 +77,8 @@ h2o_conn_t *h2o_http3_get_connection(quicly_conn_t *quic);
 
 /* lib/handler/webtransport_moq.c */
 /**
- * A QUIC listener serving MoQ natively (i.e., the `moqt-*` ALPNs instead of HTTP/3). The sessions are forwarded to the relay as
- * those of the `webtransport.moq` handler are.
+ * A QUIC listener serving MoQ natively (i.e., the `moqt-*` ALPNs) as well as HTTP/3, picked by the ALPN. The sessions are forwarded
+ * to the relay as those of the `webtransport.moq` handler are.
  */
 typedef struct st_h2o_webtransport_moq_native_t h2o_webtransport_moq_native_t;
 /**
@@ -95,22 +95,27 @@ h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create(h2o_iovec_t ho
  */
 h2o_webtransport_moq_native_t *h2o_webtransport_moq_native_create_unix(const char *path);
 /**
- * amends the quicly context of a native listener; to be used instead of `h2o_http3_server_amend_quicly_context`
+ * amends the quicly context of a native listener, after `h2o_http3_server_amend_quicly_context`, so that the callbacks dispatch to
+ * the native connections or to HTTP/3
  */
-void h2o_webtransport_moq_native_amend_quicly_context(h2o_globalconf_t *conf, quicly_context_t *quic);
+void h2o_webtransport_moq_native_amend_quicly_context(h2o_webtransport_moq_native_t *native, quicly_context_t *quic);
 /**
- * selects the ALPN of a native connection among those offered by the client; returns 0 or a TLS alert
+ * selects the ALPN of a connection to a native listener among those offered by the client, either MoQ or HTTP/3; returns 0 or a TLS
+ * alert
  */
 int h2o_webtransport_moq_native_select_alpn(ptls_t *tls, const ptls_iovec_t *protocols, size_t num_protocols);
 /**
  * the counterpart of `h2o_http3_server_accept` for native listeners; returns the connection, NULL,
- * `&h2o_quic_accept_conn_decryption_failed`, or `&h2o_http3_accept_conn_closed.super` as `h2o_http3_server_accept` does
+ * `&h2o_quic_accept_conn_decryption_failed`, or `&h2o_http3_accept_conn_closed.super` as `h2o_http3_server_accept` does. Once `h3`
+ * has been selected, which might be after the connection is accepted, `adopt_h3` is called to set up the HTTP/3 connection taking
+ * over the QUIC connection (see `h2o_http3_server_adopt`).
  */
 h2o_quic_conn_t *h2o_webtransport_moq_native_accept(h2o_webtransport_moq_native_t *native, h2o_context_t *ctx, h2o_quic_ctx_t *qctx,
                                                     quicly_address_t *destaddr, quicly_address_t *srcaddr,
                                                     quicly_decoded_packet_t *packet,
                                                     quicly_address_token_plaintext_t *address_token,
-                                                    const h2o_quic_conn_callbacks_t *callbacks);
+                                                    const h2o_quic_conn_callbacks_t *callbacks,
+                                                    h2o_quic_conn_t *(*adopt_h3)(h2o_quic_conn_t *from));
 /**
  * the connection-update callback (`h2o_quic_notify_connection_update_cb`) of native listeners
  */
