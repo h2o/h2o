@@ -419,12 +419,25 @@ h2o_socket_t *h2o_socket_connect(h2o_loop_t *loop, struct sockaddr *addr, sockle
 socklen_t get_sockname_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
 {
     struct st_h2o_uv_socket_t *sock = (void *)_sock;
-    assert(sock->handle->type == UV_TCP);
 
-    int len = sizeof(struct sockaddr_storage);
-    if (uv_tcp_getsockname((void *)sock->handle, sa, &len) != 0)
-        return 0;
-    return (socklen_t)len;
+    switch (sock->handle->type) {
+    case UV_TCP: {
+        int len = sizeof(struct sockaddr_storage);
+        if (uv_tcp_getsockname((void *)sock->handle, sa, &len) != 0)
+            return 0;
+        return (socklen_t)len;
+    }
+    case UV_POLL: {
+        /* UDP sockets (e.g., those of HTTP/3) are driven by uv_poll_t, ask the descriptor directly */
+        uv_os_fd_t fd;
+        socklen_t len = sizeof(struct sockaddr_storage);
+        if (uv_fileno(sock->handle, &fd) != 0 || getsockname(fd, sa, &len) != 0)
+            return 0;
+        return len;
+    }
+    default:
+        h2o_fatal("unexpected handle type");
+    }
 }
 
 socklen_t get_peername_uncached(h2o_socket_t *_sock, struct sockaddr *sa)
