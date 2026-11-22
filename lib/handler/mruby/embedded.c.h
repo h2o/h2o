@@ -72,6 +72,9 @@
     "        while 1\n"                                                                                                            \
     "          begin\n"                                                                                                            \
     "            while 1\n"                                                                                                        \
+    "              if req[\"rack.input\"].is_a?(String)\n"                                                                         \
+    "                req[\"rack.input\"] = H2O::StreamingInputStream.new(generator, req[\"rack.input\"])\n"                        \
+    "              end\n"                                                                                                          \
     "              resp = app.call(req)\n"                                                                                         \
     "              cached = self_fiber\n"                                                                                          \
     "              (req, generator) = Fiber.yield(resp, generator)\n"                                                              \
@@ -135,6 +138,53 @@
     "\n"                                                                                                                           \
     "    def flush\n"                                                                                                              \
     "      self\n"                                                                                                                 \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "  end\n"                                                                                                                      \
+    "\n"                                                                                                                           \
+    "  class StreamingInputStream\n"                                                                                               \
+    "\n"                                                                                                                           \
+    "    def initialize(generator, chunk)\n"                                                                                       \
+    "      @generator = generator\n"                                                                                               \
+    "      @chunk = chunk\n"                                                                                                       \
+    "      @eos = false\n"                                                                                                         \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def gets\n"                                                                                                               \
+    "      while @chunk.empty? and !@eos\n"                                                                                        \
+    "        @chunk, @eos = _h2o__fetch_req_chunk(@generator)\n"                                                                   \
+    "      end\n"                                                                                                                  \
+    "      if @chunk.empty?\n"                                                                                                     \
+    "        return nil # eos\n"                                                                                                   \
+    "      end\n"                                                                                                                  \
+    "      c = @chunk\n"                                                                                                           \
+    "      @chunk = \"\"\n"                                                                                                        \
+    "      return c\n"                                                                                                             \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def each\n"                                                                                                               \
+    "      while c = gets\n"                                                                                                       \
+    "        yield c\n"                                                                                                            \
+    "      end\n"                                                                                                                  \
+    "    end\n"                                                                                                                    \
+    "\n"                                                                                                                           \
+    "    def read(len = nil, outbuf = \"\")\n"                                                                                     \
+    "      outbuf.clear\n"                                                                                                         \
+    "      while len.nil? or outbuf.length < len\n"                                                                                \
+    "        c = gets\n"                                                                                                           \
+    "        if !c\n"                                                                                                              \
+    "          break\n"                                                                                                            \
+    "        end\n"                                                                                                                \
+    "        outbuf << c\n"                                                                                                        \
+    "        if !len.nil? and outbuf.length > len\n"                                                                               \
+    "          @chunk = outbuf.slice!(len, outbuf.length - len)\n"                                                                 \
+    "          break\n"                                                                                                            \
+    "        end\n"                                                                                                                \
+    "      end\n"                                                                                                                  \
+    "      if outbuf.empty? and len\n"                                                                                             \
+    "        outbuf = nil\n"                                                                                                       \
+    "      end\n"                                                                                                                  \
+    "      outbuf\n"                                                                                                               \
     "    end\n"                                                                                                                    \
     "\n"                                                                                                                           \
     "  end\n"                                                                                                                      \
@@ -211,6 +261,12 @@
     "  class App\n"                                                                                                                \
     "    def initialize(reprocess)\n"                                                                                              \
     "      @reprocess = reprocess\n"                                                                                               \
+    "    end\n"                                                                                                                    \
+    "    def request(env)\n"                                                                                                       \
+    "      if !(env[\"rack.input\"].nil? or env[\"rack.input\"].is_a?(InputStream))\n"                                             \
+    "        env[\"rack.input\"] = InputStream.new(env[\"rack.input\"].read)\n"                                                    \
+    "      end\n"                                                                                                                  \
+    "      _h2o_request(env)\n"                                                                                                    \
     "    end\n"                                                                                                                    \
     "    def call(env)\n"                                                                                                          \
     "      request(env).join\n"                                                                                                    \
