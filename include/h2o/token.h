@@ -38,6 +38,7 @@ typedef struct st_h2o_token_flags_t {
     unsigned char copy_for_push_request : 1;
     unsigned char dont_compress : 1; /* consult `h2o_header_t:dont_compress` as well */
     unsigned char likely_to_repeat : 1;
+    unsigned char is_hop_by_hop : 1;
 } h2o_token_flags_t;
 
 /**

@@ -35,6 +35,12 @@ In addition to the Rack interface specification, H2O recognizes status code <cod
 The feature can be used to implement access control and response header modifiers.
 </p>
 
+<p>
+Hop-by-hop header fields (<code>connection</code>, <code>keep-alive</code>, <code>proxy-connection</code>, <code>te</code>, <code>transfer-encoding</code>, <code>upgrade</code>, and <code>http2-settings</code>) describe a particular connection, and therefore are not exchanged between H2O and the applications.
+They are not included in the environment or in the response headers being passed to the applications, and an exception is raised when the applications use them in the response headers, in the early hints, in the environment being passed to <code>H2O.next</code> or <code>H2O.reprocess</code>, or in the request headers being passed to <code>http_request</code>.
+The exception is <code>connection: close</code>; when found in the response headers or in the request headers passed to <code>http_request</code>, the HTTP/1 connection being used for sending the response or the request is closed after the exchange. In other places, it is ignored.
+</p>
+
 <h3 id="access-control">Access Control</h3>
 
 <p>
