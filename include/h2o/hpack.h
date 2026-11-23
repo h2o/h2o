@@ -48,6 +48,14 @@ extern const char h2o_hpack_err_headers_too_long[]; /* can either be a hard erro
 
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_NAME 0x1
 #define H2O_HPACK_SOFT_ERROR_BIT_INVALID_VALUE 0x2
+/**
+ * the value contains characters not allowed in :method; this is a soft error only if the header field is :method
+ */
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_METHOD 0x4
+/**
+ * the value contains characters not allowed in :path; this is a soft error only if the header field is :path
+ */
+#define H2O_HPACK_SOFT_ERROR_BIT_INVALID_PATH 0x8
 
 /**
  * encodes an integer (maximum size of the output excluding the first octet is H2O_HTTP2_ENCODE_INT_MAX_LENGTH bytes)
@@ -93,6 +101,10 @@ typedef int (*h2o_hpack_decode_header_cb)(h2o_mem_pool_t *pool, void *ctx, h2o_i
  */
 int h2o_hpack_decode_header(h2o_mem_pool_t *pool, void *_hpack_header_table, h2o_iovec_t **name, h2o_iovec_t *_value,
                             const uint8_t **const src, const uint8_t *src_end, const char **err_desc);
+/**
+ * Returns the value to be returned by `h2o_hpack_decode_header_cb` for a header field that has been decoded with given soft errors.
+ */
+int h2o_hpack_return_soft_errors(const h2o_iovec_t *name, unsigned soft_errors, const char **err_desc);
 /**
  * Request parser that uses given callback as the decoder.
  */

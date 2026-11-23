@@ -293,8 +293,10 @@ static mrb_value is_ech_proc(mrb_state *mrb, mrb_value self)
     h2o_mruby_generator_t *generator = h2o_mruby_get_generator(mrb, mrb_proc_cfunc_env_get(mrb, 0));
     if (generator == NULL)
         return mrb_nil_value();
-    ptls_t *tls = generator->req->conn->callbacks->get_ptls(generator->req->conn);
-    if (tls != NULL && ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
+    ptls_t *tls;
+    if (generator->req->conn->callbacks->get_ptls != NULL &&
+        (tls = generator->req->conn->callbacks->get_ptls(generator->req->conn)) != NULL &&
+        ptls_is_ech_handshake(tls, NULL, NULL, NULL)) {
         return mrb_true_value();
     } else {
         return mrb_false_value();

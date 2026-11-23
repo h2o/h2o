@@ -59,7 +59,10 @@ static void expand_buf(struct st_gzip_context_t *self)
 
 typedef int (*processor)(z_streamp strm, int flush);
 
-static size_t process_chunk(struct st_gzip_context_t *self, const void *src, size_t len, int flush, size_t bufindex, processor proc)
+/**
+ * returns if the chunk has been processed successfully; `*bufindex` is updated to point to the last buffer containing the output
+ */
+static int process_chunk(struct st_gzip_context_t *self, const void *src, size_t len, int flush, size_t *bufindex, processor proc)
 {
     int ret;
 
@@ -71,21 +74,23 @@ static size_t process_chunk(struct st_gzip_context_t *self, const void *src, siz
      */
     do {
         /* expand buffer (note: in case of Z_SYNC_FLUSH we need to supply at least 6 bytes of output buffer) */
-        if (self->bufs.entries[bufindex].len + 32 > BUF_SIZE) {
-            ++bufindex;
-            if (bufindex == self->bufs.size)
+        if (self->bufs.entries[*bufindex].len + 32 > BUF_SIZE) {
+            ++*bufindex;
+            if (*bufindex == self->bufs.size)
                 expand_buf(self);
-            self->bufs.entries[bufindex].len = 0;
+            self->bufs.entries[*bufindex].len = 0;
         }
-        self->zs.next_out = (void *)(self->bufs.entries[bufindex].raw + self->bufs.entries[bufindex].len);
-        self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[bufindex].len);
+        self->zs.next_out = (void *)(self->bufs.entries[*bufindex].raw + self->bufs.entries[*bufindex].len);
+        self->zs.avail_out = (unsigned)(BUF_SIZE - self->bufs.entries[*bufindex].len);
         ret = proc(&self->zs, flush);
-        /* inflate() returns Z_BUF_ERROR if flush is set to Z_FINISH at the middle of the compressed data */
-        assert(ret == Z_OK || ret == Z_STREAM_END || ret == Z_BUF_ERROR);
-        self->bufs.entries[bufindex].len = BUF_SIZE - self->zs.avail_out;
+        /* inflate() returns Z_BUF_ERROR if flush is set to Z_FINISH at the middle of the compressed data; other errors (e.g.,
+         * Z_DATA_ERROR returned by inflate() when the input is corrupt) are reported to the caller */
+        if (!(ret == Z_OK || ret == Z_STREAM_END || ret == Z_BUF_ERROR))
+            return 0;
+        self->bufs.entries[*bufindex].len = BUF_SIZE - self->zs.avail_out;
     } while (self->zs.avail_out == 0 && ret != Z_STREAM_END);
 
-    return bufindex;
+    return 1;
 }
 
 static h2o_send_state_t do_process(h2o_compress_context_t *_self, h2o_sendvec_t *inbufs, size_t inbufcnt, h2o_send_state_t state,
@@ -94,15 +99,16 @@ static h2o_send_state_t do_process(h2o_compress_context_t *_self, h2o_sendvec_t 
     struct st_gzip_context_t *self = (void *)_self;
     size_t outbufindex;
     h2o_sendvec_t *last_buf;
+    int success = 1;
 
     outbufindex = 0;
     self->bufs.entries[0].len = 0;
 
     if (inbufcnt != 0) {
         size_t i;
-        for (i = 0; i != inbufcnt - 1; ++i) {
+        for (i = 0; success && i != inbufcnt - 1; ++i) {
             assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
-            outbufindex = process_chunk(self, inbufs[i].raw, inbufs[i].len, Z_NO_FLUSH, outbufindex, proc);
+            success = process_chunk(self, inbufs[i].raw, inbufs[i].len, Z_NO_FLUSH, &outbufindex, proc);
         }
         assert(inbufs[i].callbacks->read_ == h2o_sendvec_read_raw);
         last_buf = inbufs + i;
@@ -110,8 +116,9 @@ static h2o_send_state_t do_process(h2o_compress_context_t *_self, h2o_sendvec_t 
         static const h2o_sendvec_t zero_buf = {0};
         last_buf = (h2o_sendvec_t *)&zero_buf;
     }
-    outbufindex = process_chunk(self, last_buf->raw, last_buf->len, h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH,
-                                outbufindex, proc);
+    if (!(success && process_chunk(self, last_buf->raw, last_buf->len,
+                                   h2o_send_state_is_in_progress(state) ? Z_SYNC_FLUSH : Z_FINISH, &outbufindex, proc)))
+        state = H2O_SEND_STATE_ERROR;
 
     *outbufs = self->bufs.entries;
     *outbufcnt = outbufindex + 1;

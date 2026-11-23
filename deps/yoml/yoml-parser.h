@@ -266,6 +266,8 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, yo
                 if ((*target)->data.mapping.elements[i].key->type == YOML_TYPE_SCALAR &&
                     strcmp((*target)->data.mapping.elements[i].key->data.scalar, "<<") == 0) {
                     yoml_mapping_element_t src = (*target)->data.mapping.elements[i];
+                    ++src.key->_refcnt;
+                    ++src.value->_refcnt;
                     /* merge */
                     if (src.value->type == YOML_TYPE_SEQUENCE) {
                         for (j = 0; j != src.value->data.sequence.size; ++j)
@@ -276,12 +278,16 @@ static inline int yoml__resolve_merge(yoml_t **target, yaml_parser_t *parser, yo
                                     parser->problem_mark.line = src.key->line;
                                     parser->problem_mark.column = src.key->column;
                                 }
+                                yoml_free(src.key, parse_args->mem_set);
+                                yoml_free(src.value, parse_args->mem_set);
                                 return -1;
                             }
                     } else {
                         if (yoml__merge(target, i, 1, src.value, parse_args) != 0)
                             goto MergeError;
                     }
+                    yoml_free(src.key, parse_args->mem_set);
+                    yoml_free(src.value, parse_args->mem_set);
                 }
             } while (i != 0);
         }

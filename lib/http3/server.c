@@ -1113,7 +1113,7 @@ static void on_send_emit(quicly_stream_t *qs, size_t off, void *_dst, size_t *le
 Error:
     *len = 0;
     *wrote_all = 1;
-    shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_INTERNAL, 0, 0);
+    shutdown_stream(stream, H2O_HTTP3_ERROR_INTERNAL, H2O_HTTP3_ERROR_INTERNAL, 0, 0);
 }
 
 static void on_send_stop(quicly_stream_t *qs, quicly_error_t err)
@@ -1361,6 +1361,8 @@ static void run_delayed(h2o_timer_t *timer)
         }
 
     } while (made_progress);
+
+    h2o_quic_schedule_timer(&conn->h3.super);
 }
 
 quicly_error_t handle_input_post_trailers(struct st_h2o_http3_server_stream_t *stream, const uint8_t **src, const uint8_t *src_end,
@@ -1432,7 +1434,7 @@ quicly_error_t handle_input_expect_data(struct st_h2o_http3_server_stream_t *str
             stream->req.content_length - stream->req.req_body_bytes_received < frame.length) {
             /* The only viable option here is to reset the stream, as we might have already started streaming the request body
              * upstream. This behavior is consistent with what we do in HTTP/2. */
-            shutdown_stream(stream, H2O_HTTP3_ERROR_EARLY_RESPONSE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator, 0);
+            shutdown_stream(stream, H2O_HTTP3_ERROR_MESSAGE, H2O_HTTP3_ERROR_GENERAL_PROTOCOL, in_generator, 0);
             return 0;
         }
         break;
@@ -1796,6 +1798,12 @@ static void do_send(h2o_ostream_t *_ostr, h2o_req_t *_req, h2o_sendvec_t *bufs, 
     case H2O_HTTP3_SERVER_STREAM_STATE_SEND_HEADERS: {
         h2o_iovec_t datagram_flow_id;
         ssize_t priority_header_index;
+        if (stream->req.upstream_refused) {
+            /* to let the client retry, reject the request without sending a response (RFC 9114 Section 4.1.1) */
+            shutdown_stream(stream, H2O_HTTP3_ERROR_REQUEST_REJECTED, H2O_HTTP3_ERROR_REQUEST_REJECTED, 1, 0);
+            h2o_quic_schedule_timer(&get_conn(stream)->h3.super);
+            return;
+        }
         if (stream->req.send_server_timing != 0)
             h2o_add_server_timing_header(&stream->req, 0 /* TODO add support for trailers; it's going to be a little complex as we
                                                           * need to build trailers the moment they are emitted onto wire */);

@@ -34,10 +34,12 @@ const char h2o_httpclient_error_flow_control[] = "flow control error";
 const char h2o_httpclient_error_http1_line_folding[] = "line folding of header fields is not supported";
 const char h2o_httpclient_error_http1_unexpected_transfer_encoding[] = "unexpected type of transfer-encoding";
 const char h2o_httpclient_error_http1_parse_failed[] = "failed to parse the response";
+const char h2o_httpclient_error_http1_headers_too_long[] = "response headers too long";
 const char h2o_httpclient_error_protocol_violation[] = "protocol violation";
 const char h2o_httpclient_error_internal[] = "internal error";
 const char h2o_httpclient_error_malformed_frame[] = "malformed HTTP frame";
 const char h2o_httpclient_error_unexpected_101[] = "received unexpected 101 response";
+const char h2o_httpclient_error_too_many_informational[] = "too many informational responses";
 
 /**
  * Used to indicate that the HTTP request is to be "upgraded" into a CONNECT tunnel.

@@ -116,6 +116,49 @@ static void do_test_simple(int use_enc_stream)
     h2o_qpack_destroy_encoder(enc);
 }
 
+static void do_test_response_size_limit(size_t value_len, int expected_ret)
+{
+    h2o_qpack_decoder_t *dec = h2o_qpack_create_decoder(4096, 10);
+    h2o_mem_pool_t pool;
+    h2o_headers_t headers = {};
+    h2o_qpack_section_stats_t stats = {};
+    uint8_t header_ack[H2O_HPACK_ENCODE_INT_MAX_LENGTH];
+    size_t header_ack_len;
+    uint64_t blocked_ref;
+    const char *err_desc = NULL;
+    int status;
+
+    h2o_mem_init_pool(&pool);
+
+    /* field section prefix, ":status: 200" from the static table, followed by "x-a" as a literal field with a literal name */
+    uint8_t *src = h2o_mem_alloc_pool(&pool, uint8_t, value_len + 16), *p = src;
+    *p++ = 0x00;
+    *p++ = 0x00;
+    *p++ = 0xc0 | 25;
+    *p++ = 0x20 | 3;
+    memcpy(p, "x-a", 3);
+    p += 3;
+    *p = 0;
+    p = h2o_hpack_encode_int(p, value_len, 7);
+    memset(p, 'a', value_len);
+    p += value_len;
+
+    int ret = h2o_qpack_parse_response(&pool, dec, 0, &status, &headers, NULL, 0, &blocked_ref, &stats, header_ack, &header_ack_len,
+                                       src, p - src, &err_desc);
+    ok(ret == expected_ret);
+    ok(err_desc == (expected_ret == 0 ? NULL : h2o_hpack_err_headers_too_long));
+
+    h2o_mem_clear_pool(&pool);
+    h2o_qpack_destroy_decoder(dec);
+}
+
+static void test_response_size_limit(void)
+{
+    size_t max_value_len = H2O_MAX_RESPLEN - (sizeof(":status200") - 1) - (sizeof("x-a") - 1);
+    do_test_response_size_limit(max_value_len, 0);
+    do_test_response_size_limit(max_value_len + 1, H2O_HTTP2_ERROR_INVALID_HEADER_CHAR);
+}
+
 static void test_simple(void)
 {
     do_test_simple(0);
@@ -846,4 +889,5 @@ void test_lib__http3_qpack(void)
     subtest("rfc9204-appendix-b", test_rfc9204_appendix_b);
     subtest("decode-errors", test_decode_errors);
     subtest("decode-edge-cases", test_decode_edge_cases);
+    subtest("response-size-limit", test_response_size_limit);
 }

@@ -125,6 +125,13 @@ void h2o_headers_register(h2o_pathconf_t *pathconf, h2o_headers_command_t *cmds)
         memmove(pathconf->handlers.entries + 1, pathconf->handlers.entries,
                 sizeof(h2o_handler_t *) * (pathconf->handlers.size - 1));
         pathconf->handlers.entries[0] = &handler->super;
+
+        /* The protocol handlers decide whether to stream the request body or to forward expect, by looking at the attributes of the
+         * first handler. As this handler always passes the request to the next one, inherit the attributes of that handler. */
+        if (pathconf->handlers.size >= 2) {
+            handler->super.supports_request_streaming = pathconf->handlers.entries[1]->supports_request_streaming;
+            handler->super.handles_expect = pathconf->handlers.entries[1]->handles_expect;
+        }
     }
 }
 

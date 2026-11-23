@@ -610,6 +610,10 @@ static int handle_stdin_record(struct st_fcgi_generator_t *generator, struct st_
                        input->bytes + FCGI_RECORD_HEADER_SIZE, header->contentLength);
                 generator->resp.receiving->size = header->contentLength;
             }
+            if (generator->resp.receiving->size >= H2O_MAX_RESPLEN) {
+                h2o_req_log_error(generator->req, MODULE_NAME, "response headers too long");
+                return -1;
+            }
             return 0;
         } else {
             h2o_req_log_error(generator->req, MODULE_NAME, "received broken response");
@@ -691,7 +695,8 @@ static void on_read(h2o_socket_t *sock, const char *err)
                 goto Error;
             }
             h2o_buffer_consume(&sock->input, recsize);
-            can_keepalive = 1;
+            /* the connection cannot be reused if the application responded before we finished sending the request */
+            can_keepalive = !h2o_socket_is_writing(sock);
             goto EOS_Received;
         default:
             h2o_req_log_error(generator->req, MODULE_NAME, "received unexpected record, type: %u", header.type);

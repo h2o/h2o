@@ -37,10 +37,10 @@ class Htpasswd
     auth = env['HTTP_AUTHORIZATION']
     if auth
       method, cred = *auth.split(' ')
-      if method.casecmp("basic") == 0
+      if method && cred && method.casecmp("basic") == 0
         user, pass = cred.unpack("m")[0].split(':', 2)
         begin
-          if lookup(user, pass)
+          if pass && lookup(user, pass)
             return [ 399, { "x-fallthru-set-remote-user" => user }, [] ]
           end
         rescue => e

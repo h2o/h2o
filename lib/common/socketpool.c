@@ -539,6 +539,7 @@ void h2o_socketpool_connect(h2o_socketpool_connect_request_t **_req, h2o_socketp
                 h2o_error_printf("[WARN] unexpectedly received data to a pooled socket (see issue #679)\n");
         }
         destroy_detached(entry);
+        __sync_sub_and_fetch(&pool->_shared.count, 1);
         pthread_mutex_lock(&pool->_shared.mutex);
     }
     pthread_mutex_unlock(&pool->_shared.mutex);

@@ -139,6 +139,23 @@ EOT
     });
 };
 
+subtest 'expect is forwarded on paths sending early hints' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+        proxy.expect: FORWARD
+        proxy.reverse.url: http://127.0.0.1:$upstream_port
+        header.add:
+          header:
+            - "foo: FOO"
+          when: early
+EOT
+    my $resp = `curl --silent -H 'expect: 100-continue' --data-binary hello http://127.0.0.1:$server->{port}/echo-headers`;
+    like $resp, qr{^expect: 100-continue$}m;
+};
+
 subtest 'http2 upstream' => sub {
     my $backend = spawn_h2o(<< "EOT");
 send-informational: all

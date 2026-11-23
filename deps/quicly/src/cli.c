@@ -241,7 +241,7 @@ static quicly_error_t flatten_file_vec(quicly_sendbuf_vec_t *vec, void *dst, siz
     while ((rret = pread(fd, dst, len, off)) == -1 && errno == EINTR)
         ;
 
-    return rret == len ? 0 : QUICLY_TRANSPORT_ERROR_INTERNAL; /* should return application-level error */
+    return rret == len ? 0 : QUICLY_ERROR_FROM_APPLICATION_ERROR_CODE(0);
 }
 
 static void discard_file_vec(quicly_sendbuf_vec_t *vec)

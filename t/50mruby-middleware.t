@@ -1039,4 +1039,26 @@ EOT
     }
 };
 
+subtest 'h2o.is_ech in subrequest' => sub {
+    my $server = spawn_h2o(<< "EOT");
+hosts:
+  default:
+    paths:
+      /:
+      - mruby.handler: |
+          proc {|env|
+            # otherwise, the proc is passed to the next handler as a string through req->env
+            env.delete('h2o.is_ech')
+            H2O.next.call(env)
+          }
+      - mruby.handler: |
+          proc {|env|
+            [200, {}, [env['h2o.is_ech'].call.to_s]]
+          }
+EOT
+    my ($status, $headers, $body) = get('http', $server->{port}, 'curl', '/');
+    is $status, 200, 'status';
+    is $body, 'false', 'body';
+};
+
 done_testing();

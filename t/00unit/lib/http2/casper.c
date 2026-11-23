@@ -124,10 +124,60 @@ static void test_cookie_merge(void)
     h2o_http2_casper_destroy(casper);
 }
 
+static void test_cookie_merge_updates_cookie(void)
+{
+    h2o_http2_casper_t *casper;
+
+    casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), 1);
+    h2o_iovec_t cookie = h2o_http2_casper_get_cookie(casper);
+    cookie = h2o_strdup(NULL, cookie.base, cookie.len);
+    h2o_http2_casper_destroy(casper);
+
+    /* merge a cookie after the cookie of the casper has been built */
+    casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), 1);
+    h2o_http2_casper_get_cookie(casper);
+    h2o_http2_casper_consume_cookie(casper, cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
+    free(cookie.base);
+    cookie = h2o_http2_casper_get_cookie(casper);
+    cookie = h2o_strdup(NULL, cookie.base, cookie.len);
+    h2o_http2_casper_destroy(casper);
+
+    /* the rebuilt cookie should contain both keys */
+    casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_consume_cookie(casper, cookie.base, get_end_of_cookie_value(cookie.base, cookie.len));
+    ok(casper->keys.size == 2);
+    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.html"), 0) == 1);
+    ok(h2o_http2_casper_lookup(casper, H2O_STRLIT("/index.php"), 0) == 1);
+    h2o_http2_casper_destroy(casper);
+    free(cookie.base);
+}
+
+static void test_cookie_out_of_range_keys(void)
+{
+    uint64_t keys[] = {1, 2, 1 << 13, (1 << 13) + 1};
+    char bin[64], cookie[128];
+    size_t bin_len = sizeof(bin), cookie_len;
+
+    ok(golombset_encode(6, keys, sizeof(keys) / sizeof(keys[0]), bin, &bin_len) == 0);
+    cookie_len = sprintf(cookie, COOKIE_NAME "=");
+    cookie_len += h2o_base64_encode(cookie + cookie_len, bin, bin_len, 1);
+
+    h2o_http2_casper_t *casper = h2o_http2_casper_create(13, 6);
+    h2o_http2_casper_consume_cookie(casper, cookie, cookie_len);
+    ok(casper->keys.size == 2);
+    ok(casper->keys.entries[0] == 1);
+    ok(casper->keys.entries[1] == 2);
+    h2o_http2_casper_destroy(casper);
+}
+
 void test_lib__http2__casper(void)
 {
     subtest("calc_key", test_calc_key);
     subtest("test_lookup", test_lookup);
     subtest("cookie", test_cookie);
     subtest("cookie-merge", test_cookie_merge);
+    subtest("cookie-merge-updates-cookie", test_cookie_merge_updates_cookie);
+    subtest("cookie-out-of-range-keys", test_cookie_out_of_range_keys);
 }

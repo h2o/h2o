@@ -45,6 +45,13 @@ extern "C" {
 #define H2O_MAX_REQLEN (8192 + 4096 * (H2O_MAX_HEADERS))
 #endif
 
+#ifndef H2O_MAX_RESPLEN
+/**
+ * Maximum size of a response field section in bytes.
+ */
+#define H2O_MAX_RESPLEN H2O_MAX_REQLEN
+#endif
+
 typedef struct st_h2o_header_flags_t {
     unsigned char dont_compress : 1;
 } h2o_header_flags_t;

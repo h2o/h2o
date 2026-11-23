@@ -82,6 +82,7 @@ struct st_h2o_http1client_t {
      * maintain the number of bytes being already processed on the associated socket
      */
     uint64_t _socket_bytes_processed;
+    unsigned _num_informational;
     unsigned _is_chunked : 1;
     unsigned _seen_at_least_one_chunk : 1;
     unsigned _delay_free : 1;
@@ -346,7 +347,7 @@ static void on_body_chunked(h2o_socket_t *sock, const char *err)
 
         switch (phr_decode_chunked(&client->_body_decoder.chunked.decoder, inbuf->bytes + inbuf->size - newsz, &newsz)) {
         case -1: /* error */
-            newsz = size;
+            newsz = 0;
             client->_do_keepalive = 0;
             errstr = h2o_httpclient_error_http1_parse_failed;
             break;
@@ -419,15 +420,20 @@ static void on_head(h2o_socket_t *sock, const char *err)
     /* continue parsing the responses until we see a final one */
     while (1) {
         /* parse response */
+        size_t inresplen = sock->input->size < H2O_MAX_RESPLEN ? sock->input->size : H2O_MAX_RESPLEN;
         struct phr_header src_headers[MAX_HEADERS];
         num_headers = MAX_HEADERS;
-        rlen = phr_parse_response(sock->input->bytes, sock->input->size, &minor_version, &http_status, &msg, &msg_len, src_headers,
+        rlen = phr_parse_response(sock->input->bytes, inresplen, &minor_version, &http_status, &msg, &msg_len, src_headers,
                                   &num_headers, 0);
         switch (rlen) {
         case -1: /* error */
             on_error(client, h2o_httpclient_error_http1_parse_failed);
             return;
         case -2: /* incomplete */
+            if (inresplen == H2O_MAX_RESPLEN) {
+                on_error(client, h2o_httpclient_error_http1_headers_too_long);
+                return;
+            }
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             return;
         }
@@ -460,13 +466,18 @@ static void on_head(h2o_socket_t *sock, const char *err)
         }
 
         if (http_status == 101) {
-            if (client->_send_own_expect) {
-                /* expect: 100-continue is incompatible CONNECT or upgrade (when trying to establish a tunnel */
+            if (client->super.upgrade_to == NULL) {
+                /* 101 is expected only when trying to establish a tunnel */
                 on_error(client, h2o_httpclient_error_unexpected_101);
                 return;
             }
             break;
-        } else if (http_status == 100 || http_status >= 200) {
+        }
+        if (http_status <= 199 && ++client->_num_informational > H2O_HTTPCLIENT_MAX_INFORMATIONAL_RESPONSES) {
+            on_error(client, h2o_httpclient_error_too_many_informational);
+            return;
+        }
+        if (http_status == 100 || http_status >= 200) {
             /* When request body has been withheld and a 100 or a final response has been received, start sending the request body,
              * see: https://github.com/h2o/h2o/pull/3316#discussion_r1456859634. */
             if (client->_send_own_expect) {
@@ -613,6 +624,9 @@ static void on_whole_request_sent(h2o_socket_t *sock, const char *err)
             h2o_timer_link(client->super.ctx->loop, client->super.ctx->first_byte_timeout, &client->super._timeout);
             break;
         case STREAM_STATE_BODY:
+            /* the timer was used for sending the request; use it for receiving the response unless reading is paused */
+            if (h2o_socket_is_reading(client->sock))
+                h2o_timer_link(client->super.ctx->loop, client->super.ctx->io_timeout, &client->super._timeout);
             break;
         case STREAM_STATE_CLOSED:
             close_client(client);

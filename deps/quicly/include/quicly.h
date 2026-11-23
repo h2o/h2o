@@ -991,6 +991,8 @@ typedef struct st_quicly_stream_callbacks_t {
      * being written.  `wrote_all` is a boolean out parameter indicating if the application has written all the available data.
      * As this callback is triggered by calling quicly_stream_sync_sendbuf (stream, 1) when tx data is present, it assumes data
      * to be available - that is `len` return value should be non-zero.
+     * If the application fails to provide the data, it should reset the stream by calling `quicly_reset_stream` (and optionally
+     * `quicly_request_stop`). The connection cannot be closed from within this callback.
      */
     void (*on_send_emit)(quicly_stream_t *stream, size_t off, void *dst, size_t *len, int *wrote_all);
     /**
@@ -1577,7 +1579,8 @@ static int quicly_stream_is_self_initiated(quicly_stream_t *stream);
 /**
  * Sends QUIC DATAGRAM frames. Some of the frames being provided may get dropped.
  * Notes:
- * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled.
+ * * At the moment, emission of QUIC packets carrying DATAGRAM frames is not congestion controlled, but is subject to the
+ *   anti-amplification limit.
  * * While the API is designed to look like synchronous, application still has to call `quicly_send` for the time being.
  */
 void quicly_send_datagram_frames(quicly_conn_t *conn, ptls_iovec_t *datagrams, size_t num_datagrams);

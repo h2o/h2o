@@ -40,7 +40,7 @@ typedef struct st_quicly_sendbuf_vec_t quicly_sendbuf_vec_t;
  * @param dst the destination
  * @param off offset within the iovec from where serialization should happen
  * @param len number of bytes to serialize
- * @return 0 if successful, otherwise an error code
+ * @return 0 if successful, otherwise an application error code, which is used for resetting the stream
  */
 typedef quicly_error_t (*quicly_sendbuf_flatten_vec_cb)(quicly_sendbuf_vec_t *vec, void *dst, size_t off, size_t len);
 /**

@@ -13,7 +13,9 @@ DOCKER_RUN_OPTS=--privileged \
 	-v /lib/modules:/lib/modules:ro \
 	-v /usr/src:/usr/src:ro \
 	--add-host=localhost.examp1e.net:127.0.0.1 \
-	-it
+	-it \
+	$(DOCKER_RUN_EXTRA_OPTS)
+DOCKER_RUN_EXTRA_OPTS=
 TMP_SIZE=1G
 
 ALL:

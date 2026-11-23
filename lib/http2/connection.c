@@ -40,6 +40,7 @@ static void initiate_graceful_shutdown(h2o_conn_t *_conn);
 static void close_connection_now(h2o_http2_conn_t *conn);
 static int close_connection(h2o_http2_conn_t *conn);
 static ssize_t expect_default(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
+static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc);
 static void do_emit_writereq(h2o_http2_conn_t *conn);
 static void on_read(h2o_socket_t *sock, const char *err);
 static void push_path(h2o_req_t *src_req, const char *abspath, size_t abspath_len, int is_critical);
@@ -70,6 +71,7 @@ static void enqueue_server_preface(h2o_http2_conn_t *conn)
     h2o_http2_encode_settings_frame(&conn->_write.buf, settings, PTLS_ELEMENTSOF(settings));
     h2o_http2_encode_window_update_frame(
         &conn->_write.buf, 0, H2O_HTTP2_SETTINGS_HOST_CONNECTION_WINDOW_SIZE - H2O_HTTP2_SETTINGS_HOST_STREAM_INITIAL_WINDOW_SIZE);
+    conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
 }
 
 static void graceful_shutdown_close_straggler(h2o_timer_t *entry)
@@ -757,12 +759,22 @@ static int handle_trailing_headers(h2o_http2_conn_t *conn, h2o_http2_stream_t *s
 {
     size_t dummy_content_length;
     h2o_iovec_t dummy_expect = h2o_iovec_init(NULL, 0);
+    h2o_headers_t trailers = {NULL};
     int ret;
 
+    /* Trailers are decoded to keep the HPACK state in sync, but are discarded, as they cannot be merged into the request headers
+     * (RFC 9110 Section 6.5.1). The other protocol handlers discard them as well. */
     if ((ret = h2o_hpack_parse_request(&stream->req.pool, h2o_hpack_decode_header, &conn->_input_header_table, NULL, NULL, NULL,
-                                       NULL, NULL, &stream->req.headers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
-                                       err_desc)) != 0)
-        return ret;
+                                       NULL, NULL, &trailers, NULL, &dummy_content_length, &dummy_expect, NULL, src, len,
+                                       err_desc)) != 0) {
+        if (ret != H2O_HTTP2_ERROR_INVALID_HEADER_CHAR)
+            return ret;
+        /* malformed (RFC 9113 Section 8.1.1) */
+        stream->reset_by_peer_action = 1;
+        stream_send_error(conn, stream->stream_id, H2O_HTTP2_ERROR_PROTOCOL);
+        h2o_http2_stream_reset(conn, stream);
+        return 0;
+    }
     handle_request_body_chunk(conn, stream, h2o_iovec_init(NULL, 0), 1);
     return 0;
 }
@@ -1364,19 +1376,37 @@ static ssize_t expect_preface(h2o_http2_conn_t *conn, const uint8_t *src, size_t
     }
 
     {
-        enqueue_server_preface(conn);
+        /* when upgrading from HTTP/1.1, the server connection preface has been sent already (see `on_upgrade_complete`) */
+        if (h2o_timeval_is_null(&conn->timestamps.settings_sent_at))
+            enqueue_server_preface(conn);
         if (conn->http2_origin_frame) {
             /* write origin frame */
             h2o_http2_encode_origin_frame(&conn->_write.buf, *conn->http2_origin_frame);
         }
-        if (h2o_timeval_is_null(&conn->timestamps.settings_sent_at)) {
-            conn->timestamps.settings_sent_at = h2o_gettimeofday(conn->super.ctx->loop);
-        }
         h2o_http2_conn_request_write(conn);
     }
 
-    conn->_read_expect = expect_default;
+    conn->_read_expect = expect_settings;
     return CONNECTION_PREFACE.len;
+}
+
+static ssize_t expect_settings(h2o_http2_conn_t *conn, const uint8_t *src, size_t len, const char **err_desc)
+{
+    h2o_http2_frame_t frame;
+    ssize_t ret;
+    int hret;
+
+    if ((ret = h2o_http2_decode_frame(&frame, src, len, H2O_HTTP2_SETTINGS_HOST_MAX_FRAME_SIZE, err_desc)) < 0)
+        return ret;
+    if (frame.type != H2O_HTTP2_FRAME_TYPE_SETTINGS) {
+        *err_desc = "expected SETTINGS as the first frame";
+        return H2O_HTTP2_ERROR_PROTOCOL;
+    }
+    if ((hret = handle_settings_frame(conn, &frame, err_desc)) != 0)
+        return hret;
+
+    conn->_read_expect = expect_default;
+    return ret;
 }
 
 static int parse_input(h2o_http2_conn_t *conn)

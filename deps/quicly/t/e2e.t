@@ -777,7 +777,7 @@ package SpawnedProcess {
             die "failed to exec @{[$cmd->[0]]}:$?";
         }
         for (1..10) {
-            if (`netstat -na` =~ /^udp.*\s(127\.0\.0\.1|0\.0\.0\.0|\*)[\.:]$listen_port\s/m) {
+            if (`netstat -na` =~ /^udp\S*\s+\d+\s+\d+\s+(127\.0\.0\.1|0\.0\.0\.0|\*)[\.:]$listen_port\s/m) {
                 last;
             }
             if (waitpid($self->{pid}, WNOHANG) == $self->{pid}) {
