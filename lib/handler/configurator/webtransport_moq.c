@@ -19,17 +19,22 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
+#include <inttypes.h>
 #include "h2o.h"
 #include "h2o/configurator.h"
 
+#define DEFAULT_MAX_BUFFER_SIZE (16 * 1024 * 1024)
+
 static int on_config_webtransport_moq(h2o_configurator_command_t *cmd, h2o_configurator_context_t *ctx, yoml_t *node)
 {
-    yoml_t **url_node, **qmux_cleartext_node;
+    yoml_t **url_node, **qmux_cleartext_node, **max_buffer_size_node;
     h2o_iovec_t host;
     uint16_t port;
     int qmux_cleartext = 0;
+    uint64_t max_buffer_size = DEFAULT_MAX_BUFFER_SIZE;
 
-    if (h2o_configurator_parse_mapping(cmd, node, "url:s", "qmux-cleartext:s", &url_node, &qmux_cleartext_node) != 0)
+    if (h2o_configurator_parse_mapping(cmd, node, "url:s", "qmux-cleartext:s,max-buffer-size:s", &url_node, &qmux_cleartext_node,
+                                       &max_buffer_size_node) != 0)
         return -1;
 
     /* the URL of the relay, in the form of `moqt://host:port` */
@@ -44,7 +49,17 @@ static int on_config_webtransport_moq(h2o_configurator_command_t *cmd, h2o_confi
     if (qmux_cleartext_node != NULL && (qmux_cleartext = h2o_configurator_get_one_of(cmd, *qmux_cleartext_node, "OFF,ON")) == -1)
         return -1;
 
-    h2o_webtransport_moq_register(ctx->pathconf, host, port, qmux_cleartext);
+    /* the number of bytes that the relay can send on a session before the client acknowledges them */
+    if (max_buffer_size_node != NULL) {
+        if (h2o_configurator_scanf(cmd, *max_buffer_size_node, "%" SCNu64, &max_buffer_size) != 0)
+            return -1;
+        if (max_buffer_size == 0) {
+            h2o_configurator_errprintf(cmd, *max_buffer_size_node, "max-buffer-size must be a positive number");
+            return -1;
+        }
+    }
+
+    h2o_webtransport_moq_register(ctx->pathconf, host, port, qmux_cleartext, max_buffer_size);
     return 0;
 }
 

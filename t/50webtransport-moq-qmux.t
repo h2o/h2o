@@ -269,6 +269,11 @@ hosts:
         webtransport.moq:
           url: moqt://127.0.0.1:$relay_port
           qmux-cleartext: ON
+      /moq-small:
+        webtransport.moq:
+          url: moqt://127.0.0.1:$relay_port
+          qmux-cleartext: ON
+          max-buffer-size: 65536
 EOT
 
 # Opens a session: connects as the client, sends the extended CONNECT on `$session_id`, accepts the connection from h2o as the
@@ -276,6 +281,7 @@ EOT
 sub open_session {
     my (%opts) = @_;
     my $session_id = $opts{session_id} // 0;
+    my $path = $opts{path} // "/moq";
 
     my $sock = IO::Socket::SSL->new(
         PeerAddr           => "127.0.0.1:$h3qx_port",
@@ -292,7 +298,7 @@ sub open_session {
     # the extended CONNECT; QPACK without the dynamic table and Huffman encoding
     my $qstr = sub { my $s = shift; die if length $s >= 127; pack("C", length $s) . $s };
     my $lit = sub { my ($n, $v) = @_; die if length($n) - 7 >= 127; pack("CC", 0x27, length($n) - 7) . $n . $qstr->($v) };
-    my $headers = "\0\0" . "\xcf" . "\xd7" . "\x50" . $qstr->("127.0.0.1") . "\x51" . $qstr->("/moq")
+    my $headers = "\0\0" . "\xcf" . "\xd7" . "\x50" . $qstr->("127.0.0.1") . "\x51" . $qstr->($path)
         . $lit->(":protocol", "webtransport") . $lit->("sec-webtransport-http3-draft02", "1")
         . $lit->("wt-available-protocols", '"moqt-22"');
     $client->send($client->stream_frame($ctrl, encode_varint(0) . encode_h3_frame(4, $settings)),
@@ -346,6 +352,18 @@ subtest 'streams' => sub {
     ok pump([$client, $relay], sub { ($cid) = grep { $_ % 4 == 1 && $client->stream($_)->{fin} } keys %{$client->{streams}}; defined $cid }),
         "bidi stream reached the client";
     is $client->stream($cid)->{data}, $wt_bidi . "from-relay", "bidi stream payload, with the WebTransport signal";
+};
+
+subtest 'max-buffer-size' => sub {
+    my $check = sub {
+        my ($path, $max_data, $stream_window) = @_;
+        my (undef, $relay) = open_session(path => $path);
+        is $relay->{peer_tp}{4}, $max_data, "$path: initial_max_data";
+        is $relay->{peer_tp}{$_}, $stream_window, "$path: initial_max_stream_data ($_)" for 5 .. 7;
+        is $relay->{peer_tp}{$_}, 100, "$path: initial_max_streams ($_)" for 8 .. 9;
+    };
+    $check->("/moq", 16 * 1024 * 1024, 1024 * 1024);
+    $check->("/moq-small", 65536, 65536);
 };
 
 subtest 'datagrams' => sub {
