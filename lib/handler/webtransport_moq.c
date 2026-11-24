@@ -57,6 +57,12 @@ struct st_wtmoq_handler_t {
      * for testing; connects to the relay using QMux over cleartext TCP, instead of QUIC
      */
     unsigned qmux_cleartext : 1;
+    /**
+     * maximum number of bytes that the relay can send on a session before the client acknowledges them (i.e., the relay
+     * connection's max_data), and the receive window of each stream from the relay, capped at that
+     */
+    uint64_t max_buffer_size;
+    uint64_t backend_stream_window;
 };
 
 /**
@@ -521,7 +527,8 @@ static void bind_half(struct st_wtmoq_half_t *half, quicly_stream_t *qs)
     qs->data = half;
     qs->callbacks = &half_callbacks;
     if (has_receive_side(qs))
-        quicly_stream_set_receive_window(qs, STREAM_WINDOW);
+        quicly_stream_set_receive_window(qs,
+                                         half->is_frontend ? STREAM_WINDOW : half->pair->session->handler->backend_stream_window);
 }
 
 static int open_backend_stream(struct st_wtmoq_pair_t *pair, int unidirectional)
@@ -1147,6 +1154,7 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
 #if H2O_USE_LIBUV
     h2o_fatal("webtransport.moq: no support for libuv");
 #else
+    struct st_wtmoq_handler_t *handler = (void *)_handler;
     struct st_wtmoq_thread_ctx_t *tctx = h2o_mem_alloc(sizeof(*tctx));
 
     tctx->ctx = ctx;
@@ -1165,10 +1173,12 @@ static void on_context_init(h2o_handler_t *_handler, h2o_context_t *ctx)
     tctx->quic.tls = &tctx->tls;
     tctx->quic.transport_params.max_streams_uni = MAX_STREAMS;
     tctx->quic.transport_params.max_streams_bidi = MAX_STREAMS;
-    tctx->quic.transport_params.max_stream_data.uni = STREAM_WINDOW;
-    tctx->quic.transport_params.max_stream_data.bidi_local = STREAM_WINDOW;
-    tctx->quic.transport_params.max_stream_data.bidi_remote = STREAM_WINDOW;
-    tctx->quic.transport_params.max_data = MAX_STREAMS * STREAM_WINDOW;
+    /* What the relay sends is held until the client acknowledges it, so the credit given to the relay bounds what is buffered per
+     * session, including when the client stops acknowledging or goes away without closing. */
+    tctx->quic.transport_params.max_stream_data.uni = handler->backend_stream_window;
+    tctx->quic.transport_params.max_stream_data.bidi_local = handler->backend_stream_window;
+    tctx->quic.transport_params.max_stream_data.bidi_remote = handler->backend_stream_window;
+    tctx->quic.transport_params.max_data = handler->max_buffer_size;
     uint8_t cid_key[PTLS_SHA256_DIGEST_SIZE];
     ptls_openssl_random_bytes(cid_key, sizeof(cid_key));
     tctx->quic.cid_encryptor = quicly_new_default_cid_encryptor(&ptls_openssl_quiclb, &ptls_openssl_aes128ecb, &ptls_openssl_sha256,
@@ -1213,8 +1223,11 @@ static void on_handler_dispose(h2o_handler_t *_handler)
     free(handler->port.base);
 }
 
-void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext)
+void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext,
+                                   uint64_t max_buffer_size)
 {
+    assert(max_buffer_size != 0);
+
     struct st_wtmoq_handler_t *handler = (void *)h2o_create_handler(pathconf, sizeof(*handler));
 
     handler->super.on_context_init = on_context_init;
@@ -1226,4 +1239,6 @@ void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, u
     handler->port.base = h2o_mem_alloc(sizeof(H2O_UINT16_LONGEST_STR));
     handler->port.len = sprintf(handler->port.base, "%" PRIu16, port);
     handler->qmux_cleartext = qmux_cleartext;
+    handler->max_buffer_size = max_buffer_size;
+    handler->backend_stream_window = max_buffer_size < STREAM_WINDOW ? max_buffer_size : STREAM_WINDOW;
 }

@@ -2506,9 +2506,11 @@ void h2o_self_trace_register_configurator(h2o_globalconf_t *conf);
 /* lib/handler/webtransport_moq.c */
 /**
  * registers the handler forwarding MoQ sessions received over WebTransport to a MoQ relay over native QUIC (`host`:`port`), or, if
- * `qmux_cleartext` is set (for testing), over QMux on cleartext TCP
+ * `qmux_cleartext` is set (for testing), over QMux on cleartext TCP; `max_buffer_size` (non-zero) is the number of bytes that the
+ * relay can send on a session before the client acknowledges them
  */
-void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext);
+void h2o_webtransport_moq_register(h2o_pathconf_t *pathconf, h2o_iovec_t host, uint16_t port, int qmux_cleartext,
+                                   uint64_t max_buffer_size);
 /**
  * registers the configurator of the webtransport.moq directive
  */
