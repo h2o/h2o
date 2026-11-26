@@ -3003,6 +3003,10 @@ The directive specifies the directory under which should be served for the corre
 
 .PP
 
+
+When a request exactly matches a file.dir path without a trailing slash, H2O redirects it to the same path with a trailing slash using status 301.
+For example, a request to /icons is redirected to /icons/.
+
 .PP
 .BR Example:\ 
 Serving files under different paths
@@ -4333,6 +4337,12 @@ A boolean flag (ON or OFF) indicating if the server should recognize the X-Repro
 If H2O recognizes the header, it fetches the contents of the resource specified by the header, and sends the contents as the response to the client.
 If the status code associated with the X-Reproxy-URL header is 307 or 308, then the method of the original request is used to obtain the specified resource.
 Otherwise, the request method is changed to GET.
+
+
+The reproxy destination may itself redirect the request.
+For example, if /app is configured with file.dir, a reproxy to /app triggers a 301 redirect to /app/.
+H2O follows this redirect internally, changing a POST request to GET, even if the original reproxy status was 307 or 308.
+To avoid the directory redirect, use /app/ as the reproxy URL, or use file.file to map a path directly to a file.
 
 
 For example, an upstream server may send an URL pointing to a large image using the X-Reproxy-URL header stored on a distributed file system, and let H2O fetch and return the content to the client, instead of fetching the image by itself.
