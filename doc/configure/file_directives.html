@@ -154,6 +154,10 @@ Only one handler must exist within the directives.
 The directive specifies the directory under which should be served for the corresponding path.
 </p>
 
+<p>
+When a request exactly matches a <code>file.dir</code> path without a trailing slash, H2O redirects it to the same path with a trailing slash using status 301.
+For example, a request to <code>/icons</code> is redirected to <code>/icons/</code>.
+</p>
 <div class="example">
 <div class="caption">Example. Serving files under different paths</div>
 <pre><code>paths:

@@ -46,6 +46,10 @@ $ctx->{directive}->(
 EOT
 )->(sub {
 ?>
+<p>
+When a request exactly matches a <code>file.dir</code> path without a trailing slash, H2O redirects it to the same path with a trailing slash using status 301.
+For example, a request to <code>/icons</code> is redirected to <code>/icons/</code>.
+</p>
 <?= $ctx->{example}->('Serving files under different paths', <<'EOT')
 paths:
     "/":
